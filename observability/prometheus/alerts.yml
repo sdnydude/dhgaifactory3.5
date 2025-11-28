@@ -1,0 +1,76 @@
+groups:
+  - name: dhg_slo_alerts
+    interval: 30s
+    rules:
+      # ASR Service SLO: p95 latency < 2 seconds
+      - alert: ASRLatencyHigh
+        expr: histogram_quantile(0.95, rate(asr_latency_seconds_bucket[5m])) > 2
+        for: 2m
+        labels:
+          severity: critical
+          slo: asr_latency
+        annotations:
+          summary: "ASR p95 latency exceeds 2s SLO"
+          description: "ASR service p95 latency is {{ $value }}s, exceeding the 2s SLO threshold"
+
+      # Database Write SLO: < 50ms
+      - alert: DatabaseWriteLatencyHigh
+        expr: histogram_quantile(0.95, rate(registry_write_latency_ms_bucket[5m])) > 50
+        for: 2m
+        labels:
+          severity: critical
+          slo: db_write_latency
+        annotations:
+          summary: "Database write latency exceeds 50ms SLO"
+          description: "Database p95 write latency is {{ $value }}ms, exceeding the 50ms SLO threshold"
+
+      # Service Uptime SLO: > 99.5%
+      - alert: ServiceUptimeLow
+        expr: (up{job=~"registry-api|asr-service"} == 0)
+        for: 1m
+        labels:
+          severity: critical
+          slo: uptime
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "Service {{ $labels.job }} has been down for more than 1 minute, violating 99.5% uptime SLO"
+
+      # Prometheus target missing
+      - alert: PrometheusTargetMissing
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prometheus target {{ $labels.job }} is down"
+          description: "Prometheus cannot scrape {{ $labels.job }} - target down for >1m"
+
+      # GPU unavailability (if GPU metrics are available)
+      - alert: GPUUnavailable
+        expr: gpu_utilization == -1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "GPU is unavailable for ASR service"
+          description: "ASR service has fallen back to CPU mode due to GPU unavailability"
+
+      # High error rate
+      - alert: HighErrorRate
+        expr: rate(asr_errors_total[5m]) > 0.1 or rate(registry_errors_total[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate detected"
+          description: "Service {{ $labels.job }} has error rate of {{ $value }}/s"
+
+      # Database connection issues
+      - alert: DatabaseConnectionFailure
+        expr: rate(registry_db_errors_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Database connection errors detected"
+          description: "Registry API is experiencing database connection failures"

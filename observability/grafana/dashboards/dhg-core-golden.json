@@ -1,0 +1,318 @@
+{
+  "uid": "dhg-core-golden",
+  "title": "DHG-Core-Golden",
+  "tags": ["dhg", "asr", "registry", "slo"],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "10s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "ASR p95 Latency (SLO: <2s)",
+      "type": "graph",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(asr_latency_seconds_bucket[5m]))",
+          "legendFormat": "ASR p95 Latency",
+          "refId": "A"
+        },
+        {
+          "expr": "2",
+          "legendFormat": "SLO Threshold (2s)",
+          "refId": "B"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "s",
+          "label": "Latency",
+          "show": true
+        },
+        {
+          "show": true
+        }
+      ],
+      "thresholds": [
+        {
+          "value": 2,
+          "colorMode": "critical",
+          "op": "gt",
+          "fill": true,
+          "line": true
+        }
+      ],
+      "alert": {
+        "name": "ASR Latency SLO Violation",
+        "conditions": [
+          {
+            "evaluator": {
+              "params": [2],
+              "type": "gt"
+            },
+            "operator": {
+              "type": "and"
+            },
+            "query": {
+              "params": ["A", "5m", "now"]
+            },
+            "reducer": {
+              "params": [],
+              "type": "avg"
+            },
+            "type": "query"
+          }
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "title": "Database Write Latency p95 (SLO: <50ms)",
+      "type": "graph",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(registry_write_latency_ms_bucket[5m]))",
+          "legendFormat": "DB Write p95",
+          "refId": "A"
+        },
+        {
+          "expr": "50",
+          "legendFormat": "SLO Threshold (50ms)",
+          "refId": "B"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "ms",
+          "label": "Latency",
+          "show": true
+        },
+        {
+          "show": true
+        }
+      ],
+      "thresholds": [
+        {
+          "value": 50,
+          "colorMode": "critical",
+          "op": "gt",
+          "fill": true,
+          "line": true
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "GPU Utilization",
+      "type": "gauge",
+      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 8},
+      "targets": [
+        {
+          "expr": "gpu_utilization",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "red"},
+              {"value": 20, "color": "yellow"},
+              {"value": 40, "color": "green"}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Database TPS (Transactions Per Second)",
+      "type": "graph",
+      "gridPos": {"h": 8, "w": 6, "x": 6, "y": 8},
+      "targets": [
+        {
+          "expr": "rate(registry_write_operations_total[1m])",
+          "legendFormat": "Writes/sec",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(registry_read_operations_total[1m])",
+          "legendFormat": "Reads/sec",
+          "refId": "B"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "ops",
+          "label": "Operations/sec",
+          "show": true
+        },
+        {
+          "show": true
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Service Health Status",
+      "type": "stat",
+      "gridPos": {"h": 8, "w": 6, "x": 12, "y": 8},
+      "targets": [
+        {
+          "expr": "up{job=\"registry-api\"}",
+          "legendFormat": "Registry API",
+          "refId": "A"
+        },
+        {
+          "expr": "up{job=\"asr-service\"}",
+          "legendFormat": "ASR Service",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "background",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {"type": "value", "value": "1", "text": "UP"},
+            {"type": "value", "value": "0", "text": "DOWN"}
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "red"},
+              {"value": 1, "color": "green"}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Alert Status",
+      "type": "stat",
+      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 8},
+      "targets": [
+        {
+          "expr": "ALERTS{alertstate=\"firing\"}",
+          "legendFormat": "{{ alertname }}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "background",
+        "textMode": "name"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 1, "color": "red"}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "ASR Request Rate",
+      "type": "graph",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 16},
+      "targets": [
+        {
+          "expr": "rate(asr_requests_total[5m])",
+          "legendFormat": "Requests/sec",
+          "refId": "A"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "reqps",
+          "label": "Requests/sec",
+          "show": true
+        },
+        {
+          "show": true
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Error Rates",
+      "type": "graph",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 16},
+      "targets": [
+        {
+          "expr": "rate(asr_errors_total[5m])",
+          "legendFormat": "ASR Errors/sec",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(registry_errors_total[5m])",
+          "legendFormat": "Registry Errors/sec",
+          "refId": "B"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "ops",
+          "label": "Errors/sec",
+          "show": true
+        },
+        {
+          "show": true
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "System Uptime (SLO: >99.5%)",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 24, "x": 0, "y": 22},
+      "targets": [
+        {
+          "expr": "avg_over_time(up{job=~\"registry-api|asr-service\"}[24h]) * 100",
+          "legendFormat": "{{ job }} Uptime %",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "colorMode": "background",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "red"},
+              {"value": 99.5, "color": "green"}
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

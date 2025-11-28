@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv
+*.egg-info/
+dist/
+build/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+*.env.local
+
+# Secrets
+secrets/
+*.key
+*.pem
+
+# Data
+data/pgdata/
+backups/*.sql.gz
+
+# Logs
+*.log
+logs/
+
+# Grafana
+observability/grafana/data/
+
+# Prometheus
+observability/prometheus/data/

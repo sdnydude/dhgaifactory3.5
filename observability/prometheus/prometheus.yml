@@ -1,0 +1,53 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'dhg-ai-factory'
+    environment: 'local'
+
+# Alertmanager configuration (optional for future)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: []
+
+# Load alert rules
+rule_files:
+  - 'alerts.yml'
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+
+  # Registry API service
+  - job_name: 'registry-api'
+    static_configs:
+      - targets: ['registry-api:8000']
+        labels:
+          service: 'registry-api'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # ASR service
+  - job_name: 'asr-service'
+    static_configs:
+      - targets: ['asr-service:8000']
+        labels:
+          service: 'asr-service'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # PostgreSQL metrics (if we add postgres_exporter later)
+  # - job_name: 'postgres'
+  #   static_configs:
+  #     - targets: ['postgres-exporter:9187']
+
+  # Node metrics (system-level)
+  # - job_name: 'node'
+  #   static_configs:
+  #     - targets: ['node-exporter:9100']
