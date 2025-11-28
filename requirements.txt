@@ -1,0 +1,20 @@
+# Project-wide requirements
+# Individual services have their own requirements.txt in their respective directories
+
+# Registry Service
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+sqlalchemy==2.0.23
+psycopg2-binary==2.9.9
+alembic==1.12.1
+pydantic==2.5.0
+pydantic-settings==2.1.0
+python-multipart==0.0.6
+httpx==0.25.0
+prometheus-client==0.19.0
+
+# ASR Service
+openai-whisper==20231117
+torch==2.1.0
+torchaudio==2.1.0
+numpy<2.0
