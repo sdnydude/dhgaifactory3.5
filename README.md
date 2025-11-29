@@ -69,9 +69,12 @@ By default, the stack runs in CPU mode for compatibility. To enable GPU support 
    make restart
    ```
 
-### Environment Variables
-Key configurations can be adjusted in `docker-compose.yml`:
-- `WHISPER_MODEL`: Model size (base, small, medium, large-v3).
+### ASR Service
+- **Endpoint**: `http://localhost:8001`
+- **Docs**: `http://localhost:8001/docs`
+- **Models**: Configured via `WHISPER_MODEL` env var.
+  - Options: `tiny`, `base`, `small`, `medium`, `large-v3`.
+  - **Mock Mode**: Set `WHISPER_MODEL=mock` to simulate transcription (useful for Mac/CPU dev to avoid crashes).
 - `POSTGRES_USER` / `POSTGRES_DB`: Database credentials.
 
 ## 🛠 Development

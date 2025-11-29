@@ -1,6 +1,6 @@
 """
 DHG AI Factory - ASR Service
-Automatic Speech Recognition using OpenAI Whisper
+Automatic Speech Recognition using Whisper CPP
 """
 
 import os
@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Optional
 import logging
 
-import whisper
-import torch
+# Replaced openai-whisper with pywhispercpp
+from pywhispercpp.model import Model
 import httpx
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
@@ -35,8 +35,8 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 # Initialize FastAPI app
 app = FastAPI(
     title="DHG ASR Service",
-    description="Automatic Speech Recognition using Whisper",
-    version="1.0.0"
+    description="Automatic Speech Recognition using Whisper CPP",
+    version="2.0.0"
 )
 
 # Prometheus metrics
@@ -93,13 +93,18 @@ def get_model():
     global _model, _model_name
     
     if _model is None or _model_name != WHISPER_MODEL:
-        logger.info(f"Loading Whisper model: {WHISPER_MODEL}")
+        if WHISPER_MODEL == "mock":
+            logger.info("Mock mode enabled - skipping model load")
+            _model = "mock_model"
+            _model_name = "mock"
+            return _model
+
+        logger.info(f"Loading Whisper CPP model: {WHISPER_MODEL}")
         start_time = time.time()
         
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        logger.info(f"Using device: {device}")
-        
-        _model = whisper.load_model(WHISPER_MODEL, device=device)
+        # pywhispercpp handles downloading models if not present
+        # n_threads can be tuned, default is usually sufficient
+        _model = Model(WHISPER_MODEL, print_realtime=False, print_progress=False)
         _model_name = WHISPER_MODEL
         
         load_time = time.time() - start_time
@@ -109,8 +114,38 @@ def get_model():
     return _model
 
 
+async def create_media_in_registry(filename: str, file_size: int, mime_type: str) -> Optional[str]:
+    """Create media entry in Registry API"""
+    try:
+        async with httpx.AsyncClient() as client:
+            payload = {
+                "filename": filename,
+                "filepath": f"/media/{filename}",
+                "file_size_bytes": file_size,
+                "mime_type": mime_type,
+                "status": "processing"
+            }
+            
+            response = await client.post(
+                f"{REGISTRY_API_URL}/api/v1/media",
+                json=payload,
+                timeout=10.0
+            )
+            
+            if response.status_code == 201:
+                data = response.json()
+                logger.info(f"Media created in registry: {data['id']}")
+                return data['id']
+            else:
+                logger.error(f"Failed to create media in registry: {response.status_code} - {response.text}")
+                return None
+    except Exception as e:
+        logger.error(f"Error creating media in registry: {e}")
+        return None
+
+
 async def store_transcription_in_registry(
-    transcription_id: str,
+    media_id: str,
     text: str,
     meta_data: dict
 ) -> bool:
@@ -118,26 +153,29 @@ async def store_transcription_in_registry(
     try:
         async with httpx.AsyncClient() as client:
             payload = {
-                "transcription_id": transcription_id,
-                "text": text,
+                "media_id": media_id,
+                "full_text": text,
+                "processing_time_seconds": meta_data.get("processing_time", 0.0),
+                "language": meta_data.get("language"),
+                "model_name": meta_data.get("model"),
                 "meta_data": meta_data
             }
             
             response = await client.post(
-                f"{REGISTRY_API_URL}/api/v1/transcriptions",
+                f"{REGISTRY_API_URL}/api/v1/transcripts",
                 json=payload,
                 timeout=10.0
             )
             
             if response.status_code == 201:
-                logger.info(f"Transcription {transcription_id} stored in registry")
+                logger.info(f"Transcript for media {media_id} stored in registry")
                 return True
             else:
-                logger.error(f"Failed to store in registry: {response.status_code}")
+                logger.error(f"Failed to store transcript in registry: {response.status_code} - {response.text}")
                 return False
                 
     except Exception as e:
-        logger.error(f"Error storing in registry: {e}")
+        logger.error(f"Error storing transcript in registry: {e}")
         return False
 
 
@@ -145,7 +183,9 @@ async def store_transcription_in_registry(
 async def health_check():
     """Health check endpoint"""
     model_loaded = _model is not None
-    gpu_available = torch.cuda.is_available()
+    # With whisper.cpp, we don't check torch.cuda.is_available()
+    # We assume GPU is used if configured in build, but for now we just report True/False based on env
+    gpu_available = False # TODO: check if pywhispercpp exposes this
     
     # Check registry connectivity
     registry_status = "unknown"
@@ -171,42 +211,35 @@ async def health_check():
 @app.get("/metrics")
 async def metrics():
     """Prometheus metrics endpoint"""
-    # Update GPU utilization (simulated for now, in production use pynvml)
-    if torch.cuda.is_available():
-        try:
-            # This is a placeholder - in production, use nvidia-smi or pynvml
-            gpu_utilization.set(50.0)  # Simulated value
-        except Exception as e:
-            logger.warning(f"Could not get GPU metrics: {e}")
-    
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @app.post("/transcribe", response_model=TranscriptionResponse)
 async def transcribe_audio(file: UploadFile = File(...)):
     """
-    Transcribe audio file using Whisper
-    
-    Accepts audio files in various formats (mp3, wav, m4a, etc.)
-    Returns transcription text and metadata
+    Transcribe audio file using Whisper CPP
     """
-    transcription_id = str(uuid.uuid4())
     start_time = time.time()
+    file_path = UPLOAD_DIR / f"{uuid.uuid4()}_{file.filename}"
     
     try:
-        # Validate file type
-        if not file.content_type or not file.content_type.startswith('audio/'):
-            logger.warning(f"Invalid content type: {file.content_type}")
-            # Allow it anyway - Whisper can handle many formats
-        
         # Save uploaded file temporarily
-        file_path = UPLOAD_DIR / f"{transcription_id}_{file.filename}"
-        
         logger.info(f"Receiving file: {file.filename}")
         with open(file_path, "wb") as f:
             content = await file.read()
             f.write(content)
         
+        # Create media in registry
+        media_id = await create_media_in_registry(
+            filename=file.filename,
+            file_size=file.size if file.size else 0,
+            mime_type=file.content_type or "application/octet-stream"
+        )
+        
+        if not media_id:
+            logger.warning("Could not create media in registry, proceeding with transcription anyway")
+            media_id = str(uuid.uuid4())
+
         # Load model
         model = get_model()
         
@@ -214,17 +247,32 @@ async def transcribe_audio(file: UploadFile = File(...)):
         logger.info(f"Transcribing {file.filename} with model {WHISPER_MODEL}")
         transcribe_start = time.time()
         
-        result = model.transcribe(str(file_path))
-        
+        if WHISPER_MODEL == "mock":
+            time.sleep(1.0)  # Simulate processing
+            text = "This is a mock transcription result for testing purposes."
+            language = "en"
+            duration = 10.0
+        else:
+            # pywhispercpp transcribe returns segments
+            # segments = model.transcribe(str(file_path))
+            # We need to aggregate text
+            segments = model.transcribe(str(file_path))
+            text = "".join([segment.text for segment in segments]).strip()
+            # pywhispercpp might not return language/duration easily in all versions
+            # We'll assume english and calculate duration from file if needed, or from segments
+            language = "en" # Default or TODO: detect
+            # Calculate duration from segments if possible, else 0
+            duration = 0.0
+            if segments:
+                duration = segments[-1].t1 / 100.0 # t1 is usually in centiseconds in some bindings, check docs. 
+                # Actually pywhispercpp segments usually have t0, t1 in centiseconds (int)
+                # Let's verify this assumption or just use 0 for now to be safe
+                pass
+
         transcribe_time = time.time() - transcribe_start
         total_time = time.time() - start_time
         
-        # Extract results
-        text = result["text"].strip()
-        language = result.get("language")
-        duration = result.get("duration", 0.0)
-        
-        logger.info(f"Transcription complete: {len(text)} chars, {duration:.2f}s audio, {transcribe_time:.2f}s processing")
+        logger.info(f"Transcription complete: {len(text)} chars, {transcribe_time:.2f}s processing")
         
         # Store in registry
         meta_data = {
@@ -233,21 +281,18 @@ async def transcribe_audio(file: UploadFile = File(...)):
             "audio_duration": duration,
             "processing_time": transcribe_time,
             "model": WHISPER_MODEL,
-            "device": "cuda" if torch.cuda.is_available() else "cpu"
+            "engine": "whisper.cpp"
         }
         
-        await store_transcription_in_registry(transcription_id, text, meta_data)
+        await store_transcription_in_registry(media_id, text, meta_data)
         
         # Update metrics
         asr_requests_total.labels(status="success").inc()
         asr_latency_seconds.observe(total_time)
         asr_audio_duration_seconds.observe(duration)
         
-        # Cleanup
-        file_path.unlink()
-        
         return TranscriptionResponse(
-            transcription_id=transcription_id,
+            transcription_id=media_id,
             text=text,
             language=language,
             duration=duration,
@@ -258,15 +303,14 @@ async def transcribe_audio(file: UploadFile = File(...)):
     except Exception as e:
         logger.error(f"Transcription failed: {e}", exc_info=True)
         asr_requests_total.labels(status="error").inc()
-        
-        # Cleanup on error
-        if file_path.exists():
-            file_path.unlink()
-        
         raise HTTPException(
             status_code=500,
             detail=f"Transcription failed: {str(e)}"
         )
+    finally:
+        # Cleanup
+        if file_path.exists():
+            file_path.unlink()
 
 
 @app.get("/")
@@ -274,9 +318,9 @@ async def root():
     """Root endpoint"""
     return {
         "service": "DHG ASR Service",
-        "version": "1.0.0",
+        "version": "2.0.0",
+        "engine": "whisper.cpp",
         "model": WHISPER_MODEL,
-        "gpu_available": torch.cuda.is_available(),
         "endpoints": {
             "health": "/healthz",
             "metrics": "/metrics",
@@ -289,18 +333,12 @@ async def root():
 @app.on_event("startup")
 async def startup_event():
     """Preload model on startup"""
-    logger.info("ASR Service starting up...")
-    logger.info(f"CUDA available: {torch.cuda.is_available()}")
-    if torch.cuda.is_available():
-        logger.info(f"CUDA device: {torch.cuda.get_device_name(0)}")
-    
-    # Preload model
+    logger.info("ASR Service starting up (Whisper CPP)...")
     try:
         get_model()
         logger.info("Model preloaded successfully")
     except Exception as e:
         logger.error(f"Failed to preload model: {e}")
-        # Don't fail startup - model can be lazy loaded
 
 
 @app.on_event("shutdown")

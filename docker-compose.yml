@@ -64,7 +64,7 @@ services:
     environment:
       REGISTRY_API_URL: http://registry-api:8000
       CUDA_VISIBLE_DEVICES: "0"
-      WHISPER_MODEL: base
+      WHISPER_MODEL: mock
     ports:
       - "8001:8000"
     networks:

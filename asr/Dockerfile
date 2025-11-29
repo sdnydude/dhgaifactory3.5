@@ -1,11 +1,12 @@
-FROM nvidia/cuda:12.1.0-base-ubuntu22.04
+FROM python:3.10-slim
 
-# Install Python and system dependencies
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
-    python3.10 \
-    python3-pip \
     ffmpeg \
     curl \
+    build-essential \
+    cmake \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
