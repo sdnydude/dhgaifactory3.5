@@ -4,6 +4,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install Python and system dependencies for faster-whisper
 RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
     ffmpeg \
     curl \
     libgomp1 \
