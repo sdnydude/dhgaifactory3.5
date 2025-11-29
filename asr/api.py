@@ -1,6 +1,6 @@
 """
 DHG AI Factory - ASR Service
-Automatic Speech Recognition using Whisper CPP
+Automatic Speech Recognition using Faster-Whisper
 """
 
 import os
@@ -10,8 +10,7 @@ from pathlib import Path
 from typing import Optional
 import logging
 
-# Replaced openai-whisper with pywhispercpp
-from pywhispercpp.model import Model
+from faster_whisper import WhisperModel
 import httpx
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
@@ -28,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 # Environment configuration
 REGISTRY_API_URL = os.getenv("REGISTRY_API_URL", "http://registry-api:8000")
-WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base")
+WHISPER_MODEL = os.getenv("WHISPER_MODEL", "medium")
 UPLOAD_DIR = Path("/tmp/uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 
@@ -89,22 +88,27 @@ class HealthResponse(BaseModel):
 
 
 def get_model():
-    """Lazy load Whisper model"""
+    """Lazy load Whisper model using faster-whisper"""
     global _model, _model_name
     
     if _model is None or _model_name != WHISPER_MODEL:
-        if WHISPER_MODEL == "mock":
-            logger.info("Mock mode enabled - skipping model load")
-            _model = "mock_model"
-            _model_name = "mock"
-            return _model
-
-        logger.info(f"Loading Whisper CPP model: {WHISPER_MODEL}")
+        logger.info(f"Loading Faster-Whisper model: {WHISPER_MODEL}")
         start_time = time.time()
         
-        # pywhispercpp handles downloading models if not present
-        # n_threads can be tuned, default is usually sufficient
-        _model = Model(WHISPER_MODEL, print_realtime=False, print_progress=False)
+        # faster-whisper uses CPU with CTranslate2 optimizations
+        # compute_type can be: int8, int8_float16, float16, float32
+        device = "cpu"
+        compute_type = "int8"
+        
+        logger.info(f"Using device: {device}, compute_type: {compute_type}")
+        
+        # Load model with faster-whisper
+        _model = WhisperModel(
+            WHISPER_MODEL,
+            device=device,
+            compute_type=compute_type,
+            download_root="/root/.cache/whisper"
+        )
         _model_name = WHISPER_MODEL
         
         load_time = time.time() - start_time
@@ -183,9 +187,6 @@ async def store_transcription_in_registry(
 async def health_check():
     """Health check endpoint"""
     model_loaded = _model is not None
-    # With whisper.cpp, we don't check torch.cuda.is_available()
-    # We assume GPU is used if configured in build, but for now we just report True/False based on env
-    gpu_available = False # TODO: check if pywhispercpp exposes this
     
     # Check registry connectivity
     registry_status = "unknown"
@@ -203,7 +204,7 @@ async def health_check():
         status="healthy",
         model_loaded=model_loaded,
         model_name=_model_name,
-        gpu_available=gpu_available,
+        gpu_available=False,  # faster-whisper uses CPU
         registry_api=registry_status
     )
 
@@ -211,6 +212,9 @@ async def health_check():
 @app.get("/metrics")
 async def metrics():
     """Prometheus metrics endpoint"""
+    # GPU not used with CPU-based faster-whisper
+    gpu_utilization.set(0.0)
+    
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 

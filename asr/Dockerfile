@@ -1,12 +1,12 @@
-FROM python:3.10-slim
+FROM ubuntu:22.04
 
-# Install system dependencies
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install Python and system dependencies for faster-whisper
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     curl \
-    build-essential \
-    cmake \
-    git \
+    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
