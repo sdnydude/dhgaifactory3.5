@@ -1,46 +1,55 @@
+# Environment
+.env
+docker-compose.secrets.yml
+
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-env/
 venv/
-.venv
-*.egg-info/
-dist/
-build/
+.venv/
+ENV/
+env/
 
-# IDEs
+# Data & Logs
+logs/
+*.log
+data/
+uploads/
+models/
+
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-*~
-
-# OS
 .DS_Store
-Thumbs.db
 
-# Environment
-.env
-*.env.local
+# Docker
+*.pid
+*.seed
+*.pid.lock
 
-# Secrets
-secrets/
-*.key
-*.pem
+# Database
+postgres-data/
+*.db
+*.sqlite
 
-# Data
-data/pgdata/
-backups/*.sql.gz
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
 
-# Logs
-*.log
-logs/
-
-# Grafana
-observability/grafana/data/
-
-# Prometheus
-observability/prometheus/data/
+# Frontend / Node
+node_modules/
+dist/
+build/
+.parcel-cache/
+.next/
+out/
+.nuxt/
+.cache/
+.turbo/
+*.tsbuildinfo
