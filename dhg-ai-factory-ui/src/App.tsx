@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { cn } from './lib/utils';
 import { useAppStore, selectUI, selectIsConnected } from './store/useAppStore';
-import { useAgentWebSocket, WebSocketProvider } from './hooks/useAgentWebSocket';
+import { useWebSocket, WebSocketProvider } from './hooks/useAgentWebSocket';
 
 // Components
 import ChatPanel from './components/ChatPanel';
@@ -391,94 +391,12 @@ const Footer: React.FC = () => {
 // APP INNER (with WebSocket connection)
 // ============================================================================
 
+
 const AppInner: React.FC = () => {
-  const setConnected = useAppStore(state => state.setConnected);
-  const setSessionId = useAppStore(state => state.setSessionId);
-  const updateAgentStatus = useAppStore(state => state.updateAgentStatus);
-  const addAgentLog = useAppStore(state => state.addAgentLog);
-  const appendContentChunk = useAppStore(state => state.appendContentChunk);
-  const setCurrentContent = useAppStore(state => state.setCurrentContent);
-  const setValidationResult = useAppStore(state => state.setValidationResult);
-  const addMessage = useAppStore(state => state.addMessage);
-  const setTyping = useAppStore(state => state.setTyping);
+  // No longer directly calling useAgentWebSocket - using context instead
+  const { connectionState } = useWebSocket();
   
-  // Connect to WebSocket
-  const { connect, connectionState } = useAgentWebSocket(
-    'demo-auth-token', // Replace with real auth token
-    {
-      onConnected: () => {
-        setConnected(true);
-        console.log('[App] WebSocket connected');
-      },
-      onDisconnected: () => {
-        setConnected(false);
-        console.log('[App] WebSocket disconnected');
-      },
-      onAgentStatus: (payload) => {
-        updateAgentStatus(payload);
-      },
-      onAgentLog: (payload) => {
-        addAgentLog(payload.agent_id, {
-          id: `log_${Date.now()}`,
-          timestamp: new Date().toISOString(),
-          level: payload.level,
-          message: payload.message,
-          data: payload.data
-        });
-      },
-      onContentChunk: (payload) => {
-        appendContentChunk(payload);
-      },
-      onContentComplete: (payload) => {
-        setCurrentContent({
-          id: payload.content_id,
-          request_id: '',
-          title: payload.title,
-          content: payload.content,
-          format: payload.format,
-          sections: [],
-          metadata: {
-            word_count: payload.metadata.word_count,
-            reference_count: payload.metadata.reference_count,
-            generation_time_ms: payload.metadata.generation_time_ms,
-            compliance_mode: payload.metadata.compliance_mode,
-            moore_levels: payload.metadata.moore_levels_addressed,
-            target_audience: '',
-            topic: ''
-          },
-          created_at: new Date().toISOString()
-        });
-      },
-      onValidationComplete: (payload) => {
-        setValidationResult({
-          status: payload.overall_status,
-          checks: payload.checks,
-          violations: payload.violations,
-          warnings: payload.warnings,
-          validated_at: new Date().toISOString()
-        });
-      },
-      onChatResponse: (payload) => {
-        addMessage({
-          id: `msg_${Date.now()}`,
-          timestamp: new Date().toISOString(),
-          role: 'agent',
-          agent_id: payload.agent_id,
-          content: payload.content,
-          suggestions: payload.suggestions
-        });
-        setTyping(false);
-      },
-      onChatTyping: (payload) => {
-        setTyping(payload.is_typing);
-      }
-    }
-  );
-  
-  // Auto-connect on mount
-  useEffect(() => {
-    connect();
-  }, [connect]);
+  // Auto-connect happens in WebSocketProvider
   
   return (
     <div className="h-screen flex flex-col bg-gray-100">
@@ -495,13 +413,93 @@ const AppInner: React.FC = () => {
   );
 };
 
+
 // ============================================================================
-// MAIN APP COMPONENT
+// MAIN APP (with WebSocket handlers)
 // ============================================================================
 
 const App: React.FC = () => {
+  const setConnected = useAppStore(state => state.setConnected);
+  const setSessionId = useAppStore(state => state.setSessionId);
+  const updateAgentStatus = useAppStore(state => state.updateAgentStatus);
+  const addAgentLog = useAppStore(state => state.addAgentLog);
+  const appendContentChunk = useAppStore(state => state.appendContentChunk);
+  const setCurrentContent = useAppStore(state => state.setCurrentContent);
+  const setValidationResult = useAppStore(state => state.setValidationResult);
+  const addMessage = useAppStore(state => state.addMessage);
+  const setTyping = useAppStore(state => state.setTyping);
+  
+  const handlers = {
+    onConnected: () => {
+      setConnected(true);
+      console.log('[App] WebSocket connected');
+    },
+    onDisconnected: () => {
+      setConnected(false);
+      console.log('[App] WebSocket disconnected');
+    },
+    onAgentStatus: (payload) => {
+      updateAgentStatus(payload);
+    },
+    onAgentLog: (payload) => {
+      addAgentLog(payload.agent_id, {
+        id: `log_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        level: payload.level,
+        message: payload.message,
+        data: payload.data
+      });
+    },
+    onContentChunk: (payload) => {
+      appendContentChunk(payload);
+    },
+    onContentComplete: (payload) => {
+      setCurrentContent({
+        id: payload.content_id,
+        request_id: '',
+        title: payload.title,
+        content: payload.content,
+        format: payload.format,
+        sections: [],
+        metadata: {
+          word_count: payload.metadata.word_count,
+          reference_count: payload.metadata.reference_count,
+          generation_time_ms: payload.metadata.generation_time_ms,
+          compliance_mode: payload.metadata.compliance_mode,
+          moore_levels: payload.metadata.moore_levels_addressed,
+          target_audience: '',
+          topic: ''
+        },
+        created_at: new Date().toISOString()
+      });
+    },
+    onValidationComplete: (payload) => {
+      setValidationResult({
+        status: payload.overall_status,
+        checks: payload.checks,
+        violations: payload.violations,
+        warnings: payload.warnings,
+        validated_at: new Date().toISOString()
+      });
+    },
+    onChatResponse: (payload) => {
+      addMessage({
+        id: `msg_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        role: 'agent',
+        agent_id: payload.agent_id,
+        content: payload.content,
+        suggestions: payload.suggestions
+      });
+      setTyping(false);
+    },
+    onChatTyping: (payload) => {
+      setTyping(payload.is_typing);
+    }
+  };
+  
   return (
-    <WebSocketProvider authToken="demo-auth-token" handlers={{}}>
+    <WebSocketProvider authToken="demo-auth-token" handlers={handlers}>
       <AppInner />
     </WebSocketProvider>
   );

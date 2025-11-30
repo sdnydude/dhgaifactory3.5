@@ -6,55 +6,55 @@ All data stored in PostgreSQL DHG Registry
 import os
 import time
 from contextlib import asynccontextmanager
-from typing import List, Optional
+from typing import List, Optional, Union
 from datetime import datetime
 import uuid
 
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.responses import PlainTextResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, UUID4, UUID4, Field
 from sqlalchemy import create_engine, select, func
 from sqlalchemy.orm import Session, sessionmaker
 from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 
-from models import Base, Media, Transcript, Segment, Event
+from models import Base, Media, Transcript, Segment, Event, Project, Conversation, Message, Artifact
 
 
 # ============================================================================
 # Prometheus Metrics
 # ============================================================================
 registry_write_latency = Histogram(
-    'registry_write_latency_ms',
+    'registry_write_latency',
     'Database write latency in milliseconds',
     buckets=[1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000]
 )
 
 registry_read_latency = Histogram(
-    'registry_read_latency_ms',
+    'registry_read_latency',
     'Database read latency in milliseconds',
     buckets=[1, 5, 10, 25, 50, 100, 250, 500, 1000]
 )
 
 registry_write_operations = Counter(
-    'registry_write_operations_total',
+    'registry_write_operations',
     'Total number of write operations',
     ['operation']
 )
 
 registry_read_operations = Counter(
-    'registry_read_operations_total',
+    'registry_read_operations',
     'Total number of read operations',
     ['operation']
 )
 
 registry_errors = Counter(
-    'registry_errors_total',
+    'registry_errors',
     'Total number of registry errors',
     ['error_type']
 )
 
 registry_db_errors = Counter(
-    'registry_db_errors_total',
+    'registry_db_errors',
     'Total number of database connection errors'
 )
 
@@ -473,3 +473,375 @@ async def list_events(skip: int = 0, limit: int = 100, db: Session = Depends(get
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+# ========================================
+# Claude AI Data Endpoints
+# ========================================
+
+# Pydantic models for Claude data
+class ProjectResponse(BaseModel):
+    id: UUID4
+    name: str
+    project_id: Optional[str]
+    description: Optional[str]
+    custom_instructions: Optional[str]
+    knowledge_files: Optional[Union[dict, list]]
+    created_at: datetime
+    updated_at: datetime
+    conversation_count: int = 0
+
+    class Config:
+        from_attributes = True
+
+
+class ConversationResponse(BaseModel):
+    id: UUID4
+    title: str
+    conversation_id: Optional[str]
+    export_source: str
+    model_name: Optional[str]
+    project_id: Optional[UUID4]
+    created_at: datetime
+    updated_at: datetime
+    message_count: int = 0
+    artifact_count: int = 0
+
+    class Config:
+        from_attributes = True
+
+
+class MessageResponse(BaseModel):
+    id: UUID4
+    conversation_id: UUID4
+    message_index: int
+    role: str
+    content: str
+    attachments: Optional[dict]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ArtifactResponse(BaseModel):
+    id: UUID4
+    conversation_id: UUID4
+    message_id: Optional[UUID4]
+    title: str
+    artifact_type: str
+    language: Optional[str]
+    content: str
+    file_path: Optional[str]
+    published_url: Optional[str]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# Projects endpoints
+@app.get("/api/v1/projects", response_model=List[ProjectResponse])
+async def list_projects(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    """List all projects"""
+    start = time.time()
+    try:
+        projects = db.query(Project).offset(skip).limit(limit).all()
+        
+        # Add conversation count
+        result = []
+        for project in projects:
+            conv_count = db.query(Conversation).filter(Conversation.project_id == project.id).count()
+            proj_dict = {
+                'id': project.id,
+                'name': project.name,
+                'project_id': project.project_id,
+                'description': project.description,
+                'custom_instructions': project.custom_instructions,
+                'knowledge_files': project.knowledge_files,
+                'created_at': project.created_at,
+                'updated_at': project.updated_at,
+                'conversation_count': conv_count
+            }
+            result.append(ProjectResponse(**proj_dict))
+        
+        registry_read_latency.observe((time.time() - start) * 1000)
+        registry_read_operations.labels(operation="list_projects").inc()
+        return result
+    except Exception as e:
+        registry_errors.labels(error_type="list_projects").inc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/projects/{project_id}", response_model=ProjectResponse)
+async def get_project(project_id: UUID4, db: Session = Depends(get_db)):
+    """Get a specific project"""
+    start = time.time()
+    try:
+        project = db.query(Project).filter(Project.id == project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        conv_count = db.query(Conversation).filter(Conversation.project_id == project.id).count()
+        proj_dict = {
+            'id': project.id,
+            'name': project.name,
+            'project_id': project.project_id,
+            'description': project.description,
+            'custom_instructions': project.custom_instructions,
+            'knowledge_files': project.knowledge_files,
+            'created_at': project.created_at,
+            'updated_at': project.updated_at,
+            'conversation_count': conv_count
+        }
+        
+        registry_read_latency.observe((time.time() - start) * 1000)
+        registry_read_operations.labels(operation="get_project").inc()
+        return ProjectResponse(**proj_dict)
+    except HTTPException:
+        raise
+    except Exception as e:
+        registry_errors.labels(error_type="get_project").inc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Conversations endpoints
+@app.get("/api/v1/conversations", response_model=List[ConversationResponse])
+async def list_conversations(
+    skip: int = 0,
+    limit: int = 100,
+    project_id: Optional[UUID4] = None,
+    export_source: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """List conversations with optional filtering"""
+    start = time.time()
+    try:
+        query = db.query(Conversation)
+        
+        if project_id:
+            query = query.filter(Conversation.project_id == project_id)
+        if export_source:
+            query = query.filter(Conversation.export_source == export_source)
+        
+        conversations = query.order_by(Conversation.created_at.desc()).offset(skip).limit(limit).all()
+        
+        # Add counts
+        result = []
+        for conv in conversations:
+            msg_count = db.query(Message).filter(Message.conversation_id == conv.id).count()
+            art_count = db.query(Artifact).filter(Artifact.conversation_id == conv.id).count()
+            conv_dict = {
+                'id': conv.id,
+                'title': conv.title,
+                'conversation_id': conv.conversation_id,
+                'export_source': conv.export_source,
+                'model_name': conv.model_name,
+                'project_id': conv.project_id,
+                'created_at': conv.created_at,
+                'updated_at': conv.updated_at,
+                'message_count': msg_count,
+                'artifact_count': art_count
+            }
+            result.append(ConversationResponse(**conv_dict))
+        
+        registry_read_latency.observe((time.time() - start) * 1000)
+        registry_read_operations.labels(operation="list_conversations").inc()
+        return result
+    except Exception as e:
+        registry_errors.labels(error_type="list_conversations").inc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/conversations/{conversation_id}", response_model=ConversationResponse)
+async def get_conversation(conversation_id: UUID4, db: Session = Depends(get_db)):
+    """Get a specific conversation"""
+    start = time.time()
+    try:
+        conv = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+        if not conv:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        
+        msg_count = db.query(Message).filter(Message.conversation_id == conv.id).count()
+        art_count = db.query(Artifact).filter(Artifact.conversation_id == conv.id).count()
+        conv_dict = {
+            'id': conv.id,
+            'title': conv.title,
+            'conversation_id': conv.conversation_id,
+            'export_source': conv.export_source,
+            'model_name': conv.model_name,
+            'project_id': conv.project_id,
+            'created_at': conv.created_at,
+            'updated_at': conv.updated_at,
+            'message_count': msg_count,
+            'artifact_count': art_count
+        }
+        
+        registry_read_latency.observe((time.time() - start) * 1000)
+        registry_read_operations.labels(operation="get_conversation").inc()
+        return ConversationResponse(**conv_dict)
+    except HTTPException:
+        raise
+    except Exception as e:
+        registry_errors.labels(error_type="get_conversation").inc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/conversations/search")
+async def search_conversations(
+    q: str,
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db)
+):
+    """Search conversations by title or content"""
+    start = time.time()
+    try:
+        # Search in conversation titles
+        conversations = db.query(Conversation).filter(
+            Conversation.title.ilike(f'%{q}%')
+        ).order_by(Conversation.created_at.desc()).offset(skip).limit(limit).all()
+        
+        result = []
+        for conv in conversations:
+            msg_count = db.query(Message).filter(Message.conversation_id == conv.id).count()
+            art_count = db.query(Artifact).filter(Artifact.conversation_id == conv.id).count()
+            conv_dict = {
+                'id': conv.id,
+                'title': conv.title,
+                'conversation_id': conv.conversation_id,
+                'export_source': conv.export_source,
+                'model_name': conv.model_name,
+                'project_id': conv.project_id,
+                'created_at': conv.created_at,
+                'updated_at': conv.updated_at,
+                'message_count': msg_count,
+                'artifact_count': art_count
+            }
+            result.append(conv_dict)
+        
+        registry_read_latency.observe((time.time() - start) * 1000)
+        registry_read_operations.labels(operation="search_conversations").inc()
+        return result
+    except Exception as e:
+        registry_errors.labels(error_type="search_conversations").inc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Messages endpoints
+@app.get("/api/v1/messages/conversation/{conversation_id}", response_model=List[MessageResponse])
+async def list_messages(conversation_id: UUID4, db: Session = Depends(get_db)):
+    """List messages for a conversation"""
+    start = time.time()
+    try:
+        messages = db.query(Message).filter(
+            Message.conversation_id == conversation_id
+        ).order_by(Message.message_index).all()
+        
+        registry_read_latency.observe((time.time() - start) * 1000)
+        registry_read_operations.labels(operation="list_messages").inc()
+        return messages
+    except Exception as e:
+        registry_errors.labels(error_type="list_messages").inc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Artifacts endpoints
+@app.get("/api/v1/artifacts", response_model=List[ArtifactResponse])
+async def list_artifacts(
+    skip: int = 0,
+    limit: int = 100,
+    artifact_type: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """List artifacts with optional filtering"""
+    start = time.time()
+    try:
+        query = db.query(Artifact)
+        
+        if artifact_type:
+            query = query.filter(Artifact.artifact_type == artifact_type)
+        
+        artifacts = query.order_by(Artifact.created_at.desc()).offset(skip).limit(limit).all()
+        
+        registry_read_latency.observe((time.time() - start) * 1000)
+        registry_read_operations.labels(operation="list_artifacts").inc()
+        return artifacts
+    except Exception as e:
+        registry_errors.labels(error_type="list_artifacts").inc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/artifacts/conversation/{conversation_id}", response_model=List[ArtifactResponse])
+async def list_artifacts_by_conversation(conversation_id: UUID4, db: Session = Depends(get_db)):
+    """List artifacts for a specific conversation"""
+    start = time.time()
+    try:
+        artifacts = db.query(Artifact).filter(
+            Artifact.conversation_id == conversation_id
+        ).order_by(Artifact.created_at).all()
+        
+        registry_read_latency.observe((time.time() - start) * 1000)
+        registry_read_operations.labels(operation="list_artifacts_by_conversation").inc()
+        return artifacts
+    except Exception as e:
+        registry_errors.labels(error_type="list_artifacts_by_conversation").inc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/artifacts/{artifact_id}", response_model=ArtifactResponse)
+async def get_artifact(artifact_id: UUID4, db: Session = Depends(get_db)):
+    """Get a specific artifact"""
+    start = time.time()
+    try:
+        artifact = db.query(Artifact).filter(Artifact.id == artifact_id).first()
+        if not artifact:
+            raise HTTPException(status_code=404, detail="Artifact not found")
+        
+        registry_read_latency.observe((time.time() - start) * 1000)
+        registry_read_operations.labels(operation="get_artifact").inc()
+        return artifact
+    except HTTPException:
+        raise
+    except Exception as e:
+        registry_errors.labels(error_type="get_artifact").inc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# WEBSOCKET ENDPOINT
+# ============================================================================
+from fastapi import WebSocket, WebSocketDisconnect
+from websocket_manager import manager as ws_manager
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket, client_id: Optional[str] = None):
+    """WebSocket endpoint for real-time communication with UI"""
+    client_id = await ws_manager.connect(websocket, client_id)
+    
+    try:
+        while True:
+            # Receive message from client
+            data = await websocket.receive_json()
+            
+            # Process message and get response
+            response = await ws_manager.handle_client_message(client_id, data)
+            
+            # Send response if one was returned
+            if response:
+                await ws_manager.send_message(client_id, response)
+                
+    except WebSocketDisconnect:
+        ws_manager.disconnect(client_id)
+    except Exception as e:
+        logger.error("websocket_error", client_id=client_id, error=str(e))
+        ws_manager.disconnect(client_id)
+
+
+@app.get("/api/v1/ws/status")
+async def websocket_status():
+    """Get WebSocket connection status"""
+    return {
+        "active_connections": len(ws_manager.active_connections),
+        "sessions": len(ws_manager.sessions)
+    }

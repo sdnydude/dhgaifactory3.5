@@ -15,8 +15,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY models.py .
 COPY api.py .
+COPY websocket_manager.py .
 COPY alembic.ini .
 COPY alembic/ ./alembic/
+COPY importers/ ./importers/
+COPY ingest_claude_data.py .
 
 # Run migrations on startup, then start the API
 COPY entrypoint.sh .

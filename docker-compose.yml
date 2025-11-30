@@ -1,181 +1,209 @@
 version: '3.8'
 
 services:
-  # PostgreSQL 15 with pgvector - DHG Registry Database
+  # ============================================================================
+  # INFRASTRUCTURE
+  # ============================================================================
+  
   registry-db:
     image: pgvector/pgvector:pg15
     container_name: dhg-registry-db
     environment:
-      POSTGRES_USER: dhg_user
-      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
-      POSTGRES_DB: dhg_registry
-    secrets:
-      - db_password
+      POSTGRES_USER: ${POSTGRES_USER:-dhg}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ${POSTGRES_DB:-dhg_registry}
     volumes:
-      - pgdata:/var/lib/postgresql/data
-      - ./registry/init-scripts:/docker-entrypoint-initdb.d
-    networks:
-      - dhg-network
+      - postgres-data:/var/lib/postgresql/data
+      - ./registry/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dhg_user -d dhg_registry"]
+      test: ["CMD-SHELL", "pg_isready -U dhg"]
       interval: 10s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
+    networks:
+      - dhg-network
 
-  # Registry API Service
-  registry-api:
+  # ============================================================================
+  # MASTER ORCHESTRATOR AGENT
+  # ============================================================================
+  
+  orchestrator:
     build:
-      context: ./registry
-      dockerfile: Dockerfile
-    container_name: dhg-registry-api
+      context: .
+      dockerfile: agents/orchestrator/Dockerfile
+    container_name: dhg-orchestrator
+    environment:
+      - AGENT_NAME=orchestrator
+      - AGENT_TYPE=master
+      - REGISTRY_DB_URL=postgresql://${POSTGRES_USER:-dhg}:${POSTGRES_PASSWORD:-changeme}@registry-db:5432/${POSTGRES_DB:-dhg_registry}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - CME_MODE_DEFAULT=${CME_MODE_DEFAULT:-auto}
+    volumes:
+      - ./agents/orchestrator:/app
+      - ./agents/shared:/app/shared
+      - ./logs:/logs
+    ports:
+      - "8011:8000"
     depends_on:
       registry-db:
         condition: service_healthy
-    environment:
-      DATABASE_URL: postgresql://dhg_user@registry-db:5432/dhg_registry
-      DB_PASSWORD_FILE: /run/secrets/db_password
-    secrets:
-      - db_password
-    ports:
-      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks:
       - dhg-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
     restart: unless-stopped
-    labels:
-      - "prometheus.scrape=true"
-      - "prometheus.port=8000"
-      - "prometheus.path=/metrics"
 
-  # ASR Service with GPU support
-  asr-service:
+  # ============================================================================
+  # SPECIALIZED AGENTS
+  # ============================================================================
+
+  medical-llm:
     build:
-      context: ./asr
-      dockerfile: Dockerfile
-    container_name: dhg-asr-service
-    depends_on:
-      registry-api:
-        condition: service_healthy
+      context: .
+      dockerfile: agents/medical-llm/Dockerfile
+    container_name: dhg-medical-llm
     environment:
-      REGISTRY_API_URL: http://registry-api:8000
-      CUDA_VISIBLE_DEVICES: "0"
-      WHISPER_MODEL: mock
-    ports:
-      - "8001:8000"
-    networks:
-      - dhg-network
+      - AGENT_NAME=medical-llm
+      - AGENT_TYPE=specialized
+      - REGISTRY_DB_URL=postgresql://${POSTGRES_USER:-dhg}:${POSTGRES_PASSWORD:-changeme}@registry-db:5432/${POSTGRES_DB:-dhg_registry}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
     volumes:
-      - asr-models:/root/.cache/whisper
-      - ./test-media:/media:ro
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-    restart: unless-stopped
-    labels:
-      - "prometheus.scrape=true"
-      - "prometheus.port=8000"
-      - "prometheus.path=/metrics"
-
-  # Prometheus for metrics
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: dhg-prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-      - '--web.console.templates=/usr/share/prometheus/consoles'
-      - '--web.enable-lifecycle'
-    volumes:
-      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      - ./observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml
-      - prometheus-data:/prometheus
+      - ./agents/medical-llm:/app
+      - ./agents/shared:/app/shared
+      - ./logs:/logs
     ports:
-      - "9090:9090"
-    networks:
-      - dhg-network
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-    restart: unless-stopped
-
-  # Grafana for visualization
-  grafana:
-    image: grafana/grafana:latest
-    container_name: dhg-grafana
+      - "8002:8000"
     depends_on:
-      - prometheus
-    environment:
-      GF_SECURITY_ADMIN_PASSWORD_FILE: /run/secrets/grafana_password
-      GF_USERS_ALLOW_SIGN_UP: "false"
-      GF_SERVER_ROOT_URL: http://localhost:3000
-      GF_INSTALL_PLUGINS: ""
-    secrets:
-      - grafana_password
-    volumes:
-      - ./observability/grafana/provisioning:/etc/grafana/provisioning
-      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards
-      - grafana-data:/var/lib/grafana
-    ports:
-      - "3000:3000"
+      - registry-db
     networks:
       - dhg-network
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
     restart: unless-stopped
 
-  # Loki for log aggregation
-  loki:
-    image: grafana/loki:latest
-    container_name: dhg-loki
-    command: -config.file=/etc/loki/loki-config.yml
+  research:
+    build:
+      context: .
+      dockerfile: agents/research/Dockerfile
+    container_name: dhg-research
+    environment:
+      - AGENT_NAME=research
+      - AGENT_TYPE=specialized
+      - REGISTRY_DB_URL=postgresql://${POSTGRES_USER:-dhg}:${POSTGRES_PASSWORD:-changeme}@registry-db:5432/${POSTGRES_DB:-dhg_registry}
+      - PUBMED_API_KEY=${PUBMED_API_KEY}
+      - CONSENSUS_API_KEY=${CONSENSUS_API_KEY}
+      - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY}
     volumes:
-      - ./observability/loki/loki-config.yml:/etc/loki/loki-config.yml
-      - loki-data:/loki
+      - ./agents/research:/app
+      - ./agents/shared:/app/shared
+      - ./logs:/logs
+      - ./data:/data
     ports:
-      - "3100:3100"
+      - "8003:8000"
+    depends_on:
+      - registry-db
     networks:
       - dhg-network
     restart: unless-stopped
+
+  curriculum:
+    build:
+      context: .
+      dockerfile: agents/curriculum/Dockerfile
+    container_name: dhg-curriculum
+    environment:
+      - AGENT_NAME=curriculum
+      - AGENT_TYPE=specialized
+      - REGISTRY_DB_URL=postgresql://${POSTGRES_USER:-dhg}:${POSTGRES_PASSWORD:-changeme}@registry-db:5432/${POSTGRES_DB:-dhg_registry}
+    volumes:
+      - ./agents/curriculum:/app
+      - ./agents/shared:/app/shared
+      - ./logs:/logs
+    ports:
+      - "8004:8000"
+    depends_on:
+      - registry-db
+    networks:
+      - dhg-network
+    restart: unless-stopped
+
+  outcomes:
+    build:
+      context: .
+      dockerfile: agents/outcomes/Dockerfile
+    container_name: dhg-outcomes
+    environment:
+      - AGENT_NAME=outcomes
+      - AGENT_TYPE=specialized
+      - REGISTRY_DB_URL=postgresql://${POSTGRES_USER:-dhg}:${POSTGRES_PASSWORD:-changeme}@registry-db:5432/${POSTGRES_DB:-dhg_registry}
+    volumes:
+      - ./agents/outcomes:/app
+      - ./agents/shared:/app/shared
+      - ./logs:/logs
+    ports:
+      - "8005:8000"
+    depends_on:
+      - registry-db
+    networks:
+      - dhg-network
+    restart: unless-stopped
+
+  competitor-intel:
+    build:
+      context: .
+      dockerfile: agents/competitor-intel/Dockerfile
+    container_name: dhg-competitor-intel
+    environment:
+      - AGENT_NAME=competitor-intel
+      - AGENT_TYPE=specialized
+      - REGISTRY_DB_URL=postgresql://${POSTGRES_USER:-dhg}:${POSTGRES_PASSWORD:-changeme}@registry-db:5432/${POSTGRES_DB:-dhg_registry}
+    volumes:
+      - ./agents/competitor-intel:/app
+      - ./agents/shared:/app/shared
+      - ./logs:/logs
+    ports:
+      - "8006:8000"
+    depends_on:
+      - registry-db
+    networks:
+      - dhg-network
+    restart: unless-stopped
+
+  qa-compliance:
+    build:
+      context: .
+      dockerfile: agents/qa-compliance/Dockerfile
+    container_name: dhg-qa-compliance
+    environment:
+      - AGENT_NAME=qa-compliance
+      - AGENT_TYPE=specialized
+      - REGISTRY_DB_URL=postgresql://${POSTGRES_USER:-dhg}:${POSTGRES_PASSWORD:-changeme}@registry-db:5432/${POSTGRES_DB:-dhg_registry}
+      - ACCME_STANDARDS_PATH=/app/data/accme_standards.json
+    volumes:
+      - ./agents/qa-compliance:/app
+      - ./agents/shared:/app/shared
+      - ./logs:/logs
+      - ./data:/app/data
+    ports:
+      - "8007:8000"
+    depends_on:
+      - registry-db
+    networks:
+      - dhg-network
+    restart: unless-stopped
+
+# ============================================================================
+# NETWORKS & VOLUMES
+# ============================================================================
 
 networks:
   dhg-network:
     driver: bridge
-    name: dhg-network
 
 volumes:
-  pgdata:
-    name: dhg-pgdata
-  prometheus-data:
-    name: dhg-prometheus-data
-  grafana-data:
-    name: dhg-grafana-data
-  loki-data:
-    name: dhg-loki-data
-  asr-models:
-    name: dhg-asr-models
-
-secrets:
-  db_password:
-    file: ./secrets/db_password.txt
-  grafana_password:
-    file: ./secrets/grafana_password.txt
+  postgres-data:
+    driver: local

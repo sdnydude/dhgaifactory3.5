@@ -82,3 +82,80 @@ class Event(Base):
     description = Column(Text, nullable=True)
     meta_data = Column(JSONB, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class Project(Base):
+    """Claude AI Projects"""
+    __tablename__ = 'projects'
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(512), nullable=False)
+    project_id = Column(String(256), nullable=True, unique=True)
+    description = Column(Text, nullable=True)
+    custom_instructions = Column(Text, nullable=True)
+    knowledge_files = Column(JSONB, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    meta_data = Column(JSONB, nullable=True)
+    
+    # Relationships
+    conversations = relationship("Conversation", back_populates="project", cascade="all, delete-orphan")
+
+
+class Conversation(Base):
+    """Claude AI Conversations"""
+    __tablename__ = 'conversations'
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title = Column(String(1024), nullable=False)
+    conversation_id = Column(String(256), nullable=True, unique=True)
+    export_source = Column(String(64), nullable=False)
+    model_name = Column(String(128), nullable=True)
+    project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='SET NULL'), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    meta_data = Column(JSONB, nullable=True)
+    
+    # Relationships
+    project = relationship("Project", back_populates="conversations")
+    messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan", order_by="Message.message_index")
+    artifacts = relationship("Artifact", back_populates="conversation", cascade="all, delete-orphan")
+
+
+class Message(Base):
+    """Individual messages in Claude conversations"""
+    __tablename__ = 'messages'
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    conversation_id = Column(UUID(as_uuid=True), ForeignKey('conversations.id', ondelete='CASCADE'), nullable=False)
+    message_index = Column(Integer, nullable=False)
+    role = Column(String(32), nullable=False)
+    content = Column(Text, nullable=False)
+    attachments = Column(JSONB, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    meta_data = Column(JSONB, nullable=True)
+    
+    # Relationships
+    conversation = relationship("Conversation", back_populates="messages")
+    artifacts = relationship("Artifact", back_populates="message")
+
+
+class Artifact(Base):
+    """Claude AI Artifacts (code, documents, visualizations, etc.)"""
+    __tablename__ = 'artifacts'
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    conversation_id = Column(UUID(as_uuid=True), ForeignKey('conversations.id', ondelete='CASCADE'), nullable=False)
+    message_id = Column(UUID(as_uuid=True), ForeignKey('messages.id', ondelete='SET NULL'), nullable=True)
+    title = Column(String(512), nullable=False)
+    artifact_type = Column(String(64), nullable=False)
+    language = Column(String(64), nullable=True)
+    content = Column(Text, nullable=False)
+    file_path = Column(String(1024), nullable=True)
+    published_url = Column(String(1024), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    meta_data = Column(JSONB, nullable=True)
+    
+    # Relationships
+    conversation = relationship("Conversation", back_populates="artifacts")
+    message = relationship("Message", back_populates="artifacts")
