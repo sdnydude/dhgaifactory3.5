@@ -13,34 +13,43 @@
    ============================================================================ */
 @layer tokens {
     :root {
-        /* Color Palette - Digital Harmony Group */
-        --color-dhg-nav: #0F172A;
-        --color-dhg-primary: #3B82F6;
-        --color-dhg-accent: #8B5CF6;
-        --color-dhg-orange: #FF6B35;
-        --color-dhg-success: #10B981;
+        /* Color Palette - Deep Space Harmony */
+        --color-dhg-nav: #020617;        /* Deepest Space */
+        --color-dhg-primary: #3B82F6;    /* Bright Blue */
+        --color-dhg-accent: #8B5CF6;     /* Vivid Purple */
+        --color-dhg-orange: #F97316;     /* Energetic Orange */
+        --color-dhg-success: #10B981;    /* Emerald */
+        --color-dhg-danger: #EF4444;     /* Red */
 
-        /* Warm Neutrals */
-        --color-surface: #FAF9F6;
-        --color-paper: #FFFFFF;
-        --color-text: #1E293B;
-        --color-text-muted: #64748B;
-        --color-border: #E2E8F0;
+        /* Neutral Scale (Dark Mode Optimized) */
+        --color-surface-bg: #0F172A;     /* Slate 900 */
+        --color-surface-panel: #1E293B;  /* Slate 800 */
+        --color-text: #F8FAFC;           /* Slate 50 */
+        --color-text-muted: #94A3B8;     /* Slate 400 */
+        --color-border: #334155;         /* Slate 700 */
 
-        /* Derived colors using color-mix */
-        --color-orange-hover: color-mix(in srgb, var(--color-dhg-orange) 90%, black);
-        --color-primary-hover: color-mix(in srgb, var(--color-dhg-primary) 90%, black);
+        /* Gradients */
+        --gradient-body: linear-gradient(to bottom right, #020617, #0F172A);
+        --gradient-primary: linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%);
+        --gradient-orange: linear-gradient(135deg, #F97316 0%, #FB923C 100%);
+        --gradient-glass: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+
+        /* Derived colors */
+        --color-orange-hover: #EA580C;
+        --color-primary-hover: #2563EB;
 
         /* Typography */
         --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
         --font-serif: 'Merriweather', Georgia, serif;
 
-        /* Glassmorphism - Frosted glass effects */
-        --glass-bg: rgba(255, 255, 255, 0.7);
-        --glass-bg-dark: rgba(255, 255, 255, 0.5);
-        --glass-border: rgba(255, 255, 255, 0.3);
-        --glass-blur: blur(20px);
-        --glass-blur-heavy: blur(40px);
+        /* Glassmorphism - Premium Deep Space */
+        --glass-bg: rgba(15, 23, 42, 0.7);            /* Dark glass */
+        --glass-bg-hover: rgba(15, 23, 42, 0.85);     /* Darker glass on hover */
+        --glass-border: rgba(148, 163, 184, 0.1);     /* Subtle light border */
+        --glass-border-highlight: rgba(255, 255, 255, 0.1);
+        --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.36);
+        --glass-blur: blur(12px);
+        --glass-blur-heavy: blur(24px);
 
         /* Fluid Typography using clamp() */
         --text-xs: clamp(0.75rem, 0.7rem + 0.25vw, 0.875rem);
@@ -100,7 +109,9 @@
         font-size: var(--text-base);
         line-height: 1.6;
         color: var(--color-text);
-        background-color: var(--color-surface);
+        background: var(--gradient-body);
+        background-attachment: fixed;
+        min-height: 100vh;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
     }
