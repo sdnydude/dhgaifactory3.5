@@ -1,34 +1,11 @@
-@import "tailwindcss";
+/**
+ * Digital Harmony Group - Main Stylesheet
+ * Modern Vanilla CSS Architecture
+ */
 
-:root {
-  --font-sans: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
-}
+/* Import Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Merriweather:ital,wght@0,300;0,400;0,700;1,400&display=swap');
 
-body {
-  margin: 0;
-  font-family: 'Inter', sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  background-color: #FAF9F6;
-  /* dhg-surface - warm off-white */
-  color: #1E293B;
-  /* dhg-text */
-}
-
-/* Scrollbar styling */
-::-webkit-scrollbar {
-  width: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
-}
+/* Import Design System */
+@import './styles/design-system.css';
+@import './styles/components.css';
