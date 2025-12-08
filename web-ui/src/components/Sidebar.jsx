@@ -8,9 +8,9 @@ const Sidebar = ({ onNewChat }) => {
             <div className="p-4">
                 <button
                     onClick={onNewChat}
-                    className="w-full flex items-center justify-center gap-2 bg-dhg-nav hover:bg-slate-800 text-white px-4 py-3 rounded-xl transition-all shadow-sm hover:shadow-md font-medium text-sm group"
+                    className="w-full flex items-center justify-center gap-2 bg-dhg-orange hover:bg-dhg-primary text-white px-4 py-3 rounded-xl transition-all duration-300 shadow-sm hover:shadow-md font-medium text-sm group"
                 >
-                    <Plus size={18} className="text-dhg-primary group-hover:text-white transition-colors" />
+                    <Plus size={18} className="group-hover:rotate-90 transition-transform duration-300" />
                     <span>New Composition</span>
                 </button>
             </div>

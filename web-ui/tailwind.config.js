@@ -12,10 +12,11 @@ export default {
                     nav: '#0F172A',     // Deep Navy (Stability)
                     primary: '#3B82F6', // Innovation Blue
                     accent: '#8B5CF6',  // Creative Purple
+                    orange: '#FF6B35',  // DHG Orange (CTA)
                     success: '#10B981', // Growth Green
 
                     // Warm Neutrals (Humanity/Canvas)
-                    surface: '#F8FAFC', // Soft Cool White
+                    surface: '#FAF9F6',   // Warm Off-White (matches interface)
                     paper: '#FFFFFF',   // Pure White
                     text: '#1E293B',    // Slate Gray (Softer than black)
                     muted: '#64748B',   // Muted Text

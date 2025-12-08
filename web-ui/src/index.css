@@ -9,8 +9,8 @@ body {
   font-family: 'Inter', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #F8FAFC;
-  /* dhg-surface */
+  background-color: #FAF9F6;
+  /* dhg-surface - warm off-white */
   color: #1E293B;
   /* dhg-text */
 }
