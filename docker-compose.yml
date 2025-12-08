@@ -196,6 +196,42 @@ services:
       - dhg-network
     restart: unless-stopped
 
+  web-ui:
+    build:
+      context: ./web-ui
+      dockerfile: Dockerfile
+    container_name: dhg-web-ui
+    volumes:
+      - ./web-ui:/app
+      - /app/node_modules
+    ports:
+      - "3000:5173"
+    environment:
+      - VITE_ORCHESTRATOR_URL=ws://10.0.0.251:8011/ws
+    networks:
+      - dhg-network
+    restart: unless-stopped
+
+  visuals:
+    build:
+      context: .
+      dockerfile: agents/visuals/Dockerfile
+    container_name: dhg-visuals-media
+    environment:
+      - AGENT_NAME=visuals-media
+      - REGISTRY_DB_URL=postgresql://${POSTGRES_USER:-dhg}:${POSTGRES_PASSWORD:-changeme}@registry-db:5432/${POSTGRES_DB:-dhg_registry}
+    volumes:
+      - ./agents/visuals:/app/agents/visuals
+      - ./agents/shared:/app/shared
+      - ./logs:/logs
+    ports:
+      - "8008:8000"
+    depends_on:
+      - registry-db
+    networks:
+      - dhg-network
+    restart: unless-stopped
+
 # ============================================================================
 # NETWORKS & VOLUMES
 # ============================================================================
