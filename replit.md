@@ -1,49 +1,73 @@
-# DHG AI Factory - CME Pipeline Multi-Agent System
+# DHG AI Factory - CME Content Generation Platform
 
 ## Overview
-The DHG AI Factory is a multi-agent system designed for automated generation of ACCME-compliant CME content and NON-CME business/strategy materials. It orchestrates specialized agents through a master orchestrator.
+AI Factory platform for ACCME-compliant CME content generation. Uses Onyx/Danswer for RAG, multi-LLM selector (Local LLM → Gemini → Claude), and integrated transcription services.
 
-## Project Architecture
+## Architecture
 
-### Frontend (web-ui/)
-- **Framework**: React 19 with Vite
-- **Port**: 5000 (development)
-- **Features**: Chat interface, sidebar navigation, admin panel, settings
+### Replit (This App)
+- **Frontend**: React + Vite (port 5000)
+- **Gateway**: FastAPI orchestrator (port 8000)
+- Connects to your locally-hosted backend services
 
-### Backend (agents/orchestrator/)
-- **Framework**: FastAPI with Python
-- **Port**: 8000 (development, proxied via Vite)
-- **WebSocket**: Connected via `/ws` endpoint
-- **Dependencies**: fastapi, uvicorn, pydantic, structlog, httpx
+### Local Infrastructure (Your Machine)
+Run `infrastructure/setup.sh` to start:
+- **Onyx/Danswer**: RAG platform with Vespa search (ports 3000, 8080)
+- **PostgreSQL**: Central database (port 5432)
+- **Ollama**: Local LLM (port 11434)
+- **Whisper**: Transcription (port 9090)
 
-### Agent Services (Docker-based, not running in Replit)
-- Medical LLM Agent (port 8002)
-- Research/Retriever Agent (port 8003)
-- Curriculum Agent (port 8004)
-- Outcomes Agent (port 8005)
-- Competitor Intel Agent (port 8006)
-- QA/Compliance Agent (port 8007)
+## Key Files
+
+### Infrastructure (`infrastructure/`)
+| File | Purpose |
+|------|---------|
+| `setup.sh` | Install and start all services |
+| `docker-compose.yml` | Service definitions |
+| `verify.sh` | Health checks |
+| `backup.sh` / `restore.sh` | Data management |
+
+### Frontend (`web-ui/`)
+- React 19 + Vite + Tailwind CSS
+- Design Generator (Gemini image generation)
+- Audio Studio (WebAudio processing)
+- Transcription Harmony (coming)
+
+### Backend (`agents/orchestrator/`)
+- FastAPI gateway
+- LLM selector service
+- WebSocket connections
 
 ## Workflows
-
-### Development
 1. **Web UI** - React frontend on port 5000
-2. **Backend API** - FastAPI orchestrator on port 8000
+2. **Backend API** - FastAPI on port 8000
 
-### How the WebSocket Works
-- Frontend connects to `/ws` which is proxied by Vite to the backend
-- Backend handles chat messages and orchestration commands
-- Supports streaming responses and status updates
+## Setup Instructions
 
-## Recent Changes
-- Configured for Replit environment (December 2025)
-- Added Vite proxy for WebSocket connections
-- Updated WebSocket URL to use dynamic host detection
-- Installed compatible FastAPI/Starlette versions
+### 1. Local Infrastructure
+```bash
+cd infrastructure
+chmod +x *.sh
+./setup.sh
+```
 
-## User Preferences
-- None configured yet
+### 2. Configure Replit
+Set environment variables:
+```
+ONYX_API_URL=http://YOUR_IP:8080
+OLLAMA_URL=http://YOUR_IP:11434
+WHISPER_URL=http://YOUR_IP:9090
+```
 
-## Known Limitations
-- Individual agent services (medical-llm, research, etc.) require Docker and are not running in Replit
-- The orchestrator provides demo responses when agents are unavailable
+## Recent Changes (December 2025)
+- Added infrastructure setup scripts for local deployment
+- Configured Onyx/Danswer with Vespa, PostgreSQL, Redis
+- Added Ollama for local LLM
+- Added Whisper for transcription
+- Full docker-compose with health checks
+
+## Planned
+- Transcription Harmony page
+- Multi-LLM selector implementation
+- AudioStudio UI fixes
+- Connect frontend to Onyx RAG
