@@ -1,9 +1,7 @@
 #!/bin/bash
 
 # =============================================================================
-# DHG AI Factory - Service Verification Script
-# =============================================================================
-# Checks health of all services and reports status
+# DHG AI Factory - Service Verification
 # =============================================================================
 
 RED='\033[0;31m'
@@ -16,83 +14,73 @@ cd "$SCRIPT_DIR"
 
 echo ""
 echo "============================================================================="
-echo "DHG AI Factory - Service Health Check"
+echo "DHG AI Factory - Health Check"
 echo "============================================================================="
 echo ""
 
-check_service() {
+FAILED=0
+
+check() {
     local name=$1
-    local check_cmd=$2
+    local cmd=$2
     
-    if eval "$check_cmd" &>/dev/null; then
+    if eval "$cmd" &>/dev/null; then
         echo -e "  ${GREEN}✓${NC} $name"
-        return 0
     else
         echo -e "  ${RED}✗${NC} $name"
-        return 1
+        ((FAILED++))
     fi
 }
 
-check_http() {
+http_check() {
     local name=$1
     local url=$2
     
     status=$(curl -s -o /dev/null -w "%{http_code}" "$url" 2>/dev/null)
     if [[ "$status" =~ ^(200|302|401|403)$ ]]; then
         echo -e "  ${GREEN}✓${NC} $name (HTTP $status)"
-        return 0
     else
         echo -e "  ${RED}✗${NC} $name (HTTP $status)"
-        return 1
+        ((FAILED++))
     fi
 }
 
-FAILED=0
-
-echo "Docker Services:"
-check_service "Docker Daemon" "docker info" || ((FAILED++))
-check_service "Docker Compose" "docker compose version" || ((FAILED++))
+echo "Docker:"
+check "Docker daemon" "docker info"
+check "Docker Compose" "docker compose version"
 
 echo ""
 echo "Containers:"
-check_service "PostgreSQL" "docker compose exec -T postgres pg_isready -U postgres" || ((FAILED++))
-check_service "Onyx API" "docker compose ps onyx-api | grep -q 'running\|Up'" || ((FAILED++))
-check_service "Onyx Web" "docker compose ps onyx-web | grep -q 'running\|Up'" || ((FAILED++))
-check_service "Onyx Model Server" "docker compose ps onyx-model-server | grep -q 'running\|Up'" || ((FAILED++))
-check_service "Ollama" "docker compose ps ollama | grep -q 'running\|Up'" || ((FAILED++))
-check_service "Whisper" "docker compose ps whisper | grep -q 'running\|Up'" || ((FAILED++))
-check_service "Redis" "docker compose ps redis | grep -q 'running\|Up'" || ((FAILED++))
+check "PostgreSQL" "docker compose exec -T postgres pg_isready -U postgres"
+check "Vespa" "docker compose ps vespa | grep -q running"
+check "Redis" "docker compose exec -T redis redis-cli ping"
+check "Model Server" "docker compose ps model-server | grep -q running"
+check "API Server" "docker compose ps api-server | grep -q running"
+check "Web Server" "docker compose ps web-server | grep -q running"
+check "Ollama" "docker compose ps ollama | grep -q running"
+check "Whisper" "docker compose ps whisper | grep -q running"
 
 echo ""
-echo "HTTP Endpoints:"
-check_http "Onyx Frontend" "http://localhost:3000" || ((FAILED++))
-check_http "Onyx API" "http://localhost:8000/health" || ((FAILED++))
-check_http "Ollama API" "http://localhost:11434/api/tags" || ((FAILED++))
-check_http "Whisper API" "http://localhost:8080" || ((FAILED++))
-
-echo ""
-echo "Database:"
-if docker compose exec -T postgres psql -U postgres -d onyx -c "SELECT 1" &>/dev/null; then
-    TABLES=$(docker compose exec -T postgres psql -U postgres -d onyx -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'" 2>/dev/null | tr -d ' ')
-    echo -e "  ${GREEN}✓${NC} PostgreSQL connected ($TABLES tables)"
-else
-    echo -e "  ${RED}✗${NC} PostgreSQL connection failed"
-    ((FAILED++))
-fi
+echo "Endpoints:"
+http_check "Onyx UI" "http://localhost:3000"
+http_check "Onyx API" "http://localhost:8080/health"
+http_check "Vespa" "http://localhost:19071/state/v1/health"
+http_check "Ollama" "http://localhost:11434/api/tags"
+http_check "Whisper" "http://localhost:9090"
 
 echo ""
 echo "Ollama Models:"
-MODELS=$(curl -s http://localhost:11434/api/tags 2>/dev/null | grep -o '"name":"[^"]*"' | cut -d'"' -f4 | tr '\n' ', ' | sed 's/,$//')
-if [ -n "$MODELS" ]; then
-    echo -e "  ${GREEN}✓${NC} Available: $MODELS"
+models=$(curl -s http://localhost:11434/api/tags 2>/dev/null | grep -o '"name":"[^"]*"' | cut -d'"' -f4 | tr '\n' ' ')
+if [ -n "$models" ]; then
+    echo -e "  ${GREEN}✓${NC} Models: $models"
 else
-    echo -e "  ${YELLOW}!${NC} No models downloaded yet"
+    echo -e "  ${YELLOW}!${NC} No models (run: docker exec dhg-ollama ollama pull llama3.2)"
 fi
 
 echo ""
 echo "============================================================================="
 if [ $FAILED -eq 0 ]; then
-    echo -e "${GREEN}All services are healthy!${NC}"
+    echo -e "${GREEN}All services healthy${NC}"
 else
     echo -e "${RED}$FAILED service(s) have issues${NC}"
 fi

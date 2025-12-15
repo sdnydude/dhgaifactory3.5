@@ -3,13 +3,12 @@ version: '3.8'
 # =============================================================================
 # DHG AI Factory - Docker Compose Configuration
 # =============================================================================
-# Services: PostgreSQL, Onyx/Danswer, Ollama, Whisper
+# Full Onyx stack (with Vespa) + Ollama + Whisper
 # =============================================================================
 
 services:
   # ---------------------------------------------------------------------------
   # PostgreSQL Database
-  # Central repository for all data (Onyx, CME content, transcriptions)
   # ---------------------------------------------------------------------------
   postgres:
     image: postgres:15-alpine
@@ -18,7 +17,7 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
-      POSTGRES_DB: ${POSTGRES_DB:-onyx}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init-db:/docker-entrypoint-initdb.d
@@ -33,96 +32,186 @@ services:
       - dhg-network
 
   # ---------------------------------------------------------------------------
-  # Onyx/Danswer - RAG Platform
-  # Handles document ingestion, vector search, and AI agents
+  # Vespa - Vector Search Engine (Required by Onyx)
   # ---------------------------------------------------------------------------
-  onyx-api:
-    image: onyxdotapp/onyx-backend:latest
-    container_name: dhg-onyx-api
+  vespa:
+    image: vespaengine/vespa:8
+    container_name: dhg-vespa
     restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      # Database
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
-      POSTGRES_DB: ${POSTGRES_DB:-onyx}
-      
-      # Auth
-      AUTH_TYPE: ${AUTH_TYPE:-disabled}
-      
-      # LLM Configuration (use local Ollama)
-      GEN_AI_MODEL_PROVIDER: ollama
-      GEN_AI_MODEL_VERSION: llama3.2
-      GEN_AI_API_ENDPOINT: http://ollama:11434
-      
-      # Embedding (use local model)
-      EMBEDDING_MODEL_SERVER_HOST: http://onyx-model-server:9000
-      
-      # Logging
-      LOG_LEVEL: ${LOG_LEVEL:-info}
     ports:
-      - "8000:8000"
+      - "8081:8081"
+      - "19071:19071"
     volumes:
-      - onyx_data:/home/storage
+      - vespa_data:/opt/vespa/var
+    environment:
+      - VESPA_CONFIGSERVERS=vespa
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:19071/state/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
     networks:
       - dhg-network
 
-  onyx-web:
-    image: onyxdotapp/onyx-web-server:latest
-    container_name: dhg-onyx-web
+  # ---------------------------------------------------------------------------
+  # Redis
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: dhg-redis
     restart: unless-stopped
-    depends_on:
-      - onyx-api
-    environment:
-      INTERNAL_URL: http://onyx-api:8000
     ports:
-      - "3000:3000"
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - dhg-network
 
-  onyx-model-server:
+  # ---------------------------------------------------------------------------
+  # Onyx Model Server (Embeddings)
+  # ---------------------------------------------------------------------------
+  model-server:
     image: onyxdotapp/onyx-model-server:latest
-    container_name: dhg-onyx-model-server
+    container_name: dhg-model-server
     restart: unless-stopped
-    environment:
-      INDEXING_MODEL_NAME: ${EMBEDDING_MODEL:-nomic-ai/nomic-embed-text-v1}
     ports:
       - "9000:9000"
     volumes:
       - model_cache:/root/.cache
+    environment:
+      - INDEXING_MODEL_NAME=${EMBEDDING_MODEL:-nomic-ai/nomic-embed-text-v1}
+      - MIN_THREADS_ML_MODELS=1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     networks:
       - dhg-network
 
-  onyx-background:
+  # ---------------------------------------------------------------------------
+  # Onyx API Backend
+  # ---------------------------------------------------------------------------
+  api-server:
     image: onyxdotapp/onyx-backend:latest
-    container_name: dhg-onyx-background
+    container_name: dhg-api-server
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
-    command: /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
+      vespa:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      model-server:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
     environment:
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
-      POSTGRES_DB: ${POSTGRES_DB:-onyx}
-      GEN_AI_MODEL_PROVIDER: ollama
-      GEN_AI_MODEL_VERSION: llama3.2
-      GEN_AI_API_ENDPOINT: http://ollama:11434
-      EMBEDDING_MODEL_SERVER_HOST: http://onyx-model-server:9000
+      - AUTH_TYPE=${AUTH_TYPE:-disabled}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
+      - POSTGRES_DB=${POSTGRES_DB:-postgres}
+      - VESPA_HOST=vespa
+      - VESPA_PORT=8081
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MODEL_SERVER_HOST=model-server
+      - MODEL_SERVER_PORT=9000
+      - GEN_AI_MODEL_PROVIDER=${GEN_AI_PROVIDER:-ollama}
+      - GEN_AI_MODEL_VERSION=${GEN_AI_MODEL:-llama3.2}
+      - GEN_AI_API_ENDPOINT=http://ollama:11434
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - DISABLE_TELEMETRY=true
     volumes:
       - onyx_data:/home/storage
+    networks:
+      - dhg-network
+
+  # ---------------------------------------------------------------------------
+  # Onyx Background Workers
+  # ---------------------------------------------------------------------------
+  background:
+    image: onyxdotapp/onyx-backend:latest
+    container_name: dhg-background
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      vespa:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      model-server:
+        condition: service_healthy
+    command: /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
+    environment:
+      - AUTH_TYPE=${AUTH_TYPE:-disabled}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
+      - POSTGRES_DB=${POSTGRES_DB:-postgres}
+      - VESPA_HOST=vespa
+      - VESPA_PORT=8081
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MODEL_SERVER_HOST=model-server
+      - MODEL_SERVER_PORT=9000
+      - GEN_AI_MODEL_PROVIDER=${GEN_AI_PROVIDER:-ollama}
+      - GEN_AI_MODEL_VERSION=${GEN_AI_MODEL:-llama3.2}
+      - GEN_AI_API_ENDPOINT=http://ollama:11434
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - DISABLE_TELEMETRY=true
+    volumes:
+      - onyx_data:/home/storage
+    networks:
+      - dhg-network
+
+  # ---------------------------------------------------------------------------
+  # Onyx Web Frontend
+  # ---------------------------------------------------------------------------
+  web-server:
+    image: onyxdotapp/onyx-web-server:latest
+    container_name: dhg-web-server
+    restart: unless-stopped
+    depends_on:
+      - api-server
+    ports:
+      - "3000:3000"
+    environment:
+      - INTERNAL_URL=http://api-server:8080
+    networks:
+      - dhg-network
+
+  # ---------------------------------------------------------------------------
+  # Nginx Reverse Proxy
+  # ---------------------------------------------------------------------------
+  nginx:
+    image: nginx:alpine
+    container_name: dhg-nginx
+    restart: unless-stopped
+    depends_on:
+      - api-server
+      - web-server
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
     networks:
       - dhg-network
 
   # ---------------------------------------------------------------------------
   # Ollama - Local LLM Server
-  # Runs local language models (llama3.2, etc.)
   # ---------------------------------------------------------------------------
   ollama:
     image: ollama/ollama:latest
@@ -134,45 +223,23 @@ services:
       - ollama_data:/root/.ollama
     environment:
       - OLLAMA_HOST=0.0.0.0
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
     networks:
       - dhg-network
 
   # ---------------------------------------------------------------------------
   # Whisper - Transcription Service
-  # Speech-to-text with diarization support
   # ---------------------------------------------------------------------------
   whisper:
     image: onerahmet/openai-whisper-asr-webservice:latest
     container_name: dhg-whisper
     restart: unless-stopped
     ports:
-      - "8080:9000"
+      - "9090:9000"
     environment:
-      ASR_MODEL: ${WHISPER_MODEL:-base}
-      ASR_ENGINE: openai_whisper
+      - ASR_MODEL=${WHISPER_MODEL:-base}
+      - ASR_ENGINE=openai_whisper
     volumes:
       - whisper_cache:/root/.cache
-    networks:
-      - dhg-network
-
-  # ---------------------------------------------------------------------------
-  # Redis - Caching & Message Queue (Optional)
-  # ---------------------------------------------------------------------------
-  redis:
-    image: redis:7-alpine
-    container_name: dhg-redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
     networks:
       - dhg-network
 
@@ -181,17 +248,12 @@ services:
 # =============================================================================
 volumes:
   postgres_data:
-    driver: local
-  onyx_data:
-    driver: local
-  ollama_data:
-    driver: local
-  whisper_cache:
-    driver: local
-  model_cache:
-    driver: local
+  vespa_data:
   redis_data:
-    driver: local
+  model_cache:
+  onyx_data:
+  ollama_data:
+  whisper_cache:
 
 # =============================================================================
 # Networks
