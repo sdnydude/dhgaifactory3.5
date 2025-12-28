@@ -223,6 +223,7 @@ services:
     container_name: dhg-visuals-media
     environment:
       - AGENT_NAME=visuals-media
+      - GOOGLE_API_KEY=AIzaSyBU4unRPFm4iskv9NVB185kpzH0sH4lhTw
       - REGISTRY_DB_URL=postgresql://${POSTGRES_USER:-dhg}:${POSTGRES_PASSWORD:-changeme}@registry-db:5432/${POSTGRES_DB:-dhg_registry}
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility

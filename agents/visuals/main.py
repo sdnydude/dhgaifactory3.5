@@ -29,8 +29,131 @@ class Config:
     GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
     MODEL_NAME = "gemini-3-pro-image-preview"
     IMAGE_STORAGE_PATH = "/app/generated_images"
+    REGISTRY_DB_URL = os.getenv("REGISTRY_DB_URL")
 
 config = Config()
+
+
+# ============================================================================
+# DATABASE IMAGE STORE
+# ============================================================================
+
+class ImageStore:
+    """Store and retrieve generated images from PostgreSQL"""
+    
+    def __init__(self, db_url: str = None):
+        self.db_url = db_url or config.REGISTRY_DB_URL
+        self._pool = None
+    
+    async def initialize(self):
+        """Initialize database connection pool"""
+        if not self.db_url:
+            logger.warning("image_store_no_db", message="REGISTRY_DB_URL not set")
+            return False
+        
+        try:
+            import asyncpg
+            self._pool = await asyncpg.create_pool(self.db_url, min_size=1, max_size=5)
+            logger.info("image_store_connected")
+            return True
+        except Exception as e:
+            logger.error("image_store_init_failed", error=str(e))
+            return False
+    
+    async def save_image(
+        self,
+        topic: str,
+        visual_type: str,
+        image_data: bytes,
+        prompt_used: str,
+        style: str = None,
+        compliance_mode: str = None,
+        metadata: dict = None
+    ) -> str:
+        """Save generated image to database, returns image_id"""
+        if not self._pool:
+            await self.initialize()
+        
+        if not self._pool:
+            logger.warning("image_store_not_available")
+            return None
+        
+        try:
+            async with self._pool.acquire() as conn:
+                result = await conn.fetchrow("""
+                    INSERT INTO generated_images 
+                    (topic, visual_type, style, prompt_used, image_data, 
+                     file_size_bytes, generation_model, compliance_mode, metadata)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                    RETURNING image_id
+                """, 
+                    topic,
+                    visual_type,
+                    style,
+                    prompt_used,
+                    image_data,
+                    len(image_data),
+                    config.MODEL_NAME,
+                    compliance_mode,
+                    metadata
+                )
+                image_id = str(result["image_id"])
+                logger.info("image_saved", image_id=image_id, size=len(image_data))
+                return image_id
+        except Exception as e:
+            logger.error("image_save_failed", error=str(e))
+            return None
+    
+    async def get_image(self, image_id: str) -> dict:
+        """Retrieve image by ID"""
+        if not self._pool:
+            await self.initialize()
+        
+        if not self._pool:
+            return None
+        
+        try:
+            async with self._pool.acquire() as conn:
+                row = await conn.fetchrow("""
+                    SELECT image_id, topic, visual_type, style, prompt_used,
+                           image_data, mime_type, file_size_bytes, generation_model,
+                           compliance_mode, metadata, created_at
+                    FROM generated_images
+                    WHERE image_id = $1
+                """, image_id)
+                
+                if row:
+                    return dict(row)
+                return None
+        except Exception as e:
+            logger.error("image_get_failed", error=str(e))
+            return None
+    
+    async def list_images(self, limit: int = 20, offset: int = 0) -> list:
+        """List recent images (without image_data)"""
+        if not self._pool:
+            await self.initialize()
+        
+        if not self._pool:
+            return []
+        
+        try:
+            async with self._pool.acquire() as conn:
+                rows = await conn.fetch("""
+                    SELECT image_id, topic, visual_type, style, 
+                           file_size_bytes, generation_model, created_at
+                    FROM generated_images
+                    ORDER BY created_at DESC
+                    LIMIT $1 OFFSET $2
+                """, limit, offset)
+                return [dict(row) for row in rows]
+        except Exception as e:
+            logger.error("image_list_failed", error=str(e))
+            return []
+
+
+image_store = ImageStore()
+
 
 # ============================================================================
 # MODELS
@@ -253,19 +376,39 @@ async def generate_visual(request: VisualsRequest):
         aspect_ratio=request.aspect_ratio
     )
     
+    # Save to database if image was generated
+    image_id = None
+    if result.get("image_base64") and result.get("status") == "success":
+        image_bytes = base64.b64decode(result["image_base64"])
+        image_id = await image_store.save_image(
+            topic=request.topic,
+            visual_type=request.visual_type,
+            image_data=image_bytes,
+            prompt_used=result.get("prompt_used", full_topic),
+            style=request.style,
+            compliance_mode=request.compliance_mode,
+            metadata={
+                "aspect_ratio": request.aspect_ratio,
+                "data_points": request.data_points,
+                "include_text": request.include_text
+            }
+        )
+    
     return VisualsResponse(
-        image_url=result.get("image_url"),
+        image_url=f"/images/{image_id}" if image_id else result.get("image_url"),
         image_base64=result.get("image_base64"),
         prompt_used=result.get("prompt_used", full_topic),
         generation_model=config.MODEL_NAME,
         status=result.get("status", "unknown"),
         error=result.get("error"),
         metadata={
+            "image_id": image_id,
             "visual_type": request.visual_type,
             "style": request.style,
             "aspect_ratio": request.aspect_ratio,
             "compliance_mode": request.compliance_mode,
-            "generated_at": datetime.utcnow().isoformat()
+            "generated_at": datetime.utcnow().isoformat(),
+            "stored_in_db": image_id is not None
         }
     )
 
@@ -311,6 +454,74 @@ async def get_available_styles():
     }
 
 
+@app.get("/images/{image_id}")
+async def get_image(image_id: str):
+    """Retrieve a generated image by ID"""
+    from fastapi.responses import Response
+    
+    image = await image_store.get_image(image_id)
+    
+    if not image:
+        raise HTTPException(status_code=404, detail="Image not found")
+    
+    return Response(
+        content=image["image_data"],
+        media_type=image.get("mime_type", "image/png"),
+        headers={
+            "Content-Disposition": f"inline; filename={image_id}.png",
+            "X-Image-Topic": image.get("topic", ""),
+            "X-Image-Type": image.get("visual_type", "")
+        }
+    )
+
+
+@app.get("/images/{image_id}/info")
+async def get_image_info(image_id: str):
+    """Get metadata about a generated image (without the binary data)"""
+    image = await image_store.get_image(image_id)
+    
+    if not image:
+        raise HTTPException(status_code=404, detail="Image not found")
+    
+    # Return metadata without the binary data
+    return {
+        "image_id": str(image["image_id"]),
+        "topic": image["topic"],
+        "visual_type": image["visual_type"],
+        "style": image["style"],
+        "prompt_used": image["prompt_used"],
+        "file_size_bytes": image["file_size_bytes"],
+        "generation_model": image["generation_model"],
+        "compliance_mode": image["compliance_mode"],
+        "created_at": image["created_at"].isoformat() if image["created_at"] else None,
+        "image_url": f"/images/{image_id}"
+    }
+
+
+@app.get("/images")
+async def list_images(limit: int = 20, offset: int = 0):
+    """List recently generated images"""
+    images = await image_store.list_images(limit=limit, offset=offset)
+    
+    return {
+        "images": [
+            {
+                "image_id": str(img["image_id"]),
+                "topic": img["topic"],
+                "visual_type": img["visual_type"],
+                "style": img["style"],
+                "file_size_bytes": img["file_size_bytes"],
+                "created_at": img["created_at"].isoformat() if img["created_at"] else None,
+                "image_url": f"/images/{img['image_id']}"
+            }
+            for img in images
+        ],
+        "count": len(images),
+        "limit": limit,
+        "offset": offset
+    }
+
+
 @app.get("/")
 async def root():
     """Root endpoint"""
@@ -323,21 +534,31 @@ async def root():
             "Presentation slide creation",
             "Clinical chart generation",
             "Anatomical diagram creation",
-            "Medical illustration"
+            "Medical illustration",
+            "Database image storage"
         ],
-        "api_configured": bool(config.GOOGLE_API_KEY)
+        "api_configured": bool(config.GOOGLE_API_KEY),
+        "db_configured": bool(config.REGISTRY_DB_URL)
     }
 
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize Nano Banana Pro on startup"""
+    """Initialize Nano Banana Pro and image store on startup"""
     logger.info("visuals_agent_starting")
     await nano_banana.initialize()
-    logger.info("visuals_agent_ready", nano_banana_ready=nano_banana._initialized)
+    await image_store.initialize()
+    logger.info(
+        "visuals_agent_ready", 
+        nano_banana_ready=nano_banana._initialized,
+        image_store_ready=image_store._pool is not None
+    )
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Shutdown tasks"""
     logger.info("visuals_agent_shutdown")
+    if image_store._pool:
+        await image_store._pool.close()
+
