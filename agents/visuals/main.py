@@ -297,11 +297,30 @@ class NanoBananaClient:
         }
         
         type_descriptors = {
+            # Original types
             "infographic": "professional medical infographic with icons, data visualization, and clear hierarchy",
             "slide": "professional presentation slide suitable for medical education",
             "chart": "clinical data chart or graph with clear labels and professional appearance",
             "diagram": "anatomical or process diagram with accurate labeling",
-            "illustration": "medical illustration with professional accuracy and educational value"
+            "illustration": "medical illustration with professional accuracy and educational value",
+            # CME-specific types
+            "thumbnail": "eye-catching video or podcast thumbnail with bold text, suitable for YouTube or LMS course cards",
+            "certificate": "professional CME completion certificate with elegant borders, accreditation logos placeholder, and formal typography",
+            "logo": "clean medical logo with legible text, suitable for podcast or educational activity branding",
+            "timeline": "horizontal or vertical timeline showing treatment progression, disease stages, or clinical milestones",
+            "comparison": "side-by-side comparison visual for treatment options, drug classes, or clinical approaches",
+            "anatomical": "focused anatomical illustration of specific body part or system with labels",
+            "flowchart": "clinical decision flowchart or algorithm with clear decision points and pathways",
+            "case_study": "patient case presentation visual with HIPAA-safe placeholder demographics and key clinical findings",
+            "moa": "mechanism of action diagram showing drug or treatment pathway at molecular or cellular level",
+            # Social/Marketing types
+            "social_post": "social media card optimized for Instagram or LinkedIn with engaging visuals and minimal text",
+            "banner": "wide banner image for website headers, email campaigns, or event promotion",
+            "avatar": "professional avatar or profile image for AI agents or educational personas",
+            # Data-heavy types
+            "heatmap": "data heatmap visualization showing intensity or frequency patterns",
+            "dashboard": "multi-metric dashboard display with KPIs, gauges, and summary statistics",
+            "scorecard": "performance scorecard or summary card with key metrics and visual indicators"
         }
         
         style_desc = style_descriptors.get(style, style_descriptors["medical-professional"])
@@ -335,12 +354,21 @@ nano_banana = NanoBananaClient()
 @app.get("/health")
 async def health():
     """Health check endpoint"""
+    all_types = [
+        "infographic", "slide", "chart", "diagram", "illustration",
+        "thumbnail", "certificate", "logo", "timeline", "comparison",
+        "anatomical", "flowchart", "case_study", "moa",
+        "social_post", "banner", "avatar",
+        "heatmap", "dashboard", "scorecard"
+    ]
     return {
         "status": "healthy",
         "agent": "visuals",
         "model": config.MODEL_NAME,
         "api_configured": bool(config.GOOGLE_API_KEY),
-        "capabilities": ["infographic", "slide", "chart", "diagram", "illustration"]
+        "db_configured": bool(config.REGISTRY_DB_URL),
+        "capabilities": all_types,
+        "total_visual_types": len(all_types)
     }
 
 
@@ -436,21 +464,45 @@ async def edit_visual(request: EditRequest):
 
 @app.get("/styles")
 async def get_available_styles():
-    """Get available visual styles"""
+    """Get available visual styles and types"""
     return {
-        "visual_types": [
-            {"id": "infographic", "name": "Infographic", "description": "Data-rich visual with icons and text"},
-            {"id": "slide", "name": "Presentation Slide", "description": "Single slide for medical presentations"},
-            {"id": "chart", "name": "Chart/Graph", "description": "Clinical data visualization"},
-            {"id": "diagram", "name": "Diagram", "description": "Anatomical or process diagram"},
-            {"id": "illustration", "name": "Illustration", "description": "Medical illustration"}
-        ],
+        "visual_types": {
+            "core": [
+                {"id": "infographic", "name": "Infographic", "description": "Data-rich visual with icons and text"},
+                {"id": "slide", "name": "Presentation Slide", "description": "Single slide for medical presentations"},
+                {"id": "chart", "name": "Chart/Graph", "description": "Clinical data visualization"},
+                {"id": "diagram", "name": "Diagram", "description": "Anatomical or process diagram"},
+                {"id": "illustration", "name": "Illustration", "description": "Medical illustration"}
+            ],
+            "cme_specific": [
+                {"id": "thumbnail", "name": "Thumbnail", "description": "Video/podcast thumbnail for YouTube or LMS"},
+                {"id": "certificate", "name": "Certificate", "description": "CME completion certificate"},
+                {"id": "logo", "name": "Logo", "description": "Medical/podcast logo with text"},
+                {"id": "timeline", "name": "Timeline", "description": "Treatment progression or milestones"},
+                {"id": "comparison", "name": "Comparison", "description": "Side-by-side treatment options"},
+                {"id": "anatomical", "name": "Anatomical", "description": "Focused body part/system illustration"},
+                {"id": "flowchart", "name": "Flowchart", "description": "Clinical decision algorithm"},
+                {"id": "case_study", "name": "Case Study", "description": "Patient case presentation visual"},
+                {"id": "moa", "name": "Mechanism of Action", "description": "Drug/treatment pathway diagram"}
+            ],
+            "social_marketing": [
+                {"id": "social_post", "name": "Social Post", "description": "Instagram/LinkedIn optimized card"},
+                {"id": "banner", "name": "Banner", "description": "Website header or event banner"},
+                {"id": "avatar", "name": "Avatar", "description": "Profile image for agents/personas"}
+            ],
+            "data_heavy": [
+                {"id": "heatmap", "name": "Heatmap", "description": "Data intensity visualization"},
+                {"id": "dashboard", "name": "Dashboard", "description": "Multi-metric display with KPIs"},
+                {"id": "scorecard", "name": "Scorecard", "description": "Performance summary with indicators"}
+            ]
+        },
         "styles": [
             {"id": "medical-professional", "name": "Medical Professional", "description": "Clean clinical aesthetic"},
             {"id": "educational", "name": "Educational", "description": "Clear labeling for learning"},
             {"id": "modern-minimal", "name": "Modern Minimal", "description": "Contemporary healthcare design"}
         ],
-        "aspect_ratios": ["16:9", "4:3", "1:1", "9:16"]
+        "aspect_ratios": ["16:9", "4:3", "1:1", "9:16"],
+        "total_visual_types": 19
     }
 
 

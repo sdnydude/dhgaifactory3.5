@@ -385,6 +385,243 @@ const MediaUploadTool = () => (
     </div>
 );
 
+// Graphics asset packages for batch generation
+const GRAPHICS_PACKAGES = [
+    { id: 'podcast', name: 'Podcast Package', types: ['thumbnail', 'logo', 'social_post', 'banner'] },
+    { id: 'webinar', name: 'Webinar Package', types: ['slide', 'infographic', 'thumbnail', 'certificate'] },
+    { id: 'course', name: 'Course Package', types: ['slide', 'diagram', 'infographic', 'certificate', 'thumbnail'] },
+    { id: 'clinical', name: 'Clinical Education', types: ['anatomical', 'flowchart', 'moa', 'case_study', 'diagram'] },
+    { id: 'custom', name: 'Custom Selection', types: [] }
+];
+
+const VISUAL_TYPES = {
+    core: [
+        { id: 'infographic', name: 'Infographic' },
+        { id: 'slide', name: 'Slide' },
+        { id: 'chart', name: 'Chart' },
+        { id: 'diagram', name: 'Diagram' },
+        { id: 'illustration', name: 'Illustration' }
+    ],
+    cme: [
+        { id: 'thumbnail', name: 'Thumbnail' },
+        { id: 'certificate', name: 'Certificate' },
+        { id: 'logo', name: 'Logo' },
+        { id: 'timeline', name: 'Timeline' },
+        { id: 'comparison', name: 'Comparison' },
+        { id: 'anatomical', name: 'Anatomical' },
+        { id: 'flowchart', name: 'Flowchart' },
+        { id: 'case_study', name: 'Case Study' },
+        { id: 'moa', name: 'MOA Diagram' }
+    ],
+    social: [
+        { id: 'social_post', name: 'Social Post' },
+        { id: 'banner', name: 'Banner' },
+        { id: 'avatar', name: 'Avatar' }
+    ],
+    data: [
+        { id: 'heatmap', name: 'Heatmap' },
+        { id: 'dashboard', name: 'Dashboard' },
+        { id: 'scorecard', name: 'Scorecard' }
+    ]
+};
+
+const VisualsToolPanel = () => {
+    const [prompt, setPrompt] = useState('');
+    const [selectedPackage, setSelectedPackage] = useState('custom');
+    const [selectedTypes, setSelectedTypes] = useState([]);
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [results, setResults] = useState([]);
+
+    const handlePackageChange = (packageId) => {
+        setSelectedPackage(packageId);
+        const pkg = GRAPHICS_PACKAGES.find(p => p.id === packageId);
+        if (pkg && pkg.types.length > 0) {
+            setSelectedTypes(pkg.types);
+        }
+    };
+
+    const toggleType = (typeId) => {
+        setSelectedPackage('custom');
+        setSelectedTypes(prev =>
+            prev.includes(typeId)
+                ? prev.filter(t => t !== typeId)
+                : [...prev, typeId]
+        );
+    };
+
+    const handleSubmit = async () => {
+        if (!prompt.trim() || selectedTypes.length === 0) return;
+
+        setIsGenerating(true);
+        setResults([]);
+
+        try {
+            const newResults = [];
+            for (const visualType of selectedTypes) {
+                const response = await fetch('http://10.0.0.251:8008/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        topic: prompt,
+                        visual_type: visualType,
+                        style: 'medical-professional'
+                    })
+                });
+                const data = await response.json();
+                newResults.push({ type: visualType, ...data });
+            }
+            setResults(newResults);
+        } catch (error) {
+            console.error('Generation failed:', error);
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
+    return (
+        <div style={{ padding: 'var(--space-4)', overflowY: 'auto', height: '100%' }}>
+            <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-text)', marginBottom: 'var(--space-3)' }}>
+                🎨 Nano Banana Pro Visuals
+            </div>
+
+            {/* Prompt Input */}
+            <div style={{ marginBottom: 'var(--space-3)' }}>
+                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', display: 'block', marginBottom: 'var(--space-1)' }}>
+                    Describe your visuals
+                </label>
+                <textarea
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    placeholder="e.g., Type 2 diabetes management best practices, focusing on lifestyle modifications..."
+                    style={{
+                        width: '100%',
+                        minHeight: '80px',
+                        padding: 'var(--space-2)',
+                        background: 'var(--color-surface-panel)',
+                        border: '1px solid var(--glass-border)',
+                        borderRadius: 'var(--radius-md)',
+                        color: 'var(--color-text)',
+                        fontSize: 'var(--text-xs)',
+                        resize: 'vertical'
+                    }}
+                />
+            </div>
+
+            {/* Graphics Package Dropdown */}
+            <div style={{ marginBottom: 'var(--space-3)' }}>
+                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', display: 'block', marginBottom: 'var(--space-1)' }}>
+                    Graphics Package
+                </label>
+                <select
+                    value={selectedPackage}
+                    onChange={(e) => handlePackageChange(e.target.value)}
+                    style={{
+                        width: '100%',
+                        padding: 'var(--space-2)',
+                        background: 'var(--color-surface-panel)',
+                        border: '1px solid var(--glass-border)',
+                        borderRadius: 'var(--radius-md)',
+                        color: 'var(--color-text)',
+                        fontSize: 'var(--text-xs)'
+                    }}
+                >
+                    {GRAPHICS_PACKAGES.map(pkg => (
+                        <option key={pkg.id} value={pkg.id}>{pkg.name}</option>
+                    ))}
+                </select>
+            </div>
+
+            {/* Visual Types Multi-Select */}
+            <div style={{ marginBottom: 'var(--space-3)' }}>
+                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', display: 'block', marginBottom: 'var(--space-2)' }}>
+                    Visual Types ({selectedTypes.length} selected)
+                </label>
+
+                {Object.entries(VISUAL_TYPES).map(([category, types]) => (
+                    <div key={category} style={{ marginBottom: 'var(--space-2)' }}>
+                        <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>
+                            {category === 'core' ? 'Core' : category === 'cme' ? 'CME' : category === 'social' ? 'Social' : 'Data'}
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                            {types.map(type => (
+                                <button
+                                    key={type.id}
+                                    onClick={() => toggleType(type.id)}
+                                    style={{
+                                        padding: '4px 8px',
+                                        fontSize: '10px',
+                                        borderRadius: 'var(--radius-sm)',
+                                        border: '1px solid',
+                                        borderColor: selectedTypes.includes(type.id) ? 'var(--color-dhg-primary)' : 'var(--glass-border)',
+                                        background: selectedTypes.includes(type.id)
+                                            ? 'linear-gradient(135deg, var(--color-dhg-primary), var(--color-dhg-accent))'
+                                            : 'transparent',
+                                        color: selectedTypes.includes(type.id) ? 'white' : 'var(--color-text-muted)',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s'
+                                    }}
+                                >
+                                    {type.name}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Submit Button */}
+            <button
+                onClick={handleSubmit}
+                disabled={isGenerating || !prompt.trim() || selectedTypes.length === 0}
+                style={{
+                    width: '100%',
+                    padding: 'var(--space-3)',
+                    background: isGenerating
+                        ? 'var(--glass-bg)'
+                        : 'linear-gradient(135deg, var(--color-dhg-primary), var(--color-dhg-accent))',
+                    border: 'none',
+                    borderRadius: 'var(--radius-md)',
+                    fontSize: 'var(--text-sm)',
+                    fontWeight: 600,
+                    color: 'white',
+                    cursor: isGenerating ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 'var(--space-2)',
+                    opacity: (!prompt.trim() || selectedTypes.length === 0) ? 0.5 : 1
+                }}
+            >
+                {isGenerating ? '⏳ Generating...' : '🎨 Generate Visuals'}
+            </button>
+
+            {/* Results Preview */}
+            {results.length > 0 && (
+                <div style={{ marginTop: 'var(--space-4)' }}>
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginBottom: 'var(--space-2)' }}>
+                        Generated ({results.length})
+                    </div>
+                    {results.map((result, i) => (
+                        <div key={i} style={{
+                            padding: 'var(--space-2)',
+                            background: 'var(--color-surface-panel)',
+                            border: '1px solid var(--glass-border)',
+                            borderRadius: 'var(--radius-md)',
+                            marginBottom: 'var(--space-2)',
+                            fontSize: '10px'
+                        }}>
+                            <div style={{ color: 'var(--color-text)', fontWeight: 600 }}>{result.type}</div>
+                            <div style={{ color: result.status === 'success' ? 'var(--color-success)' : 'var(--color-error)' }}>
+                                {result.status} {result.metadata?.image_id && `• ID: ${result.metadata.image_id.slice(0, 8)}...`}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
 const LEFT_TABS = [
     { id: 'chat', label: 'Chat', icon: MessageSquare },
     { id: 'agents', label: 'Agents', icon: Bot },
@@ -393,10 +630,12 @@ const LEFT_TABS = [
 ];
 
 const RIGHT_TABS = [
+    { id: 'visuals', label: 'Visuals', icon: Layout },
     { id: 'prompt', label: 'Prompt', icon: Sliders },
     { id: 'transcribe', label: 'Transcribe', icon: Mic },
     { id: 'upload', label: 'Upload', icon: Upload }
 ];
+
 
 const CENTER_VIEWS = [
     { id: 'chat', label: 'Chat', icon: MessageSquare },
@@ -417,10 +656,11 @@ const LeftPanelContent = ({ activeTab }) => {
 
 const RightPanelContent = ({ activeTab }) => {
     switch (activeTab) {
+        case 'visuals': return <VisualsToolPanel />;
         case 'prompt': return <PromptCheckerTool />;
         case 'transcribe': return <TranscriptionTool />;
         case 'upload': return <MediaUploadTool />;
-        default: return <PromptCheckerTool />;
+        default: return <VisualsToolPanel />;
     }
 };
 
