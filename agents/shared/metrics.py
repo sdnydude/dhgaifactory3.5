@@ -7,7 +7,7 @@ logger = structlog.get_logger(__name__)
 def get_gpu_metrics():
     """
     Returns GPU utilization and memory usage using py3nvml.
-    Returns placeholder values if GPU is not available or drivers are missing.
+    Returns zeroed values with status 'Unavailable' if GPU is not available or drivers are missing.
     """
     try:
         py3nvml.nvmlInit()
