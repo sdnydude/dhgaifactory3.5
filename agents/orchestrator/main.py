@@ -1,6 +1,7 @@
 """
 DHG AI FACTORY - CME PIPELINE ORCHESTRATOR (MASTER AGENT)
 Main FastAPI application for coordinating all CME and NON-CME content generation
+Includes LangGraph integration for graph-based workflow orchestration
 """
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect
@@ -13,6 +14,14 @@ import os
 import structlog
 from datetime import datetime
 import uuid
+
+# LangGraph Integration
+from langgraph_integration import (
+    get_agent_graph,
+    initialize_langgraph,
+    shutdown_langgraph,
+    DHGAgentGraph
+)
 
 # Initialize structured logging
 logger = structlog.get_logger()
@@ -148,6 +157,21 @@ class HealthResponse(BaseModel):
     timestamp: datetime
     agents: Dict[str, str]
     registry_connected: bool
+    langgraph_ready: bool = False
+
+
+class LangGraphRunRequest(BaseModel):
+    """Request for LangGraph workflow execution"""
+    topic: str
+    task_type: str = "general"
+    compliance_mode: str = "auto"
+    thread_id: Optional[str] = None
+
+
+class LangGraphResumeRequest(BaseModel):
+    """Request to resume a LangGraph thread"""
+    thread_id: str
+    message: str
 
 # ============================================================================
 # AGENT CLIENT
@@ -383,11 +407,19 @@ async def health_check():
     ]:
         agents_status[name] = "healthy" if await agent_client.health_check(url) else "unhealthy"
     
+    langgraph_ready = False
+    try:
+        graph = await get_agent_graph()
+        langgraph_ready = graph.graph is not None
+    except Exception:
+        langgraph_ready = False
+
     return HealthResponse(
         status="healthy",
         timestamp=datetime.utcnow(),
         agents=agents_status,
-        registry_connected=bool(config.REGISTRY_DB_URL)
+        registry_connected=bool(config.REGISTRY_DB_URL),
+        langgraph_ready=langgraph_ready
     )
 
 @app.post("/orchestrate", response_model=TaskResponse)
@@ -441,13 +473,127 @@ async def orchestrate_task(request: TaskRequest, background_tasks: BackgroundTas
         logger.error("orchestration_failed", task_id=task_id, error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ============================================================================
+# LANGGRAPH ENDPOINTS
+# ============================================================================
+
+@app.post("/langgraph/run")
+async def langgraph_run(request: LangGraphRunRequest):
+    """
+    Run a LangGraph workflow.
+    
+    Executes the agent graph with PostgreSQL checkpoint persistence.
+    """
+    task_id = str(uuid.uuid4())
+    
+    logger.info(
+        "langgraph_run_request",
+        task_id=task_id,
+        topic=request.topic,
+        task_type=request.task_type
+    )
+    
+    try:
+        graph = await get_agent_graph()
+        result = await graph.run(
+            task_id=task_id,
+            topic=request.topic,
+            task_type=request.task_type,
+            compliance_mode=request.compliance_mode,
+            thread_id=request.thread_id
+        )
+        
+        return {
+            "task_id": task_id,
+            "status": result.get("status"),
+            "thread_id": result.get("metadata", {}).get("thread_id"),
+            "final_deliverable": result.get("final_deliverable"),
+            "current_agent": result.get("current_agent"),
+            "errors": result.get("errors", [])
+        }
+        
+    except Exception as e:
+        logger.error("langgraph_run_failed", task_id=task_id, error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/langgraph/resume")
+async def langgraph_resume(request: LangGraphResumeRequest):
+    """
+    Resume a LangGraph conversation thread.
+    
+    Continues an existing workflow with a new message.
+    """
+    logger.info("langgraph_resume_request", thread_id=request.thread_id)
+    
+    try:
+        graph = await get_agent_graph()
+        result = await graph.resume_thread(
+            thread_id=request.thread_id,
+            new_message=request.message
+        )
+        
+        return {
+            "thread_id": request.thread_id,
+            "status": result.get("status"),
+            "final_deliverable": result.get("final_deliverable"),
+            "current_agent": result.get("current_agent")
+        }
+        
+    except Exception as e:
+        logger.error("langgraph_resume_failed", thread_id=request.thread_id, error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/langgraph/history/{thread_id}")
+async def langgraph_history(thread_id: str):
+    """
+    Get history for a LangGraph thread.
+    
+    Returns all checkpointed states for the conversation.
+    """
+    try:
+        graph = await get_agent_graph()
+        history = await graph.get_thread_history(thread_id)
+        
+        return {
+            "thread_id": thread_id,
+            "states": history,
+            "count": len(history)
+        }
+        
+    except Exception as e:
+        logger.error("langgraph_history_failed", thread_id=thread_id, error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/langgraph/status")
+async def langgraph_status():
+    """Get LangGraph system status"""
+    try:
+        graph = await get_agent_graph()
+        return {
+            "status": "ready",
+            "checkpointer": "postgres" if graph.checkpointer else "memory",
+            "nodes": list(graph.graph.nodes.keys()) if graph.graph else [],
+            "db_connected": graph.checkpointer is not None
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+
 @app.get("/")
 async def root():
     """Root endpoint"""
     return {
         "service": "DHG AI Factory - CME Orchestrator",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "status": "operational",
+        "langgraph": "enabled",
         "documentation": "/docs"
     }
 
@@ -462,9 +608,18 @@ async def startup_event():
     
     # Dependency Injection for WebSocket Manager
     ws_manager.agent_client = agent_client
+    
+    # Initialize LangGraph
+    try:
+        await initialize_langgraph()
+        logger.info("langgraph_initialized_on_startup")
+    except Exception as e:
+        logger.error("langgraph_init_failed_on_startup", error=str(e))
+
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Shutdown tasks"""
     await agent_client.client.aclose()
+    await shutdown_langgraph()
     logger.info("orchestrator_shutdown")
