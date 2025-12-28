@@ -266,11 +266,27 @@ async def extract_icd10(request: ICD10Request):
             format="json"
         )
         import json
-        codes = json.loads(response['message']['content'])
-        return ICD10Response(codes=codes, confidence_scores={c['code']: 0.9 for c in codes})
+        result = json.loads(response['message']['content'])
+        
+        # Handle different JSON structures
+        if isinstance(result, list):
+            codes = result
+        elif isinstance(result, dict) and 'codes' in result:
+            codes = result['codes']
+        else:
+            codes = []
+        
+        # Safely build confidence scores
+        confidence_scores = {}
+        for c in codes:
+            if isinstance(c, dict) and 'code' in c:
+                confidence_scores[c['code']] = 0.9
+        
+        return ICD10Response(codes=codes, confidence_scores=confidence_scores)
     except Exception as e:
         logger.error("icd10_failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/quality-measures", response_model=QualityMeasureResponse)
 async def suggest_quality_measures(request: QualityMeasureRequest):
