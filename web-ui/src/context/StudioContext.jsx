@@ -6,6 +6,7 @@ export const StudioProvider = ({ children }) => {
     const [selectedModel, setSelectedModel] = useState(null);
     const [rightPanelOpen, setRightPanelOpen] = useState(true);
     const [rightPanelContent, setRightPanelContent] = useState('prompt-tools');
+    const [complianceMode, setComplianceMode] = useState('auto');
 
     // Theme State: 'light', 'dark', 'system'
     const [theme, setTheme] = useState(() => {
@@ -46,9 +47,12 @@ export const StudioProvider = ({ children }) => {
         setRightPanelOpen,
         rightPanelContent,
         setRightPanelContent,
+        complianceMode,
+        setComplianceMode,
         theme,
         setTheme
     };
+
 
     return (
         <StudioContext.Provider value={value}>
