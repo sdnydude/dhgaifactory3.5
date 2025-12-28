@@ -243,19 +243,30 @@ class NanoBananaClient:
         try:
             model = self._client.GenerativeModel(self.model_name)
             
+            # Generate with image-generation prompt
             response = await asyncio.to_thread(
                 model.generate_content,
-                enhanced_prompt,
-                generation_config={
-                    "response_modalities": ["image", "text"],
-                }
+                enhanced_prompt
             )
             
+            # Check for image in response
             image_data = None
-            for part in response.parts:
-                if hasattr(part, 'inline_data') and part.inline_data.mime_type.startswith('image/'):
-                    image_data = base64.b64encode(part.inline_data.data).decode('utf-8')
-                    break
+            if hasattr(response, 'parts'):
+                for part in response.parts:
+                    if hasattr(part, 'inline_data') and hasattr(part.inline_data, 'data'):
+                        if part.inline_data.mime_type and part.inline_data.mime_type.startswith('image/'):
+                            image_data = base64.b64encode(part.inline_data.data).decode('utf-8')
+                            break
+            
+            # Also check for candidates structure
+            if not image_data and hasattr(response, 'candidates'):
+                for candidate in response.candidates:
+                    if hasattr(candidate, 'content') and hasattr(candidate.content, 'parts'):
+                        for part in candidate.content.parts:
+                            if hasattr(part, 'inline_data') and hasattr(part.inline_data, 'data'):
+                                if part.inline_data.mime_type and part.inline_data.mime_type.startswith('image/'):
+                                    image_data = base64.b64encode(part.inline_data.data).decode('utf-8')
+                                    break
             
             if image_data:
                 return {
