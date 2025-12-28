@@ -39,6 +39,10 @@ const Sidebar = ({ onNewChat }) => {
             </div>
 
             <div style={{ padding: 'var(--space-2)', display: 'flex', flexDirection: 'column', gap: 'var(--space-1)', borderTop: '1px solid var(--color-border)' }}>
+                <Link to="/walkthrough" className="sidebar__nav-item">
+                    <MessageSquare size={16} />
+                    <span>System Walkthrough</span>
+                </Link>
                 <Link to="/admin" className="sidebar__nav-item">
                     <Shield size={16} />
                     <span>Admin Panel</span>

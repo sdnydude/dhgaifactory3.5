@@ -7,10 +7,10 @@ RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 COPY agents/shared/requirements.txt /tmp/requirements-shared.txt
 RUN pip install --no-cache-dir -r /tmp/requirements-shared.txt
 
-COPY agents/${agent}/requirements.txt* /tmp/requirements-agent.txt || true
+COPY agents/competitor-intel/requirements.txt* /tmp/requirements-agent.txt
 RUN pip install --no-cache-dir -r /tmp/requirements-agent.txt 2>/dev/null || true
 
-COPY agents/${agent}/ /app/
+COPY agents/competitor-intel/ /app/
 COPY agents/shared/ /app/shared/
 
 EXPOSE 8000

@@ -1,0 +1,154 @@
+import React, { useState } from 'react';
+import { ChevronDown, Cpu, Cloud, Zap, Check } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+
+const models = [
+    {
+        category: 'Cloud Models',
+        icon: <Cloud size={16} />,
+        items: [
+            { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', provider: 'Google' },
+            { id: 'claude-3-opus', name: 'Claude 3 Opus', provider: 'Anthropic' },
+            { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', provider: 'OpenAI' }
+        ]
+    },
+    {
+        category: 'Local LLMs',
+        icon: <Cpu size={16} />,
+        items: [
+            { id: 'llama-3-70b', name: 'Llama 3 70B', provider: 'Local' },
+            { id: 'mistral-large', name: 'Mistral Large', provider: 'Local' },
+            { id: 'nano-banana-pro', name: 'Nano Banana Pro', provider: 'DHG Custom' }
+        ]
+    },
+    {
+        category: 'Specialized Agents',
+        icon: <Zap size={16} />,
+        items: [
+            { id: 'sora-video', name: 'Sora (Video)', provider: 'OpenAI' },
+            { id: 'gemini-vision', name: 'Gemini Vision', provider: 'Google' },
+            { id: 'dhg-medical', name: 'DHG Medical', provider: 'Internal' }
+        ]
+    }
+];
+
+const ModelSelector = ({ selectedModel, onSelectModel }) => {
+    const [isOpen, setIsOpen] = useState(false);
+
+    // Default to first generic if nothing selected
+    const active = selectedModel || models[0].items[0];
+
+    return (
+        <div style={{ position: 'relative', zIndex: 50 }}>
+            <button
+                onClick={() => setIsOpen(!isOpen)}
+                style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 'var(--space-2)',
+                    padding: 'var(--space-2) var(--space-4)',
+                    background: 'var(--glass-bg)',
+                    border: '1px solid var(--glass-border)',
+                    borderRadius: 'var(--radius-md)',
+                    color: 'var(--color-text)',
+                    cursor: 'pointer',
+                    minWidth: '200px',
+                    justifyContent: 'space-between',
+                    transition: 'all 0.2s ease'
+                }}
+                className="hover-glass"
+            >
+                <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                    <span style={{ color: 'var(--color-dhg-primary)' }}>
+                        {models.find(g => g.items.find(i => i.id === active.id))?.icon}
+                    </span>
+                    <span style={{ fontWeight: 500 }}>{active.name}</span>
+                </span>
+                <ChevronDown size={14} style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+            </button>
+
+            <AnimatePresence>
+                {isOpen && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 5 }}
+                        style={{
+                            position: 'absolute',
+                            top: '100%',
+                            left: 0,
+                            width: '280px',
+                            marginTop: 'var(--space-2)',
+                            background: 'var(--color-surface-panel)',
+                            border: '1px solid var(--glass-border)',
+                            borderRadius: 'var(--radius-lg)',
+                            padding: 'var(--space-2)',
+                            boxShadow: 'var(--shadow-xl)',
+                            maxHeight: '400px',
+                            overflowY: 'auto'
+                        }}
+                    >
+                        {models.map((group) => (
+                            <div key={group.category} style={{ marginBottom: 'var(--space-2)' }}>
+                                <div style={{
+                                    padding: 'var(--space-2)',
+                                    fontSize: 'var(--text-xs)',
+                                    color: 'var(--color-text-muted)',
+                                    textTransform: 'uppercase',
+                                    fontWeight: 600,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 'var(--space-2)'
+                                }}>
+                                    {group.icon} {group.category}
+                                </div>
+                                {group.items.map((item) => (
+                                    <button
+                                        key={item.id}
+                                        onClick={() => {
+                                            onSelectModel?.(item);
+                                            setIsOpen(false);
+                                        }}
+                                        style={{
+                                            width: '100%',
+                                            textAlign: 'left',
+                                            padding: 'var(--space-2) var(--space-3)',
+                                            borderRadius: 'var(--radius-md)',
+                                            background: active.id === item.id ? 'var(--color-dhg-primary)' : 'transparent',
+                                            color: active.id === item.id ? 'white' : 'var(--color-text)',
+                                            border: 'none',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between',
+                                            marginBottom: '2px',
+                                            transition: 'background 0.2s'
+                                        }}
+                                        className={active.id !== item.id ? "hover-item" : ""}
+                                    >
+                                        <div>
+                                            <div style={{ fontSize: 'var(--text-sm)' }}>{item.name}</div>
+                                            <div style={{ fontSize: '10px', opacity: 0.7 }}>{item.provider}</div>
+                                        </div>
+                                        {active.id === item.id && <Check size={14} />}
+                                    </button>
+                                ))}
+                            </div>
+                        ))}
+                    </motion.div>
+                )}
+            </AnimatePresence>
+            <style>{`
+        .hover-glass:hover {
+          background: var(--glass-bg-hover) !important;
+          border-color: var(--color-dhg-primary) !important;
+        }
+        .hover-item:hover {
+          background: rgba(255,255,255,0.05) !important;
+        }
+      `}</style>
+        </div>
+    );
+};
+
+export default ModelSelector;

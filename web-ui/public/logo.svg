@@ -1,0 +1,33 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg-gradient" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#020617"/>
+      <stop offset="100%" stop-color="#0F172A"/>
+    </linearGradient>
+    <linearGradient id="glass-gradient" x1="100" y1="100" x2="400" y2="400" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="rgba(255, 255, 255, 0.15)"/>
+      <stop offset="100%" stop-color="rgba(255, 255, 255, 0.05)"/>
+    </linearGradient>
+    <linearGradient id="accent-gradient" x1="150" y1="150" x2="350" y2="350" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#3B82F6"/>
+      <stop offset="100%" stop-color="#8B5CF6"/>
+    </linearGradient>
+    <filter id="glass-blur" x="0" y="0" width="512" height="512" filterUnits="userSpaceOnUse">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="15" result="blur"/>
+    </filter>
+  </defs>
+  
+  <rect width="512" height="512" rx="128" fill="url(#bg-gradient)"/>
+  
+  <!-- Glass Container -->
+  <g filter="url(#glass-blur)">
+     <circle cx="256" cy="256" r="180" fill="url(#glass-gradient)"/>
+  </g>
+  <circle cx="256" cy="256" r="180" stroke="rgba(255,255,255,0.1)" stroke-width="2"/>
+  
+  <!-- DHG Monogram/Symbol -->
+  <path d="M180 340 L180 172 L230 172 C270 172 290 190 290 230 C290 250 280 270 260 280 L295 340 L260 340 L230 285 L210 285 L210 340 Z" fill="url(#accent-gradient)" opacity="0.9"/>
+  <circle cx="330" cy="256" r="40" stroke="#F97316" stroke-width="8" fill="none" opacity="0.8"/>
+  
+  <text x="50%" y="85%" text-anchor="middle" font-family="Arial, sans-serif" font-weight="bold" font-size="48" fill="rgba(255,255,255,0.8)" letter-spacing="4">DHG</text>
+</svg>

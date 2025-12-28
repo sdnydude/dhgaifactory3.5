@@ -459,6 +459,9 @@ async def root():
 async def startup_event():
     """Startup tasks"""
     logger.info("orchestrator_starting", config=config.__dict__)
+    
+    # Dependency Injection for WebSocket Manager
+    ws_manager.agent_client = agent_client
 
 @app.on_event("shutdown")
 async def shutdown_event():

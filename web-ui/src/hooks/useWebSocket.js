@@ -17,7 +17,9 @@ export const useWebSocket = (url) => {
 
             ws.onopen = () => {
                 console.log('WebSocket Connected');
-                setIsConnected(true);
+                // Handshake
+                ws.send(JSON.stringify({ type: 'connection.init' }));
+                setIsConnected(true); // Technically should wait for ack, but this is fine for UI feedback
             };
 
             ws.onmessage = (event) => {
@@ -25,13 +27,16 @@ export const useWebSocket = (url) => {
                     const data = JSON.parse(event.data);
                     const { type, payload } = data;
 
-                    if (type === 'message') {
+                    if (type === 'chat.response') {
                         // Standard chat message
-                        setMessages(prev => [...prev, { role: 'assistant', content: payload }]);
+                        setMessages(prev => [...prev, { role: 'assistant', content: payload.content || payload }]);
                         setIsProcessing(false);
-                    } else if (type === 'status') {
+                    } else if (type === 'status' || type === 'agent.status') {
                         // Status update (e.g. "Researching...", "Generating...")
-                        // TODO: specific UX for status updates?
+                        // We could expose this state later
+                        console.log('Status update:', payload);
+                    } else if (type === 'connection.ack') {
+                        console.log('Handshake acknowledged:', payload);
                     }
 
                 } catch (err) {
@@ -68,11 +73,14 @@ export const useWebSocket = (url) => {
         };
     }, [connect]);
 
-    const sendMessage = useCallback((content) => {
+    const sendMessage = useCallback((content, metadata = {}) => {
         if (socketRef.current?.readyState === WebSocket.OPEN) {
             const msg = {
-                type: 'message', // Standardize message format
-                payload: content
+                type: 'chat.message',
+                data: { // Protocol uses 'data' or 'payload', matching manager.py 'data = message.get("data")'
+                    content,
+                    ...metadata
+                }
             };
             socketRef.current.send(JSON.stringify(msg));
 

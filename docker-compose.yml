@@ -33,7 +33,7 @@ services:
     build:
       context: .
       dockerfile: agents/orchestrator/Dockerfile
-    container_name: dhg-orchestrator
+    container_name: dhg-aifactory-orchestrator
     environment:
       - AGENT_NAME=orchestrator
       - AGENT_TYPE=master
@@ -73,6 +73,8 @@ services:
       - REGISTRY_DB_URL=postgresql://${POSTGRES_USER:-dhg}:${POSTGRES_PASSWORD:-changeme}@registry-db:5432/${POSTGRES_DB:-dhg_registry}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     volumes:
       - ./agents/medical-llm:/app
       - ./agents/shared:/app/shared
@@ -97,6 +99,8 @@ services:
       - PUBMED_API_KEY=${PUBMED_API_KEY}
       - CONSENSUS_API_KEY=${CONSENSUS_API_KEY}
       - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY}
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     volumes:
       - ./agents/research:/app
       - ./agents/shared:/app/shared
@@ -200,7 +204,7 @@ services:
     build:
       context: ./web-ui
       dockerfile: Dockerfile
-    container_name: dhg-web-ui
+    container_name: dhg-aifactory-web-ui
     volumes:
       - ./web-ui:/app
       - /app/node_modules
@@ -220,6 +224,8 @@ services:
     environment:
       - AGENT_NAME=visuals-media
       - REGISTRY_DB_URL=postgresql://${POSTGRES_USER:-dhg}:${POSTGRES_PASSWORD:-changeme}@registry-db:5432/${POSTGRES_DB:-dhg_registry}
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     volumes:
       - ./agents/visuals:/app/agents/visuals
       - ./agents/shared:/app/shared
@@ -232,9 +238,26 @@ services:
       - dhg-network
     restart: unless-stopped
 
-# ============================================================================
-# NETWORKS & VOLUMES
-# ============================================================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: dhg-ollama
+    volumes:
+      - ollama-data:/root/.ollama
+    ports:
+      - "11434:11434"
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - dhg-network
+    restart: unless-stopped
 
 networks:
   dhg-network:
@@ -242,4 +265,6 @@ networks:
 
 volumes:
   postgres-data:
+    driver: local
+  ollama-data:
     driver: local

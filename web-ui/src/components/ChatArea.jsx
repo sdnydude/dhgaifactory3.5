@@ -40,31 +40,36 @@ const ChatArea = ({ messages, onSendMessage, isProcessing }) => {
                         alignItems: 'center',
                         justifyContent: 'center',
                         color: 'var(--color-text-muted)',
-                        opacity: 0.6
+                        padding: 'var(--space-8)'
                     }}>
                         <div style={{
-                            width: '4rem',
-                            height: '4rem',
-                            backgroundColor: 'white',
-                            borderRadius: 'var(--radius-xl)',
-                            boxShadow: 'var(--shadow-sm)',
-                            border: '1px solid var(--color-border)',
-                            marginBottom: 'var(--space-4)',
+                            width: '5rem',
+                            height: '5rem',
+                            background: 'var(--glass-bg)',
+                            backdropFilter: 'var(--glass-blur)',
+                            borderRadius: '30%',
+                            border: '1px solid var(--glass-border)',
+                            marginBottom: 'var(--space-6)',
                             display: 'flex',
                             alignItems: 'center',
-                            justifyContent: 'center'
+                            justifyContent: 'center',
+                            boxShadow: '0 0 40px rgba(139, 92, 246, 0.2)',
+                            transform: 'rotate(-5deg)'
                         }}>
                             <div style={{
-                                width: '2rem',
-                                height: '2rem',
+                                width: '2.5rem',
+                                height: '2.5rem',
                                 borderRadius: '50%',
-                                background: 'linear-gradient(135deg, var(--color-dhg-primary), var(--color-dhg-accent))'
+                                background: 'var(--gradient-primary)',
+                                boxShadow: '0 0 20px var(--color-dhg-primary)'
                             }}></div>
                         </div>
-                        <p style={{ fontSize: 'var(--text-lg)', fontWeight: 500, fontFamily: 'var(--font-serif)', color: 'var(--color-dhg-nav)' }}>
-                            Start a new composition
+                        <h2 style={{ fontSize: 'var(--text-xl)', fontWeight: 700, margin: 0, color: 'var(--color-text)' }}>
+                            Factory Intelligence Online
+                        </h2>
+                        <p style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)', opacity: 0.7 }}>
+                            Initialize a session to begin multi-agent orchestration.
                         </p>
-                        <p style={{ fontSize: 'var(--text-sm)' }}>Collaborate with the AI Factory</p>
                     </div>
                 ) : (
                     <>

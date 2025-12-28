@@ -1,75 +1,209 @@
-import React from 'react';
-import { User, Palette, Globe, Monitor } from 'lucide-react';
+import React, { useState } from 'react';
+import { User, Palette, Monitor, Edit2, Shield, Bell, Moon, Sun, Globe, Cpu } from 'lucide-react';
+import { useStudio } from '../context/StudioContext';
+import Panel from '../components/ui/Panel';
 
 const SettingsPage = () => {
+    const { setSelectedModel, selectedModel, theme, setTheme } = useStudio();
+
     return (
-        <div className="p-8 max-w-4xl mx-auto">
-            <h1 className="text-2xl font-semibold text-gray-800 mb-6 flex items-center gap-2">
-                <User className="text-[#d94838]" /> User Settings
-            </h1>
+        <div style={{
+            padding: 'var(--space-8)',
+            maxWidth: '70rem',
+            margin: '0 auto',
+            color: 'var(--color-text)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 'var(--space-8)'
+        }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h1 style={{
+                    fontSize: 'var(--text-2xl)',
+                    fontWeight: 700,
+                    color: 'var(--color-text)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 'var(--space-3)'
+                }}>
+                    <User size={32} style={{ color: 'var(--color-dhg-primary)' }} />
+                    Command Configuration
+                </h1>
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', background: 'var(--glass-bg)', padding: 'var(--space-2) var(--space-4)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--glass-border)' }}>
+                    Admin Access Level: **Full Autonomy**
+                </div>
+            </div>
 
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm divide-y divide-gray-100">
-                {/* Profile Section */}
-                <div className="p-6">
-                    <h2 className="text-lg font-medium text-gray-800 mb-4">Profile</h2>
-                    <div className="flex items-center gap-4">
-                        <div className="w-16 h-16 rounded-full bg-purple-600 flex items-center justify-center text-white text-xl font-bold">
-                            SW
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-8)' }}>
+                {/* Profile & Appearance */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-8)' }}>
+                    <Panel title="Profile Identity" actions={<Edit2 size={16} />}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-5)' }}>
+                            <div style={{
+                                width: '5rem',
+                                height: '5rem',
+                                borderRadius: 'var(--radius-xl)',
+                                background: 'var(--gradient-primary)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 'var(--space-3)',
+                                justifyContent: 'center',
+                                color: 'white',
+                                fontSize: 'var(--text-xl)',
+                                fontWeight: 800,
+                                boxShadow: 'var(--shadow-lg)',
+                                border: '2px solid rgba(255,255,255,0.1)'
+                            }}>
+                                DH
+                            </div>
+                            <div>
+                                <div style={{ fontSize: 'var(--text-xl)', fontWeight: 700 }}>DHG Principal</div>
+                                <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)' }}>admin@dhg.sh</div>
+                                <div style={{
+                                    marginTop: 'var(--space-2)',
+                                    display: 'inline-block',
+                                    padding: '2px 8px',
+                                    background: 'rgba(59, 130, 246, 0.1)',
+                                    color: 'var(--color-dhg-primary)',
+                                    borderRadius: '4px',
+                                    fontSize: '10px',
+                                    fontWeight: 700
+                                }}>VERIFIED PARTNER</div>
+                            </div>
                         </div>
-                        <div>
-                            <div className="font-medium text-gray-900">swebber64</div>
-                            <div className="text-sm text-gray-500">Administrator</div>
+                    </Panel>
+
+                    <Panel title="Visual Environment" actions={<Palette size={16} />}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--space-3)' }}>
+                            {[
+                                { id: 'light', icon: <Sun size={14} />, label: 'Deep Light' },
+                                { id: 'dark', icon: <Moon size={14} />, label: 'Space Dark' },
+                                { id: 'system', icon: <Globe size={14} />, label: 'Auto Sync' },
+                            ].map((t) => (
+                                <button
+                                    key={t.id}
+                                    onClick={() => setTheme(t.id)}
+                                    style={{
+                                        border: theme === t.id ? '2px solid var(--color-dhg-primary)' : '1px solid var(--glass-border)',
+                                        background: theme === t.id ? 'var(--gradient-primary)' : 'rgba(255,255,255,0.02)',
+                                        color: theme === t.id ? 'white' : 'var(--color-text)',
+                                        padding: 'var(--space-4) var(--space-2)',
+                                        borderRadius: 'var(--radius-lg)',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s ease',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        alignItems: 'center',
+                                        gap: 'var(--space-2)'
+                                    }}
+                                >
+                                    {t.icon}
+                                    <span style={{ fontSize: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t.label}</span>
+                                </button>
+                            ))}
                         </div>
-                        <button className="ml-auto text-sm border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors">
-                            Edit Profile
-                        </button>
-                    </div>
+                    </Panel>
                 </div>
 
-                {/* Theme Section */}
-                <div className="p-6">
-                    <h2 className="text-lg font-medium text-gray-800 mb-4 flex items-center gap-2">
-                        <Palette size={20} /> Appearance
-                    </h2>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <button className="border-2 border-[#d94838] bg-gray-50 p-4 rounded-xl text-left relative overflow-hidden group">
-                            <div className="absolute top-2 right-2 w-4 h-4 rounded-full bg-[#d94838] border border-white"></div>
-                            <div className="font-medium text-gray-900">Light</div>
-                            <div className="text-xs text-gray-500 mt-1">Default DHG theme</div>
-                        </button>
-                        <button className="border border-gray-200 p-4 rounded-xl text-left hover:border-gray-300 transition-colors">
-                            <div className="font-medium text-gray-900">Dark</div>
-                            <div className="text-xs text-gray-500 mt-1">Easy on the eyes</div>
-                        </button>
-                        <button className="border border-gray-200 p-4 rounded-xl text-left hover:border-gray-300 transition-colors">
-                            <div className="font-medium text-gray-900">System</div>
-                            <div className="text-xs text-gray-500 mt-1">Follow OS preference</div>
-                        </button>
+                {/* Intelligence & Communications */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-8)' }}>
+                    <Panel title="Intelligence Default" actions={<Monitor size={16} />}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+                            <div>
+                                <label style={labelStyle}>Primary Core Model</label>
+                                <select style={selectStyle}>
+                                    <optgroup label="Cloud Tier">
+                                        <option>Gemini 1.5 Pro (Recommended)</option>
+                                        <option>Claude 3.5 Sonnet</option>
+                                        <option>GPT-4o</option>
+                                    </optgroup>
+                                    <optgroup label="Local Tier">
+                                        <option>Llama 3 70B (Local)</option>
+                                        <option>Nano Banana Pro (Custom)</option>
+                                    </optgroup>
+                                </select>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'var(--space-3)', background: 'rgba(255,255,255,0.02)', borderRadius: 'var(--radius-md)', border: '1px solid var(--glass-border)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                                    <Cpu size={14} style={{ color: 'var(--color-dhg-accent)' }} />
+                                    <span style={{ fontSize: 'var(--text-xs)', fontWeight: 500 }}>Autonomous Fallback</span>
+                                </div>
+                                <div style={{ width: '32px', height: '18px', background: 'var(--color-dhg-success)', borderRadius: '9px', position: 'relative' }}>
+                                    <div style={{ width: '14px', height: '14px', background: 'white', borderRadius: '50%', position: 'absolute', right: '2px', top: '2px' }}></div>
+                                </div>
+                            </div>
+                        </div>
+                    </Panel>
+
+                    <Panel title="Command Notifications" actions={<Bell size={16} />}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+                            {[
+                                { label: 'Agent Completion Alerts', active: true },
+                                { label: 'System Health Warnings', active: true },
+                                { label: 'Security Verifications', active: false },
+                            ].map((n, i) => (
+                                <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)' }}>{n.label}</span>
+                                    <div style={{ width: '32px', height: '18px', background: n.active ? 'var(--color-dhg-primary)' : 'var(--color-border)', borderRadius: '9px', position: 'relative', cursor: 'pointer' }}>
+                                        <div style={{ width: '14px', height: '14px', background: 'white', borderRadius: '50%', position: 'absolute', [n.active ? 'right' : 'left']: '2px', top: '2px' }}></div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </Panel>
+                </div>
+            </div>
+
+            <div style={{
+                padding: 'var(--space-6)',
+                background: 'var(--glass-bg)',
+                border: '1px solid var(--glass-border)',
+                borderRadius: 'var(--radius-xl)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
+                    <Shield size={24} style={{ color: 'var(--color-dhg-orange)' }} />
+                    <div>
+                        <div style={{ fontWeight: 700, fontSize: 'var(--text-sm)' }}>Privacy Protocol V3.5</div>
+                        <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-xs)' }}>End-to-end encrypted locally-hosted database.</div>
                     </div>
                 </div>
-
-                {/* Model Preference */}
-                <div className="p-6">
-                    <h2 className="text-lg font-medium text-gray-800 mb-4 flex items-center gap-2">
-                        <Monitor size={20} /> Default Model
-                    </h2>
-                    <div className="max-w-md">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Primary Model for New Chats</label>
-                        <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#d94838] focus:border-transparent">
-                            <option value="claude-3-5-sonnet">Claude 3.5 Sonnet</option>
-                            <option value="gemini-1-5-pro">Gemini 1.5 Pro</option>
-                            <option value="gpt-4o">GPT-4o</option>
-                            <option value="llama-3-local">Llama 3 (Local)</option>
-                        </select>
-                        <p className="text-xs text-gray-500 mt-2">
-                            This setting controls which model is selected by default when you start a new chat. You can always change it per chat.
-                        </p>
-                    </div>
-                </div>
-
+                <button style={{
+                    padding: 'var(--space-2) var(--space-4)',
+                    background: 'transparent',
+                    border: '1px solid var(--color-dhg-danger)',
+                    color: 'var(--color-dhg-danger)',
+                    borderRadius: 'var(--radius-md)',
+                    fontSize: 'var(--text-xs)',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                }}>Delete Account & Data</button>
             </div>
         </div>
     );
 };
 
+const labelStyle = {
+    display: 'block',
+    fontSize: 'var(--text-xs)',
+    fontWeight: 600,
+    marginBottom: 'var(--space-2)',
+    color: 'var(--color-text-muted)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em'
+};
+
+const selectStyle = {
+    width: '100%',
+    background: 'var(--color-surface-panel)',
+    border: '1px solid var(--glass-border)',
+    borderRadius: 'var(--radius-md)',
+    padding: 'var(--space-3)',
+    color: 'var(--color-text)',
+    outline: 'none',
+    fontSize: 'var(--text-sm)',
+    cursor: 'pointer'
+};
 export default SettingsPage;

@@ -78,8 +78,23 @@ To ensure high-quality, systematic development, we define the following agent ro
 
 ---
 
-## Part 3: Action Plan
-1.  **Foundation:** Update `design-system.css` for new panel layouts and "premium" gradients.
-2.  **Components:** Build `Panel`, `ModelSelector`, `PromptRefiner`.
+## Part 3: Port Allocation Strategy
+To avoid conflicts and ensure scalable growth, we strictly segment ports by service layer.
+
+| Service Layer | Port Range | Strategy |
+| :--- | :--- | :--- |
+| **Frontend / Web UI** | **3020 - 3050** | Segregated from defaults (`3000`) and reserved ports (`3011`). Next UI allocation starts at **3020**. |
+| **Backend / Agents** | **8020 - 8050** | Overspill from the congested `8000-8011` block. New agents start at **8020**. |
+| **Internal / Infra** | **9000 - 9100** | Monitoring (Prometheus/Grafana `9090`), Databases (`5432` reserved), internal tools. |
+
+**Reserved/Blacklisted Ports:**
+*   **3011**: Reserved (Do NOT use).
+*   **3000, 3005**: Legacy/Occupied.
+
+---
+
+## Part 4: Action Plan
+1.  **Foundation:** Update `design-system.css` for new panel layouts and "premium" gradients. (DONE)
+2.  **Components:** Build `Panel`, `ModelSelector`, `PromptRefiner` (Target Port: 3020 if standalone).
 3.  **Pages:** Flesh out `AdminPage` and `SettingsPage`.
 4.  **Integration:** Wire up the Model Selector to the backend/WebSocket.

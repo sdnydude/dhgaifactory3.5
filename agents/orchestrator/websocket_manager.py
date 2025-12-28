@@ -68,7 +68,60 @@ class ConnectionManager:
             return None
         if t == "chat.message":
             content = data.get("content")
-            return {"type": "chat.response", "payload": {"content": f"Echo: {content}"}}
+            model = data.get("model", "auto")
+            mode = data.get("mode", "auto")
+            
+            # Determine target agent based on model selection
+            target_agent_url = None
+            if "medical" in model or model == "auto":
+                 # Use config from main.py (imported or injected? safer to rely on known service names)
+                 target_agent_url = "http://medical-llm:8000"
+            elif "claude" in model:
+                 target_agent_url = "http://medical-llm:8000" # Using Medical LLM as proxy for now (it has prompt logic)
+            
+            if not target_agent_url:
+                target_agent_url = "http://medical-llm:8000" # Default
+
+            try:
+                # Notify processing
+                await self.send_message(client_id, {
+                    "type": "agent.status", 
+                    "payload": {"status": "processing", "agent": model}
+                })
+
+                # Call Agent (We rely on dependency injection from main.py)
+                if hasattr(self, 'agent_client'):
+                    # Construct simple payload for generic agent interaction
+                    # Note: specialized agents expect specific schemas. 
+                    # For Phase 3, we map a simple chat to the "generate" endpoint of medical-llm
+                    payload = {
+                        "task": "cme_script", # Defaulting to script for chat interaction
+                        "topic": content, # Using content as topic
+                        "compliance_mode": mode,
+                        "style": "conversational"
+                    }
+                    
+                    # Make the call
+                    response = await self.agent_client.call_agent(
+                        target_agent_url,
+                        "generate",
+                        payload
+                    )
+                    
+                    return {
+                        "type": "chat.response", 
+                        "payload": {
+                            "content": response.get("content", "No content generated"),
+                            "metadata": response.get("metadata")
+                        }
+                    }
+                else:
+                    return {"type": "chat.response", "payload": {"content": "Error: Agent Client not initialized"}}
+
+            except Exception as e:
+                logger.error("agent_routing_failed", error=str(e))
+                return {"type": "chat.response", "payload": {"content": f"Error communicating with agent: {str(e)}"}}
+
         logger.warning("ws_unknown_type", client_id=client_id, type=t)
         return {"type": "error", "payload": {"code": "unknown_type", "message": f"Unknown type: {t}"}}
 

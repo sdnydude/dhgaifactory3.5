@@ -11,54 +11,23 @@
 /* ============================================================================
    DESIGN TOKENS - CSS Custom Properties
    ============================================================================ */
+/* ============================================================================
+   DESIGN TOKENS - CSS Custom Properties
+   ============================================================================ */
 @layer tokens {
     :root {
-        /* Color Palette - Deep Space Harmony */
-        --color-dhg-nav: #020617;        /* Deepest Space */
-        --color-dhg-primary: #3B82F6;    /* Bright Blue */
-        --color-dhg-accent: #8B5CF6;     /* Vivid Purple */
-        --color-dhg-orange: #F97316;     /* Energetic Orange */
-        --color-dhg-success: #10B981;    /* Emerald */
-        --color-dhg-danger: #EF4444;     /* Red */
-
-        /* Neutral Scale (Dark Mode Optimized) */
-        --color-surface-bg: #0F172A;     /* Slate 900 */
-        --color-surface-panel: #1E293B;  /* Slate 800 */
-        --color-text: #F8FAFC;           /* Slate 50 */
-        --color-text-muted: #94A3B8;     /* Slate 400 */
-        --color-border: #334155;         /* Slate 700 */
-
-        /* Gradients */
-        --gradient-body: linear-gradient(to bottom right, #020617, #0F172A);
-        --gradient-primary: linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%);
-        --gradient-orange: linear-gradient(135deg, #F97316 0%, #FB923C 100%);
-        --gradient-glass: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
-
-        /* Derived colors */
-        --color-orange-hover: #EA580C;
-        --color-primary-hover: #2563EB;
-
-        /* Typography */
+        /* TYPOGRAPHY */
         --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
         --font-serif: 'Merriweather', Georgia, serif;
 
-        /* Glassmorphism - Premium Deep Space */
-        --glass-bg: rgba(15, 23, 42, 0.7);            /* Dark glass */
-        --glass-bg-hover: rgba(15, 23, 42, 0.85);     /* Darker glass on hover */
-        --glass-border: rgba(148, 163, 184, 0.1);     /* Subtle light border */
-        --glass-border-highlight: rgba(255, 255, 255, 0.1);
-        --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.36);
-        --glass-blur: blur(12px);
-        --glass-blur-heavy: blur(24px);
-
-        /* Fluid Typography using clamp() */
+        /* FLUID TYPOGRAPHY */
         --text-xs: clamp(0.75rem, 0.7rem + 0.25vw, 0.875rem);
         --text-sm: clamp(0.875rem, 0.8rem + 0.375vw, 1rem);
         --text-base: clamp(1rem, 0.95rem + 0.25vw, 1.125rem);
         --text-lg: clamp(1.125rem, 1rem + 0.625vw, 1.25rem);
         --text-xl: clamp(1.25rem, 1.1rem + 0.75vw, 1.5rem);
 
-        /* Spacing Scale - Apple-inspired generous whitespace */
+        /* SPACING SCALE */
         --space-1: 0.25rem;
         --space-2: 0.5rem;
         --space-3: 0.75rem;
@@ -70,24 +39,99 @@
         --space-12: 5rem;
         --space-16: 8rem;
 
-        /* Border Radius - Subtle, refined */
+        /* BORDER RADIUS */
         --radius-sm: 0.5rem;
         --radius-md: 0.75rem;
         --radius-lg: 1rem;
         --radius-xl: 1.5rem;
 
-        /* Shadows - Subtle depth, Apple-style */
-        --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.03);
-        --shadow-sm: 0 2px 4px 0 rgb(0 0 0 / 0.04), 0 1px 2px 0 rgb(0 0 0 / 0.02);
-        --shadow-md: 0 4px 8px 0 rgb(0 0 0 / 0.04), 0 2px 4px 0 rgb(0 0 0 / 0.02);
-        --shadow-lg: 0 8px 16px 0 rgb(0 0 0 / 0.06), 0 4px 8px 0 rgb(0 0 0 / 0.03);
-        --shadow-xl: 0 16px 32px 0 rgb(0 0 0 / 0.08), 0 8px 16px 0 rgb(0 0 0 / 0.04);
-
-        /* Transitions - Smooth, Apple-quality */
+        /* TRANSITIONS */
         --transition-fast: 200ms cubic-bezier(0.4, 0, 0.2, 1);
         --transition-base: 350ms cubic-bezier(0.4, 0, 0.2, 1);
         --transition-slow: 500ms cubic-bezier(0.4, 0, 0.2, 1);
         --transition-bounce: 600ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    /* DARK THEME (Default) */
+    [data-theme="dark"] {
+        /* Color Palette */
+        --color-dhg-nav: #020617;
+        --color-dhg-primary: #3B82F6;
+        --color-dhg-accent: #8B5CF6;
+        --color-dhg-orange: #F97316;
+        --color-dhg-success: #10B981;
+        --color-dhg-danger: #EF4444;
+
+        /* Neutrals */
+        --color-surface-bg: #0F172A;
+        --color-surface-panel: #1E293B;
+        --color-text: #F8FAFC;
+        --color-text-muted: #94A3B8;
+        --color-border: #334155;
+
+        /* Gradients */
+        --gradient-body: linear-gradient(to bottom right, #020617, #0F172A);
+        --gradient-primary: linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%);
+
+        /* Glassmorphism */
+        --glass-bg: rgba(15, 23, 42, 0.7);
+        --glass-bg-hover: rgba(15, 23, 42, 0.85);
+        --glass-border: rgba(148, 163, 184, 0.1);
+        --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.36);
+        --glass-blur: blur(12px);
+
+        /* Shadows */
+        --shadow-sm: 0 2px 4px 0 rgb(0 0 0 / 0.5);
+        --shadow-md: 0 4px 8px 0 rgb(0 0 0 / 0.5);
+        --shadow-lg: 0 8px 16px 0 rgb(0 0 0 / 0.6);
+        --shadow-xl: 0 16px 32px 0 rgb(0 0 0 / 0.6);
+    }
+
+    /* LIGHT THEME */
+    [data-theme="light"] {
+        /* Color Palette */
+        --color-dhg-nav: #FFFFFF;
+        --color-dhg-primary: #2563EB;
+        /* Darker blue for contrast on white */
+        --color-dhg-accent: #7C3AED;
+        /* Darker purple */
+        --color-dhg-orange: #EA580C;
+        /* Darker orange */
+        --color-dhg-success: #059669;
+        /* Darker green */
+        --color-dhg-danger: #DC2626;
+        /* Darker red */
+
+        /* Neutrals */
+        --color-surface-bg: #F5F5F7;
+        /* Apple Light Gray */
+        --color-surface-panel: #FFFFFF;
+        /* Pure White */
+        --color-text: #1D1D1F;
+        /* Almost Black */
+        --color-text-muted: #86868B;
+        /* Apple Gray */
+        --color-border: #D2D2D7;
+        /* Apple Border */
+
+        /* Gradients */
+        --gradient-body: linear-gradient(to bottom right, #F5F5F7, #E5E5E5);
+        --gradient-primary: linear-gradient(135deg, #2563EB 0%, #7C3AED 100%);
+
+        /* Glassmorphism - Frosty White */
+        --glass-bg: rgba(255, 255, 255, 0.65);
+        --glass-bg-hover: rgba(255, 255, 255, 0.85);
+        --glass-border: rgba(255, 255, 255, 0.4);
+        --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.05);
+        /* Very subtle shadow */
+        --glass-blur: blur(20px);
+        /* Heavier blur for light mode */
+
+        /* Shadows - Soft & Diffuse */
+        --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
     }
 }
 
