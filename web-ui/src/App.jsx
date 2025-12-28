@@ -23,9 +23,15 @@ const WalkthroughPage = () => (
   </div>
 );
 
-// Orchestrator runs on 8011 in docker-compose.
-// Use environment variable if available, otherwise fallback to localhost default
-const WS_URL = import.meta.env.VITE_ORCHESTRATOR_URL || "ws://localhost:8011/ws";
+const getWebSocketUrl = () => {
+  if (import.meta.env.VITE_ORCHESTRATOR_URL) {
+    return import.meta.env.VITE_ORCHESTRATOR_URL;
+  }
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${window.location.host}/ws`;
+};
+
+const WS_URL = getWebSocketUrl();
 
 const ChatRoute = () => {
   const { messages, isConnected, isProcessing, sendMessage: wsSendMessage, clearMessages } = useWebSocket(WS_URL);
