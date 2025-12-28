@@ -229,23 +229,37 @@ async def named_entity_recognition(request: NERRequest):
     """
     logger.info("ner_request", text_length=len(request.text))
     
-    prompt = f"Perform clinical NER on this text. Extract entities of types: {', '.join(request.entity_types)}. Return JSON only.\n\nText: {request.text}"
+    prompt = f"Perform clinical NER on this text. Extract entities of types: {', '.join(request.entity_types)}. Return JSON with entity types as keys and lists of entity objects (with 'text' and 'type' fields) as values.\n\nText: {request.text}"
     
     try:
         response = client.chat(
             model=config.OLLAMA_MODEL,
             messages=[
-                {'role': 'system', 'content': "You are a clinical NER extracter. Return a JSON object with entity types as keys and lists of extracted entities as values."},
+                {'role': 'system', 'content': "You are a clinical NER extracter. Return JSON object with entity types as keys and lists of entity objects as values."},
                 {'role': 'user', 'content': prompt}
             ],
             format="json"
         )
         import json
         result = json.loads(response['message']['content'])
-        return NERResponse(entities=result, normalized_concepts={})
+        
+        # Normalize the result to expected format
+        normalized_entities: Dict[str, List[Dict[str, Any]]] = {}
+        for key, entities in result.items():
+            if isinstance(entities, list):
+                normalized_list = []
+                for entity in entities:
+                    if isinstance(entity, str):
+                        normalized_list.append({"text": entity, "type": key})
+                    elif isinstance(entity, dict):
+                        normalized_list.append(entity)
+                normalized_entities[key] = normalized_list
+        
+        return NERResponse(entities=normalized_entities, normalized_concepts={})
     except Exception as e:
         logger.error("ner_failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/icd10", response_model=ICD10Response)
 async def extract_icd10(request: ICD10Request):
