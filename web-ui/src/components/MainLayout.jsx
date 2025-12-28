@@ -425,7 +425,7 @@ const VISUAL_TYPES = {
     ]
 };
 
-const VisualsToolPanel = () => {
+const VisualsToolPanel = ({ onGeneratedImages }) => {
     const [prompt, setPrompt] = useState('');
     const [selectedPackage, setSelectedPackage] = useState('custom');
     const [selectedTypes, setSelectedTypes] = useState([]);
@@ -471,6 +471,10 @@ const VisualsToolPanel = () => {
                 newResults.push({ type: visualType, ...data });
             }
             setResults(newResults);
+            // Call callback to display in IDE gallery
+            if (onGeneratedImages) {
+                onGeneratedImages(newResults);
+            }
         } catch (error) {
             console.error('Generation failed:', error);
         } finally {
@@ -654,18 +658,120 @@ const LeftPanelContent = ({ activeTab }) => {
     }
 };
 
-const RightPanelContent = ({ activeTab }) => {
+const RightPanelContent = ({ activeTab, onGeneratedImages }) => {
     switch (activeTab) {
-        case 'visuals': return <VisualsToolPanel />;
+        case 'visuals': return <VisualsToolPanel onGeneratedImages={onGeneratedImages} />;
         case 'prompt': return <PromptCheckerTool />;
         case 'transcribe': return <TranscriptionTool />;
         case 'upload': return <MediaUploadTool />;
-        default: return <VisualsToolPanel />;
+        default: return <VisualsToolPanel onGeneratedImages={onGeneratedImages} />;
     }
 };
 
-const CenterViewContent = ({ activeView }) => {
+// IDE Gallery View for generated images
+const IDEGalleryView = ({ generatedImages }) => {
+    if (!generatedImages || generatedImages.length === 0) {
+        return (
+            <div style={{
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--color-text-muted)',
+                padding: 'var(--space-6)'
+            }}>
+                <Code size={48} style={{ opacity: 0.3, marginBottom: 'var(--space-4)' }} />
+                <div style={{ fontSize: 'var(--text-lg)', fontWeight: 600 }}>Visual Gallery</div>
+                <div style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)', textAlign: 'center' }}>
+                    Generated images will appear here.<br />
+                    Use the Visuals panel → Generate to create medical visuals.
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div style={{
+            height: '100%',
+            overflowY: 'auto',
+            padding: 'var(--space-4)',
+            background: 'var(--gradient-body)'
+        }}>
+            <div style={{
+                fontSize: 'var(--text-lg)',
+                fontWeight: 600,
+                color: 'var(--color-text)',
+                marginBottom: 'var(--space-4)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--space-2)'
+            }}>
+                🎨 Generated Visuals ({generatedImages.length})
+            </div>
+            <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+                gap: 'var(--space-4)'
+            }}>
+                {generatedImages.map((img, i) => (
+                    <div key={i} style={{
+                        background: 'var(--glass-bg)',
+                        borderRadius: 'var(--radius-lg)',
+                        border: '1px solid var(--glass-border)',
+                        overflow: 'hidden',
+                        boxShadow: '0 4px 16px rgba(0,0,0,0.2)'
+                    }}>
+                        {img.image_base64 ? (
+                            <img
+                                src={`data:image/jpeg;base64,${img.image_base64}`}
+                                alt={img.type}
+                                style={{
+                                    width: '100%',
+                                    height: '200px',
+                                    objectFit: 'cover'
+                                }}
+                            />
+                        ) : (
+                            <div style={{
+                                width: '100%',
+                                height: '200px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                background: 'var(--color-surface-panel)',
+                                color: 'var(--color-text-muted)'
+                            }}>
+                                {img.status === 'error' ? '❌ Error' : '⏳ Loading...'}
+                            </div>
+                        )}
+                        <div style={{ padding: 'var(--space-3)' }}>
+                            <div style={{
+                                fontSize: 'var(--text-sm)',
+                                fontWeight: 600,
+                                color: 'var(--color-text)',
+                                textTransform: 'capitalize'
+                            }}>
+                                {img.type?.replace('_', ' ')}
+                            </div>
+                            <div style={{
+                                fontSize: '10px',
+                                color: img.status === 'success' ? 'var(--color-success)' : 'var(--color-error)',
+                                marginTop: '4px'
+                            }}>
+                                {img.status} • {img.generation_model || 'Nano Banana Pro'}
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+const CenterViewContent = ({ activeView, generatedImages }) => {
     if (activeView === 'chat') return <Outlet />;
+    if (activeView === 'ide') return <IDEGalleryView generatedImages={generatedImages} />;
     return (
         <div style={{
             height: '100%',
@@ -675,11 +781,9 @@ const CenterViewContent = ({ activeView }) => {
             color: 'var(--color-text-muted)'
         }}>
             <div style={{ textAlign: 'center' }}>
-                {activeView === 'ide' && <Code size={48} style={{ opacity: 0.3, marginBottom: 'var(--space-4)' }} />}
                 {activeView === 'langgraph' && <GitBranch size={48} style={{ opacity: 0.3, marginBottom: 'var(--space-4)' }} />}
                 {activeView === 'registry' && <Database size={48} style={{ opacity: 0.3, marginBottom: 'var(--space-4)' }} />}
                 <div style={{ fontSize: 'var(--text-lg)', fontWeight: 600 }}>
-                    {activeView === 'ide' && 'IDE View'}
                     {activeView === 'langgraph' && 'LangGraph View'}
                     {activeView === 'registry' && 'Registry View'}
                 </div>
@@ -697,8 +801,14 @@ const MainLayout = () => {
     const [showLeftPanel, setShowLeftPanel] = useState(true);
     const [showRightPanel, setShowRightPanel] = useState(true);
     const [leftTab, setLeftTab] = useState('agents');
-    const [rightTab, setRightTab] = useState('prompt');
-    const [centerView, setCenterView] = useState('chat');
+    const [rightTab, setRightTab] = useState('visuals');
+    const [centerView, setCenterView] = useState('ide');
+    const [generatedImages, setGeneratedImages] = useState([]);
+
+    const handleGeneratedImages = (images) => {
+        setGeneratedImages(prev => [...images, ...prev]);
+        setCenterView('ide'); // Switch to IDE view to show generated images
+    };
 
     const glassPanelStyle = (side) => ({
         height: '100%',
@@ -827,7 +937,7 @@ const MainLayout = () => {
                                 minSize={30}
                             >
                                 <div style={{ height: '100%', overflow: 'hidden' }}>
-                                    <CenterViewContent activeView={centerView} />
+                                    <CenterViewContent activeView={centerView} generatedImages={generatedImages} />
                                 </div>
                             </Panel>
                             {showRightPanel && (
@@ -837,7 +947,7 @@ const MainLayout = () => {
                                         <div style={glassPanelStyle('right')}>
                                             <PanelTabs tabs={RIGHT_TABS} activeTab={rightTab} onTabChange={setRightTab} />
                                             <div style={{ flex: 1, overflowY: 'auto' }}>
-                                                <RightPanelContent activeTab={rightTab} />
+                                                <RightPanelContent activeTab={rightTab} onGeneratedImages={handleGeneratedImages} />
                                             </div>
                                         </div>
                                     </Panel>
