@@ -10,6 +10,7 @@ import asyncio
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import structlog
 
@@ -19,6 +20,15 @@ app = FastAPI(
     title="DHG Visuals Agent",
     description="Medical visualization and image generation using Nano Banana Pro",
     version="1.0.0"
+)
+
+# Enable CORS for web UI
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins for development
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # ============================================================================
