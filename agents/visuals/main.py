@@ -1,42 +1,343 @@
-from dhg_core.base import BaseAgent
-from dhg_core.messaging import AgentResponse
+"""
+DHG AI FACTORY - VISUALS AGENT
+Medical image generation using Nano Banana Pro (Gemini 3 Pro Image)
+"""
+
+import os
+import io
+import base64
+import asyncio
+from datetime import datetime
+from typing import Optional, List, Dict, Any
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import List, Optional
+import structlog
+
+logger = structlog.get_logger()
+
+app = FastAPI(
+    title="DHG Visuals Agent",
+    description="Medical visualization and image generation using Nano Banana Pro",
+    version="1.0.0"
+)
+
+# ============================================================================
+# CONFIGURATION
+# ============================================================================
+
+class Config:
+    GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+    MODEL_NAME = "gemini-3-pro-image-preview"
+    IMAGE_STORAGE_PATH = "/app/generated_images"
+
+config = Config()
+
+# ============================================================================
+# MODELS
+# ============================================================================
 
 class VisualsRequest(BaseModel):
+    """Request for visual generation"""
     topic: str
-    visual_type: str = "infographic" # slide, chart, infographic
+    visual_type: str = "infographic"  # slide, chart, infographic, diagram, illustration
+    style: str = "medical-professional"  # medical-professional, educational, modern-minimal
     data_points: Optional[List[str]] = None
+    include_text: Optional[str] = None
+    aspect_ratio: str = "16:9"  # 16:9, 4:3, 1:1, 9:16
+    compliance_mode: str = "cme"  # cme, non-cme
 
 class VisualsResponse(BaseModel):
-    image_url: str
+    """Response with generated visual"""
+    image_url: Optional[str] = None
+    image_base64: Optional[str] = None
     prompt_used: str
+    generation_model: str
+    status: str
+    error: Optional[str] = None
+    metadata: Dict[str, Any]
 
-class VisualsAgent(BaseAgent):
-    async def startup(self):
-        self.logger.info("visuals_agent_initialized")
+class EditRequest(BaseModel):
+    """Request to edit an existing image"""
+    image_base64: str
+    edit_prompt: str
+    visual_type: str = "infographic"
 
-    async def generate_visual(self, request: VisualsRequest) -> VisualsResponse:
-        self.logger.info("generating_visual", topic=request.topic, type=request.visual_type)
+# ============================================================================
+# NANO BANANA PRO CLIENT
+# ============================================================================
+
+class NanoBananaClient:
+    """Client for Nano Banana Pro (Gemini 3 Pro Image) API"""
+    
+    def __init__(self, api_key: str = None):
+        self.api_key = api_key or config.GOOGLE_API_KEY
+        self.model_name = config.MODEL_NAME
+        self._client = None
+        self._initialized = False
+    
+    async def initialize(self):
+        """Initialize the Gemini client"""
+        if not self.api_key:
+            logger.warning("nano_banana_no_api_key", message="GOOGLE_API_KEY not set")
+            return False
         
-        # Placeholder for DALL-E / Stable Diffusion integration
-        # For prototype, return a mock URL
-        mock_url = f"https://placeholder.com/visuals/{request.topic.replace(' ', '_')}.png"
+        try:
+            import google.generativeai as genai
+            genai.configure(api_key=self.api_key)
+            self._client = genai
+            self._initialized = True
+            logger.info("nano_banana_initialized", model=self.model_name)
+            return True
+        except ImportError:
+            logger.warning("nano_banana_sdk_missing", message="google-generativeai not installed")
+            return False
+        except Exception as e:
+            logger.error("nano_banana_init_failed", error=str(e))
+            return False
+    
+    async def generate_image(
+        self,
+        prompt: str,
+        visual_type: str = "infographic",
+        style: str = "medical-professional",
+        aspect_ratio: str = "16:9"
+    ) -> Dict[str, Any]:
+        """Generate an image using Nano Banana Pro"""
         
-        return VisualsResponse(
-            image_url=mock_url,
-            prompt_used=f"Medical {request.visual_type} about {request.topic}"
-        )
+        if not self._initialized:
+            await self.initialize()
+        
+        if not self._initialized or not self._client:
+            return {
+                "status": "fallback",
+                "image_url": self._generate_fallback_url(prompt),
+                "prompt_used": prompt,
+                "error": "Nano Banana Pro not available, using fallback"
+            }
+        
+        enhanced_prompt = self._build_medical_prompt(prompt, visual_type, style, aspect_ratio)
+        
+        try:
+            model = self._client.GenerativeModel(self.model_name)
+            
+            response = await asyncio.to_thread(
+                model.generate_content,
+                enhanced_prompt,
+                generation_config={
+                    "response_modalities": ["image", "text"],
+                }
+            )
+            
+            image_data = None
+            for part in response.parts:
+                if hasattr(part, 'inline_data') and part.inline_data.mime_type.startswith('image/'):
+                    image_data = base64.b64encode(part.inline_data.data).decode('utf-8')
+                    break
+            
+            if image_data:
+                return {
+                    "status": "success",
+                    "image_base64": image_data,
+                    "prompt_used": enhanced_prompt,
+                    "error": None
+                }
+            else:
+                return {
+                    "status": "no_image",
+                    "image_url": self._generate_fallback_url(prompt),
+                    "prompt_used": enhanced_prompt,
+                    "error": "Model did not return image"
+                }
+                
+        except Exception as e:
+            logger.error("nano_banana_generation_failed", error=str(e))
+            return {
+                "status": "error",
+                "image_url": self._generate_fallback_url(prompt),
+                "prompt_used": enhanced_prompt,
+                "error": str(e)
+            }
+    
+    def _build_medical_prompt(
+        self,
+        topic: str,
+        visual_type: str,
+        style: str,
+        aspect_ratio: str
+    ) -> str:
+        """Build an optimized prompt for medical visuals"""
+        
+        style_descriptors = {
+            "medical-professional": "clean, professional medical illustration style with soft blues and greens, clinical accuracy",
+            "educational": "clear educational diagram style with labeled elements, easy to understand",
+            "modern-minimal": "modern minimalist design with clean lines, subtle gradients, contemporary healthcare aesthetic"
+        }
+        
+        type_descriptors = {
+            "infographic": "professional medical infographic with icons, data visualization, and clear hierarchy",
+            "slide": "professional presentation slide suitable for medical education",
+            "chart": "clinical data chart or graph with clear labels and professional appearance",
+            "diagram": "anatomical or process diagram with accurate labeling",
+            "illustration": "medical illustration with professional accuracy and educational value"
+        }
+        
+        style_desc = style_descriptors.get(style, style_descriptors["medical-professional"])
+        type_desc = type_descriptors.get(visual_type, type_descriptors["infographic"])
+        
+        prompt = f"""Generate a {type_desc} about: {topic}
 
-# Initialize
-agent = VisualsAgent("visuals-media")
-app = agent.app
+Style: {style_desc}
+Aspect ratio: {aspect_ratio}
+Requirements:
+- Suitable for continuing medical education (CME)
+- Accurate and professional medical representation
+- Clear, readable text if included
+- High quality, publication-ready output
+- No misleading or inaccurate medical information"""
+        
+        return prompt
+    
+    def _generate_fallback_url(self, topic: str) -> str:
+        """Generate a fallback placeholder URL"""
+        safe_topic = topic.replace(' ', '_').replace('/', '-')[:50]
+        return f"https://via.placeholder.com/1200x675/2563eb/ffffff?text={safe_topic}"
 
-@app.post("/generate")
-async def generate_endpoint(request: VisualsRequest) -> AgentResponse[VisualsResponse]:
-    result = await agent.generate_visual(request)
-    return AgentResponse(
-        source=agent.name,
-        type="task.response",
-        payload=result
+
+nano_banana = NanoBananaClient()
+
+# ============================================================================
+# ENDPOINTS
+# ============================================================================
+
+@app.get("/health")
+async def health():
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "agent": "visuals",
+        "model": config.MODEL_NAME,
+        "api_configured": bool(config.GOOGLE_API_KEY),
+        "capabilities": ["infographic", "slide", "chart", "diagram", "illustration"]
+    }
+
+
+@app.post("/generate", response_model=VisualsResponse)
+async def generate_visual(request: VisualsRequest):
+    """
+    Generate medical visual using Nano Banana Pro
+    
+    Supports: infographic, slide, chart, diagram, illustration
+    """
+    
+    logger.info(
+        "visual_generation_request",
+        topic=request.topic,
+        visual_type=request.visual_type,
+        style=request.style
     )
+    
+    prompt_additions = []
+    if request.data_points:
+        prompt_additions.append(f"Include data points: {', '.join(request.data_points)}")
+    if request.include_text:
+        prompt_additions.append(f"Include text: {request.include_text}")
+    
+    full_topic = request.topic
+    if prompt_additions:
+        full_topic += ". " + ". ".join(prompt_additions)
+    
+    result = await nano_banana.generate_image(
+        prompt=full_topic,
+        visual_type=request.visual_type,
+        style=request.style,
+        aspect_ratio=request.aspect_ratio
+    )
+    
+    return VisualsResponse(
+        image_url=result.get("image_url"),
+        image_base64=result.get("image_base64"),
+        prompt_used=result.get("prompt_used", full_topic),
+        generation_model=config.MODEL_NAME,
+        status=result.get("status", "unknown"),
+        error=result.get("error"),
+        metadata={
+            "visual_type": request.visual_type,
+            "style": request.style,
+            "aspect_ratio": request.aspect_ratio,
+            "compliance_mode": request.compliance_mode,
+            "generated_at": datetime.utcnow().isoformat()
+        }
+    )
+
+
+@app.post("/edit")
+async def edit_visual(request: EditRequest):
+    """Edit an existing visual with new instructions"""
+    
+    logger.info("visual_edit_request", edit_prompt=request.edit_prompt)
+    
+    if not nano_banana._initialized:
+        await nano_banana.initialize()
+    
+    if not nano_banana._initialized:
+        raise HTTPException(
+            status_code=503,
+            detail="Nano Banana Pro not available for editing"
+        )
+    
+    return {
+        "status": "pending",
+        "message": "Image editing requires multimodal input - implementation in progress"
+    }
+
+
+@app.get("/styles")
+async def get_available_styles():
+    """Get available visual styles"""
+    return {
+        "visual_types": [
+            {"id": "infographic", "name": "Infographic", "description": "Data-rich visual with icons and text"},
+            {"id": "slide", "name": "Presentation Slide", "description": "Single slide for medical presentations"},
+            {"id": "chart", "name": "Chart/Graph", "description": "Clinical data visualization"},
+            {"id": "diagram", "name": "Diagram", "description": "Anatomical or process diagram"},
+            {"id": "illustration", "name": "Illustration", "description": "Medical illustration"}
+        ],
+        "styles": [
+            {"id": "medical-professional", "name": "Medical Professional", "description": "Clean clinical aesthetic"},
+            {"id": "educational", "name": "Educational", "description": "Clear labeling for learning"},
+            {"id": "modern-minimal", "name": "Modern Minimal", "description": "Contemporary healthcare design"}
+        ],
+        "aspect_ratios": ["16:9", "4:3", "1:1", "9:16"]
+    }
+
+
+@app.get("/")
+async def root():
+    """Root endpoint"""
+    return {
+        "agent": "visuals",
+        "status": "ready",
+        "model": "Nano Banana Pro (Gemini 3 Pro Image)",
+        "capabilities": [
+            "Medical infographic generation",
+            "Presentation slide creation",
+            "Clinical chart generation",
+            "Anatomical diagram creation",
+            "Medical illustration"
+        ],
+        "api_configured": bool(config.GOOGLE_API_KEY)
+    }
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize Nano Banana Pro on startup"""
+    logger.info("visuals_agent_starting")
+    await nano_banana.initialize()
+    logger.info("visuals_agent_ready", nano_banana_ready=nano_banana._initialized)
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Shutdown tasks"""
+    logger.info("visuals_agent_shutdown")
