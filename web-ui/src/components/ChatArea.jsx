@@ -85,14 +85,22 @@ const ChatArea = ({ messages, onSendMessage, isProcessing }) => {
 
             <div className="chat-area__input-container">
                 <div className="chat-area__input-wrapper">
-                    <input
-                        type="text"
+                    <textarea
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
                         onKeyPress={handleKeyPress}
                         placeholder="Type your message..."
                         className="chat-area__input"
                         disabled={isProcessing}
+                        rows={3}
+                        style={{
+                            resize: 'none',
+                            whiteSpace: 'pre-wrap',
+                            wordWrap: 'break-word',
+                            color: '#ffffff',
+                            caretColor: '#ffffff',
+                            lineHeight: '1.5'
+                        }}
                     />
                     <button
                         onClick={handleSend}
