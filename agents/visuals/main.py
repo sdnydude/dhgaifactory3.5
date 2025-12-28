@@ -37,7 +37,7 @@ app.add_middleware(
 
 class Config:
     GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
-    MODEL_NAME = "gemini-3-pro-image-preview"
+    MODEL_NAME = "gemini-3-pro-image-preview"  # Nano Banana Pro
     IMAGE_STORAGE_PATH = "/app/generated_images"
     REGISTRY_DB_URL = os.getenv("REGISTRY_DB_URL")
 
@@ -203,13 +203,18 @@ class NanoBananaClient:
     """Client for Nano Banana Pro (Gemini 3 Pro Image) API"""
     
     def __init__(self, api_key: str = None):
-        self.api_key = api_key or config.GOOGLE_API_KEY
+        # Read API key fresh from environment (not from config which may be stale)
+        self.api_key = api_key or os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
         self.model_name = config.MODEL_NAME
         self._client = None
         self._initialized = False
     
     async def initialize(self):
         """Initialize the Gemini client"""
+        # Re-read API key from environment in case it wasn't available at __init__ time
+        if not self.api_key:
+            self.api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+        
         if not self.api_key:
             logger.warning("nano_banana_no_api_key", message="GOOGLE_API_KEY not set")
             return False
