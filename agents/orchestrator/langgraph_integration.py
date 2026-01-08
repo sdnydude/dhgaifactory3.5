@@ -8,6 +8,7 @@ import asyncio
 from typing import Dict, Any, List, Optional, TypedDict, Annotated
 from datetime import datetime
 import structlog
+import httpx
 
 from langgraph.graph import StateGraph, END
 try:
@@ -55,6 +56,29 @@ class DHGAgentGraph:
         self.graph = None
         self.compiled_graph = None
         self.logger = logger.bind(component="langgraph")
+        self.http_client = None
+        
+        self.agent_urls = {
+            "research": os.getenv("RESEARCH_URL", "http://research:8000"),
+            "medical_llm": os.getenv("MEDICAL_LLM_URL", "http://medical-llm:8000"),
+            "curriculum": os.getenv("CURRICULUM_URL", "http://curriculum:8000"),
+            "outcomes": os.getenv("OUTCOMES_URL", "http://outcomes:8000"),
+            "qa_compliance": os.getenv("QA_COMPLIANCE_URL", "http://qa-compliance:8000"),
+        }
+    
+    async def _call_agent(self, agent_name: str, endpoint: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Make HTTP call to a specialized agent"""
+        if not self.http_client:
+            self.http_client = httpx.AsyncClient(timeout=120.0)
+        
+        url = f"{self.agent_urls.get(agent_name, '')}/{endpoint}"
+        try:
+            response = await self.http_client.post(url, json=payload)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            self.logger.error("agent_call_failed", agent=agent_name, endpoint=endpoint, error=str(e))
+            return {"error": str(e), "agent": agent_name}
         
     async def initialize(self):
         """Initialize the graph with PostgreSQL checkpointer"""
@@ -82,11 +106,11 @@ class DHGAgentGraph:
         workflow = StateGraph(GraphState)
         
         workflow.add_node("router", self._route_task)
-        workflow.add_node("research", self._research_node)
-        workflow.add_node("medical_llm", self._medical_llm_node)
-        workflow.add_node("curriculum", self._curriculum_node)
-        workflow.add_node("outcomes", self._outcomes_node)
-        workflow.add_node("qa_compliance", self._qa_compliance_node)
+        workflow.add_node("research_agent", self._research_node)
+        workflow.add_node("medical_llm_agent", self._medical_llm_node)
+        workflow.add_node("curriculum_agent", self._curriculum_node)
+        workflow.add_node("outcomes_agent", self._outcomes_node)
+        workflow.add_node("qa_compliance_agent", self._qa_compliance_node)
         workflow.add_node("finalize", self._finalize_node)
         
         workflow.set_entry_point("router")
@@ -95,21 +119,21 @@ class DHGAgentGraph:
             "router",
             self._determine_next_agent,
             {
-                "research": "research",
-                "medical_llm": "medical_llm",
-                "curriculum": "curriculum",
-                "outcomes": "outcomes",
-                "qa_compliance": "qa_compliance",
+                "research": "research_agent",
+                "medical_llm": "medical_llm_agent",
+                "curriculum": "curriculum_agent",
+                "outcomes": "outcomes_agent",
+                "qa_compliance": "qa_compliance_agent",
                 "finalize": "finalize",
                 "end": END
             }
         )
         
-        workflow.add_edge("research", "medical_llm")
-        workflow.add_edge("medical_llm", "qa_compliance")
-        workflow.add_edge("curriculum", "outcomes")
-        workflow.add_edge("outcomes", "qa_compliance")
-        workflow.add_edge("qa_compliance", "finalize")
+        workflow.add_edge("research_agent", "medical_llm_agent")
+        workflow.add_edge("medical_llm_agent", "qa_compliance_agent")
+        workflow.add_edge("curriculum_agent", "outcomes_agent")
+        workflow.add_edge("outcomes_agent", "qa_compliance_agent")
+        workflow.add_edge("qa_compliance_agent", "finalize")
         workflow.add_edge("finalize", END)
         
         if self.checkpointer:
@@ -152,67 +176,113 @@ class DHGAgentGraph:
         }
     
     async def _research_node(self, state: GraphState) -> GraphState:
-        """Execute research agent"""
+        """Execute research agent - calls real research service"""
         self.logger.info("research_agent_executing", topic=state.get("topic"))
+        
+        payload = {
+            "topic": state.get("topic"),
+            "sources": ["pubmed", "cochrane", "clinical_trials"],
+            "max_results": 20,
+            "include_epidemiology": True,
+            "include_guidelines": True
+        }
+        
+        result = await self._call_agent("research", "research", payload)
         
         return {
             **state,
             "current_agent": "research",
-            "status": "researching",
-            "research_data": {
-                "sources": ["pubmed", "cochrane"],
-                "references_found": 0,
-                "timestamp": datetime.utcnow().isoformat()
-            }
+            "status": "research_complete" if "error" not in result else "research_failed",
+            "research_data": result,
+            "errors": state.get("errors", []) + ([result.get("error")] if "error" in result else [])
         }
     
     async def _medical_llm_node(self, state: GraphState) -> GraphState:
-        """Execute medical LLM agent"""
+        """Execute medical LLM agent - calls real medical-llm service"""
         self.logger.info("medical_llm_executing", topic=state.get("topic"))
+        
+        payload = {
+            "task": state.get("task_type", "general"),
+            "topic": state.get("topic"),
+            "research_data": state.get("research_data"),
+            "compliance_mode": state.get("compliance_mode", "auto"),
+            "word_count_target": 500,
+            "include_sdoh": True,
+            "include_equity": True
+        }
+        
+        result = await self._call_agent("medical_llm", "generate", payload)
         
         return {
             **state,
             "current_agent": "medical_llm",
-            "status": "generating_content",
-            "medical_content": None
+            "status": "content_generated" if "error" not in result else "content_failed",
+            "medical_content": result.get("content"),
+            "errors": state.get("errors", []) + ([result.get("error")] if "error" in result else [])
         }
     
     async def _curriculum_node(self, state: GraphState) -> GraphState:
-        """Execute curriculum agent"""
+        """Execute curriculum agent - calls real curriculum service"""
         self.logger.info("curriculum_agent_executing", topic=state.get("topic"))
+        
+        payload = {
+            "topic": state.get("topic"),
+            "target_audience": state.get("metadata", {}).get("target_audience", "physicians"),
+            "duration_hours": 1,
+            "compliance_mode": state.get("compliance_mode", "cme")
+        }
+        
+        result = await self._call_agent("curriculum", "design", payload)
         
         return {
             **state,
             "current_agent": "curriculum",
-            "status": "designing_curriculum",
-            "curriculum": None
+            "status": "curriculum_designed" if "error" not in result else "curriculum_failed",
+            "curriculum": result,
+            "errors": state.get("errors", []) + ([result.get("error")] if "error" in result else [])
         }
     
     async def _outcomes_node(self, state: GraphState) -> GraphState:
-        """Execute outcomes agent"""
+        """Execute outcomes agent - calls real outcomes service"""
         self.logger.info("outcomes_agent_executing", topic=state.get("topic"))
+        
+        payload = {
+            "topic": state.get("topic"),
+            "target_audience": state.get("metadata", {}).get("target_audience", "physicians"),
+            "moore_levels": [3, 4, 5],
+            "compliance_mode": state.get("compliance_mode", "cme")
+        }
+        
+        result = await self._call_agent("outcomes", "plan", payload)
         
         return {
             **state,
             "current_agent": "outcomes",
-            "status": "planning_outcomes",
-            "outcomes": None
+            "status": "outcomes_planned" if "error" not in result else "outcomes_failed",
+            "outcomes": result,
+            "errors": state.get("errors", []) + ([result.get("error")] if "error" in result else [])
         }
     
     async def _qa_compliance_node(self, state: GraphState) -> GraphState:
-        """Execute QA/Compliance agent"""
+        """Execute QA/Compliance agent - calls real qa-compliance service"""
         self.logger.info("qa_compliance_executing", 
                         compliance_mode=state.get("compliance_mode"))
+        
+        payload = {
+            "content": state.get("medical_content", ""),
+            "compliance_mode": state.get("compliance_mode", "cme"),
+            "content_type": state.get("task_type", "general"),
+            "references": state.get("research_data", {}).get("reference_ids", [])
+        }
+        
+        result = await self._call_agent("qa_compliance", "validate", payload)
         
         return {
             **state,
             "current_agent": "qa_compliance",
-            "status": "validating",
-            "compliance_report": {
-                "passed": True,
-                "violations": [],
-                "checked_at": datetime.utcnow().isoformat()
-            }
+            "status": "validation_complete" if "error" not in result else "validation_failed",
+            "compliance_report": result,
+            "errors": state.get("errors", []) + ([result.get("error")] if "error" in result else [])
         }
     
     async def _finalize_node(self, state: GraphState) -> GraphState:
