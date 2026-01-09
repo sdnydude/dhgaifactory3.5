@@ -1,0 +1,14 @@
+{
+  "task_type": "business_strategy",
+  "topic": "Digital CME Platform Launch Strategy for Cardiology Specialty",
+  "compliance_mode": "non-cme",
+  "target_audience": "Executive Leadership",
+  "additional_context": {
+    "market_segment": "cardiology",
+    "budget": "$500,000",
+    "timeline_months": 12,
+    "competitive_advantage": "Digital Harmony integration",
+    "target_providers": 50,
+    "expected_activities_year_1": 24
+  }
+}

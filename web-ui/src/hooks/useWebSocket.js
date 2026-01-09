@@ -17,9 +17,8 @@ export const useWebSocket = (url) => {
 
             ws.onopen = () => {
                 console.log('WebSocket Connected');
-                // Handshake
                 ws.send(JSON.stringify({ type: 'connection.init' }));
-                setIsConnected(true); // Technically should wait for ack, but this is fine for UI feedback
+                setIsConnected(true);
             };
 
             ws.onmessage = (event) => {
@@ -28,17 +27,13 @@ export const useWebSocket = (url) => {
                     const { type, payload } = data;
 
                     if (type === 'chat.response') {
-                        // Standard chat message
                         setMessages(prev => [...prev, { role: 'assistant', content: payload.content || payload }]);
                         setIsProcessing(false);
                     } else if (type === 'status' || type === 'agent.status') {
-                        // Status update (e.g. "Researching...", "Generating...")
-                        // We could expose this state later
                         console.log('Status update:', payload);
                     } else if (type === 'connection.ack') {
                         console.log('Handshake acknowledged:', payload);
                     }
-
                 } catch (err) {
                     console.error('Error parsing WebSocket message:', err);
                 }
@@ -47,7 +42,6 @@ export const useWebSocket = (url) => {
             ws.onclose = () => {
                 console.log('WebSocket Disconnected');
                 setIsConnected(false);
-                // Attempt reconnect after 3 seconds
                 reconnectTimeoutRef.current = setTimeout(connect, 3000);
             };
 
@@ -77,19 +71,16 @@ export const useWebSocket = (url) => {
         if (socketRef.current?.readyState === WebSocket.OPEN) {
             const msg = {
                 type: 'chat.message',
-                data: { // Protocol uses 'data' or 'payload', matching manager.py 'data = message.get("data")'
+                data: {
                     content,
                     ...metadata
                 }
             };
             socketRef.current.send(JSON.stringify(msg));
-
-            // Optimistic update
             setMessages(prev => [...prev, { role: 'user', content }]);
             setIsProcessing(true);
         } else {
             console.error('WebSocket is not connected');
-            // Could show toast error here
         }
     }, []);
 
@@ -97,5 +88,18 @@ export const useWebSocket = (url) => {
         setMessages([]);
     }, []);
 
-    return { messages, isConnected, isProcessing, sendMessage, clearMessages };
+    // Helper to add messages directly (for non-WebSocket flows like Ollama)
+    const addMessage = useCallback((message) => {
+        setMessages(prev => [...prev, message]);
+    }, []);
+
+    return {
+        messages,
+        isConnected,
+        isProcessing,
+        sendMessage,
+        clearMessages,
+        addMessage,
+        setIsProcessing
+    };
 };

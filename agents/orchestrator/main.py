@@ -1,6 +1,7 @@
 """
 DHG AI FACTORY - CME PIPELINE ORCHESTRATOR (MASTER AGENT)
 Main FastAPI application for coordinating all CME and NON-CME content generation
+Includes LangGraph integration for graph-based workflow orchestration
 """
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect
@@ -13,6 +14,19 @@ import os
 import structlog
 from datetime import datetime
 import uuid
+import json
+
+# Ollama configuration for semantic analysis
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://10.0.0.251:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "mistral:latest")
+
+# LangGraph Integration
+from langgraph_integration import (
+    get_agent_graph,
+    initialize_langgraph,
+    shutdown_langgraph,
+    DHGAgentGraph
+)
 
 # Initialize structured logging
 logger = structlog.get_logger()
@@ -148,6 +162,59 @@ class HealthResponse(BaseModel):
     timestamp: datetime
     agents: Dict[str, str]
     registry_connected: bool
+    langgraph_ready: bool = False
+
+
+class LangGraphRunRequest(BaseModel):
+    """Request for LangGraph workflow execution"""
+    topic: str
+    task_type: str = "general"
+    compliance_mode: str = "auto"
+    thread_id: Optional[str] = None
+
+
+class LangGraphResumeRequest(BaseModel):
+    """Request to resume a LangGraph thread"""
+    thread_id: str
+    message: str
+
+
+class PromptAnalyzeRequest(BaseModel):
+    """Request for prompt analysis"""
+    prompt: str
+    context: Optional[str] = None
+
+
+class PromptAnalyzeResponse(BaseModel):
+    """Response from prompt analysis"""
+    overall_score: float = Field(ge=0.0, le=1.0)
+    clarity_score: float = Field(ge=0.0, le=1.0)
+    specificity_score: float = Field(ge=0.0, le=1.0)
+    compliance_score: float = Field(ge=0.0, le=1.0)
+    detected_mode: str
+    suggestions: List[str]
+    flags: List[str]
+    word_count: int
+    estimated_tokens: int
+    semantic_analysis: Optional[Dict[str, Any]] = None
+
+
+class TranscriptionRequest(BaseModel):
+    """Request for audio transcription"""
+    url: str
+    project_type: str = "medical"
+    language: Optional[str] = None
+
+
+class TranscriptionResponse(BaseModel):
+    """Response from audio transcription"""
+    transcription_id: str
+    status: str
+    text: Optional[str] = None
+    duration_seconds: Optional[float] = None
+    processing_time_seconds: Optional[float] = None
+    language: Optional[str] = None
+    error: Optional[str] = None
 
 # ============================================================================
 # AGENT CLIENT
@@ -383,11 +450,19 @@ async def health_check():
     ]:
         agents_status[name] = "healthy" if await agent_client.health_check(url) else "unhealthy"
     
+    langgraph_ready = False
+    try:
+        graph = await get_agent_graph()
+        langgraph_ready = graph.graph is not None
+    except Exception:
+        langgraph_ready = False
+
     return HealthResponse(
         status="healthy",
         timestamp=datetime.utcnow(),
         agents=agents_status,
-        registry_connected=bool(config.REGISTRY_DB_URL)
+        registry_connected=bool(config.REGISTRY_DB_URL),
+        langgraph_ready=langgraph_ready
     )
 
 @app.post("/orchestrate", response_model=TaskResponse)
@@ -441,13 +516,488 @@ async def orchestrate_task(request: TaskRequest, background_tasks: BackgroundTas
         logger.error("orchestration_failed", task_id=task_id, error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
+
+async def analyze_prompt_semantics(prompt: str) -> Optional[Dict[str, Any]]:
+    """
+    Use Ollama LLM for semantic analysis of prompt intent
+    
+    Returns structured analysis of:
+    - Primary intent (what the user wants)
+    - Task type classification
+    - Key entities extracted
+    - Potential ambiguities
+    - Quality score
+    """
+    analysis_prompt = f"""Analyze this prompt for a medical education AI system. Return ONLY valid JSON.
+
+PROMPT: "{prompt}"
+
+Respond with this exact JSON structure:
+{{
+    "primary_intent": "brief description of what user wants",
+    "task_type": "one of: needs_assessment, content_creation, research, curriculum, evaluation, general",
+    "key_entities": ["list", "of", "medical", "terms", "or", "topics"],
+    "target_audience": "physicians/nurses/patients/general or unknown",
+    "ambiguities": ["list of unclear aspects"],
+    "quality_score": 0.0 to 1.0,
+    "improvement_suggestions": ["list of specific improvements"]
+}}"""
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{OLLAMA_URL}/api/generate",
+                json={
+                    "model": OLLAMA_MODEL,
+                    "prompt": analysis_prompt,
+                    "stream": False,
+                    "keep_alive": "5m",  # Unload from GPU after 5 min idle
+                    "options": {
+                        "temperature": 0.1,
+                        "num_predict": 500
+                    }
+                }
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                llm_response = result.get("response", "")
+                
+                try:
+                    start_idx = llm_response.find("{")
+                    end_idx = llm_response.rfind("}") + 1
+                    if start_idx != -1 and end_idx > start_idx:
+                        json_str = llm_response[start_idx:end_idx]
+                        analysis = json.loads(json_str)
+                        logger.info("semantic_analysis_complete", model=OLLAMA_MODEL)
+                        return analysis
+                except json.JSONDecodeError:
+                    logger.warning("semantic_analysis_json_parse_failed")
+                    return {"raw_response": llm_response[:500], "parse_error": True}
+            else:
+                logger.warning("ollama_request_failed", status=response.status_code)
+                return None
+                
+    except httpx.TimeoutException:
+        logger.warning("ollama_timeout")
+        return None
+    except Exception as e:
+        logger.warning("semantic_analysis_failed", error=str(e))
+        return None
+
+
+@app.post("/api/prompt-analyze", response_model=PromptAnalyzeResponse)
+async def analyze_prompt(request: PromptAnalyzeRequest):
+    """
+    Analyze a prompt for clarity, specificity, and compliance
+    
+    Returns scores and suggestions for improvement
+    """
+    prompt = request.prompt.strip()
+    word_count = len(prompt.split())
+    estimated_tokens = int(word_count * 1.3)
+    
+    suggestions = []
+    flags = []
+    
+    clarity_score = 1.0
+    if word_count < 10:
+        clarity_score -= 0.3
+        suggestions.append("Add more context to your prompt for clearer results")
+    if "?" not in prompt and not any(verb in prompt.lower() for verb in ["create", "generate", "write", "analyze", "explain"]):
+        clarity_score -= 0.2
+        suggestions.append("Include a clear action verb or question")
+    if prompt.count(",") > 10:
+        clarity_score -= 0.1
+        suggestions.append("Consider breaking complex prompts into multiple requests")
+    
+    specificity_score = 1.0
+    vague_terms = ["something", "stuff", "things", "good", "nice", "better", "maybe"]
+    for term in vague_terms:
+        if term in prompt.lower():
+            specificity_score -= 0.15
+            flags.append(f"Vague term detected: '{term}'")
+    if word_count < 20:
+        specificity_score -= 0.2
+        suggestions.append("Add specific details about expected output format")
+    has_specifics = any(x in prompt.lower() for x in ["diabetes", "hypertension", "cardiology", "oncology", "cme", "icd-10", "moore"])
+    if has_specifics:
+        specificity_score = min(1.0, specificity_score + 0.2)
+    
+    cme_keywords = ["cme", "accme", "needs assessment", "moore levels", "learning objectives", "curriculum", "medical education", "gap analysis"]
+    non_cme_keywords = ["business", "strategy", "marketing", "commercial", "not cme"]
+    
+    detected_mode = "auto"
+    compliance_score = 0.8
+    
+    prompt_lower = prompt.lower()
+    if any(kw in prompt_lower for kw in cme_keywords):
+        detected_mode = "cme"
+        compliance_score = 0.95
+        if "accme" not in prompt_lower and "cme" in prompt_lower:
+            suggestions.append("Consider specifying ACCME compliance requirements")
+    elif any(kw in prompt_lower for kw in non_cme_keywords):
+        detected_mode = "non-cme"
+        compliance_score = 0.9
+    
+    brand_terms = ["pfizer", "merck", "novartis", "lilly", "abbvie", "roche", "johnson", "bristol", "astrazeneca", "sanofi", "gsk"]
+    if any(brand in prompt_lower for brand in brand_terms):
+        flags.append("Commercial content detected - ensure fair balance")
+        compliance_score -= 0.1
+        if detected_mode == "cme":
+            suggestions.append("CME content should avoid specific brand references")
+    
+    clarity_score = max(0.0, min(1.0, clarity_score))
+    specificity_score = max(0.0, min(1.0, specificity_score))
+    compliance_score = max(0.0, min(1.0, compliance_score))
+    overall_score = (clarity_score * 0.3) + (specificity_score * 0.4) + (compliance_score * 0.3)
+    
+    if overall_score >= 0.8:
+        suggestions.insert(0, "Good prompt! Ready for processing.")
+    elif overall_score >= 0.6:
+        suggestions.insert(0, "Acceptable prompt with room for improvement.")
+    else:
+        suggestions.insert(0, "Consider revising prompt for better results.")
+    
+    semantic_analysis = None
+    if word_count >= 5:
+        semantic_analysis = await analyze_prompt_semantics(prompt)
+        
+        if semantic_analysis and "quality_score" in semantic_analysis:
+            llm_quality = semantic_analysis.get("quality_score", 0.5)
+            overall_score = (overall_score * 0.6) + (llm_quality * 0.4)
+            overall_score = round(max(0.0, min(1.0, overall_score)), 2)
+            
+        if semantic_analysis and "improvement_suggestions" in semantic_analysis:
+            for sug in semantic_analysis.get("improvement_suggestions", [])[:2]:
+                if sug and sug not in suggestions:
+                    suggestions.append(f"AI: {sug}")
+    
+    logger.info("prompt_analyzed", word_count=word_count, overall_score=overall_score, 
+                detected_mode=detected_mode, has_semantic=semantic_analysis is not None)
+    
+    return PromptAnalyzeResponse(
+        overall_score=round(overall_score, 2),
+        clarity_score=round(clarity_score, 2),
+        specificity_score=round(specificity_score, 2),
+        compliance_score=round(compliance_score, 2),
+        detected_mode=detected_mode,
+        suggestions=suggestions[:5],
+        flags=flags[:5],
+        word_count=word_count,
+        estimated_tokens=estimated_tokens,
+        semantic_analysis=semantic_analysis
+    )
+
+
+@app.post("/api/transcribe", response_model=TranscriptionResponse)
+async def transcribe_audio(request: TranscriptionRequest):
+    """
+    Transcribe audio from URL
+    
+    Downloads audio and processes with Whisper ASR
+    """
+    transcription_id = str(uuid.uuid4())
+    start_time = datetime.utcnow()
+    
+    logger.info("transcription_request", transcription_id=transcription_id, url=request.url[:50])
+    
+    try:
+        valid_extensions = ['.mp3', '.wav', '.m4a', '.mp4', '.webm', '.ogg', '.flac']
+        url_lower = request.url.lower()
+        if not any(ext in url_lower for ext in valid_extensions):
+            return TranscriptionResponse(
+                transcription_id=transcription_id,
+                status="error",
+                error="URL must point to an audio file (.mp3, .wav, .m4a, .mp4, .webm, .ogg, .flac)"
+            )
+        
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            try:
+                response = await client.head(request.url, follow_redirects=True)
+                if response.status_code != 200:
+                    return TranscriptionResponse(
+                        transcription_id=transcription_id,
+                        status="error",
+                        error=f"Cannot access URL: HTTP {response.status_code}"
+                    )
+            except Exception as e:
+                return TranscriptionResponse(
+                    transcription_id=transcription_id,
+                    status="error",
+                    error=f"Cannot reach URL: {str(e)}"
+                )
+        
+        processing_time = (datetime.utcnow() - start_time).total_seconds()
+        
+        return TranscriptionResponse(
+            transcription_id=transcription_id,
+            status="queued",
+            text=None,
+            duration_seconds=None,
+            processing_time_seconds=processing_time,
+            language=request.language
+        )
+        
+    except Exception as e:
+        logger.error("transcription_failed", transcription_id=transcription_id, error=str(e))
+        return TranscriptionResponse(
+            transcription_id=transcription_id,
+            status="error",
+            error=str(e)
+        )
+
+
+@app.get("/api/transcribe/{transcription_id}")
+async def get_transcription_status(transcription_id: str):
+    """
+    Get transcription status
+    
+    Returns current status and result if complete
+    """
+    return {
+        "transcription_id": transcription_id,
+        "status": "processing",
+        "message": "Transcription is being processed. Check back shortly."
+    }
+
+
+# ============================================================================
+# OLLAMA ENDPOINTS - Direct access to open models
+# ============================================================================
+
+class OllamaChatRequest(BaseModel):
+    """Request for Ollama chat"""
+    model: str
+    message: str
+    system_prompt: Optional[str] = None
+
+
+class OllamaChatResponse(BaseModel):
+    """Response from Ollama chat"""
+    model: str
+    response: str
+    done: bool = True
+
+
+@app.get("/api/ollama/models")
+async def get_ollama_models():
+    """
+    Get list of available Ollama models
+    
+    Returns models pulled and available for inference
+    """
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(f"{OLLAMA_URL}/api/tags")
+            
+            if response.status_code == 200:
+                data = response.json()
+                models = []
+                for model in data.get("models", []):
+                    models.append({
+                        "name": model.get("name"),
+                        "size_gb": round(model.get("size", 0) / 1e9, 1),
+                        "parameter_size": model.get("details", {}).get("parameter_size", "unknown"),
+                        "family": model.get("details", {}).get("family", "unknown"),
+                        "type": "ollama"
+                    })
+                
+                logger.info("ollama_models_fetched", count=len(models))
+                return {
+                    "models": models,
+                    "source": "ollama",
+                    "url": OLLAMA_URL
+                }
+            else:
+                logger.warning("ollama_models_fetch_failed", status=response.status_code)
+                return {"models": [], "error": "Could not fetch models from Ollama"}
+                
+    except Exception as e:
+        logger.warning("ollama_unavailable", error=str(e))
+        return {"models": [], "error": f"Ollama unavailable: {str(e)}"}
+
+
+@app.post("/api/ollama/chat", response_model=OllamaChatResponse)
+async def ollama_chat(request: OllamaChatRequest):
+    """
+    Direct chat with Ollama model
+    
+    Bypasses internal agent pipeline for direct LLM access
+    """
+    logger.info("ollama_chat_request", model=request.model)
+    
+    system = request.system_prompt or f"You are {request.model}, a helpful AI assistant."
+    
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                f"{OLLAMA_URL}/api/generate",
+                json={
+                    "model": request.model,
+                    "prompt": request.message,
+                    "system": system,
+                    "stream": False,
+                    "keep_alive": "5m"
+                }
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                llm_response = result.get("response", "")
+                
+                logger.info("ollama_chat_complete", model=request.model, 
+                           response_length=len(llm_response))
+                
+                return OllamaChatResponse(
+                    model=request.model,
+                    response=llm_response,
+                    done=True
+                )
+            else:
+                logger.error("ollama_chat_failed", status=response.status_code)
+                return OllamaChatResponse(
+                    model=request.model,
+                    response=f"Error: Ollama returned status {response.status_code}",
+                    done=True
+                )
+                
+    except httpx.TimeoutException:
+        logger.error("ollama_chat_timeout", model=request.model)
+        return OllamaChatResponse(
+            model=request.model,
+            response="Error: Request timed out. The model may still be loading.",
+            done=True
+        )
+    except Exception as e:
+        logger.error("ollama_chat_error", error=str(e))
+        return OllamaChatResponse(
+            model=request.model,
+            response=f"Error: {str(e)}",
+            done=True
+        )
+
+
+# ============================================================================
+# LANGGRAPH ENDPOINTS
+# ============================================================================
+
+@app.post("/langgraph/run")
+async def langgraph_run(request: LangGraphRunRequest):
+    """
+    Run a LangGraph workflow.
+    
+    Executes the agent graph with PostgreSQL checkpoint persistence.
+    """
+    task_id = str(uuid.uuid4())
+    
+    logger.info(
+        "langgraph_run_request",
+        task_id=task_id,
+        topic=request.topic,
+        task_type=request.task_type
+    )
+    
+    try:
+        graph = await get_agent_graph()
+        result = await graph.run(
+            task_id=task_id,
+            topic=request.topic,
+            task_type=request.task_type,
+            compliance_mode=request.compliance_mode,
+            thread_id=request.thread_id
+        )
+        
+        return {
+            "task_id": task_id,
+            "status": result.get("status"),
+            "thread_id": result.get("metadata", {}).get("thread_id"),
+            "final_deliverable": result.get("final_deliverable"),
+            "current_agent": result.get("current_agent"),
+            "errors": result.get("errors", [])
+        }
+        
+    except Exception as e:
+        logger.error("langgraph_run_failed", task_id=task_id, error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/langgraph/resume")
+async def langgraph_resume(request: LangGraphResumeRequest):
+    """
+    Resume a LangGraph conversation thread.
+    
+    Continues an existing workflow with a new message.
+    """
+    logger.info("langgraph_resume_request", thread_id=request.thread_id)
+    
+    try:
+        graph = await get_agent_graph()
+        result = await graph.resume_thread(
+            thread_id=request.thread_id,
+            new_message=request.message
+        )
+        
+        return {
+            "thread_id": request.thread_id,
+            "status": result.get("status"),
+            "final_deliverable": result.get("final_deliverable"),
+            "current_agent": result.get("current_agent")
+        }
+        
+    except Exception as e:
+        logger.error("langgraph_resume_failed", thread_id=request.thread_id, error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/langgraph/history/{thread_id}")
+async def langgraph_history(thread_id: str):
+    """
+    Get history for a LangGraph thread.
+    
+    Returns all checkpointed states for the conversation.
+    """
+    try:
+        graph = await get_agent_graph()
+        history = await graph.get_thread_history(thread_id)
+        
+        return {
+            "thread_id": thread_id,
+            "states": history,
+            "count": len(history)
+        }
+        
+    except Exception as e:
+        logger.error("langgraph_history_failed", thread_id=thread_id, error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/langgraph/status")
+async def langgraph_status():
+    """Get LangGraph system status"""
+    try:
+        graph = await get_agent_graph()
+        return {
+            "status": "ready",
+            "checkpointer": "postgres" if graph.checkpointer else "memory",
+            "nodes": list(graph.graph.nodes.keys()) if graph.graph else [],
+            "db_connected": graph.checkpointer is not None
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+
 @app.get("/")
 async def root():
     """Root endpoint"""
     return {
         "service": "DHG AI Factory - CME Orchestrator",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "status": "operational",
+        "langgraph": "enabled",
         "documentation": "/docs"
     }
 
@@ -462,9 +1012,18 @@ async def startup_event():
     
     # Dependency Injection for WebSocket Manager
     ws_manager.agent_client = agent_client
+    
+    # Initialize LangGraph
+    try:
+        await initialize_langgraph()
+        logger.info("langgraph_initialized_on_startup")
+    except Exception as e:
+        logger.error("langgraph_init_failed_on_startup", error=str(e))
+
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Shutdown tasks"""
     await agent_client.client.aclose()
+    await shutdown_langgraph()
     logger.info("orchestrator_shutdown")

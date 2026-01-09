@@ -34,15 +34,45 @@ const getWebSocketUrl = () => {
 const WS_URL = getWebSocketUrl();
 
 const ChatRoute = () => {
-  const { messages, isConnected, isProcessing, sendMessage: wsSendMessage, clearMessages } = useWebSocket(WS_URL);
+  const { messages, isConnected, isProcessing, sendMessage: wsSendMessage, clearMessages, addMessage, setIsProcessing } = useWebSocket(WS_URL);
   const { selectedModel, theme } = useStudio();
 
-  const handleSendMessage = (content) => {
-    wsSendMessage(content, {
-      model: selectedModel || 'gpt-4o', // Default fallback
-      theme,
-      mode: 'auto' // Default compliance mode
-    });
+  const handleSendMessage = async (content) => {
+    // Check if selected model is an Ollama model
+    if (selectedModel && selectedModel.type === 'ollama') {
+      // Add user message immediately
+      addMessage({ role: 'user', content });
+      setIsProcessing(true);
+
+      try {
+        const response = await fetch('http://10.0.0.251:8011/api/ollama/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: selectedModel.id,
+            message: content
+          })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          addMessage({ role: 'assistant', content: data.response });
+        } else {
+          addMessage({ role: 'assistant', content: 'Error: Could not get response from Ollama' });
+        }
+      } catch (error) {
+        addMessage({ role: 'assistant', content: `Error: ${error.message}` });
+      } finally {
+        setIsProcessing(false);
+      }
+    } else {
+      // Use existing WebSocket pipeline for internal agents
+      wsSendMessage(content, {
+        model: selectedModel?.id || 'gpt-4o',
+        theme,
+        mode: 'auto'
+      });
+    }
   };
 
   return (

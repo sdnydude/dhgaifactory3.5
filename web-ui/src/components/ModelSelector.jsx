@@ -1,42 +1,49 @@
 import React, { useState } from 'react';
-import { ChevronDown, Cpu, Cloud, Zap, Check } from 'lucide-react';
+import { ChevronDown, Cpu, Cloud, Zap, Check, Server } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-
-const models = [
-    {
-        category: 'Cloud Models',
-        icon: <Cloud size={16} />,
-        items: [
-            { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', provider: 'Google' },
-            { id: 'claude-3-opus', name: 'Claude 3 Opus', provider: 'Anthropic' },
-            { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', provider: 'OpenAI' }
-        ]
-    },
-    {
-        category: 'Local LLMs',
-        icon: <Cpu size={16} />,
-        items: [
-            { id: 'llama-3-70b', name: 'Llama 3 70B', provider: 'Local' },
-            { id: 'mistral-large', name: 'Mistral Large', provider: 'Local' },
-            { id: 'nano-banana-pro', name: 'Nano Banana Pro', provider: 'DHG Custom' }
-        ]
-    },
-    {
-        category: 'Specialized Agents',
-        icon: <Zap size={16} />,
-        items: [
-            { id: 'sora-video', name: 'Sora (Video)', provider: 'OpenAI' },
-            { id: 'gemini-vision', name: 'Gemini Vision', provider: 'Google' },
-            { id: 'dhg-medical', name: 'DHG Medical', provider: 'Internal' }
-        ]
-    }
-];
+import { useStudio } from '../context/StudioContext';
 
 const ModelSelector = ({ selectedModel, onSelectModel }) => {
     const [isOpen, setIsOpen] = useState(false);
+    const { availableModels, ollamaModels } = useStudio();
 
-    // Default to first generic if nothing selected
-    const active = selectedModel || models[0].items[0];
+    // Build model groups dynamically
+    const modelGroups = [
+        {
+            category: 'Cloud Models',
+            icon: <Cloud size={16} />,
+            items: [
+                { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', provider: 'Google', type: 'cloud' },
+                { id: 'claude-3-opus', name: 'Claude 3 Opus', provider: 'Anthropic', type: 'cloud' },
+                { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', provider: 'OpenAI', type: 'cloud' }
+            ]
+        },
+        {
+            category: 'Open Models (Ollama)',
+            icon: <Server size={16} />,
+            items: ollamaModels.map(m => ({
+                id: m.name,
+                name: m.name.replace(':latest', ''),
+                provider: m.description || 'Ollama',
+                type: 'ollama'
+            }))
+        },
+        {
+            category: 'DHG Agents',
+            icon: <Zap size={16} />,
+            items: availableModels
+                .filter(m => m.type === 'internal')
+                .map(m => ({
+                    id: m.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+                    name: m.name,
+                    provider: m.description || 'Internal',
+                    type: 'internal'
+                }))
+        }
+    ].filter(group => group.items.length > 0);
+
+    // Default to first agent if nothing selected
+    const active = selectedModel || modelGroups[0]?.items[0] || { id: 'default', name: 'Select Model' };
 
     return (
         <div style={{ position: 'relative', zIndex: 50 }}>
@@ -59,8 +66,9 @@ const ModelSelector = ({ selectedModel, onSelectModel }) => {
                 className="hover-glass"
             >
                 <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-                    <span style={{ color: 'var(--color-dhg-primary)' }}>
-                        {models.find(g => g.items.find(i => i.id === active.id))?.icon}
+                    <span style={{ color: active.type === 'ollama' ? '#10b981' : 'var(--color-dhg-primary)' }}>
+                        {active.type === 'ollama' ? <Server size={16} /> :
+                            active.type === 'cloud' ? <Cloud size={16} /> : <Zap size={16} />}
                     </span>
                     <span style={{ fontWeight: 500 }}>{active.name}</span>
                 </span>
@@ -88,7 +96,7 @@ const ModelSelector = ({ selectedModel, onSelectModel }) => {
                             overflowY: 'auto'
                         }}
                     >
-                        {models.map((group) => (
+                        {modelGroups.map((group) => (
                             <div key={group.category} style={{ marginBottom: 'var(--space-2)' }}>
                                 <div style={{
                                     padding: 'var(--space-2)',
@@ -114,7 +122,9 @@ const ModelSelector = ({ selectedModel, onSelectModel }) => {
                                             textAlign: 'left',
                                             padding: 'var(--space-2) var(--space-3)',
                                             borderRadius: 'var(--radius-md)',
-                                            background: active.id === item.id ? 'var(--color-dhg-primary)' : 'transparent',
+                                            background: active.id === item.id ?
+                                                (item.type === 'ollama' ? '#10b981' : 'var(--color-dhg-primary)') :
+                                                'transparent',
                                             color: active.id === item.id ? 'white' : 'var(--color-text)',
                                             border: 'none',
                                             cursor: 'pointer',

@@ -1,0 +1,27 @@
+{
+  "task_type": "needs_assessment",
+  "topic": "Type 2 Diabetes Management: Updates in Pharmacotherapy and Lifestyle Interventions",
+  "compliance_mode": "auto",
+  "target_audience": "Primary Care Physicians",
+  "funder": "American Diabetes Association",
+  "word_count_target": 1250,
+  "moore_levels": [
+    "level_3_learning_declarative",
+    "level_4_competence",
+    "level_5_performance"
+  ],
+  "include_sdoh": true,
+  "include_equity": true,
+  "reference_count_min": 8,
+  "reference_count_max": 12,
+  "additional_context": {
+    "focus_areas": [
+      "Recent guideline updates",
+      "GLP-1 receptor agonists",
+      "SGLT2 inhibitors",
+      "Cardiovascular risk reduction",
+      "Health equity considerations"
+    ],
+    "target_credit_hours": 1.0
+  }
+}

@@ -183,6 +183,36 @@ CREATE INDEX idx_competitor_funder ON competitor_activities(funder);
 CREATE INDEX idx_competitor_date ON competitor_activities(activity_date DESC);
 
 -- ============================================================================
+-- GENERATED VISUALS TABLES
+-- ============================================================================
+
+-- Generated Images: AI-generated visuals stored in database
+CREATE TABLE IF NOT EXISTS generated_images (
+    image_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    topic TEXT NOT NULL,
+    visual_type VARCHAR(50) NOT NULL, -- infographic, slide, chart, diagram, illustration
+    style VARCHAR(50), -- medical-professional, educational, modern-minimal
+    prompt_used TEXT,
+    image_data BYTEA NOT NULL, -- Binary image data
+    mime_type VARCHAR(50) DEFAULT 'image/png',
+    file_size_bytes INT,
+    width_px INT,
+    height_px INT,
+    generation_model VARCHAR(100),
+    status VARCHAR(20) DEFAULT 'success', -- success, error, pending
+    compliance_mode VARCHAR(20), -- cme, non-cme
+    metadata JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_images_topic ON generated_images(topic);
+CREATE INDEX idx_images_type ON generated_images(visual_type);
+CREATE INDEX idx_images_created ON generated_images(created_at DESC);
+CREATE INDEX idx_images_status ON generated_images(status);
+
+
+-- ============================================================================
 -- HELPER FUNCTIONS
 -- ============================================================================
 

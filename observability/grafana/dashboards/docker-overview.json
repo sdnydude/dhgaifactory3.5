@@ -1,0 +1,84 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "iteration": 1650000000000,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Container CPU (cores)",
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [
+        {
+          "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{image!\"\"}[5m]))",
+          "legendFormat": "{{name}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+    },
+    {
+      "type": "timeseries",
+      "title": "Container Memory (bytes)",
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [
+        {
+          "expr": "sum by (name) (container_memory_usage_bytes{image!\"\"})",
+          "legendFormat": "{{name}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+    },
+    {
+      "type": "timeseries",
+      "title": "Container Network RX/TX (bytes/s)",
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [
+        {"expr": "sum by (name) (rate(container_network_receive_bytes_total{image!\\\"\\\"}[5m]))", "legendFormat": "{{name}} rx", "refId": "A"},
+        {"expr": "sum by (name) (rate(container_network_transmit_bytes_total{image!\\\"\\\"}[5m]))", "legendFormat": "{{name}} tx", "refId": "B"}
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+    },
+    {
+      "type": "timeseries",
+      "title": "Container Disk IO (ops/s)",
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [
+        {"expr": "sum by (name) (rate(container_fs_reads_total{image!\\\"\\\"}[5m]))", "legendFormat": "{{name}} reads", "refId": "A"},
+        {"expr": "sum by (name) (rate(container_fs_writes_total{image!\\\"\\\"}[5m]))", "legendFormat": "{{name}} writes", "refId": "B"}
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+    },
+    {
+      "type": "stat",
+      "title": "Running Containers",
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [
+        {"expr": "count(container_last_seen{image!\\\"\\\"})", "refId": "A"}
+      ],
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 16}
+    },
+    {
+      "type": "timeseries",
+      "title": "Node CPU Utilization (%)",
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [
+        {"expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\\\"idle\\\"}[5m])) * 100)", "refId": "A"}
+      ],
+      "gridPos": {"h": 4, "w": 18, "x": 6, "y": 16}
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 36,
+  "style": "dark",
+  "tags": ["docker", "cadvisor", "node-exporter"],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "timezone": "",
+  "title": "Docker Overview",
+  "uid": "docker-overview",
+  "version": 1
+}
