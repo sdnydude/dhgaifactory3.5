@@ -5,6 +5,7 @@ Medical image generation using Nano Banana Pro (Gemini 3 Pro Image)
 
 import os
 import io
+import json
 import base64
 import asyncio
 from datetime import datetime
@@ -105,7 +106,7 @@ class ImageStore:
                     len(image_data),
                     config.MODEL_NAME,
                     compliance_mode,
-                    metadata
+                    json.dumps(metadata) if isinstance(metadata, dict) else metadata
                 )
                 image_id = str(result["image_id"])
                 logger.info("image_saved", image_id=image_id, size=len(image_data))
@@ -398,6 +399,107 @@ async def health():
     }
 
 
+async def generate_asset_metadata(topic: str, visual_type: str, aspect_ratio: str) -> dict:
+    """
+    Generate contextual titles, subject lines, and image specs for an asset.
+    Uses Ollama LLM to generate creative, context-aware titles.
+    """
+    import httpx
+    
+    ollama_url = os.getenv("OLLAMA_URL", "http://10.0.0.251:11434")
+    type_label = visual_type.replace('_', ' ').title()
+    
+    # Build prompt for LLM to generate creative titles
+    llm_prompt = f"""You are a creative asset naming assistant. Generate titles and subject lines for a visual asset.
+
+Asset Details:
+- User's request: "{topic}"
+- Visual type: {type_label}
+
+Generate exactly:
+1. Three SHORT creative titles (3-6 words each) that capture the essence of the visual. Do NOT just repeat the user's request.
+2. Three email subject lines (suitable for sharing this asset)
+
+Format your response EXACTLY like this:
+TITLES:
+1. [First creative title]
+2. [Second creative title]  
+3. [Third creative title]
+SUBJECTS:
+1. [First subject line]
+2. [Second subject line]
+3. [Third subject line]
+
+Be creative and concise. Focus on the core topic, not the formatting words like "add" or "social media"."""
+
+    # Default fallback titles
+    fallback_titles = [
+        f"{type_label} Asset",
+        f"Visual: {topic[:30]}..." if len(topic) > 30 else f"Visual: {topic}",
+        f"Generated {type_label}"
+    ]
+    fallback_subjects = [
+        f"New {type_label} Ready",
+        f"Your Visual Asset",
+        f"Asset Generated"
+    ]
+    
+    title_options = fallback_titles
+    subject_lines = fallback_subjects
+    
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                f"{ollama_url}/api/generate",
+                json={
+                    "model": "mistral",
+                    "prompt": llm_prompt,
+                    "stream": False,
+                    "options": {"temperature": 0.7, "num_predict": 200}
+                }
+            )
+            if response.status_code == 200:
+                result = response.json().get("response", "")
+                # Parse the response
+                if "TITLES:" in result and "SUBJECTS:" in result:
+                    titles_section = result.split("TITLES:")[1].split("SUBJECTS:")[0]
+                    subjects_section = result.split("SUBJECTS:")[1]
+                    
+                    # Extract numbered items
+                    import re
+                    title_matches = re.findall(r'\d+\.\s*(.+?)(?:\n|$)', titles_section)
+                    subject_matches = re.findall(r'\d+\.\s*(.+?)(?:\n|$)', subjects_section)
+                    
+                    if len(title_matches) >= 3:
+                        title_options = [t.strip() for t in title_matches[:3]]
+                    if len(subject_matches) >= 3:
+                        subject_lines = [s.strip() for s in subject_matches[:3]]
+    except Exception as e:
+        logger.warning("llm_title_generation_failed", error=str(e))
+    
+    # Image specifications based on aspect ratio
+    aspect_specs = {
+        "16:9": {"width": 1920, "height": 1080},
+        "4:3": {"width": 1600, "height": 1200},
+        "1:1": {"width": 1200, "height": 1200},
+        "9:16": {"width": 1080, "height": 1920}
+    }
+    dims = aspect_specs.get(aspect_ratio, {"width": 1920, "height": 1080})
+    
+    return {
+        "title_options": title_options,
+        "subject_lines": subject_lines,
+        "topic": topic[:50] if len(topic) > 50 else topic,
+        "specs": {
+            "format": "JPEG",
+            "width_px": dims["width"],
+            "height_px": dims["height"],
+            "colorspace": "sRGB",
+            "aspect_ratio": aspect_ratio
+        }
+    }
+
+
 @app.post("/generate", response_model=VisualsResponse)
 async def generate_visual(request: VisualsRequest):
     """
@@ -448,6 +550,10 @@ async def generate_visual(request: VisualsRequest):
             }
         )
     
+    # Generate asset metadata (titles, subject lines, specs)
+    # Generate asset metadata (titles, subject lines, specs) using AI
+    asset_meta = await generate_asset_metadata(request.topic, request.visual_type, request.aspect_ratio)
+    
     return VisualsResponse(
         image_url=f"/images/{image_id}" if image_id else result.get("image_url"),
         image_base64=result.get("image_base64"),
@@ -462,7 +568,11 @@ async def generate_visual(request: VisualsRequest):
             "aspect_ratio": request.aspect_ratio,
             "compliance_mode": request.compliance_mode,
             "generated_at": datetime.utcnow().isoformat(),
-            "stored_in_db": image_id is not None
+            "stored_in_db": image_id is not None,
+            "topic": asset_meta["topic"],
+            "title_options": asset_meta["title_options"],
+            "subject_lines": asset_meta["subject_lines"],
+            "specs": asset_meta["specs"]
         }
     )
 

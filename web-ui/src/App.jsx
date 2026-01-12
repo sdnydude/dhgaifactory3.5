@@ -33,27 +33,32 @@ const getWebSocketUrl = () => {
 
 const WS_URL = getWebSocketUrl();
 
-const ChatRoute = () => {
-  const { messages, isConnected, isProcessing, sendMessage: wsSendMessage, clearMessages, addMessage, setIsProcessing } = useWebSocket(WS_URL);
+const AppInner = () => {
+  const {
+    messages,
+    isConnected,
+    isProcessing,
+    streamingContent,
+    agentEvents,
+    validationResult,
+    sendMessage: wsSendMessage,
+    clearMessages,
+    addMessage,
+    setIsProcessing
+  } = useWebSocket(WS_URL);
+
   const { selectedModel, theme } = useStudio();
 
   const handleSendMessage = async (content) => {
-    // Check if selected model is an Ollama model
     if (selectedModel && selectedModel.type === 'ollama') {
-      // Add user message immediately
       addMessage({ role: 'user', content });
       setIsProcessing(true);
-
       try {
         const response = await fetch('http://10.0.0.251:8011/api/ollama/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: selectedModel.id,
-            message: content
-          })
+          body: JSON.stringify({ model: selectedModel.name, message: content })
         });
-
         if (response.ok) {
           const data = await response.json();
           addMessage({ role: 'assistant', content: data.response });
@@ -66,7 +71,6 @@ const ChatRoute = () => {
         setIsProcessing(false);
       }
     } else {
-      // Use existing WebSocket pipeline for internal agents
       wsSendMessage(content, {
         model: selectedModel?.id || 'gpt-4o',
         theme,
@@ -76,28 +80,30 @@ const ChatRoute = () => {
   };
 
   return (
-    <ChatArea
-      messages={messages}
-      onSendMessage={handleSendMessage}
-      isProcessing={isProcessing}
-    />
+    <Routes>
+      <Route path="/" element={<MainLayout agentEvents={agentEvents} validationResult={validationResult} />}>
+        <Route index element={<Navigate to="/chat" replace />} />
+        <Route path="chat" element={
+          <ChatArea
+            messages={messages}
+            onSendMessage={handleSendMessage}
+            isProcessing={isProcessing}
+            streamingContent={streamingContent}
+          />
+        } />
+        <Route path="admin" element={<AdminPage />} />
+        <Route path="settings" element={<SettingsPage />} />
+        <Route path="walkthrough" element={<WalkthroughPage />} />
+      </Route>
+    </Routes>
   );
 };
-
 
 function App() {
   return (
     <StudioProvider>
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<MainLayout />}>
-            <Route index element={<Navigate to="/chat" replace />} />
-            <Route path="chat" element={<ChatRoute />} />
-            <Route path="admin" element={<AdminPage />} />
-            <Route path="settings" element={<SettingsPage />} />
-            <Route path="walkthrough" element={<WalkthroughPage />} />
-          </Route>
-        </Routes>
+        <AppInner />
       </BrowserRouter>
     </StudioProvider>
   );

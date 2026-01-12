@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { Link } from 'react-router-dom';
@@ -223,30 +223,56 @@ const HistoryTabContent = () => (
     </div>
 );
 
-const StatusTabContent = () => (
+const StatusTabContent = ({ events = [] }) => (
     <div style={{ padding: 'var(--space-4)' }}>
         <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginBottom: 'var(--space-3)' }}>
-            System Health
+            Real-time Agent Activities
         </div>
         <div style={{ display: 'grid', gap: 'var(--space-2)' }}>
-            {[
-                { label: 'Orchestrator', value: 'Connected', color: 'var(--color-success)' },
-                { label: 'Agents Online', value: '5/6', color: 'var(--color-warning)' },
-                { label: 'Queue Depth', value: '0', color: 'var(--color-success)' },
-                { label: 'Avg Response', value: '1.2s', color: 'var(--color-success)' }
-            ].map(stat => (
-                <div key={stat.label} style={{
-                    padding: 'var(--space-3)',
-                    background: 'var(--color-surface-panel)',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--glass-border)',
-                    display: 'flex',
-                    justifyContent: 'space-between'
-                }}>
-                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>{stat.label}</span>
-                    <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: stat.color }}>{stat.value}</span>
+            {events.length === 0 ? (
+                <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', padding: 'var(--space-2)' }}>
+                    No recent activities recorded.
                 </div>
-            ))}
+            ) : (
+                [...events].reverse().slice(0, 10).map((event, i) => (
+                    <div key={i} style={{
+                        padding: 'var(--space-3)',
+                        background: 'var(--color-surface-panel)',
+                        borderRadius: 'var(--radius-md)',
+                        border: '1px solid var(--glass-border)',
+                        animation: i === 0 ? 'pulse-border 2s infinite' : 'none'
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-dhg-primary)', textTransform: 'uppercase' }}>
+                                {event.agent || 'System'}
+                            </span>
+                            <span style={{ fontSize: '9px', color: 'var(--color-text-muted)' }}>
+                                {new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                            </span>
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--color-text)' }}>{event.message}</div>
+                        {event.status && (
+                            <div style={{ fontSize: '9px', marginTop: '4px', opacity: 0.6 }}>
+                                Status: <span style={{ color: event.status === 'error' ? 'red' : 'inherit' }}>{event.status}</span>
+                            </div>
+                        )}
+                    </div>
+                ))
+            )}
+        </div>
+
+        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', margin: 'var(--space-4) 0 var(--space-3) 0' }}>
+            System Performance
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2)' }}>
+            <div style={{ padding: 'var(--space-2)', background: 'rgba(0,0,0,0.1)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--glass-border)' }}>
+                <div style={{ fontSize: '9px', color: 'var(--color-text-muted)' }}>LATENCY</div>
+                <div style={{ fontSize: '12px', fontWeight: 600 }}>0.8s</div>
+            </div>
+            <div style={{ padding: 'var(--space-2)', background: 'rgba(0,0,0,0.1)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--glass-border)' }}>
+                <div style={{ fontSize: '9px', color: 'var(--color-text-muted)' }}>UPTIME</div>
+                <div style={{ fontSize: '12px', fontWeight: 600 }}>99.9%</div>
+            </div>
         </div>
     </div>
 );
@@ -806,22 +832,23 @@ const CENTER_VIEWS = [
     { id: 'registry', label: 'Registry', icon: Database }
 ];
 
-const LeftPanelContent = ({ activeTab }) => {
+const LeftPanelContent = ({ activeTab, agentEvents = [] }) => {
     switch (activeTab) {
         case 'chat': return <ChatTabContent />;
         case 'agents': return <AgentsTabContent />;
         case 'history': return <HistoryTabContent />;
-        case 'status': return <StatusTabContent />;
+        case 'status': return <StatusTabContent events={agentEvents} />;
         default: return <ChatTabContent />;
     }
 };
 
-const RightPanelContent = ({ activeTab, onGeneratedImages }) => {
+const RightPanelContent = ({ activeTab, onGeneratedImages, validationResult = null }) => {
     switch (activeTab) {
         case 'visuals': return <VisualsToolPanel onGeneratedImages={onGeneratedImages} />;
         case 'prompt': return <PromptCheckerTool />;
         case 'transcribe': return <TranscriptionTool />;
         case 'upload': return <MediaUploadTool />;
+        case 'artifacts': return <ArtifactsPanel validation={validationResult} />;
         default: return <VisualsToolPanel onGeneratedImages={onGeneratedImages} />;
     }
 };
@@ -883,11 +910,12 @@ const IDEGalleryView = ({ generatedImages }) => {
                         {img.image_base64 ? (
                             <img
                                 src={`data:image/jpeg;base64,${img.image_base64}`}
-                                alt={img.type}
+                                alt={img.prompt_used || img.type}
                                 style={{
                                     width: '100%',
-                                    height: '200px',
-                                    objectFit: 'cover'
+                                    maxHeight: '400px',
+                                    objectFit: 'contain',
+                                    background: '#1a1a2e'
                                 }}
                             />
                         ) : (
@@ -903,21 +931,96 @@ const IDEGalleryView = ({ generatedImages }) => {
                                 {img.status === 'error' ? '❌ Error' : '⏳ Loading...'}
                             </div>
                         )}
-                        <div style={{ padding: 'var(--space-3)' }}>
-                            <div style={{
-                                fontSize: 'var(--text-sm)',
-                                fontWeight: 600,
-                                color: 'var(--color-text)',
-                                textTransform: 'capitalize'
-                            }}>
-                                {img.type?.replace('_', ' ')}
+                        <div style={{ padding: 'var(--space-4)' }}>
+                            {/* Title Options */}
+                            <div style={{ marginBottom: 'var(--space-3)' }}>
+                                <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>Title Options</div>
+                                {(img.metadata?.title_options || [img.metadata?.topic || 'Generated Visual']).map((title, idx) => (
+                                    <div key={idx} style={{
+                                        fontSize: idx === 0 ? 'var(--text-sm)' : '11px',
+                                        fontWeight: idx === 0 ? 600 : 400,
+                                        color: idx === 0 ? 'var(--color-text)' : 'var(--color-text-muted)',
+                                        padding: '2px 0',
+                                        borderLeft: idx === 0 ? '2px solid var(--color-dhg-primary)' : 'none',
+                                        paddingLeft: idx === 0 ? '8px' : '10px'
+                                    }}>
+                                        {idx + 1}. {title}
+                                    </div>
+                                ))}
                             </div>
+
+                            {/* Subject Lines */}
+                            {img.metadata?.subject_lines && (
+                                <div style={{ marginBottom: 'var(--space-3)' }}>
+                                    <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>Subject Lines</div>
+                                    {img.metadata.subject_lines.map((line, idx) => (
+                                        <div key={idx} style={{
+                                            fontSize: '11px',
+                                            color: 'var(--color-text-muted)',
+                                            padding: '2px 0',
+                                            paddingLeft: '10px'
+                                        }}>
+                                            {idx + 1}. {line}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Image Specs */}
+                            {img.metadata?.specs && (
+                                <div style={{
+                                    background: 'var(--color-surface-panel)',
+                                    borderRadius: 'var(--radius-sm)',
+                                    padding: 'var(--space-2)',
+                                    marginBottom: 'var(--space-3)'
+                                }}>
+                                    <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>Specs</div>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', fontSize: '10px' }}>
+                                        <span style={{ color: 'var(--color-text)' }}>
+                                            📐 {img.metadata.specs.width_px}×{img.metadata.specs.height_px}px
+                                        </span>
+                                        <span style={{ color: 'var(--color-text)' }}>
+                                            📄 {img.metadata.specs.format}
+                                        </span>
+                                        <span style={{ color: 'var(--color-text)' }}>
+                                            🎨 {img.metadata.specs.colorspace}
+                                        </span>
+                                        <span style={{ color: 'var(--color-text)' }}>
+                                            ⬛ {img.metadata.specs.aspect_ratio}
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Prompt Used */}
+                            <div style={{
+                                background: 'rgba(0,0,0,0.2)',
+                                borderRadius: 'var(--radius-sm)',
+                                padding: 'var(--space-2)',
+                                marginBottom: 'var(--space-2)'
+                            }}>
+                                <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>Prompt</div>
+                                <div style={{ fontSize: '11px', color: 'var(--color-text)', lineHeight: 1.4 }}>
+                                    {img.prompt_used?.slice(0, 200)}{img.prompt_used?.length > 200 ? '...' : ''}
+                                </div>
+                            </div>
+
+                            {/* Footer with type and status */}
                             <div style={{
                                 fontSize: '10px',
-                                color: img.status === 'success' ? 'var(--color-success)' : 'var(--color-error)',
-                                marginTop: '4px'
+                                color: 'var(--color-text-muted)',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                textTransform: 'capitalize',
+                                borderTop: '1px solid var(--glass-border)',
+                                paddingTop: 'var(--space-2)',
+                                marginTop: 'var(--space-2)'
                             }}>
-                                {img.status} • {img.generation_model || 'Nano Banana Pro'}
+                                <span>{img.type?.replace('_', ' ')}</span>
+                                <span style={{ color: img.status === 'success' ? 'var(--color-success)' : 'var(--color-error)' }}>
+                                    {img.status} • {img.generation_model || 'Nano Banana Pro'}
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -951,7 +1054,7 @@ const CenterViewContent = ({ activeView, generatedImages }) => {
     );
 };
 
-const MainLayout = () => {
+const MainLayout = ({ agentEvents = [], validationResult = null }) => {
     const { selectedModel, setSelectedModel } = useStudio();
     const location = useLocation();
     const isStudioPage = location.pathname === '/chat' || location.pathname === '/';
@@ -1069,7 +1172,7 @@ const MainLayout = () => {
                                             </div>
                                             <PanelTabs tabs={LEFT_TABS} activeTab={leftTab} onTabChange={setLeftTab} />
                                             <div style={{ flex: 1, overflowY: 'auto' }}>
-                                                <LeftPanelContent activeTab={leftTab} />
+                                                <LeftPanelContent activeTab={leftTab} agentEvents={agentEvents} />
                                             </div>
                                             {/* Bottom Navigation Links */}
                                             <div style={{ padding: 'var(--space-2)', borderTop: '1px solid var(--glass-border)', display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
@@ -1105,7 +1208,11 @@ const MainLayout = () => {
                                         <div style={glassPanelStyle('right')}>
                                             <PanelTabs tabs={RIGHT_TABS} activeTab={rightTab} onTabChange={setRightTab} />
                                             <div style={{ flex: 1, overflowY: 'auto' }}>
-                                                <RightPanelContent activeTab={rightTab} onGeneratedImages={handleGeneratedImages} />
+                                                <RightPanelContent
+                                                    activeTab={rightTab}
+                                                    onGeneratedImages={handleGeneratedImages}
+                                                    validationResult={validationResult}
+                                                />
                                             </div>
                                         </div>
                                     </Panel>

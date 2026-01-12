@@ -3,7 +3,7 @@ import MessageBubble from './MessageBubble';
 import { Send } from 'lucide-react';
 import HarmonicLoader from './HarmonicLoader';
 
-const ChatArea = ({ messages, onSendMessage, isProcessing }) => {
+const ChatArea = ({ messages, onSendMessage, isProcessing, streamingContent }) => {
     const [inputValue, setInputValue] = useState('');
     const messagesEndRef = useRef(null);
 
@@ -77,7 +77,21 @@ const ChatArea = ({ messages, onSendMessage, isProcessing }) => {
                             <MessageBubble key={index} message={msg} />
                         ))}
 
-                        {isProcessing && <HarmonicLoader />}
+                        {isProcessing && (
+                            <div className="streaming-indicator">
+                                {streamingContent ? (
+                                    <MessageBubble
+                                        message={{
+                                            role: 'assistant',
+                                            content: streamingContent,
+                                            isStreaming: true
+                                        }}
+                                    />
+                                ) : (
+                                    <HarmonicLoader />
+                                )}
+                            </div>
+                        )}
                         <div ref={messagesEndRef} />
                     </>
                 )}

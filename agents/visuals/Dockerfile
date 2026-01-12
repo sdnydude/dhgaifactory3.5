@@ -2,8 +2,8 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install base dependencies
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+# Install base dependencies including exempi for XMP metadata
+RUN apt-get update && apt-get install -y curl libexempi-dev && rm -rf /var/lib/apt/lists/*
 
 # Copy Core Library first (to leverage caching if we had separate requirements)
 COPY agents/shared/ /app/shared/
@@ -17,6 +17,9 @@ ENV PYTHONPATH=/app/shared
 
 # Copy Agent Code
 COPY agents/visuals/ /app/agents/visuals/
+
+# Install visuals-specific dependencies (google-generativeai, pillow)
+RUN pip install --no-cache-dir -r /app/agents/visuals/requirements.txt
 
 # Expose Port
 EXPOSE 8000

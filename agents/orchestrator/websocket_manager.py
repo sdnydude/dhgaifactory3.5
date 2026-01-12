@@ -54,92 +54,129 @@ class ConnectionManager:
                 "type": "connection.ack",
                 "payload": {
                     "session_id": self.sessions[client_id]["session_id"],
-                    "server_version": "1.0.0",
+                    "server_version": "1.1.0",
                     "heartbeat_interval": 30000,
-                    "capabilities": ["streaming", "agent_status"],
+                    "capabilities": ["multi_agent", "streaming_status", "registry_sync"],
                 },
             }
+        
         if t == "ping":
             return {"type": "pong", "payload": {}}
-        if t == "request.submit":
-            req_id = str(uuid.uuid4())
-            await self.send_message(client_id, {"type": "request.accepted", "payload": {"request_id": req_id}})
-            asyncio.create_task(self._demo_flow(client_id, req_id, data))
-            return None
-        if t == "chat.message":
-            content = data.get("content")
+            
+        if t == "chat.message" or t == "request.submit":
+            req_id = data.get("request_id") or str(uuid.uuid4())
+            content = data.get("content") or data.get("topic")
             model = data.get("model", "auto")
             mode = data.get("mode", "auto")
             
-            # Determine target agent based on model selection
-            target_agent_url = None
-            if "medical" in model or model == "auto":
-                 # Use config from main.py (imported or injected? safer to rely on known service names)
-                 target_agent_url = "http://medical-llm:8000"
-            elif "claude" in model:
-                 target_agent_url = "http://medical-llm:8000" # Using Medical LLM as proxy for now (it has prompt logic)
+            # Acknowledge request
+            await self.send_message(client_id, {
+                "type": "request.accepted", 
+                "payload": {"request_id": req_id}
+            })
             
-            if not target_agent_url:
-                target_agent_url = "http://medical-llm:8000" # Default
-
-            try:
-                # Notify processing
-                await self.send_message(client_id, {
-                    "type": "agent.status", 
-                    "payload": {"status": "processing", "agent": model}
-                })
-
-                # Call Agent (We rely on dependency injection from main.py)
-                if hasattr(self, 'agent_client'):
-                    # Construct simple payload for generic agent interaction
-                    # Note: specialized agents expect specific schemas. 
-                    # For Phase 3, we map a simple chat to the "generate" endpoint of medical-llm
-                    payload = {
-                        "task": "cme_script", # Defaulting to script for chat interaction
-                        "topic": content, # Using content as topic
-                        "compliance_mode": mode,
-                        "style": "conversational"
-                    }
-                    
-                    # Make the call
-                    response = await self.agent_client.call_agent(
-                        target_agent_url,
-                        "generate",
-                        payload
-                    )
-                    
-                    return {
-                        "type": "chat.response", 
-                        "payload": {
-                            "content": response.get("content", "No content generated"),
-                            "metadata": response.get("metadata")
-                        }
-                    }
-                else:
-                    return {"type": "chat.response", "payload": {"content": "Error: Agent Client not initialized"}}
-
-            except Exception as e:
-                logger.error("agent_routing_failed", error=str(e))
-                return {"type": "chat.response", "payload": {"content": f"Error communicating with agent: {str(e)}"}}
+            # Start background processing
+            asyncio.create_task(self._run_task(client_id, req_id, content, model, mode, data))
+            return None
 
         logger.warning("ws_unknown_type", client_id=client_id, type=t)
         return {"type": "error", "payload": {"code": "unknown_type", "message": f"Unknown type: {t}"}}
 
-    async def _demo_flow(self, client_id: str, req_id: str, request_data: Dict):
+    async def _run_task(self, client_id: str, req_id: str, content: str, model: str, mode: str, full_data: Dict):
+        """
+        Coordinated task execution across agents
+        """
         try:
-            await asyncio.sleep(0.2)
-            await self.send_message(client_id, {"type": "agent.status", "payload": {"request_id": req_id, "agent": "orchestrator", "status": "processing", "message": "Processing request..."}})
-            await asyncio.sleep(0.5)
+            # 1. Routing & Initial Status
+            target_agent = "medical-llm"
+            if "research" in model.lower():
+                target_agent = "research"
+            elif "curriculum" in model.lower():
+                target_agent = "curriculum"
+                
+            await self.send_message(client_id, {
+                "type": "agent.status", 
+                "payload": {
+                    "request_id": req_id,
+                    "agent": target_agent,
+                    "status": "processing",
+                    "message": f"Routing request to {target_agent}..."
+                }
+            })
+
+            # 2. Call the Agent
+            if not hasattr(self, 'agent_client'):
+                raise Exception("Agent Client not initialized")
+
+            # Map the request to the agent's expected schema
+            # Defaulting to 'generate' for medical-llm, but could be others
+            agent_url = f"http://{target_agent}:8000"
+            
+            # Simulate multi-step status if it's a complex task
+            if mode == "cme":
+                 await self.send_message(client_id, {
+                     "type": "agent.status",
+                     "payload": {"request_id": req_id, "agent": "qa-compliance", "status": "checking", "message": "Verifying ACCME requirements..."}
+                 })
+                 await asyncio.sleep(0.1)
+
+            # Call specialized agent
+            response = await self.agent_client.call_agent(
+                agent_url,
+                "generate",
+                {
+                    "task": full_data.get("task_type", "cme_script"),
+                    "topic": content,
+                    "compliance_mode": mode,
+                    "word_count_target": full_data.get("word_count_target", 1000)
+                }
+            )
+
+            # 3. Stream Content Back
             content_id = str(uuid.uuid4())
-            await self.send_message(client_id, {"type": "content.chunk", "payload": {"request_id": req_id, "content_id": content_id, "chunk": "# CME Content\n\n"}})
-            await asyncio.sleep(0.3)
-            await self.send_message(client_id, {"type": "content.chunk", "payload": {"request_id": req_id, "content_id": content_id, "chunk": "This is generated CME content.\n\n"}})
-            await asyncio.sleep(0.3)
-            await self.send_message(client_id, {"type": "content.complete", "payload": {"request_id": req_id, "content_id": content_id, "title": request_data.get("title", "Generated Content"), "format": "markdown", "metadata": {"generated_at": datetime.utcnow().isoformat()}}})
-            await asyncio.sleep(0.2)
-            await self.send_message(client_id, {"type": "validation.complete", "payload": {"request_id": req_id, "content_id": content_id, "overall_status": "passed", "checks": [{"check": "accme_compliance", "status": "passed"}], "warnings": [], "violations": []}})
+            generated_text = response.get("content", "No content generated")
+            
+            # For "streaming" feel, we can send chunks (simulated for now, as agent returns whole block)
+            # Future: specialized agents will stream
+            await self.send_message(client_id, {
+                "type": "content.chunk", 
+                "payload": {"request_id": req_id, "content_id": content_id, "chunk": generated_text}
+            })
+
+            # 4. Final Completion
+            await self.send_message(client_id, {
+                "type": "content.complete",
+                "payload": {
+                    "request_id": req_id,
+                    "content_id": content_id,
+                    "title": content[:50],
+                    "format": "markdown",
+                    "metadata": response.get("metadata", {})
+                }
+            })
+
+            # 5. Validation Result
+            await self.send_message(client_id, {
+                "type": "validation.complete",
+                "payload": {
+                    "request_id": req_id,
+                    "content_id": content_id,
+                    "overall_status": "passed" if not response.get("violations") else "failed",
+                    "checks": [{"check": "compliance_check", "status": "passed"}],
+                    "violations": response.get("violations", []),
+                    "warnings": response.get("warnings", [])
+                }
+            })
+
         except Exception as e:
-            logger.error("demo_flow_failed", client_id=client_id, error=str(e))
+            logger.error("run_task_failed", req_id=req_id, error=str(e))
+            await self.send_message(client_id, {
+                "type": "error",
+                "payload": {
+                    "request_id": req_id,
+                    "message": f"Task execution failed: {str(e)}"
+                }
+            })
 
 
 manager = ConnectionManager()

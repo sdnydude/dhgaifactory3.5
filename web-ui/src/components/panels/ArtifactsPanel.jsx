@@ -1,7 +1,7 @@
 import React from 'react';
 import { FileText, Download, Clock } from 'lucide-react';
 
-const ArtifactsPanel = () => {
+const ArtifactsPanel = ({ validation = null }) => {
     const artifacts = [];
 
     return (
@@ -21,12 +21,27 @@ const ArtifactsPanel = () => {
                 borderBottom: '1px solid var(--glass-border)',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 'var(--space-2)',
+                justifyContent: 'space-between',
                 background: 'rgba(0,0,0,0.2)',
                 flexShrink: 0
             }}>
-                <FileText size={16} style={{ color: 'var(--color-dhg-primary)' }} />
-                <span style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>Artifacts</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                    <FileText size={16} style={{ color: 'var(--color-dhg-primary)' }} />
+                    <span style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>Artifacts</span>
+                </div>
+                {validation && (
+                    <span style={{
+                        fontSize: '9px',
+                        padding: '2px 6px',
+                        borderRadius: '10px',
+                        background: validation.overall_status === 'passed' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                        color: validation.overall_status === 'passed' ? 'var(--color-success)' : 'var(--color-error)',
+                        fontWeight: 700,
+                        textTransform: 'uppercase'
+                    }}>
+                        QA: {validation.overall_status}
+                    </span>
+                )}
             </div>
 
             {/* Artifacts Content */}
@@ -35,7 +50,27 @@ const ArtifactsPanel = () => {
                 overflowY: 'auto',
                 padding: 'var(--space-4)'
             }}>
-                {artifacts.length === 0 ? (
+                {validation && (
+                    <div style={{
+                        padding: 'var(--space-4)',
+                        background: 'rgba(0,0,0,0.1)',
+                        borderRadius: 'var(--radius-md)',
+                        border: '1px solid var(--glass-border)',
+                        marginBottom: 'var(--space-4)'
+                    }}>
+                        <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginBottom: 'var(--space-2)', fontWeight: 600, textTransform: 'uppercase' }}>
+                            QA Verification Results
+                        </div>
+                        {validation.checks?.map((check, i) => (
+                            <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                <span style={{ fontSize: '11px', color: 'var(--color-text)' }}>{check.check?.replace(/_/g, ' ') || 'Check'}</span>
+                                <span style={{ fontSize: '10px', color: check.status === 'passed' ? 'var(--color-success)' : 'var(--color-error)' }}>{check.status === 'passed' ? '✓' : '✗'}</span>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {artifacts.length === 0 && !validation ? (
                     <div style={{
                         height: '100%',
                         display: 'flex',
@@ -47,9 +82,6 @@ const ArtifactsPanel = () => {
                     }}>
                         <FileText size={32} style={{ opacity: 0.3, marginBottom: 'var(--space-3)' }} />
                         <p style={{ fontSize: 'var(--text-sm)', margin: 0 }}>No artifacts yet</p>
-                        <p style={{ fontSize: 'var(--text-xs)', marginTop: 'var(--space-1)', opacity: 0.7 }}>
-                            Generated content will appear here
-                        </p>
                     </div>
                 ) : (
                     artifacts.map((artifact, idx) => (

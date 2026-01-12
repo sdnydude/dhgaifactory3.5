@@ -4,6 +4,10 @@ export const useWebSocket = (url) => {
     const [messages, setMessages] = useState([]);
     const [isConnected, setIsConnected] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [streamingContent, setStreamingContent] = useState('');
+    const [agentEvents, setAgentEvents] = useState([]);
+    const [validationResult, setValidationResult] = useState(null);
+
     const socketRef = useRef(null);
     const reconnectTimeoutRef = useRef(null);
 
@@ -29,10 +33,30 @@ export const useWebSocket = (url) => {
                     if (type === 'chat.response') {
                         setMessages(prev => [...prev, { role: 'assistant', content: payload.content || payload }]);
                         setIsProcessing(false);
-                    } else if (type === 'status' || type === 'agent.status') {
-                        console.log('Status update:', payload);
+                        setStreamingContent('');
+                    } else if (type === 'agent.status' || type === 'status') {
+                        setAgentEvents(prev => [...prev, { ...payload, timestamp: new Date().toISOString() }]);
+                    } else if (type === 'content.chunk') {
+                        setStreamingContent(prev => prev + (payload.chunk || ''));
+                        setIsProcessing(true);
+                    } else if (type === 'content.complete') {
+                        setMessages(prev => [...prev, {
+                            role: 'assistant',
+                            content: streamingContent || payload.content || 'Generation complete.',
+                            metadata: payload.metadata,
+                            isArtifact: true,
+                            title: payload.title
+                        }]);
+                        setStreamingContent('');
+                        setIsProcessing(false);
+                    } else if (type === 'validation.complete') {
+                        setValidationResult(payload);
                     } else if (type === 'connection.ack') {
                         console.log('Handshake acknowledged:', payload);
+                    } else if (type === 'error') {
+                        console.error('Server error:', payload.message);
+                        setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${payload.message}`, isError: true }]);
+                        setIsProcessing(false);
                     }
                 } catch (err) {
                     console.error('Error parsing WebSocket message:', err);
@@ -53,7 +77,7 @@ export const useWebSocket = (url) => {
         } catch (err) {
             console.error('Connection failed:', err);
         }
-    }, [url]);
+    }, [url, streamingContent]);
 
     useEffect(() => {
         connect();
@@ -69,6 +93,8 @@ export const useWebSocket = (url) => {
 
     const sendMessage = useCallback((content, metadata = {}) => {
         if (socketRef.current?.readyState === WebSocket.OPEN) {
+            setStreamingContent('');
+            setValidationResult(null);
             const msg = {
                 type: 'chat.message',
                 data: {
@@ -86,9 +112,10 @@ export const useWebSocket = (url) => {
 
     const clearMessages = useCallback(() => {
         setMessages([]);
+        setAgentEvents([]);
+        setStreamingContent('');
     }, []);
 
-    // Helper to add messages directly (for non-WebSocket flows like Ollama)
     const addMessage = useCallback((message) => {
         setMessages(prev => [...prev, message]);
     }, []);
@@ -97,6 +124,9 @@ export const useWebSocket = (url) => {
         messages,
         isConnected,
         isProcessing,
+        streamingContent,
+        agentEvents,
+        validationResult,
         sendMessage,
         clearMessages,
         addMessage,
