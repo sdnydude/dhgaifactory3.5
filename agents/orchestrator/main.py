@@ -21,15 +21,55 @@ OLLAMA_URL = os.getenv("OLLAMA_URL", "http://10.0.0.251:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "mistral:latest")
 
 # LangGraph Integration
-from langgraph_integration import (
+from .langgraph_integration import (
     get_agent_graph,
     initialize_langgraph,
     shutdown_langgraph,
     DHGAgentGraph
 )
 
+
+def configure_tracing() -> str:
+    """
+    Check LangSmith cloud availability and quota at startup.
+    Falls back to local-only mode (no cloud tracing) if unavailable.
+    Returns: 'cloud' if using cloud tracing, 'local' if disabled.
+    """
+    api_key = os.getenv("LANGCHAIN_API_KEY", "")
+    tracing_enabled = os.getenv("LANGCHAIN_TRACING_V2", "false").lower() == "true"
+    
+    if not api_key or not tracing_enabled:
+        os.environ["LANGCHAIN_TRACING_V2"] = "false"
+        return "local"
+    
+    try:
+        import httpx
+        response = httpx.post(
+            "https://api.smith.langchain.com/v1/metadata/submit",
+            headers={"x-api-key": api_key},
+            json={"runs": [], "nodes": []},
+            timeout=5.0
+        )
+        if response.status_code in (200, 204):
+            os.environ["LANGCHAIN_TRACING_V2"] = "true"
+            return "cloud"
+        elif response.status_code == 429:
+            os.environ["LANGCHAIN_TRACING_V2"] = "false"
+            return "local"
+        else:
+            os.environ["LANGCHAIN_TRACING_V2"] = "false"
+            return "local"
+    except Exception:
+        os.environ["LANGCHAIN_TRACING_V2"] = "false"
+        return "local"
+
+
+# Configure tracing at startup
+TRACING_MODE = configure_tracing()
+
 # Initialize structured logging
 logger = structlog.get_logger()
+logger.info("tracing_configured", mode=TRACING_MODE)
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -995,11 +1035,255 @@ async def root():
     """Root endpoint"""
     return {
         "service": "DHG AI Factory - CME Orchestrator",
-        "version": "1.1.0",
+        "version": "1.2.0",
         "status": "operational",
         "langgraph": "enabled",
+        "artifacts_registry": "enabled",
         "documentation": "/docs"
     }
+
+
+# ============================================================================
+# ARTIFACTS REGISTRY API
+# ============================================================================
+
+class ArtifactRegisterRequest(BaseModel):
+    """Request to register an artifact"""
+    artifact_type: str  # image, document, learning_objective, assessment
+    source_agent: str  # visuals, curriculum, outcomes, research
+    source_table: str  # generated_images, segments, learning_objectives
+    source_id: str  # UUID of the source record
+    title: str
+    description: Optional[str] = None
+    file_format: Optional[str] = None
+    file_size_bytes: Optional[int] = None
+    thumbnail_base64: Optional[str] = None
+    tags: Optional[List[str]] = None
+    task_id: Optional[str] = None
+    compliance_mode: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class ArtifactResponse(BaseModel):
+    """Artifact response"""
+    artifact_id: str
+    artifact_type: str
+    source_agent: str
+    title: str
+    description: Optional[str] = None
+    file_format: Optional[str] = None
+    file_size_bytes: Optional[int] = None
+    tags: Optional[List[str]] = None
+    created_at: str
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class ArtifactsClient:
+    """Database client for artifacts registry"""
+    
+    def __init__(self):
+        self._pool = None
+    
+    async def initialize(self):
+        if not config.REGISTRY_DB_URL:
+            logger.warning("artifacts_client_no_db")
+            return False
+        try:
+            import asyncpg
+            self._pool = await asyncpg.create_pool(config.REGISTRY_DB_URL, min_size=1, max_size=5)
+            logger.info("artifacts_client_connected")
+            return True
+        except Exception as e:
+            logger.error("artifacts_client_init_failed", error=str(e))
+            return False
+    
+    async def register(self, request: ArtifactRegisterRequest) -> str:
+        """Register a new artifact, returns artifact_id"""
+        if not self._pool:
+            await self.initialize()
+        if not self._pool:
+            return None
+        
+        try:
+            async with self._pool.acquire() as conn:
+                result = await conn.fetchrow("""
+                    INSERT INTO artifacts 
+                    (artifact_type, source_agent, source_table, source_id, title,
+                     description, file_format, file_size_bytes, thumbnail_base64,
+                     tags, task_id, compliance_mode, metadata)
+                    VALUES ($1, $2, $3, $4::uuid, $5, $6, $7, $8, $9, $10, $11::uuid, $12, $13)
+                    RETURNING artifact_id
+                """,
+                    request.artifact_type,
+                    request.source_agent,
+                    request.source_table,
+                    request.source_id,
+                    request.title,
+                    request.description,
+                    request.file_format,
+                    request.file_size_bytes,
+                    request.thumbnail_base64,
+                    request.tags,
+                    request.task_id,
+                    request.compliance_mode,
+                    json.dumps(request.metadata) if request.metadata else None
+                )
+                return str(result["artifact_id"])
+        except Exception as e:
+            logger.error("artifact_register_failed", error=str(e))
+            return None
+    
+    async def list_artifacts(self, artifact_type: str = None, limit: int = 20, offset: int = 0) -> list:
+        """List artifacts with optional type filter"""
+        if not self._pool:
+            await self.initialize()
+        if not self._pool:
+            return []
+        
+        try:
+            async with self._pool.acquire() as conn:
+                if artifact_type:
+                    rows = await conn.fetch("""
+                        SELECT artifact_id, artifact_type, source_agent, title, description,
+                               file_format, file_size_bytes, tags, created_at, metadata
+                        FROM artifacts
+                        WHERE artifact_type = $1
+                        ORDER BY created_at DESC
+                        LIMIT $2 OFFSET $3
+                    """, artifact_type, limit, offset)
+                else:
+                    rows = await conn.fetch("""
+                        SELECT artifact_id, artifact_type, source_agent, title, description,
+                               file_format, file_size_bytes, tags, created_at, metadata
+                        FROM artifacts
+                        ORDER BY created_at DESC
+                        LIMIT $1 OFFSET $2
+                    """, limit, offset)
+                return [dict(row) for row in rows]
+        except Exception as e:
+            logger.error("artifact_list_failed", error=str(e))
+            return []
+    
+    async def get_artifact(self, artifact_id: str) -> dict:
+        """Get a single artifact by ID"""
+        if not self._pool:
+            await self.initialize()
+        if not self._pool:
+            return None
+        
+        try:
+            async with self._pool.acquire() as conn:
+                row = await conn.fetchrow("""
+                    SELECT artifact_id, artifact_type, source_agent, source_table, source_id,
+                           title, description, file_format, file_size_bytes, thumbnail_base64,
+                           tags, task_id, compliance_mode, metadata, created_at
+                    FROM artifacts
+                    WHERE artifact_id = $1::uuid
+                """, artifact_id)
+                return dict(row) if row else None
+        except Exception as e:
+            logger.error("artifact_get_failed", error=str(e))
+            return None
+
+
+artifacts_client = ArtifactsClient()
+
+
+@app.post("/api/artifacts/register")
+async def register_artifact(request: ArtifactRegisterRequest):
+    """
+    Register a new artifact in the catalog.
+    
+    Called by agents after creating content to register in central catalog.
+    """
+    artifact_id = await artifacts_client.register(request)
+    
+    if not artifact_id:
+        raise HTTPException(status_code=500, detail="Failed to register artifact")
+    
+    logger.info("artifact_registered", 
+                artifact_id=artifact_id, 
+                artifact_type=request.artifact_type,
+                source_agent=request.source_agent)
+    
+    return {
+        "artifact_id": artifact_id,
+        "status": "registered",
+        "artifact_type": request.artifact_type,
+        "title": request.title
+    }
+
+
+@app.get("/api/artifacts")
+async def list_artifacts(
+    artifact_type: Optional[str] = None,
+    limit: int = 20,
+    offset: int = 0
+):
+    """
+    List artifacts in the catalog.
+    
+    Optional filter by artifact_type: image, document, learning_objective, assessment, etc.
+    """
+    artifacts = await artifacts_client.list_artifacts(
+        artifact_type=artifact_type,
+        limit=min(limit, 100),
+        offset=offset
+    )
+    
+    return {
+        "artifacts": [
+            {
+                "artifact_id": str(a["artifact_id"]),
+                "artifact_type": a["artifact_type"],
+                "source_agent": a["source_agent"],
+                "title": a["title"],
+                "description": a.get("description"),
+                "file_format": a.get("file_format"),
+                "file_size_bytes": a.get("file_size_bytes"),
+                "tags": a.get("tags"),
+                "created_at": a["created_at"].isoformat() if a.get("created_at") else None,
+                "metadata": json.loads(a["metadata"]) if a.get("metadata") else None
+            }
+            for a in artifacts
+        ],
+        "count": len(artifacts),
+        "limit": limit,
+        "offset": offset,
+        "filter": {"artifact_type": artifact_type} if artifact_type else None
+    }
+
+
+@app.get("/api/artifacts/{artifact_id}")
+async def get_artifact(artifact_id: str):
+    """
+    Get a single artifact by ID.
+    
+    Returns full metadata including source table/ID for downloading original.
+    """
+    artifact = await artifacts_client.get_artifact(artifact_id)
+    
+    if not artifact:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+    
+    return {
+        "artifact_id": str(artifact["artifact_id"]),
+        "artifact_type": artifact["artifact_type"],
+        "source_agent": artifact["source_agent"],
+        "source_table": artifact["source_table"],
+        "source_id": str(artifact["source_id"]),
+        "title": artifact["title"],
+        "description": artifact.get("description"),
+        "file_format": artifact.get("file_format"),
+        "file_size_bytes": artifact.get("file_size_bytes"),
+        "thumbnail_base64": artifact.get("thumbnail_base64"),
+        "tags": artifact.get("tags"),
+        "task_id": str(artifact["task_id"]) if artifact.get("task_id") else None,
+        "compliance_mode": artifact.get("compliance_mode"),
+        "metadata": json.loads(artifact["metadata"]) if artifact.get("metadata") else None,
+        "created_at": artifact["created_at"].isoformat() if artifact.get("created_at") else None
+    }
+
 
 # ============================================================================
 # STARTUP/SHUTDOWN
