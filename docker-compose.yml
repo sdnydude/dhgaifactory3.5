@@ -38,6 +38,10 @@ services:
       - REGISTRY_DB_URL=postgresql://${POSTGRES_USER:-dhg}:${POSTGRES_PASSWORD:-changeme}@registry-db:5432/${POSTGRES_DB:-dhg_registry}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - CME_MODE_DEFAULT=${CME_MODE_DEFAULT:-auto}
+      - LANGCHAIN_TRACING_V2=true
+      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
+      - LANGCHAIN_PROJECT=dhg-aifactory
+      - LANGCHAIN_ENDPOINT=https://api.smith.langchain.com
     volumes:
       - ./agents/orchestrator:/app
       - ./agents/shared:/app/shared
