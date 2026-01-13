@@ -21,7 +21,7 @@ OLLAMA_URL = os.getenv("OLLAMA_URL", "http://10.0.0.251:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "mistral:latest")
 
 # LangGraph Integration
-from .langgraph_integration import (
+from langgraph_integration import (
     get_agent_graph,
     initialize_langgraph,
     shutdown_langgraph,
