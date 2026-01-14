@@ -1,0 +1,1620 @@
+openapi: 3.0.3
+info:
+  title: DHG AI Factory API
+  description: |
+    Multi-agent orchestration system for CME (Continuing Medical Education) and non-CME content generation.
+
+    ## Architecture
+    The system consists of a master Orchestrator that coordinates 7 specialized agents:
+    - **Medical LLM** (8002): Clinical content generation, NER, ICD-10 extraction
+    - **Research** (8003): Multi-source evidence retrieval from 9+ sources
+    - **Curriculum** (8004): Learning objectives and Moore Levels mapping
+    - **Outcomes** (8005): Assessment instruments and outcomes measurement
+    - **Competitor Intel** (8006): Market intelligence
+    - **QA/Compliance** (8007): ACCME validation and compliance checking
+    - **Visuals** (8008): Medical image generation via Nano Banana Pro
+
+    ## Compliance Modes
+    - **CME**: Enforces ACCME rules, fair balance, no commercial bias
+    - **NON-CME**: No compliance restrictions, allows commercial language
+    - **AUTO**: Automatically detects mode based on task type and keywords
+  version: 1.2.0
+  contact:
+    name: DHG AI Factory
+
+servers:
+  - url: http://localhost:8011
+    description: Orchestrator (primary interface)
+  - url: http://localhost:8002
+    description: Medical LLM Agent
+  - url: http://localhost:8003
+    description: Research Agent
+  - url: http://localhost:8004
+    description: Curriculum Agent
+  - url: http://localhost:8005
+    description: Outcomes Agent
+  - url: http://localhost:8007
+    description: QA/Compliance Agent
+  - url: http://localhost:8008
+    description: Visuals Agent
+
+tags:
+  - name: Orchestrator
+    description: Master coordination and task routing
+  - name: LangGraph
+    description: Workflow execution with state persistence
+  - name: Ollama
+    description: Direct local LLM access
+  - name: Artifacts
+    description: Asset catalog and registry
+  - name: Medical LLM
+    description: Clinical content and NLP
+  - name: Research
+    description: Evidence retrieval
+  - name: Curriculum
+    description: Learning objectives
+  - name: Outcomes
+    description: Assessment and measurement
+  - name: QA/Compliance
+    description: ACCME validation
+  - name: Visuals
+    description: Image generation
+
+paths:
+  # ==========================================================================
+  # ORCHESTRATOR ENDPOINTS (Port 8011)
+  # ==========================================================================
+
+  /health:
+    get:
+      tags: [Orchestrator]
+      summary: Health check
+      description: Returns health status of orchestrator and all connected agents
+      responses:
+        '200':
+          description: Health status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: healthy
+                timestamp: "2025-01-13T12:00:00Z"
+                agents:
+                  medical-llm: healthy
+                  research: healthy
+                  curriculum: healthy
+                  outcomes: healthy
+                  competitor-intel: healthy
+                  qa-compliance: healthy
+                registry_connected: true
+                langgraph_ready: true
+
+  /orchestrate:
+    post:
+      tags: [Orchestrator]
+      summary: Main orchestration endpoint
+      description: |
+        Detects compliance mode, coordinates specialized agents, and returns completed deliverables.
+        Supports task types: needs_assessment, curriculum, learning_objectives, cme_script,
+        grant_request, gap_analysis, outcomes_plan, business_strategy, competitor_analysis.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskRequest'
+            example:
+              task_type: needs_assessment
+              topic: "Type 2 Diabetes Management in Primary Care"
+              compliance_mode: auto
+              target_audience: "Primary Care Physicians"
+              word_count_target: 1250
+              include_sdoh: true
+              include_equity: true
+              reference_count_min: 6
+              reference_count_max: 12
+      responses:
+        '200':
+          description: Task completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '501':
+          description: Task type not yet implemented
+
+  /api/prompt-analyze:
+    post:
+      tags: [Orchestrator]
+      summary: Analyze prompt quality
+      description: Analyzes prompt for clarity, specificity, and compliance. Uses Ollama for semantic analysis.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PromptAnalyzeRequest'
+            example:
+              prompt: "Create a CME needs assessment about hypertension management for cardiologists"
+      responses:
+        '200':
+          description: Prompt analysis results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptAnalyzeResponse'
+
+  /api/transcribe:
+    post:
+      tags: [Orchestrator]
+      summary: Queue audio transcription
+      description: Downloads audio from URL and queues for Whisper ASR processing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TranscriptionRequest'
+      responses:
+        '200':
+          description: Transcription queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranscriptionResponse'
+
+  /api/transcribe/{transcription_id}:
+    get:
+      tags: [Orchestrator]
+      summary: Get transcription status
+      parameters:
+        - name: transcription_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Transcription status
+
+  # ==========================================================================
+  # OLLAMA ENDPOINTS
+  # ==========================================================================
+
+  /api/ollama/models:
+    get:
+      tags: [Ollama]
+      summary: List available Ollama models
+      description: Returns models pulled and available for inference on the local Ollama instance
+      responses:
+        '200':
+          description: Model list
+          content:
+            application/json:
+              example:
+                models:
+                  - name: mistral:latest
+                    size_gb: 4.1
+                    parameter_size: 7B
+                    family: mistral
+                    type: ollama
+                source: ollama
+                url: "http://10.0.0.251:11434"
+
+  /api/ollama/chat:
+    post:
+      tags: [Ollama]
+      summary: Direct chat with Ollama model
+      description: Bypasses agent pipeline for direct LLM access
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OllamaChatRequest'
+            example:
+              model: "mistral:latest"
+              message: "What are the key components of a CME needs assessment?"
+      responses:
+        '200':
+          description: Chat response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OllamaChatResponse'
+
+  # ==========================================================================
+  # LANGGRAPH ENDPOINTS
+  # ==========================================================================
+
+  /langgraph/run:
+    post:
+      tags: [LangGraph]
+      summary: Run LangGraph workflow
+      description: Executes agent graph with PostgreSQL checkpoint persistence
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LangGraphRunRequest'
+      responses:
+        '200':
+          description: Workflow execution result
+
+  /langgraph/resume:
+    post:
+      tags: [LangGraph]
+      summary: Resume LangGraph thread
+      description: Continues an existing workflow with a new message
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LangGraphResumeRequest'
+      responses:
+        '200':
+          description: Resume result
+
+  /langgraph/history/{thread_id}:
+    get:
+      tags: [LangGraph]
+      summary: Get thread history
+      description: Returns all checkpointed states for a conversation
+      parameters:
+        - name: thread_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Thread history
+
+  /langgraph/status:
+    get:
+      tags: [LangGraph]
+      summary: LangGraph system status
+      responses:
+        '200':
+          description: System status
+          content:
+            application/json:
+              example:
+                status: ready
+                checkpointer: postgres
+                nodes: [router, research, medical_llm, qa_compliance, final]
+                db_connected: true
+
+  # ==========================================================================
+  # ARTIFACTS REGISTRY
+  # ==========================================================================
+
+  /api/artifacts:
+    get:
+      tags: [Artifacts]
+      summary: List artifacts
+      description: List artifacts with optional type filter
+      parameters:
+        - name: artifact_type
+          in: query
+          schema:
+            type: string
+            enum: [image, document, learning_objective, assessment]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Artifact list
+
+  /api/artifacts/register:
+    post:
+      tags: [Artifacts]
+      summary: Register artifact
+      description: Called by agents after creating content to register in central catalog
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArtifactRegisterRequest'
+      responses:
+        '200':
+          description: Artifact registered
+
+  /api/artifacts/{artifact_id}:
+    get:
+      tags: [Artifacts]
+      summary: Get artifact by ID
+      parameters:
+        - name: artifact_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Artifact details
+        '404':
+          description: Artifact not found
+
+  # ==========================================================================
+  # MEDICAL LLM AGENT (Port 8002)
+  # ==========================================================================
+
+  /generate:
+    post:
+      tags: [Medical LLM]
+      summary: Generate medical content
+      description: Generates CME content based on research and requirements
+      servers:
+        - url: http://localhost:8002
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateRequest'
+      responses:
+        '200':
+          description: Generated content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerateResponse'
+
+  /ner:
+    post:
+      tags: [Medical LLM]
+      summary: Named Entity Recognition
+      description: Extracts clinical entities (diseases, drugs, devices, labs, procedures)
+      servers:
+        - url: http://localhost:8002
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NERRequest'
+      responses:
+        '200':
+          description: NER results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NERResponse'
+
+  /icd10:
+    post:
+      tags: [Medical LLM]
+      summary: Extract ICD-10 codes
+      description: Extracts ICD-10 codes from clinical text
+      servers:
+        - url: http://localhost:8002
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ICD10Request'
+      responses:
+        '200':
+          description: ICD-10 codes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ICD10Response'
+
+  /quality-measures:
+    post:
+      tags: [Medical LLM]
+      summary: Suggest quality measures
+      description: Suggests NQF/CMS/MIPS quality measures based on topic
+      servers:
+        - url: http://localhost:8002
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QualityMeasureRequest'
+      responses:
+        '200':
+          description: Quality measures
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QualityMeasureResponse'
+
+  /guideline-summary:
+    post:
+      tags: [Medical LLM]
+      summary: Summarize clinical guidelines
+      description: Summarizes guidelines from provided references (ACR, ACC/AHA, ADA, etc.)
+      servers:
+        - url: http://localhost:8002
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GuidelineSummaryRequest'
+      responses:
+        '200':
+          description: Guideline summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuidelineSummaryResponse'
+
+  # ==========================================================================
+  # RESEARCH AGENT (Port 8003)
+  # ==========================================================================
+
+  /research:
+    post:
+      tags: [Research]
+      summary: Multi-source research query
+      description: |
+        Queries multiple research sources (PubMed, ClinicalTrials.gov, CDC, CMS, USPSTF, etc.),
+        validates URLs, and stores references in registry.
+      servers:
+        - url: http://localhost:8003
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResearchRequest'
+      responses:
+        '200':
+          description: Research results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResearchResponse'
+
+  /sources:
+    get:
+      tags: [Research]
+      summary: Get research source status
+      servers:
+        - url: http://localhost:8003
+      responses:
+        '200':
+          description: Source status
+
+  /validate-urls:
+    post:
+      tags: [Research]
+      summary: Validate reference URLs
+      servers:
+        - url: http://localhost:8003
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReferenceValidationRequest'
+      responses:
+        '200':
+          description: Validation results
+
+  # ==========================================================================
+  # CURRICULUM AGENT (Port 8004)
+  # ==========================================================================
+
+  /design:
+    post:
+      tags: [Curriculum]
+      summary: Design curriculum
+      description: Creates complete curriculum with 6-10 learning objectives mapped to Moore Levels
+      servers:
+        - url: http://localhost:8004
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CurriculumRequest'
+      responses:
+        '200':
+          description: Curriculum design
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurriculumResponse'
+
+  /objectives/generate:
+    post:
+      tags: [Curriculum]
+      summary: Generate learning objectives
+      servers:
+        - url: http://localhost:8004
+      parameters:
+        - name: topic
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: learning_gaps
+          in: query
+          required: true
+          schema:
+            type: array
+            items:
+              type: string
+        - name: count
+          in: query
+          schema:
+            type: integer
+            default: 8
+      responses:
+        '200':
+          description: Learning objectives
+
+  /objectives/map:
+    post:
+      tags: [Curriculum]
+      summary: Map objectives to standards
+      description: Maps objectives to Moore Levels, ICD-10, QI measures
+      servers:
+        - url: http://localhost:8004
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ObjectiveMappingRequest'
+      responses:
+        '200':
+          description: Mapped objectives
+
+  /moore-levels:
+    get:
+      tags: [Curriculum]
+      summary: Get Moore Levels definitions
+      servers:
+        - url: http://localhost:8004
+      responses:
+        '200':
+          description: Moore Levels information
+
+  # ==========================================================================
+  # OUTCOMES AGENT (Port 8005)
+  # ==========================================================================
+
+  /plan:
+    post:
+      tags: [Outcomes]
+      summary: Build outcomes plan
+      description: Creates comprehensive outcomes plan with methodology, instruments, and innovative pathways
+      servers:
+        - url: http://localhost:8005
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OutcomesRequest'
+      responses:
+        '200':
+          description: Outcomes plan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutcomesResponse'
+
+  /methodology:
+    post:
+      tags: [Outcomes]
+      summary: Design outcomes methodology
+      servers:
+        - url: http://localhost:8005
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MethodologyRequest'
+      responses:
+        '200':
+          description: Methodology design
+
+  /instruments/generate:
+    post:
+      tags: [Outcomes]
+      summary: Generate assessment instruments
+      description: Creates pre/post/6-week follow-up instruments
+      servers:
+        - url: http://localhost:8005
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                learning_objectives:
+                  type: array
+                  items:
+                    type: string
+                moore_levels:
+                  type: array
+                  items:
+                    type: integer
+                assessment_types:
+                  type: array
+                  items:
+                    type: string
+                  default: [pre, post, 6_week_follow_up]
+      responses:
+        '200':
+          description: Assessment instruments
+
+  /pathways/suggest:
+    post:
+      tags: [Outcomes]
+      summary: Suggest innovative pathways
+      description: Returns 3 innovative outcomes measurement approaches
+      servers:
+        - url: http://localhost:8005
+      parameters:
+        - name: intervention_type
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: target_moore_levels
+          in: query
+          required: true
+          schema:
+            type: array
+            items:
+              type: integer
+        - name: count
+          in: query
+          schema:
+            type: integer
+            default: 3
+      responses:
+        '200':
+          description: Innovative pathways
+
+  # ==========================================================================
+  # QA/COMPLIANCE AGENT (Port 8007)
+  # ==========================================================================
+
+  /validate:
+    post:
+      tags: [QA/Compliance]
+      summary: Validate content compliance
+      description: |
+        Validates content for ACCME compliance, fair balance, hallucinated sources,
+        word count, and promotional language. ACCME rules only apply in CME mode.
+      servers:
+        - url: http://localhost:8007
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidationRequest'
+      responses:
+        '200':
+          description: Validation results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationResponse'
+
+  /accme-rules:
+    get:
+      tags: [QA/Compliance]
+      summary: Get ACCME compliance rules
+      servers:
+        - url: http://localhost:8007
+      responses:
+        '200':
+          description: ACCME rules list
+
+  /promotional-keywords:
+    get:
+      tags: [QA/Compliance]
+      summary: Get promotional keywords
+      description: Keywords to avoid in CME content
+      servers:
+        - url: http://localhost:8007
+      responses:
+        '200':
+          description: Keyword list
+
+  /quick-check:
+    post:
+      tags: [QA/Compliance]
+      summary: Quick compliance check
+      description: Runs standard checks with default settings
+      servers:
+        - url: http://localhost:8007
+      parameters:
+        - name: content
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: compliance_mode
+          in: query
+          schema:
+            type: string
+            default: cme
+      responses:
+        '200':
+          description: Quick check results
+
+  # ==========================================================================
+  # VISUALS AGENT (Port 8008)
+  # ==========================================================================
+
+  /generate:
+    post:
+      tags: [Visuals]
+      summary: Generate medical visual
+      description: |
+        Generates medical visuals using Nano Banana Pro (Gemini 3 Pro Image).
+        Supports 19 visual types including infographics, diagrams, thumbnails, certificates.
+        Embeds XMP metadata and registers in artifacts catalog.
+      servers:
+        - url: http://localhost:8008
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VisualsRequest'
+      responses:
+        '200':
+          description: Generated visual
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisualsResponse'
+
+  /styles:
+    get:
+      tags: [Visuals]
+      summary: Get available styles and types
+      servers:
+        - url: http://localhost:8008
+      responses:
+        '200':
+          description: Available visual types, styles, and aspect ratios
+
+  /images:
+    get:
+      tags: [Visuals]
+      summary: List generated images
+      servers:
+        - url: http://localhost:8008
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Image list
+
+  /images/{image_id}:
+    get:
+      tags: [Visuals]
+      summary: Get image by ID
+      servers:
+        - url: http://localhost:8008
+      parameters:
+        - name: image_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Image binary
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Image not found
+
+  /images/{image_id}/info:
+    get:
+      tags: [Visuals]
+      summary: Get image metadata
+      servers:
+        - url: http://localhost:8008
+      parameters:
+        - name: image_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Image metadata
+
+components:
+  schemas:
+    # ==========================================================================
+    # ORCHESTRATOR SCHEMAS
+    # ==========================================================================
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        agents:
+          type: object
+          additionalProperties:
+            type: string
+        registry_connected:
+          type: boolean
+        langgraph_ready:
+          type: boolean
+
+    TaskRequest:
+      type: object
+      required: [task_type, topic]
+      properties:
+        task_type:
+          type: string
+          enum: [needs_assessment, curriculum, learning_objectives, cme_script, grant_request, gap_analysis, outcomes_plan, business_strategy, competitor_analysis]
+        topic:
+          type: string
+        compliance_mode:
+          type: string
+          enum: [cme, non-cme, auto]
+          default: auto
+        target_audience:
+          type: string
+        funder:
+          type: string
+        word_count_target:
+          type: integer
+        moore_levels:
+          type: array
+          items:
+            type: string
+        include_sdoh:
+          type: boolean
+          default: true
+        include_equity:
+          type: boolean
+          default: true
+        reference_count_min:
+          type: integer
+          default: 6
+        reference_count_max:
+          type: integer
+          default: 12
+        additional_context:
+          type: object
+        force_mode:
+          type: string
+          enum: [cme, non-cme]
+
+    TaskResponse:
+      type: object
+      properties:
+        task_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        compliance_mode:
+          type: string
+        deliverables:
+          type: object
+        violations:
+          type: array
+          items:
+            type: string
+        warnings:
+          type: array
+          items:
+            type: string
+        metadata:
+          type: object
+
+    PromptAnalyzeRequest:
+      type: object
+      required: [prompt]
+      properties:
+        prompt:
+          type: string
+        context:
+          type: string
+
+    PromptAnalyzeResponse:
+      type: object
+      properties:
+        overall_score:
+          type: number
+          minimum: 0
+          maximum: 1
+        clarity_score:
+          type: number
+        specificity_score:
+          type: number
+        compliance_score:
+          type: number
+        detected_mode:
+          type: string
+        suggestions:
+          type: array
+          items:
+            type: string
+        flags:
+          type: array
+          items:
+            type: string
+        word_count:
+          type: integer
+        estimated_tokens:
+          type: integer
+        semantic_analysis:
+          type: object
+
+    TranscriptionRequest:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+        project_type:
+          type: string
+          default: medical
+        language:
+          type: string
+
+    TranscriptionResponse:
+      type: object
+      properties:
+        transcription_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        text:
+          type: string
+        duration_seconds:
+          type: number
+        processing_time_seconds:
+          type: number
+        language:
+          type: string
+        error:
+          type: string
+
+    OllamaChatRequest:
+      type: object
+      required: [model, message]
+      properties:
+        model:
+          type: string
+        message:
+          type: string
+        system_prompt:
+          type: string
+
+    OllamaChatResponse:
+      type: object
+      properties:
+        model:
+          type: string
+        response:
+          type: string
+        done:
+          type: boolean
+
+    LangGraphRunRequest:
+      type: object
+      required: [topic]
+      properties:
+        topic:
+          type: string
+        task_type:
+          type: string
+          default: general
+        compliance_mode:
+          type: string
+          default: auto
+        thread_id:
+          type: string
+
+    LangGraphResumeRequest:
+      type: object
+      required: [thread_id, message]
+      properties:
+        thread_id:
+          type: string
+        message:
+          type: string
+
+    ArtifactRegisterRequest:
+      type: object
+      required: [artifact_type, source_agent, source_table, source_id, title]
+      properties:
+        artifact_type:
+          type: string
+          enum: [image, document, learning_objective, assessment]
+        source_agent:
+          type: string
+        source_table:
+          type: string
+        source_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        file_format:
+          type: string
+        file_size_bytes:
+          type: integer
+        thumbnail_base64:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        task_id:
+          type: string
+          format: uuid
+        compliance_mode:
+          type: string
+        metadata:
+          type: object
+
+    # ==========================================================================
+    # MEDICAL LLM SCHEMAS
+    # ==========================================================================
+
+    GenerateRequest:
+      type: object
+      required: [topic]
+      properties:
+        task:
+          type: string
+          default: general
+        topic:
+          type: string
+        research_data:
+          type: object
+        compliance_mode:
+          type: string
+          default: auto
+        word_count_target:
+          type: integer
+          default: 500
+        include_sdoh:
+          type: boolean
+          default: true
+        include_equity:
+          type: boolean
+          default: true
+        reference_count_min:
+          type: integer
+          default: 1
+        reference_count_max:
+          type: integer
+          default: 5
+        style:
+          type: string
+          default: conversational
+        structure:
+          type: string
+          default: general
+        corrections:
+          type: array
+          items:
+            type: string
+
+    GenerateResponse:
+      type: object
+      properties:
+        content:
+          type: string
+        references:
+          type: array
+          items:
+            type: object
+        metadata:
+          type: object
+        icd10_codes:
+          type: array
+          items:
+            type: string
+        quality_measures:
+          type: array
+          items:
+            type: string
+        clinical_entities:
+          type: object
+
+    NERRequest:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+        entity_types:
+          type: array
+          items:
+            type: string
+          default: [disease, drug, device, lab, procedure]
+
+    NERResponse:
+      type: object
+      properties:
+        entities:
+          type: object
+        normalized_concepts:
+          type: object
+
+    ICD10Request:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+        context:
+          type: string
+
+    ICD10Response:
+      type: object
+      properties:
+        codes:
+          type: array
+          items:
+            type: object
+            properties:
+              code:
+                type: string
+              description:
+                type: string
+        confidence_scores:
+          type: object
+
+    QualityMeasureRequest:
+      type: object
+      required: [topic]
+      properties:
+        topic:
+          type: string
+        condition:
+          type: string
+        intervention:
+          type: string
+
+    QualityMeasureResponse:
+      type: object
+      properties:
+        measures:
+          type: array
+          items:
+            type: object
+        sources:
+          type: array
+          items:
+            type: string
+
+    GuidelineSummaryRequest:
+      type: object
+      required: [guideline_source, topic, references]
+      properties:
+        guideline_source:
+          type: string
+        topic:
+          type: string
+        references:
+          type: array
+          items:
+            type: object
+
+    GuidelineSummaryResponse:
+      type: object
+      properties:
+        summary:
+          type: string
+        key_recommendations:
+          type: array
+          items:
+            type: string
+        evidence_levels:
+          type: object
+        references_used:
+          type: array
+          items:
+            type: object
+
+    # ==========================================================================
+    # RESEARCH SCHEMAS
+    # ==========================================================================
+
+    ResearchRequest:
+      type: object
+      required: [topic, sources]
+      properties:
+        topic:
+          type: string
+        sources:
+          type: array
+          items:
+            type: string
+            enum: [pubmed, clinical_trials, cdc_wonder, cms_quality, uspstf, ahrq, nih_reporter, consensus, perplexity]
+        max_results:
+          type: integer
+          default: 50
+        include_epidemiology:
+          type: boolean
+          default: true
+        include_guidelines:
+          type: boolean
+          default: true
+        include_quality_measures:
+          type: boolean
+          default: true
+        date_range_start:
+          type: string
+          format: date
+        date_range_end:
+          type: string
+          format: date
+        filters:
+          type: object
+
+    ResearchResponse:
+      type: object
+      properties:
+        reference_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        summary:
+          type: string
+        sources_used:
+          type: array
+          items:
+            type: string
+        total_results:
+          type: integer
+        cached_results:
+          type: integer
+        new_results:
+          type: integer
+        metadata:
+          type: object
+
+    ReferenceValidationRequest:
+      type: object
+      required: [urls]
+      properties:
+        urls:
+          type: array
+          items:
+            type: string
+            format: uri
+        retry_failed:
+          type: boolean
+          default: true
+
+    # ==========================================================================
+    # CURRICULUM SCHEMAS
+    # ==========================================================================
+
+    CurriculumRequest:
+      type: object
+      required: [topic, target_audience, learning_gaps, moore_levels_target, compliance_mode]
+      properties:
+        topic:
+          type: string
+        target_audience:
+          type: string
+        learning_gaps:
+          type: array
+          items:
+            type: string
+        moore_levels_target:
+          type: array
+          items:
+            type: string
+        compliance_mode:
+          type: string
+          enum: [cme, non-cme]
+        duration_minutes:
+          type: integer
+        format:
+          type: string
+          default: enduring
+        include_assessments:
+          type: boolean
+          default: true
+        include_faculty_brief:
+          type: boolean
+          default: true
+
+    CurriculumResponse:
+      type: object
+      properties:
+        learning_objectives:
+          type: array
+          items:
+            $ref: '#/components/schemas/LearningObjective'
+        curriculum_outline:
+          type: object
+        faculty_brief:
+          type: string
+        assessment_plan:
+          type: object
+        metadata:
+          type: object
+
+    LearningObjective:
+      type: object
+      properties:
+        objective_text:
+          type: string
+        moore_levels:
+          type: array
+          items:
+            type: string
+        icd10_codes:
+          type: array
+          items:
+            type: string
+        qi_measures:
+          type: array
+          items:
+            type: string
+        target_behaviors:
+          type: array
+          items:
+            type: string
+        bloom_taxonomy:
+          type: string
+        assessment_method:
+          type: string
+
+    ObjectiveMappingRequest:
+      type: object
+      required: [objectives]
+      properties:
+        objectives:
+          type: array
+          items:
+            type: string
+        include_icd10:
+          type: boolean
+          default: true
+        include_qi_measures:
+          type: boolean
+          default: true
+        include_behaviors:
+          type: boolean
+          default: true
+
+    # ==========================================================================
+    # OUTCOMES SCHEMAS
+    # ==========================================================================
+
+    OutcomesRequest:
+      type: object
+      required: [learning_objectives, target_moore_levels, intervention_type, target_audience]
+      properties:
+        learning_objectives:
+          type: array
+          items:
+            type: string
+        target_moore_levels:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+            maximum: 7
+        intervention_type:
+          type: string
+        target_audience:
+          type: string
+        icd10_codes:
+          type: array
+          items:
+            type: string
+        qi_measures:
+          type: array
+          items:
+            type: string
+        duration_minutes:
+          type: integer
+
+    OutcomesResponse:
+      type: object
+      properties:
+        methodology:
+          type: object
+        assessment_instruments:
+          type: object
+        innovative_pathways:
+          type: array
+          items:
+            type: object
+        data_map:
+          type: object
+        metadata:
+          type: object
+
+    MethodologyRequest:
+      type: object
+      required: [moore_levels, intervention_type, participant_count_estimate]
+      properties:
+        moore_levels:
+          type: array
+          items:
+            type: integer
+        intervention_type:
+          type: string
+        participant_count_estimate:
+          type: integer
+        follow_up_duration_weeks:
+          type: integer
+          default: 6
+
+    # ==========================================================================
+    # QA/COMPLIANCE SCHEMAS
+    # ==========================================================================
+
+    ValidationRequest:
+      type: object
+      required: [content, compliance_mode, document_type, checks]
+      properties:
+        content:
+          type: string
+        compliance_mode:
+          type: string
+          enum: [cme, non-cme]
+        document_type:
+          type: string
+        checks:
+          type: array
+          items:
+            type: string
+            enum: [compliance_mode, hallucinated_sources, reference_validation, word_count, accme_compliance, fair_balance, commercial_bias, sdoh_equity]
+        references:
+          type: array
+          items:
+            type: object
+        metadata:
+          type: object
+
+    ValidationResponse:
+      type: object
+      properties:
+        compliance_checks_passed:
+          type: boolean
+        violations_detected:
+          type: array
+          items:
+            type: string
+        warnings:
+          type: array
+          items:
+            type: string
+        recommendations:
+          type: array
+          items:
+            type: string
+        checks_performed:
+          type: array
+          items:
+            type: string
+        metadata:
+          type: object
+
+    # ==========================================================================
+    # VISUALS SCHEMAS
+    # ==========================================================================
+
+    VisualsRequest:
+      type: object
+      required: [topic]
+      properties:
+        topic:
+          type: string
+        visual_type:
+          type: string
+          enum: [infographic, slide, chart, diagram, illustration, thumbnail, certificate, logo, timeline, comparison, anatomical, flowchart, case_study, moa, social_post, banner, avatar, heatmap, dashboard, scorecard]
+          default: infographic
+        style:
+          type: string
+          enum: [medical-professional, educational, modern-minimal]
+          default: modern-minimal
+        data_points:
+          type: array
+          items:
+            type: string
+        include_text:
+          type: string
+        aspect_ratio:
+          type: string
+          enum: ["16:9", "4:3", "1:1", "9:16"]
+          default: "16:9"
+        compliance_mode:
+          type: string
+          enum: [auto, cme, non-cme]
+          default: auto
+
+    VisualsResponse:
+      type: object
+      properties:
+        image_url:
+          type: string
+        image_base64:
+          type: string
+        prompt_used:
+          type: string
+        generation_model:
+          type: string
+        status:
+          type: string
+        error:
+          type: string
+        metadata:
+          type: object
+          properties:
+            image_id:
+              type: string
+            visual_type:
+              type: string
+            style:
+              type: string
+            aspect_ratio:
+              type: string
+            xmp_embedded:
+              type: boolean
+            title_options:
+              type: array
+              items:
+                type: string
+            subject_lines:
+              type: array
+              items:
+                type: string
+            specs:
+              type: object

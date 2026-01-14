@@ -1,0 +1,19 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "dhg_workflow": "./graph_export.py:graph"
+  },
+  "env": ".env",
+  "http": {
+    "cors": {
+      "allow_origins": [
+        "https://smith.langchain.com",
+        "https://*.trycloudflare.com",
+        "*"
+      ],
+      "allow_credentials": true,
+      "allow_methods": ["*"],
+      "allow_headers": ["*"]
+    }
+  }
+}

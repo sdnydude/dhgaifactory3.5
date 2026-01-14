@@ -42,12 +42,14 @@ services:
       - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
       - LANGCHAIN_PROJECT=dhg-aifactory
       - LANGCHAIN_ENDPOINT=https://api.smith.langchain.com
+      - LANGSMITH_WORKSPACE_ID=${LANGSMITH_WORKSPACE_ID}
     volumes:
       - ./agents/orchestrator:/app
       - ./agents/shared:/app/shared
       - ./logs:/logs
     ports:
       - "8011:8000"
+      - "2024:2024"
     depends_on:
       registry-db:
         condition: service_healthy

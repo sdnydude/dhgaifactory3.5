@@ -3,7 +3,7 @@ DHG AI FACTORY - QA / COMPLIANCE AGENT
 ACCME compliance validation and quality assurance
 """
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import os
@@ -17,19 +17,6 @@ app = FastAPI(
     description="ACCME compliance validation and quality assurance",
     version="1.0.0"
 )
-
-
-# Add request logging middleware for debugging
-@app.middleware("http")
-async def log_raw_requests(request: Request, call_next):
-    if request.url.path == "/validate" and request.method == "POST":
-        body = await request.body()
-        logger.info("raw_validate_request", 
-                   path=request.url.path, 
-                   body=body.decode() if body else "<empty>", 
-                   content_type=request.headers.get("content-type"))
-    response = await call_next(request)
-    return response
 
 # ============================================================================
 # SYSTEM PROMPT - DHG QA / COMPLIANCE AGENT

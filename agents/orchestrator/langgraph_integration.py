@@ -13,11 +13,14 @@ import httpx
 from langgraph.graph import StateGraph, END
 try:
     from langgraph.checkpoint.postgres import PostgresSaver
+    from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 except ImportError:
     try:
         from langgraph_checkpoint_postgres import PostgresSaver
+        AsyncPostgresSaver = None
     except ImportError:
         PostgresSaver = None
+        AsyncPostgresSaver = None
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
 logger = structlog.get_logger()
@@ -83,9 +86,19 @@ class DHGAgentGraph:
     async def initialize(self):
         """Initialize the graph with PostgreSQL checkpointer"""
         try:
-            if self.db_url and PostgresSaver is not None:
+            if self.db_url and AsyncPostgresSaver is not None:
                 try:
-                    self.checkpointer = PostgresSaver.from_conn_string(self.db_url)
+                    # Use AsyncPostgresSaver for async graph operations
+                    checkpointer_cm = AsyncPostgresSaver.from_conn_string(self.db_url)
+                    # Enter the context manager if needed
+                    if hasattr(checkpointer_cm, '__aenter__'):
+                        self._checkpointer_cm = checkpointer_cm
+                        self.checkpointer = await checkpointer_cm.__aenter__()
+                    elif hasattr(checkpointer_cm, '__enter__'):
+                        self._checkpointer_cm = checkpointer_cm
+                        self.checkpointer = checkpointer_cm.__enter__()
+                    else:
+                        self.checkpointer = checkpointer_cm
                     self.logger.info("langgraph_postgres_connected", db_url=self.db_url[:50] + "...")
                 except Exception as db_err:
                     self.logger.warning("langgraph_postgres_failed", error=str(db_err))
@@ -271,8 +284,9 @@ class DHGAgentGraph:
         payload = {
             "content": state.get("medical_content", ""),
             "compliance_mode": state.get("compliance_mode", "cme"),
-            "content_type": state.get("task_type", "general"),
-            "references": state.get("research_data", {}).get("reference_ids", [])
+            "document_type": state.get("task_type", "general"),
+            "references": [],  # QA expects List[Dict], not UUID list - use empty for now
+            "checks": ["promotional_language", "fair_balance", "references", "word_count"],
         }
         
         result = await self._call_agent("qa_compliance", "validate", payload)

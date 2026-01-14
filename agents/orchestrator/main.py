@@ -31,37 +31,15 @@ from langgraph_integration import (
 
 def configure_tracing() -> str:
     """
-    Check LangSmith cloud availability and quota at startup.
-    Falls back to local-only mode (no cloud tracing) if unavailable.
-    Returns: 'cloud' if using cloud tracing, 'local' if disabled.
+    Log current tracing configuration at startup.
+    Returns: 'cloud' if tracing enabled, 'local' if disabled.
     """
     api_key = os.getenv("LANGCHAIN_API_KEY", "")
     tracing_enabled = os.getenv("LANGCHAIN_TRACING_V2", "false").lower() == "true"
     
-    if not api_key or not tracing_enabled:
-        os.environ["LANGCHAIN_TRACING_V2"] = "false"
-        return "local"
-    
-    try:
-        import httpx
-        response = httpx.post(
-            "https://api.smith.langchain.com/v1/metadata/submit",
-            headers={"x-api-key": api_key},
-            json={"runs": [], "nodes": []},
-            timeout=5.0
-        )
-        if response.status_code in (200, 204):
-            os.environ["LANGCHAIN_TRACING_V2"] = "true"
-            return "cloud"
-        elif response.status_code == 429:
-            os.environ["LANGCHAIN_TRACING_V2"] = "false"
-            return "local"
-        else:
-            os.environ["LANGCHAIN_TRACING_V2"] = "false"
-            return "local"
-    except Exception:
-        os.environ["LANGCHAIN_TRACING_V2"] = "false"
-        return "local"
+    if api_key and tracing_enabled:
+        return "cloud"
+    return "local"
 
 
 # Configure tracing at startup

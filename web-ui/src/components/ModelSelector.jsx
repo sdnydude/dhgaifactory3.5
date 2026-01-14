@@ -14,7 +14,7 @@ const ModelSelector = ({ selectedModel, onSelectModel }) => {
             icon: <Cloud size={16} />,
             items: [
                 { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', provider: 'Google', type: 'cloud' },
-                { id: 'claude-3-opus', name: 'Claude 3 Opus', provider: 'Anthropic', type: 'cloud' },
+                { id: 'claude-haiku-4-5-20251015', name: 'Claude Haiku 4.5', provider: 'Anthropic', type: 'cloud' },
                 { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', provider: 'OpenAI', type: 'cloud' }
             ]
         },
