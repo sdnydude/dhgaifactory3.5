@@ -1,124 +1,116 @@
-# DHG AI Factory - Task Tracking
+# DHG AI Factory - Master TODO
 
-**Last Updated:** January 13, 2026  
-**Status:** 🟢 **Production Running** (25+ containers healthy on .251)  
-**Tailscale IP:** 100.107.14.51 (g700data1)
-
----
-
-## ✅ Completed
-
-### Infrastructure
-- [x] PostgreSQL + pgvector (14 tables)
-- [x] LangGraph checkpoint table + AsyncPostgresSaver
-- [x] Image storage (BYTEA)
-- [x] Onyx RAG connector
-- [x] Transcription pipeline (8 services)
-- [x] Web UI at port 3005
-- [x] Tailscale tunnel configured (g700data1, dh40801, stephens-macbook-pro connected)
-
-### Deployed Agents (8 running)
-- [x] **Orchestrator** (port 8011) - Master coordinator, LangGraph state management
-- [x] **CME Pipeline (6):** medical-llm, research, curriculum, outcomes, competitor-intel, qa-compliance
-- [x] **Content Generation:** Visuals agent (port 8008)
-
-### LangSmith + LangGraph (IN ORCHESTRATOR CONTAINER)
-- [x] LangSmith Plus account (DHG org, workspace ID: bad71132-9f05-443d-9a04-1f923632024c)
-- [x] LangSmith SDK v0.6.2
-- [x] LangGraph CLI v0.4.11, API v0.6.35, checkpoint-postgres v3.0.3
-- [x] langgraph.json configured for dhg_workflow graph
-- [x] Port 2024 exposed for LangGraph dev server
-- [x] Traces appearing in LangSmith Cloud
-- [x] PostgreSQL checkpointer with AsyncPostgresSaver
-- [x] LangGraph workflows executing end-to-end
-
-### Agent Communication
-- [x] Medical-LLM generates content via Ollama
-- [x] QA-Compliance validation (fixed 422 error)
-- [x] Orchestrator WebSocket routing
-- [x] End-to-end workflow completes without errors
-
-### UI
-- [x] Multi-panel layout with tabs
-- [x] Visuals Tool Panel
-- [x] IDE Gallery with lightbox
-- [x] Glassmorphism theme
+**Updated:** January 14, 2026  
+**Status:** 🟢 LibreChat Running, Distributed GPU Setup Needed
 
 ---
 
-## 🎯 LangSmith Studio Access (via Tailscale)
+## ✅ Completed This Session
 
-**Studio URL:**
+- [x] LibreChat deployed on .251 (port 3010)
+- [x] Dark theme active
+- [x] User registration working (swebber@fafstudios.com)
+- [x] Ollama medllama2 connected and working
+- [x] Ollama mistral-small3.1:24b connected and working
+- [x] DHG Medical LLM OpenAI-compatible endpoint added (`/v1/chat/completions`)
+- [x] LibreChat baseURL fix (removed trailing slashes)
+- [x] dropParams added for DHG Medical LLM
+- [x] Git branch created: `feature/librechat-integration`
+
+---
+
+## 🔴 P0: Complete LibreChat Integration
+
+### Remaining YAML Fixes
+- [ ] Fix all DHG endpoint baseURLs (remove trailing `/`)
+- [ ] Add dropParams to all DHG endpoints
+- [ ] Verify all endpoints connecting
+
+### OpenAI-Compatible Endpoints (for LibreChat)
+- [x] DHG Medical LLM — `/v1/chat/completions` added
+- [ ] DHG Research — add endpoint
+- [ ] DHG Orchestrator — add endpoint
+- [ ] DHG Curriculum, Outcomes, Competitor-Intel, QA — add endpoints
+- [ ] DHG Visuals — add endpoint
+
+### MCP Tools (Phase 3)
+- [ ] Visuals `/mcp` endpoint
+- [ ] Transcribe `/mcp` endpoint
+- [ ] Prompt Checker `/mcp` endpoint
+
+---
+
+## 🔴 P0.5: Distributed GPU Setup
+
+### Hardware Fleet
+
+| Machine | GPU | VRAM | Role |
+|---------|-----|------|------|
+| .251 (Ubuntu) | RTX 5080 | 16GB | Main stack, medllama2 |
+| ASUS Laptop | RTX 5090 | 24GB | Large models (Mistral 24B) |
+| Ubuntu PC | RTX 4080 | 16GB | ComfyUI, image gen |
+| ProArt Creator | RTX 5080 | 16GB | Fast NVMe model storage |
+
+### Setup Steps
+
+#### 1. ASUS Laptop (RTX 5090) — For Mistral
+- [ ] Install Ollama (WSL2 or Windows native)
+- [ ] Configure `OLLAMA_HOST=0.0.0.0`
+- [ ] Pull `mistral-small3.1:24b`
+- [ ] Add to Tailscale network
+- [ ] Get Tailscale IP
+- [ ] Update librechat.yaml with remote Ollama URL
+
+#### 2. LibreChat Multi-Ollama Config
+```yaml
+# librechat.yaml - Multiple Ollama instances
+endpoints:
+  custom:
+    - name: "Ollama-Local"
+      baseURL: "http://dhg-ollama:11434/v1"  # .251 - medllama2
+    - name: "Ollama-5090"
+      baseURL: "http://<5090-tailscale-ip>:11434/v1"  # Laptop - Mistral
 ```
-https://smith.langchain.com/studio/?baseUrl=http://100.107.14.51:2024
-```
 
-**Direct API:**
-- LangGraph API: http://100.107.14.51:2024
-- Orchestrator API: http://100.107.14.51:8011
-- Web UI: http://100.107.14.51:3005
-
----
-
-## 📦 Agents to Deploy (9 built, not containerized)
-
-> All 9 have main.py implemented, need Dockerfiles and docker-compose entries
-
-### Content Generation
-- [ ] **Scribe** (368 lines) - Activity logging, hourly timestamps
-
-### Development Lifecycle (6)
-- [ ] **Strategy** (435 lines) - Divergent/convergent planning, roadmaps
-- [ ] **Discovery** (379 lines) - Stakeholder interviews, problem mapping
-- [ ] **Architect** (173 lines) - Technical design, system architecture
-- [ ] **Implementation** (160 lines) - Code generation, patterns
-- [ ] **Deployment** (208 lines) - DevOps, CI/CD, infrastructure
-- [ ] **QA-Manager** (178 lines) - Test planning, quality gates
+#### 3. Ubuntu PC (RTX 4080) — For ComfyUI
+- [ ] Install ComfyUI
+- [ ] Configure SDXL / Flux models
+- [ ] Expose API for Visuals agent
+- [ ] Update Visuals agent to call remote ComfyUI
 
 ---
 
-## 🔴 Priority 1: Deploy Remaining 9 Agents
+## 🟠 P1: Database Consolidation
 
-> Containerize and add to docker-compose
+- [ ] Migrate `dhg-transcribe-db` to Central Registry
+- [ ] Remove `bakery-db`
+- [ ] Evaluate `infisical-*` services
+- [ ] Configure LibreChat for PostgreSQL (not MongoDB)
 
-- [ ] Create Dockerfiles for each agent
-- [ ] Add to docker-compose.yml with health checks
-- [ ] Assign ports (8020-8030 range)
-- [ ] Integrate with orchestrator routing
+---
 
-## 🟠 Priority 2: Agent Enhancements (Core Value)
+## 🟡 P2: Demo Validation
 
-> Make agents more capable with real data sources
+- [ ] Test multi-model switching in LibreChat
+- [ ] Test session persistence
+- [ ] Test agent invocation via custom endpoints
+- [ ] Verify LangSmith traces
+- [ ] Record demo video
 
-- [ ] **Research Agent** - Connect PubMed, ClinicalTrials.gov, CDC APIs
-- [ ] **Competitor-Intel** - Web scrapers for ACCME/Medscape/WebMD
-- [ ] **Medical LLM** - Cloud fallbacks (OpenAI, Anthropic)
-- [ ] **QA-Compliance** - Registry logging for audit trail
-- [ ] **Visuals** - XMP metadata embedding, compliance_mode selector
+---
 
-## 🟡 Priority 3: UI Improvements
+## 🟢 P3: Agent Deployment (9 remaining)
 
-> Enhance user experience and developer tools
+- [ ] Scribe (content generation)
+- [ ] Strategy, Discovery, Architect, Implementation, Deployment, QA-Manager
 
-- [ ] **LangGraph visualization** - Graph view in UI
-- [ ] **Registry browser** - Query and view database contents
-- [ ] **Prompt Refiner** - Real-time prompt quality analysis
-- [ ] **Model selector** - Expose all agent models to UI
+---
 
-## 🟢 Priority 4: LangSmith Plus Features
+## Finalized Decisions
 
-> Leverage full LangSmith Plus for observability
-
-- [ ] **Agents in LangSmith Studio** - Expose 16 agents in graph view
-- [ ] **Evaluations** - Online/offline evaluation workflows
-- [ ] **Prompt Hub** - Version prompts centrally
-- [ ] **Monitoring & Alerting** - Set up LangSmith alerts
-
-## 🔵 Priority 5: Infrastructure Hardening
-
-> Network security and reliability
-
-- [ ] **Health check dashboard** - Grafana metrics
-- [ ] **Backup automation** - Scheduled PostgreSQL backups
-- [ ] **SSL/TLS** - HTTPS for all endpoints
-- [ ] **Multi-Tenant** - Workspace isolation, API key management
+- [x] LibreChat as primary UI
+- [x] All agents in code (not Agent Builder)
+- [x] MCP integration enabled
+- [x] Max 2-level subgraph depth
+- [x] Shared central registry
+- [x] Distributed GPU across 4 machines
