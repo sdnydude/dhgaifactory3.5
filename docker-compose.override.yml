@@ -1,0 +1,19 @@
+services:
+  session-logger:
+    build:
+      context: .
+      dockerfile: services/session-logger/Dockerfile
+    container_name: dhg-session-logger
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-dhg}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
+      - POSTGRES_DB=${POSTGRES_DB:-dhg_registry}
+      - POSTGRES_HOST=registry-db
+    ports:
+      - "8009:8009"
+    depends_on:
+      registry-db:
+        condition: service_healthy
+    networks:
+      - dhg-network
+    restart: unless-stopped
