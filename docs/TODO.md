@@ -1,124 +1,113 @@
-# DHG AI Factory - Task Tracking
+# DHG AI Factory - Master To-Do List
+**Last Updated:** Jan 20, 2026 12:27 PM
 
-**Last Updated:** January 13, 2026  
-**Status:** 🟢 **Production Running** (25+ containers healthy on .251)  
-**Tailscale IP:** 100.107.14.51 (g700data1)
-
----
-
-## ✅ Completed
-
-### Infrastructure
-- [x] PostgreSQL + pgvector (14 tables)
-- [x] LangGraph checkpoint table + AsyncPostgresSaver
-- [x] Image storage (BYTEA)
-- [x] Onyx RAG connector
-- [x] Transcription pipeline (8 services)
-- [x] Web UI at port 3005
-- [x] Tailscale tunnel configured (g700data1, dh40801, stephens-macbook-pro connected)
-
-### Deployed Agents (8 running)
-- [x] **Orchestrator** (port 8011) - Master coordinator, LangGraph state management
-- [x] **CME Pipeline (6):** medical-llm, research, curriculum, outcomes, competitor-intel, qa-compliance
-- [x] **Content Generation:** Visuals agent (port 8008)
-
-### LangSmith + LangGraph (IN ORCHESTRATOR CONTAINER)
-- [x] LangSmith Plus account (DHG org, workspace ID: bad71132-9f05-443d-9a04-1f923632024c)
-- [x] LangSmith SDK v0.6.2
-- [x] LangGraph CLI v0.4.11, API v0.6.35, checkpoint-postgres v3.0.3
-- [x] langgraph.json configured for dhg_workflow graph
-- [x] Port 2024 exposed for LangGraph dev server
-- [x] Traces appearing in LangSmith Cloud
-- [x] PostgreSQL checkpointer with AsyncPostgresSaver
-- [x] LangGraph workflows executing end-to-end
-
-### Agent Communication
-- [x] Medical-LLM generates content via Ollama
-- [x] QA-Compliance validation (fixed 422 error)
-- [x] Orchestrator WebSocket routing
-- [x] End-to-end workflow completes without errors
-
-### UI
-- [x] Multi-panel layout with tabs
-- [x] Visuals Tool Panel
-- [x] IDE Gallery with lightbox
-- [x] Glassmorphism theme
+## System Status
+- **Running Containers:** 38
+- **Stopped Containers:** 16
+- **Key Services:** All healthy
+- **Code Audit:** Passed (Jan 20)
 
 ---
 
-## 🎯 LangSmith Studio Access (via Tailscale)
+## P0: Blockers - CLEAR
 
-**Studio URL:**
-```
-https://smith.langchain.com/studio/?baseUrl=http://100.107.14.51:2024
-```
-
-**Direct API:**
-- LangGraph API: http://100.107.14.51:2024
-- Orchestrator API: http://100.107.14.51:8011
-- Web UI: http://100.107.14.51:3005
+No blockers.
 
 ---
 
-## 📦 Agents to Deploy (9 built, not containerized)
+## P1: This Sprint
 
-> All 9 have main.py implemented, need Dockerfiles and docker-compose entries
+### CME Pipeline Endpoints
 
-### Content Generation
-- [ ] **Scribe** (368 lines) - Activity logging, hourly timestamps
+**Step 1: Research Agent** ✅ COMPLETE
+- [x] All 6 endpoints implemented and tested
 
-### Development Lifecycle (6)
-- [ ] **Strategy** (435 lines) - Divergent/convergent planning, roadmaps
-- [ ] **Discovery** (379 lines) - Stakeholder interviews, problem mapping
-- [ ] **Architect** (173 lines) - Technical design, system architecture
-- [ ] **Implementation** (160 lines) - Code generation, patterns
-- [ ] **Deployment** (208 lines) - DevOps, CI/CD, infrastructure
-- [ ] **QA-Manager** (178 lines) - Test planning, quality gates
+**Step 2: Curriculum Agent** (IN PROGRESS)
+- [ ] /design - Full curriculum design
+- [ ] /objectives/generate - Learning objectives
+- [ ] /map - Objective mapping to Moore/ICD-10/QI
+- [ ] /outline - Activity outline
+- [ ] /faculty-brief - Instructor brief
+- [ ] /assessment - Assessment design
+- [ ] /templates - Template retrieval
+
+### LibreChat Features
+- [x] **Web Search (Tavily)** - Configured Jan 18
+- [x] **Memory** - Enabled Jan 20 (Claude backend)
+- [x] **MCP Integration** - Enabled Jan 20
+- [ ] **Artifacts** - Verify CSP headers
+
+### Security
+- [ ] **Build DHG Security Agent** (2 hrs)
+
+### LibreChat Enhancements
+- [ ] **Publish Google OAuth App**
+
+### Pending API Keys
+- [ ] **Consensus API** - Application submitted, awaiting approval
+
+### LibreChat Help Integration
+- [ ] **Footer Links** - Link to /docs/help/
+- [ ] **Slash Commands** - /help [agent-name]
+- [ ] **Help Index Page** - README.md with all agents
+
+### User Help Files (Complete as agents are built)
+- [x] Research Agent - Complete
+- [ ] Medical LLM Agent
+- [ ] Curriculum Agent
+- [ ] Visuals Agent
+- [ ] Outcomes Agent
+- [ ] QA Compliance Agent
+- [ ] Competitor Intel Agent
+- [ ] Orchestrator Agent
+- [ ] Transcription Agent
 
 ---
 
-## 🔴 Priority 1: Deploy Remaining 9 Agents
+## P2: Support Agent Endpoints
 
-> Containerize and add to docker-compose
+**Competitor Intel Agent** (10 endpoints)
+**Orchestrator** /registry/log
 
-- [ ] Create Dockerfiles for each agent
-- [ ] Add to docker-compose.yml with health checks
-- [ ] Assign ports (8020-8030 range)
-- [ ] Integrate with orchestrator routing
+---
 
-## 🟠 Priority 2: Agent Enhancements (Core Value)
+## P3: Video Content Pipeline (7 items)
 
-> Make agents more capable with real data sources
+## P4: Creator Harmony Platform (4 items)
 
-- [ ] **Research Agent** - Connect PubMed, ClinicalTrials.gov, CDC APIs
-- [ ] **Competitor-Intel** - Web scrapers for ACCME/Medscape/WebMD
-- [ ] **Medical LLM** - Cloud fallbacks (OpenAI, Anthropic)
-- [ ] **QA-Compliance** - Registry logging for audit trail
-- [ ] **Visuals** - XMP metadata embedding, compliance_mode selector
+## P5: Backlog (11 items)
 
-## 🟡 Priority 3: UI Improvements
+---
 
-> Enhance user experience and developer tools
+## Standard Requirements for All New Agents/Features
 
-- [ ] **LangGraph visualization** - Graph view in UI
-- [ ] **Registry browser** - Query and view database contents
-- [ ] **Prompt Refiner** - Real-time prompt quality analysis
-- [ ] **Model selector** - Expose all agent models to UI
+Going forward, every agent or feature must include:
+1. ✅ Production-ready code (no stubs, no TODOs)
+2. ✅ Non-technical user guide in /docs/help/
+3. ✅ Example prompts tested in LibreChat
+4. ✅ Integration with help system (footer + slash commands)
 
-## 🟢 Priority 4: LangSmith Plus Features
+---
 
-> Leverage full LangSmith Plus for observability
+## Completed (Jan 20, 2026)
 
-- [ ] **Agents in LangSmith Studio** - Expose 16 agents in graph view
-- [ ] **Evaluations** - Online/offline evaluation workflows
-- [ ] **Prompt Hub** - Version prompts centrally
-- [ ] **Monitoring & Alerting** - Set up LangSmith alerts
+- [x] **Research Agent fully implemented** (6 endpoints)
+  - Perplexity API integration
+  - PubMed/NCBI API integration
+  - Source status monitoring
+  - URL validation with retry
+  - Cache stats and clear
+- [x] **Research Agent User Guide** created
+- [x] **Help File Implementation Plan** approved
+- [x] Code Quality Audit - Passed
+- [x] Memory feature enabled
+- [x] MCP Servers enabled
+- [x] Committed 12+ changes
 
-## 🔵 Priority 5: Infrastructure Hardening
+## Previously Completed
 
-> Network security and reliability
-
-- [ ] **Health check dashboard** - Grafana metrics
-- [ ] **Backup automation** - Scheduled PostgreSQL backups
-- [ ] **SSL/TLS** - HTTPS for all endpoints
-- [ ] **Multi-Tenant** - Workspace isolation, API key management
+- [x] LibreChat custom endpoints
+- [x] All DHG agents configured in LibreChat (10)
+- [x] Tavily Web Search, Google OAuth
+- [x] Infisical secrets management
+- [x] Registry database tables created

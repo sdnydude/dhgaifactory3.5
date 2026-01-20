@@ -53,3 +53,13 @@ out/
 .cache/
 .turbo/
 *.tsbuildinfo
+
+# Infisical local config
+.infisical-config.sh
+.infisical.json
+
+# LangGraph build artifacts
+.langgraph_api/
+
+# Backup files
+*.bak

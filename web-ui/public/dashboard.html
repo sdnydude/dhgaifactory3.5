@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DHG AI Factory - Service Dashboard</title>
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: rgba(255, 255, 255, 0.03);
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0b0;
+            --accent: #6366f1;
+            --accent-glow: rgba(99, 102, 241, 0.3);
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --border: rgba(255, 255, 255, 0.08);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        header {
+            text-align: center;
+            padding: 3rem 0;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 3rem;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.5rem;
+        }
+
+        header p {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+        }
+
+        .status-bar {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-top: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-secondary);
+            transition: all 0.3s ease;
+        }
+
+        .status-dot.healthy {
+            background: var(--success);
+            box-shadow: 0 0 10px var(--success);
+        }
+
+        .status-dot.warning {
+            background: var(--warning);
+            box-shadow: 0 0 10px var(--warning);
+        }
+
+        .status-dot.error {
+            background: var(--error);
+            box-shadow: 0 0 10px var(--error);
+        }
+
+        .status-dot.checking {
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.3;
+            }
+        }
+
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .section-title::before {
+            content: '';
+            width: 4px;
+            height: 24px;
+            background: linear-gradient(180deg, var(--accent) 0%, transparent 100%);
+            border-radius: 2px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            border-color: var(--accent);
+            box-shadow: 0 0 30px var(--accent-glow);
+            transform: translateY(-2px);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 1rem;
+        }
+
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .card-badge {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            background: rgba(160, 160, 176, 0.15);
+            color: var(--text-secondary);
+            border: 1px solid rgba(160, 160, 176, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        .card-badge.healthy {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--success);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .card-badge.error {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--error);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .card-description {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+        }
+
+        .card-meta {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .card-meta span {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .card-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 1rem;
+            padding: 0.5rem 1rem;
+            background: var(--accent);
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .card-link:hover {
+            background: #5457e5;
+            transform: translateX(4px);
+        }
+
+        .table-container {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            overflow: hidden;
+            margin-bottom: 3rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            padding: 1rem 1.5rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            background: var(--bg-secondary);
+            font-weight: 600;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover td {
+            background: rgba(99, 102, 241, 0.05);
+        }
+
+        .port {
+            font-family: 'Fira Code', 'Monaco', monospace;
+            background: var(--bg-secondary);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.85rem;
+        }
+
+        .refresh-btn {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            padding: 1rem 1.5rem;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            box-shadow: 0 4px 20px var(--accent-glow);
+            transition: all 0.2s ease;
+        }
+
+        .refresh-btn:hover {
+            transform: scale(1.05);
+        }
+
+        .refresh-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .last-updated {
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            margin-bottom: 2rem;
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem;
+            border-top: 1px solid var(--border);
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+
+            header h1 {
+                font-size: 1.75rem;
+            }
+
+            .grid {
+                grid-template-columns: 1fr;
+            }
+
+            .status-bar {
+                gap: 1rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>DHG AI Factory</h1>
+            <p>Central Registry & AI Agent Ecosystem</p>
+            <div class="status-bar">
+                <div class="status-item">
+                    <span class="status-dot checking" id="agents-status"></span>
+                    <span id="agents-count">Checking agents...</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-dot checking" id="db-status"></span>
+                    <span id="db-label">Checking database...</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-dot checking" id="onyx-status"></span>
+                    <span id="onyx-label">Checking Onyx...</span>
+                </div>
+            </div>
+        </header>
+
+        <p class="last-updated">Last updated: <span id="last-update">Never</span></p>
+
+        <section>
+            <h2 class="section-title">Core Services</h2>
+            <div class="grid">
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">LibreChat</span>
+                        <span class="card-badge" id="librechat-badge">Checking...</span>
+                    </div>
+                    <p class="card-description">Primary chat interface with multi-model support including Ollama,
+                        OpenAI, and DHG agents.</p>
+                    <div class="card-meta">
+                        <span>Port: <code class="port">3010</code></span>
+                    </div>
+                    <a href="https://app.digitalharmonyai.com" class="card-link" target="_blank">Open LibreChat →</a>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Onyx RAG</span>
+                        <span class="card-badge" id="onyx-badge">Checking...</span>
+                    </div>
+                    <p class="card-description">Document indexing and retrieval-augmented generation for knowledge base
+                        queries.</p>
+                    <div class="card-meta">
+                        <span>Port: <code class="port">3001</code></span>
+                    </div>
+                    <a href="https://onyx.digitalharmonyai.com" class="card-link" target="_blank">Open Onyx →</a>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">pgAdmin</span>
+                        <span class="card-badge" id="pgadmin-badge">Checking...</span>
+                    </div>
+                    <p class="card-description">PostgreSQL database administration and query interface for Central
+                        Registry.</p>
+                    <div class="card-meta">
+                        <span>Port: <code class="port">5050</code></span>
+                    </div>
+                    <a href="https://db.digitalharmonyai.com" class="card-link" target="_blank">Open pgAdmin →</a>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Session Logger</span>
+                        <span class="card-badge" id="logger-badge">Checking...</span>
+                    </div>
+                    <p class="card-description">AI session tracking with embeddings for knowledge management and RAG.
+                    </p>
+                    <div class="card-meta">
+                        <span>Port: <code class="port">8009</code></span>
+                    </div>
+                    <a href="https://api.digitalharmonyai.com/health" class="card-link" target="_blank">Check Health
+                        →</a>
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <h2 class="section-title">Agent Endpoints</h2>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Agent</th>
+                            <th>Port</th>
+                            <th>Endpoint</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="agent-table">
+                        <tr>
+                            <td>Orchestrator</td>
+                            <td><code class="port">8011</code></td>
+                            <td>/health, /v1/chat/completions</td>
+                            <td><span class="status-dot checking" data-port="8011"></span></td>
+                        </tr>
+                        <tr>
+                            <td>Medical LLM</td>
+                            <td><code class="port">8002</code></td>
+                            <td>/health, /v1/chat/completions</td>
+                            <td><span class="status-dot checking" data-port="8002"></span></td>
+                        </tr>
+                        <tr>
+                            <td>Research</td>
+                            <td><code class="port">8003</code></td>
+                            <td>/health, /v1/chat/completions</td>
+                            <td><span class="status-dot checking" data-port="8003"></span></td>
+                        </tr>
+                        <tr>
+                            <td>Curriculum</td>
+                            <td><code class="port">8004</code></td>
+                            <td>/health, /v1/chat/completions</td>
+                            <td><span class="status-dot checking" data-port="8004"></span></td>
+                        </tr>
+                        <tr>
+                            <td>Outcomes</td>
+                            <td><code class="port">8005</code></td>
+                            <td>/health, /v1/chat/completions</td>
+                            <td><span class="status-dot checking" data-port="8005"></span></td>
+                        </tr>
+                        <tr>
+                            <td>Competitor Intel</td>
+                            <td><code class="port">8006</code></td>
+                            <td>/health, /v1/chat/completions</td>
+                            <td><span class="status-dot checking" data-port="8006"></span></td>
+                        </tr>
+                        <tr>
+                            <td>QA Compliance</td>
+                            <td><code class="port">8007</code></td>
+                            <td>/health, /v1/chat/completions</td>
+                            <td><span class="status-dot checking" data-port="8007"></span></td>
+                        </tr>
+                        <tr>
+                            <td>Visuals</td>
+                            <td><code class="port">8008</code></td>
+                            <td>/health, /v1/chat/completions</td>
+                            <td><span class="status-dot checking" data-port="8008"></span></td>
+                        </tr>
+                        <tr>
+                            <td>Session Logger</td>
+                            <td><code class="port">8009</code></td>
+                            <td>/health, /sessions/start, /search</td>
+                            <td><span class="status-dot checking" data-port="8009"></span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section>
+            <h2 class="section-title">Central Registry Tables</h2>
+            <div class="grid">
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Session & Knowledge</span>
+                    </div>
+                    <p class="card-description">AI session tracking, debug logs, knowledge items with embeddings for
+                        RAG.</p>
+                    <div class="card-meta">
+                        <span>ai_sessions</span>
+                        <span>debug_logs</span>
+                        <span>knowledge_items</span>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">CME Content</span>
+                    </div>
+                    <p class="card-description">Medical education content segments, references, learning objectives, and
+                        outcomes.</p>
+                    <div class="card-meta">
+                        <span>segments</span>
+                        <span>references</span>
+                        <span>outcomes</span>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">LangGraph</span>
+                    </div>
+                    <p class="card-description">Workflow checkpoints and state persistence for agent orchestration.</p>
+                    <div class="card-meta">
+                        <span>checkpoints</span>
+                        <span>langgraph_writes</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <footer>
+            <p>DHG AI Factory v3.5 • Branch: feature/librechat-integration • Server: 10.0.0.251</p>
+        </footer>
+    </div>
+
+    <button class="refresh-btn" onclick="checkAllServices()">↻ Refresh Status</button>
+
+    <script>
+        const services = {
+            librechat: { url: 'https://app.digitalharmonyai.com', badge: 'librechat-badge' },
+            onyx: { url: 'https://onyx.digitalharmonyai.com', badge: 'onyx-badge' },
+            pgadmin: { url: 'https://db.digitalharmonyai.com', badge: 'pgadmin-badge' },
+            logger: { url: 'https://api.digitalharmonyai.com/health', badge: 'logger-badge' }
+        };
+
+        async function checkUrl(url) {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 5000);
+
+            try {
+                const response = await fetch(url, {
+                    method: 'GET',
+                    mode: 'no-cors',
+                    signal: controller.signal
+                });
+                clearTimeout(timeout);
+                return true;
+            } catch (error) {
+                clearTimeout(timeout);
+                return false;
+            }
+        }
+
+        function updateBadge(elementId, isHealthy) {
+            const badge = document.getElementById(elementId);
+            if (badge) {
+                badge.textContent = isHealthy ? 'Running' : 'Down';
+                badge.className = 'card-badge ' + (isHealthy ? 'healthy' : 'error');
+            }
+        }
+
+        function updateStatusDot(elementId, isHealthy) {
+            const dot = document.getElementById(elementId);
+            if (dot) {
+                dot.className = 'status-dot ' + (isHealthy ? 'healthy' : 'error');
+            }
+        }
+
+        async function checkAllServices() {
+            const btn = document.querySelector('.refresh-btn');
+            btn.disabled = true;
+            btn.textContent = '↻ Checking...';
+
+            document.querySelectorAll('.status-dot').forEach(dot => {
+                dot.className = 'status-dot checking';
+            });
+
+            let healthyCount = 0;
+            const totalServices = Object.keys(services).length;
+
+            for (const [name, config] of Object.entries(services)) {
+                const isHealthy = await checkUrl(config.url);
+                if (isHealthy) healthyCount++;
+                updateBadge(config.badge, isHealthy);
+            }
+
+            // Update header status
+            const allHealthy = healthyCount === totalServices;
+            updateStatusDot('agents-status', allHealthy);
+            document.getElementById('agents-count').textContent =
+                allHealthy ? 'All Services Healthy' : `${healthyCount}/${totalServices} Services Up`;
+
+            // Check session logger for DB status
+            const loggerHealthy = await checkUrl('https://api.digitalharmonyai.com/health');
+            updateStatusDot('db-status', loggerHealthy);
+            document.getElementById('db-label').textContent =
+                loggerHealthy ? 'Database Connected' : 'Database Unknown';
+
+            // Check Onyx
+            const onyxHealthy = await checkUrl('https://onyx.digitalharmonyai.com');
+            updateStatusDot('onyx-status', onyxHealthy);
+            document.getElementById('onyx-label').textContent =
+                onyxHealthy ? 'Onyx RAG Active' : 'Onyx Down';
+
+            // Update agent table dots (internal - show as unknown from external)
+            document.querySelectorAll('[data-port]').forEach(dot => {
+                dot.className = 'status-dot warning';
+                dot.title = 'Internal port - check via internal network';
+            });
+
+            document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+
+            btn.disabled = false;
+            btn.textContent = '↻ Refresh Status';
+        }
+
+        checkAllServices();
+        setInterval(checkAllServices, 30000);
+    </script>
+</body>
+
+</html>

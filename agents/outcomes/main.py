@@ -923,3 +923,112 @@ async def startup_event():
 async def shutdown_event():
     """Shutdown tasks"""
     logger.info("outcomes_agent_shutdown")
+
+
+# ============================================================================
+# OPENAI-COMPATIBLE CHAT COMPLETIONS (for LibreChat)
+# ============================================================================
+
+import time
+import uuid
+
+class ChatMessage(BaseModel):
+    """OpenAI chat message format"""
+    role: str
+    content: str
+
+class ChatCompletionRequest(BaseModel):
+    """OpenAI-compatible chat completion request"""
+    model: str = "agent"
+    messages: List[ChatMessage]
+    temperature: Optional[float] = 0.7
+    max_tokens: Optional[int] = 2048
+    stream: Optional[bool] = False
+
+class ChatCompletionChoice(BaseModel):
+    """OpenAI chat completion choice"""
+    index: int
+    message: ChatMessage
+    finish_reason: str
+
+class ChatCompletionUsage(BaseModel):
+    """Token usage info"""
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+
+class ChatCompletionResponse(BaseModel):
+    """OpenAI-compatible chat completion response"""
+    id: str
+    object: str = "chat.completion"
+    created: int
+    model: str
+    choices: List[ChatCompletionChoice]
+    usage: ChatCompletionUsage
+
+@app.post("/v1/chat/completions", response_model=ChatCompletionResponse)
+async def chat_completions(request: ChatCompletionRequest):
+    """OpenAI-compatible chat completions endpoint for LibreChat."""
+    start_time = time.time()
+    
+    try:
+        # Extract user message
+        user_message = ""
+        for msg in request.messages:
+            if msg.role == "user":
+                user_message = msg.content
+        
+        # Simple echo response for now - each agent can customize
+        # Call Ollama for real response
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=60.0) as ollama_client:
+                ollama_resp = await ollama_client.post(
+                    "http://dhg-ollama:11434/api/chat",
+                    json={
+                        "model": "mistral-small3.1:24b",
+                        "messages": [
+                            {"role": "system", "content": "You are an Outcomes Assessment Agent."},
+                            {"role": "user", "content": user_message}
+                        ],
+                        "stream": False
+                    }
+                )
+                ollama_data = ollama_resp.json()
+                response_content = ollama_data.get("message", {}).get("content", f"Agent received: {user_message}")
+        except Exception as ollama_err:
+            response_content = f"I am the Outcomes agent. Your message: {user_message[:100]}"
+        
+        elapsed = time.time() - start_time
+        prompt_tokens = len(user_message.split()) * 4
+        completion_tokens = len(response_content.split()) * 4
+        
+        return ChatCompletionResponse(
+            id=f"chatcmpl-{uuid.uuid4().hex[:8]}",
+            created=int(time.time()),
+            model=request.model,
+            choices=[
+                ChatCompletionChoice(
+                    index=0,
+                    message=ChatMessage(role="assistant", content=response_content),
+                    finish_reason="stop"
+                )
+            ],
+            usage=ChatCompletionUsage(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=prompt_tokens + completion_tokens
+            )
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+@app.get("/v1/models")
+async def list_models():
+    """List available models (OpenAI-compatible)"""
+    return {
+        "object": "list",
+        "data": [{"id": "agent", "object": "model", "created": 1700000000, "owned_by": "dhg-ai-factory"}]
+    }
+

@@ -16,6 +16,9 @@ from datetime import datetime
 import uuid
 import json
 
+# MCP Registry Integration
+from mcp_registry import mcp_router
+
 # Ollama configuration for semantic analysis
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://10.0.0.251:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "mistral:latest")
@@ -64,6 +67,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount MCP Registry Router
+app.include_router(mcp_router, prefix="/mcp/registry")
 
 
 # ============================================================================

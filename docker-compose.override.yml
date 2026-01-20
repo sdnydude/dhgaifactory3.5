@@ -1,0 +1,41 @@
+services:
+  session-logger:
+    build:
+      context: services/session-logger
+      dockerfile: Dockerfile
+    container_name: dhg-session-logger
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-dhg}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
+      - POSTGRES_DB=${POSTGRES_DB:-dhg_registry}
+      - POSTGRES_HOST=registry-db
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    ports:
+      - "8009:8009"
+    depends_on:
+      registry-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8009/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - dhg-network
+    restart: unless-stopped
+
+  dhg-logo-maker:
+    build: ./services/logo-maker
+    container_name: dhg-logo-maker
+    ports:
+      - "8012:8012"
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+    volumes:
+      - /mnt/4tb/dhg-storage/logo-maker:/mnt/4tb/dhg-storage/logo-maker
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8012/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped

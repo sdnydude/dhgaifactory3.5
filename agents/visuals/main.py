@@ -1,6 +1,6 @@
 """
 DHG AI FACTORY - VISUALS AGENT
-Medical image generation using Nano Banana Pro (Gemini 3 Pro Image)
+Medical image generation using Nano Banana Pro (Gemini 3 Flash)
 """
 
 import os
@@ -38,7 +38,7 @@ app.add_middleware(
 
 class Config:
     GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
-    MODEL_NAME = "gemini-3-pro-image-preview"  # Nano Banana Pro
+    MODEL_NAME = "gemini-3-flash-preview"  # Nano Banana Pro
     IMAGE_STORAGE_PATH = "/app/generated_images"
     REGISTRY_DB_URL = os.getenv("REGISTRY_DB_URL")
 
@@ -201,7 +201,7 @@ class EditRequest(BaseModel):
 # ============================================================================
 
 class NanoBananaClient:
-    """Client for Nano Banana Pro (Gemini 3 Pro Image) API"""
+    """Client for Nano Banana Pro (Gemini 3 Flash) API"""
     
     def __init__(self, api_key: str = None):
         # Read API key fresh from environment (not from config which may be stale)
@@ -716,7 +716,7 @@ async def root():
     return {
         "agent": "visuals",
         "status": "ready",
-        "model": "Nano Banana Pro (Gemini 3 Pro Image)",
+        "model": "Nano Banana Pro (Gemini 3 Flash)",
         "capabilities": [
             "Medical infographic generation",
             "Presentation slide creation",
@@ -749,4 +749,135 @@ async def shutdown_event():
     logger.info("visuals_agent_shutdown")
     if image_store._pool:
         await image_store._pool.close()
+
+
+
+# ============================================================================
+# OPENAI-COMPATIBLE CHAT COMPLETIONS (for LibreChat)
+# ============================================================================
+
+import time
+import uuid
+
+class ChatMessage(BaseModel):
+    """OpenAI chat message format"""
+    role: str
+    content: str
+
+class ChatCompletionRequest(BaseModel):
+    """OpenAI-compatible chat completion request"""
+    model: str = "agent"
+    messages: List[ChatMessage]
+    temperature: Optional[float] = 0.7
+    max_tokens: Optional[int] = 2048
+    stream: Optional[bool] = False
+
+class ChatCompletionChoice(BaseModel):
+    """OpenAI chat completion choice"""
+    index: int
+    message: ChatMessage
+    finish_reason: str
+
+class ChatCompletionUsage(BaseModel):
+    """Token usage info"""
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+
+class ChatCompletionResponse(BaseModel):
+    """OpenAI-compatible chat completion response"""
+    id: str
+    object: str = "chat.completion"
+    created: int
+    model: str
+    choices: List[ChatCompletionChoice]
+    usage: ChatCompletionUsage
+
+@app.post("/v1/chat/completions", response_model=ChatCompletionResponse)
+async def chat_completions(request: ChatCompletionRequest):
+    """OpenAI-compatible chat completions endpoint for LibreChat.
+    
+    Interprets user messages as image generation requests and returns
+    the generated image as a markdown image link.
+    """
+    start_time = time.time()
+    
+    try:
+        # Extract user message
+        user_message = ""
+        for msg in request.messages:
+            if msg.role == "user":
+                user_message = msg.content
+        
+        if not user_message:
+            user_message = "Generate a medical infographic"
+        
+        # Use Nano Banana Pro to generate the image
+        logger.info("chat_completions_generate", prompt=user_message[:100])
+        
+        result = await nano_banana.generate_image(
+            prompt=user_message,
+            visual_type="infographic",
+            style="medical-professional",
+            aspect_ratio="16:9"
+        )
+        
+        # Get prompt used from result
+        prompt_used_text = result.get("prompt_used", user_message)
+        if len(prompt_used_text) > 200:
+            prompt_used_text = prompt_used_text[:200] + "..."
+        
+        # Build response based on generation result
+        status = result.get("status", "unknown")
+        
+        if status == "success" and result.get("image_base64"):
+            # Return markdown with embedded image
+            image_data = result["image_base64"]
+            mime_type = "image/png"
+            data_uri = f"data:{mime_type};base64,{image_data}"
+            response_content = f"I generated this image based on your request:\n\n![Generated Image]({data_uri})\n\n**Prompt used:** {prompt_used_text}"
+        elif status == "fallback":
+            fallback_url = result.get("image_url", "")
+            response_content = f"Image generation service is initializing. Here is a placeholder: {fallback_url}\n\nPlease try again in a moment."
+        elif status == "no_image":
+            response_content = f"The model processed your request but did not return an image. Prompt used: {prompt_used_text}"
+        else:
+            error_msg = result.get("error", "Unknown error")
+            response_content = f"Image generation encountered an issue: {error_msg}. Please try again with a different prompt."
+        
+        elapsed = time.time() - start_time
+        prompt_tokens = len(user_message.split()) * 4
+        completion_tokens = len(response_content.split()) * 4
+        
+        logger.info("chat_completions_complete", status=status, elapsed_seconds=elapsed)
+        
+        return ChatCompletionResponse(
+            id=f"chatcmpl-{uuid.uuid4().hex[:8]}",
+            created=int(time.time()),
+            model=request.model,
+            choices=[
+                ChatCompletionChoice(
+                    index=0,
+                    message=ChatMessage(role="assistant", content=response_content),
+                    finish_reason="stop"
+                )
+            ],
+            usage=ChatCompletionUsage(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=prompt_tokens + completion_tokens
+            )
+        )
+        
+    except Exception as e:
+        logger.error("chat_completions_error", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+@app.get("/v1/models")
+async def list_models():
+    """List available models (OpenAI-compatible)"""
+    return {
+        "object": "list",
+        "data": [{"id": "agent", "object": "model", "created": 1700000000, "owned_by": "dhg-ai-factory"}]
+    }
 
