@@ -340,9 +340,14 @@ async def query_source(source_name: str, query: str, max_results: int = 10):
     
     logger.info("direct_source_query", source=source_name, query=query)
     
-    # TODO: Query the specific source
-    # Return raw results (not stored in registry)
+    # Handle Perplexity queries
+    if source_name == "perplexity":
+        result = await query_perplexity(query, max_results)
+        if "error" in result and result["error"]:
+            raise HTTPException(status_code=500, detail=result["error"])
+        return result
     
+    # Other sources not yet implemented
     raise HTTPException(status_code=501, detail=f"Direct query to {source_name} implementation pending")
 
 @app.get("/")
@@ -485,3 +490,75 @@ async def list_models():
         "data": [{"id": "agent", "object": "model", "created": 1700000000, "owned_by": "dhg-ai-factory"}]
     }
 
+
+
+# ============================================================================
+# PERPLEXITY API INTEGRATION
+# ============================================================================
+
+import httpx
+
+async def query_perplexity(query: str, max_results: int = 10) -> Dict[str, Any]:
+    """
+    Query Perplexity API for web-grounded research.
+    
+    Returns synthesized answer with citations.
+    """
+    api_key = config.PERPLEXITY_API_KEY
+    if not api_key:
+        return {"error": "PERPLEXITY_API_KEY not configured", "results": []}
+    
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                "https://api.perplexity.ai/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "sonar",
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": "You are a medical research assistant. Provide evidence-based answers with citations to scientific literature."
+                        },
+                        {
+                            "role": "user",
+                            "content": query
+                        }
+                    ],
+                    "max_tokens": 2048,
+                    "return_citations": True
+                }
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+            return {
+                "source": "perplexity",
+                "answer": data.get("choices", [{}])[0].get("message", {}).get("content", ""),
+                "citations": data.get("citations", []),
+                "model": data.get("model", "sonar"),
+                "usage": data.get("usage", {})
+            }
+    except Exception as e:
+        logger.error("perplexity_query_failed", error=str(e))
+        return {"error": str(e), "results": []}
+
+
+@app.post("/sources/perplexity/query")
+async def query_perplexity_endpoint(query: str, max_results: int = 10):
+    """
+    Query Perplexity directly for medical research.
+    
+    Returns AI-synthesized answer with web citations.
+    """
+    logger.info("perplexity_query", query=query[:100])
+    
+    result = await query_perplexity(query, max_results)
+    
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+    
+    return result
