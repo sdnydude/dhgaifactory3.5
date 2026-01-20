@@ -1,111 +1,102 @@
-# DHG AI Factory - Master TODO
+# DHG AI Factory - Master To-Do List
+**Last Updated:** Jan 20, 2026
 
-**Updated:** January 14, 2026
-**Status:** 🟢 LibreChat + 11 Agents Running, CR Integration Next
-
----
-
-## ✅ Completed
-
-### Infrastructure
-- [x] LibreChat deployed on .251 (port 3010)
-- [x] 11 Docker containers healthy
-- [x] PostgreSQL Central Registry (18 tables)
-- [x] LangGraph checkpointing working
-- [x] Ollama medllama2 + mistral connected
-- [x] Git branch: `feature/librechat-integration`
-
-### OpenAI-Compatible Endpoints (All 7 Agents)
-- [x] DHG Medical LLM — `/v1/chat/completions`
-- [x] DHG Research — `/v1/chat/completions`
-- [x] DHG Curriculum — `/v1/chat/completions`
-- [x] DHG Outcomes — `/v1/chat/completions`
-- [x] DHG Competitor-Intel — `/v1/chat/completions`
-- [x] DHG QA-Compliance — `/v1/chat/completions`
-- [x] DHG Visuals — `/v1/chat/completions`
-
-### Infisical Secret Vault
-- [x] Organization: Digital Harmony Group
-- [x] Project: DHG AI Factory
-- [x] Environments: Dev, Staging, Production
-- [x] Folders: database, llm-providers, research-apis, observability, infrastructure
-- [x] Machine Identity: cli-setup (Universal Auth)
+## System Status
+- **Running Containers:** 40
+- **Stopped Containers:** 14 (Onyx kept 60 days, Whisper stopped for GPU)
+- **Key Services:** All healthy
 
 ---
 
-## 🔴 P0: Central Registry Integration (NEW)
+## P0: Blockers - CLEAR
 
-> All session data, debug logs, and knowledge stored in PostgreSQL for RAG
-
-- [ ] Create `ai_sessions` table
-- [ ] Create `debug_logs` table
-- [ ] Create `session_files` table (with embeddings)
-- [ ] Create `knowledge_items` table
-- [ ] Build session-logger service
-- [ ] Configure Onyx RAG connector to CR
-- [ ] Sync LibreChat conversations to CR (MongoDB → PostgreSQL sync)
+No blockers.
 
 ---
 
-## 🔴 P0.5: Database Consolidation
+## P1: This Sprint
 
-- [ ] Migrate `dhg-transcribe-db` to Central Registry
-- [ ] Remove `bakery-db`
-- [ ] Evaluate Infisical DB consolidation
-- [ ] Add LibreChat → CR sync service (MongoDB stays, data synced)
+### LibreChat Features (In Progress)
+- [x] **Web Search (Tavily)** - Configured Jan 18
+- [ ] **Memory** - Persistent context across chats
+- [ ] **Artifacts** - Generative UI output
+- [ ] **MCP Integration** - Connect to external tools
 
----
+### Security
+- [ ] **Build DHG Security Agent** (2 hrs)
+  - Manage Cloudflare Access (add/remove users)
+  - Fetch analytics via GraphQL API
+  - Ingest data into Registry
 
-## 🟠 P1: Distributed GPU Setup
+### LibreChat Enhancements
+- [ ] **Slash Commands** - /security, /dhg-style
+- [ ] **Footer Links** - Docs, Status, Admin
+- [ ] **Publish Google OAuth App** - Allow external users
 
-| Machine | GPU | Status |
-|---------|-----|--------|
-| .251 (Ubuntu) | RTX 5080 | ✓ Running |
-| ASUS Laptop | RTX 5090 | [ ] Pending |
-| Ubuntu PC | RTX 4080 | [ ] Pending |
-| ProArt Creator | RTX 5080 | [ ] Pending |
-
-### Next Steps
-- [ ] Install Ollama on ASUS Laptop (WSL2)
-- [ ] Add to Tailscale, update librechat.yaml
-- [ ] Install ComfyUI on Ubuntu PC
-- [ ] Update Visuals agent for remote ComfyUI
-
----
-
-## 🟡 P2: Agent Enhancements
-
-- [ ] Research Agent — Connect PubMed, ClinicalTrials.gov APIs
-- [ ] Competitor-Intel — Web scrapers for ACCME/Medscape
-- [ ] Medical LLM — Cloud fallbacks (OpenAI, Anthropic)
-- [ ] QA-Compliance — Registry audit trail logging
-- [ ] Visuals — XMP metadata, compliance_mode selector
+### RAG Platform
+- [ ] **Install LangFlow** - Port :7860
+- [ ] **Install OpenRAG** - Port :8090
 
 ---
 
-## 🟢 P3: MCP Tools
+## P2: Video Content Pipeline
 
-- [ ] Visuals `/mcp` endpoint
-- [ ] Transcribe `/mcp` endpoint
-- [ ] Prompt Checker `/mcp` endpoint
-
----
-
-## 🔵 P4: Demo & Validation
-
-- [ ] Test multi-model switching in LibreChat
-- [ ] Test agent invocation via custom endpoints
-- [ ] Verify LangSmith traces
-- [ ] Record demo video
+- [ ] Vimeo API Integration
+- [ ] YouTube API Integration
+- [ ] Video Ingestion Pipeline
+- [ ] AI Clip Generation
+- [ ] Install Clapshot
+- [ ] Transcript-Based Editing
+- [ ] Install Mixpost
 
 ---
 
-## Finalized Decisions
+## P3: Creator Harmony Platform
 
-- [x] LibreChat as primary UI
-- [x] All agents in code (not Agent Builder)
-- [x] MCP integration enabled
-- [x] Shared Central Registry (PostgreSQL + pgvector)
-- [x] Distributed GPU across 4 machines
-- [x] Infisical for secret management
-- [x] All sessions/debug data to Central Registry for RAG
+- [ ] Define Content Production Agents
+- [ ] Project Creation Flow
+- [ ] Deliverable Generation
+- [ ] Creator Harmony Dashboard
+
+---
+
+## P4: Backlog
+
+- [ ] Code Interpreter (waiting for self-hosted option)
+- [ ] Claude Files API (beta header)
+- [ ] Claude Skills API (beta header)
+- [ ] Local Whisper for LibreChat STT
+- [ ] XMP Metadata (Visuals Agent)
+- [ ] pgvector Embeddings
+- [ ] LibreChat to Registry Sync
+- [ ] Upgrade Infisical CLI to v0.155.5
+
+---
+
+## Completed (Jan 18-19, 2026)
+
+- [x] Tavily Web Search configured (3 API keys saved)
+- [x] LibreChat Google OAuth configured
+- [x] qwen2.5:14b set as default Ollama model
+- [x] Infisical CLI working (localhost:8089)
+- [x] Cloudflare tokens saved to Infisical
+- [x] eofranke@gmail.com added to Cloudflare Access
+- [x] Stopped Onyx (11 containers, keeping 60 days)
+- [x] Deleted UIBakery (8 containers)
+- [x] All DHG agents configured in LibreChat (10)
+- [x] Perplexity configured
+- [x] pgAdmin running on :5050
+- [x] Full features review completed
+
+## Previously Completed
+
+- [x] LibreChat custom endpoints
+- [x] Anthropic/OpenAI/Google providers
+- [x] MCP servers configured
+- [x] 7 CME agents running
+- [x] Transcription pipeline operational
+- [x] Infisical secrets management
+- [x] File upload + Speech TTS/STT
+- [x] Registry database tables created
+- [x] RAG API running
+- [x] Meilisearch (conversation search)

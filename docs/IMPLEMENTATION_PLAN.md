@@ -1,148 +1,82 @@
-# Implementation Plan: Agent Enhancements (Priority 1)
+# DHG AI Factory - Implementation Plan
 
-**Last Updated:** January 13, 2026  
-**Status:** Planning  
-
-## Goal
-
-Enhance the core CME pipeline agents with real data sources and production-ready reliability, transforming them from mock/stub implementations to fully functional services.
+**Last Updated:** January 15, 2026  
+**Status:** LibreChat Integration Stabilization
 
 ---
 
-## 1. Research Agent - Multi-Source APIs
+## Current State
 
-**Target:** Connect to real medical research APIs
+### What Works
+- All 10+ agent containers are running and healthy
+- Health endpoints respond correctly
+- Agents return OpenAI-compatible JSON responses
+- Ollama models (medllama2, mistral) respond locally
+- Central Registry PostgreSQL operational
+- Cloudflare Access configured for public URLs
 
-### Endpoints to Implement
-- **PubMed/NCBI** - `eutils.ncbi.nlm.nih.gov/entrez`
-- **ClinicalTrials.gov** - `clinicaltrials.gov/api/v2`
-- **CDC WONDER** - `wonder.cdc.gov` (data access)
-- **CMS Quality Measures** - `data.cms.gov`
-
-### Implementation Steps
-1. Add API client modules in `agents/research/sources/`
-2. Configure rate limiting and caching in `api_cache` table
-3. Implement unified response normalization
-4. Add fallback chain (PubMed -> Consensus -> Perplexity)
-
-### Files to Modify
-- `agents/research/main.py`
-- `agents/research/sources/pubmed.py` [NEW]
-- `agents/research/sources/clinical_trials.py` [NEW]
+### What Needs Fixing
+1. LibreChat streaming - Fixed with forcePrompt: true
+2. Network isolation - Fixed by connecting agents to librechat_default
+3. Orchestrator chat endpoint - Missing /v1/chat/completions
+4. Agent functionality - Most return stub responses, not real LLM output
 
 ---
 
-## 2. Competitor-Intel - Web Scrapers
+## Phase 1: LibreChat Stability (CURRENT)
 
-**Target:** Automated competitive intelligence from CME providers
+### Completed Today (January 15)
+- [x] Research identified forcePrompt: true as solution
+- [x] Updated librechat.yaml with forcePrompt for all endpoints
+- [x] Connected all DHG containers to librechat_default network
+- [x] Created LogoMaker agent with Nano Banana Pro integration
 
-### Sources to Scrape
-- ACCME Provider Directory
-- Medscape Education
-- WebMD Medscape CME
-- FreeCME
-- PriMed
-- NEJM Knowledge+
-
-### Implementation Steps
-1. Add async scraper modules with rate limiting
-2. Store in `competitor_activities` table
-3. Implement deduplication logic
-4. Add alerting for new competitor activities
-
-### Files to Modify
-- `agents/competitor-intel/main.py`
-- `agents/competitor-intel/scrapers/` [NEW DIR]
+### Still Required
+- [ ] Verify user can chat with all agents in LibreChat UI
+- [ ] Add orchestrator /v1/chat/completions endpoint
+- [ ] Update docker-compose.yml for persistent network config
+- [ ] Test each agent individually through LibreChat
 
 ---
 
-## 3. Medical LLM - Cloud Fallbacks
+## Phase 2: Agent Production Readiness
 
-**Target:** Reliable content generation with provider redundancy
+### Code Review Checklist (Per Agent)
+Each agent main.py must have:
+- [ ] Error handling with try/except around all LLM calls
+- [ ] Structured logging using structlog
+- [ ] Timeout handling (asyncio.wait_for or httpx timeout)
+- [ ] Graceful fallback responses on failure
+- [ ] Registry connection with retry logic
+- [ ] Health check that verifies all dependencies
 
-### Fallback Chain
-1. **Ollama** (local) - Primary, fastest
-2. **OpenAI GPT-4** - Cloud fallback
-3. **Anthropic Claude** - Secondary fallback
+### Priority Agent Fixes
 
-### Implementation Steps
-1. Add provider abstraction layer
-2. Implement automatic failover on timeout/error
-3. Log provider usage to registry for cost tracking
-4. Add model-specific prompts per provider
-
-### Files to Modify
-- `agents/medical-llm/main.py`
-- `agents/medical-llm/providers/` [NEW DIR]
-
----
-
-## 4. QA-Compliance - Registry Logging
-
-**Target:** Full audit trail for compliance reviews
-
-### Data to Log
-- Validation results (pass/fail, score)
-- Rule violations detected
-- Content checksums
-- Reviewer actions (if human review)
-
-### Implementation Steps
-1. Add `compliance_audits` table to schema
-2. Log every validation to registry
-3. Add query endpoint for audit history
-4. Implement retention policy
-
-### Files to Modify
-- `agents/qa-compliance/main.py`
-- `registry/init.sql` (add table)
+1. Medical LLM (8002) - Add OpenAI/Anthropic fallback chain
+2. Research (8003) - Implement PubMed, ClinicalTrials.gov clients
+3. Orchestrator (8011) - Add /v1/chat/completions endpoint
+4. Visuals (8008) - Complete XMP metadata, compliance_mode
 
 ---
 
-## 5. Visuals - Metadata and Compliance Mode
+## Phase 3: Network Persistence
 
-**Target:** Embedded metadata and user-selectable compliance mode
-
-### Features
-- XMP metadata in generated images
-- `compliance_mode` dropdown in UI (auto/cme/non-cme)
-- Watermarking for CME content
-
-### Implementation Steps
-1. Add XMP embedding using `python-xmp-toolkit` or `pyexiv2`
-2. Add `compliance_mode` to `/generate` endpoint
-3. Update `VisualsToolPanel.jsx` with dropdown
-4. Store metadata in `visual_artifacts` table
-
-### Files to Modify
-- `agents/visuals/main.py`
-- `web-ui/src/components/panels/VisualsToolPanel.jsx`
+Add networks section to docker-compose.yml to make agent connections persistent.
 
 ---
 
-## Verification Plan
+## Phase 4: Central Registry Integration
 
-### Automated Tests
-```bash
-# Test Research Agent API connectivity
-curl http://localhost:8003/health
-curl -X POST http://localhost:8003/research -H "Content-Type: application/json" -d '{"topic":"diabetes","sources":["pubmed"]}'
-
-# Test Medical LLM fallback
-curl -X POST http://localhost:8002/generate -H "Content-Type: application/json" -d '{"topic":"hypertension","force_provider":"openai"}'
-
-# Test QA-Compliance logging
-curl http://localhost:8007/audit-history?limit=10
-```
-
-### Manual Verification
-1. Generate CME content and verify registry entries
-2. Check competitor scraper results in database
-3. Verify XMP metadata in downloaded images
+Tables to Create:
+- ai_sessions - LibreChat conversation sync
+- debug_logs - Structured error/debug logs
+- knowledge_items - RAG-ready knowledge base
 
 ---
 
-**Executable as delivered in the stated environment**.
+## Files Modified Today
 
-Intentionally omitted:
-- None - plan is complete for Priority 1 scope.
+- /home/swebber64/DHG/aifactory3.5/librechat/librechat.yaml
+- /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/services/logo-maker/main.py
+- /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/docs/TODO.md
+- /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/docs/IMPLEMENTATION_PLAN.md
