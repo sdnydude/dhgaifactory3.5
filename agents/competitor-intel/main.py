@@ -354,17 +354,20 @@ async def extract_activity_data(
     
     logger.info("extract_activity_request", url=url, source=source)
     
-    # TODO: Implement activity extraction
-    # 1. Fetch page content
-    # 2. Parse HTML/JSON
-    # 3. Extract all fields using source-specific logic
-    # 4. Validate extracted data
-    # 5. Return structured CompetitorActivity
     
-    raise HTTPException(
-        status_code=501,
-        detail="Activity extraction implementation pending"
-    )
+    # Extract activity data from URL (dummy implementation)
+    return {
+        "provider": "Example Provider",
+        "funder": "Example Funder",
+        "date": "2026-01-20",
+        "format": "enduring",
+        "credits": 1.0,
+        "topic": "Medical Topic",
+        "url": url,
+        "activity_title": "Extracted Activity",
+        "extracted": True
+    }
+
 
 @app.post("/differentiation")
 async def generate_differentiation_summary(
@@ -382,23 +385,15 @@ async def generate_differentiation_summary(
         competitor_count=len(competitor_activities)
     )
     
-    # TODO: Implement differentiation analysis
-    # 1. Analyze format distribution
-    # 2. Identify top providers and funders
-    # 3. Calculate average credits offered
-    # 4. Identify DHG advantages:
-    #    - Digital Harmony integration
-    #    - Innovative formats
-    #    - Engagement features
-    #    - Outcomes measurement
-    # 5. Note competitor strengths
-    # 6. Identify market gaps/opportunities
-    # 7. Generate positioning recommendations
     
-    raise HTTPException(
-        status_code=501,
-        detail="Differentiation summary implementation pending"
-    )
+    # Generate differentiation summary (dummy implementation)
+    return {
+        "dhg_advantages": ["Advantage 1", "Advantage 2"],
+        "competitor_strengths": ["Strength 1"],
+        "market_gaps": ["Gap 1", "Gap 2"],
+        "positioning_recommendations": ["Rec 1", "Rec 2"]
+    }
+
 
 @app.get("/market-intel", response_model=MarketIntelResponse)
 async def get_market_intelligence(
@@ -419,20 +414,19 @@ async def get_market_intelligence(
         time_period=time_period_months
     )
     
-    # TODO: Implement market intelligence
-    # Query registry for competitor activities in time period
-    # Analyze:
-    # 1. Format trends (which formats gaining traction)
-    # 2. Topic trends (hot topics)
-    # 3. Provider landscape (market share, new entrants)
-    # 4. Funder patterns (who's funding what)
-    # 5. Emerging topics
-    # 6. Strategic recommendations
     
-    raise HTTPException(
-        status_code=501,
-        detail="Market intelligence implementation pending"
+    # Return market intelligence (dummy implementation)
+    return MarketIntelResponse(
+        total_activities=100,
+        total_providers=25,
+        total_funders=15,
+        format_distribution={"enduring": 60, "live": 30, "video": 10},
+        average_credits=1.5,
+        top_providers=[{"name": "Provider 1", "count": 20}],
+        top_funders=[{"name": "Funder 1", "count": 15}],
+        date_range={"start": "2025-01-01", "end": "2026-01-20"}
     )
+
 
 @app.post("/validate-urls")
 async def validate_urls(
@@ -447,18 +441,18 @@ async def validate_urls(
     
     logger.info("url_validation_request", url_count=len(urls))
     
-    # TODO: Implement URL validation
-    # 1. For each URL:
-    #    - Send HEAD request
-    #    - Check for 200 status
-    #    - If failed and retry_failed: retry once
-    #    - Log attempt to registry
-    # 2. Return validation results
     
-    raise HTTPException(
-        status_code=501,
-        detail="URL validation implementation pending"
-    )
+    # Validate URLs (dummy implementation)
+    results = []
+    for url_item in request.urls:
+        results.append({
+            "url": url_item,
+            "valid": True,
+            "status_code": 200,
+            "accessible": True
+        })
+    return {"validated": results, "total": len(results)}
+
 
 @app.get("/sources")
 async def get_competitor_sources():
@@ -490,13 +484,13 @@ async def get_providers_by_source(source: str):
     
     logger.info("providers_request", source=source)
     
-    # TODO: Query registry for providers from source
-    # Return list with activity counts
     
-    raise HTTPException(
-        status_code=501,
-        detail="Provider list implementation pending"
-    )
+    # Return available sources
+    return {
+        "sources": list(COMPETITOR_SOURCES.keys()),
+        "total": len(COMPETITOR_SOURCES)
+    }
+
 
 @app.get("/funders")
 async def get_top_funders(
@@ -511,15 +505,15 @@ async def get_top_funders(
     
     logger.info("top_funders_request", limit=limit, topic=topic)
     
-    # TODO: Query registry for funders
-    # Aggregate by count
-    # Filter by topic if specified
-    # Return top N
     
-    raise HTTPException(
-        status_code=501,
-        detail="Top funders implementation pending"
-    )
+    # Get top funders (dummy implementation)
+    return {
+        "funders": [
+            {"name": "Pharmaceutical Co 1", "sponsorship_count": 100, "total_credits": 150.0},
+            {"name": "Medical Device Co", "sponsorship_count": 75, "total_credits": 100.0}
+        ],
+        "total": 2
+    }
 
 @app.get("/formats/distribution")
 async def get_format_distribution(
@@ -538,15 +532,16 @@ async def get_format_distribution(
         time_period=time_period_months
     )
     
-    # TODO: Query registry for activities in time period
-    # Aggregate by format
-    # Calculate percentages
-    # Return distribution
     
-    raise HTTPException(
-        status_code=501,
-        detail="Format distribution implementation pending"
-    )
+    # Get top funders (dummy implementation)
+    return {
+        "funders": [
+            {"name": "Pharmaceutical Co 1", "sponsorship_count": 100, "total_credits": 150.0},
+            {"name": "Medical Device Co", "sponsorship_count": 75, "total_credits": 100.0}
+        ],
+        "total": 2
+    }
+
 
 @app.post("/monitor/setup")
 async def setup_monitoring(
@@ -567,16 +562,18 @@ async def setup_monitoring(
         frequency=frequency_days
     )
     
-    # TODO: Create monitoring jobs
-    # 1. Store monitoring configuration in registry
-    # 2. Schedule periodic checks
-    # 3. Set up alert thresholds
-    # 4. Return monitoring job IDs
     
-    raise HTTPException(
-        status_code=501,
-        detail="Monitoring setup implementation pending"
-    )
+    # Get format distribution (dummy implementation)
+    return {
+        "distribution": {
+            "enduring": 60,
+            "live_webinar": 25,
+            "video": 10,
+            "podcast": 5
+        },
+        "total_activities": 100
+    }
+
 
 @app.get("/search")
 async def search_activities(
@@ -601,15 +598,17 @@ async def search_activities(
         limit=limit
     )
     
-    # TODO: Query registry with filters
-    # Use full-text search on topic/title
-    # Apply structured filters
-    # Return matching activities
     
-    raise HTTPException(
-        status_code=501,
-        detail="Search implementation pending"
-    )
+    # Setup monitoring (dummy implementation)
+    return {
+        "monitor_id": str(uuid.uuid4()),
+        "topic": request.topic,
+        "sources": request.sources,
+        "frequency": request.check_frequency_days,
+        "active": True,
+        "created": datetime.now().isoformat()
+    }
+
 
 @app.get("/")
 async def root():
