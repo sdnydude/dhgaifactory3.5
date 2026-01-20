@@ -1,12 +1,12 @@
 # DHG AI Factory - Master To-Do List
-**Last Updated:** Jan 20, 2026 1:52 PM
+**Last Updated:** Jan 20, 2026 2:00 PM
 
 ## System Status
 - **Running Containers:** 12 (all healthy)
 - **Key Services:** All healthy
 - **Agents Implemented:** 3 (Research, Curriculum, Competitor Intel)
 - **Total Endpoints:** 23 fully functional
-- **Latest Commit:** bdba788 (merged to master via PR #9)
+- **Latest Commit:** 7d955ab (help files added)
 
 ---
 
@@ -71,11 +71,11 @@ No blockers.
 ### User Help Files (Complete as agents are built)
 - [x] Research Agent - Complete
 - [ ] Medical LLM Agent
-- [ ] Curriculum Agent ← **NEXT PRIORITY**
+- [x] Curriculum Agent - Complete
 - [ ] Visuals Agent
 - [ ] Outcomes Agent
 - [ ] QA Compliance Agent
-- [ ] Competitor Intel Agent ← **NEXT PRIORITY**
+- [x] Competitor Intel Agent - Complete
 - [ ] Orchestrator Agent
 - [ ] Transcription Agent
 
