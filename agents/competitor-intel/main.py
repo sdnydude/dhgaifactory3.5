@@ -591,7 +591,25 @@ async def chat_completions(request: ChatCompletionRequest):
                 user_message = msg.content
         
         # Simple echo response for now - each agent can customize
-        response_content = f"Agent received: {user_message}"
+        # Call Ollama for real response
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=60.0) as ollama_client:
+                ollama_resp = await ollama_client.post(
+                    "http://dhg-ollama:11434/api/chat",
+                    json={
+                        "model": "mistral-small3.1:24b",
+                        "messages": [
+                            {"role": "system", "content": "You are a Competitor Intelligence Agent."},
+                            {"role": "user", "content": user_message}
+                        ],
+                        "stream": False
+                    }
+                )
+                ollama_data = ollama_resp.json()
+                response_content = ollama_data.get("message", {}).get("content", f"Agent received: {user_message}")
+        except Exception as ollama_err:
+            response_content = f"I am the Competitor Intel agent. Your message: {user_message[:100]}"
         
         elapsed = time.time() - start_time
         prompt_tokens = len(user_message.split()) * 4
