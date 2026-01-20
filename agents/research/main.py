@@ -8,12 +8,10 @@ from pydantic import BaseModel
 from typing import Dict, Any, List, Optional
 import os
 import structlog
-import ollama
 import uuid
 from shared import metrics
 
 logger = structlog.get_logger()
-cl_client = ollama.Client(host=os.getenv("OLLAMA_HOST", "http://ollama:11434"))
 
 app = FastAPI(
     title="DHG Research/Retriever Agent",
@@ -194,6 +192,32 @@ AVAILABLE_SOURCES = {
 # ENDPOINTS
 # ============================================================================
 
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+async def call_ollama(system_prompt: str, user_prompt: str, model: str = "qwen2.5:14b") -> str:
+    """Call Ollama for LLM assistance"""
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                "http://dhg-ollama:11434/api/chat",
+                json={
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    "stream": False
+                }
+            )
+            data = response.json()
+            return data.get("message", {}).get("content", "")
+    except Exception as e:
+        logger.error("ollama_call_failed", error=str(e))
+        return f"LLM call failed: {str(e)}"
+
 @app.get("/health")
 async def health():
     """Health check endpoint with real GPU metrics"""
@@ -231,15 +255,14 @@ async def research(request: ResearchRequest):
         max_results=request.max_results
     )
     
+    # Build user prompt
+    sources_str = ', '.join(request.sources)
+    user_prompt = f"Research Topic: {request.topic}\nSources: {sources_str}\nProvide a scientific synthesis of found evidence."
+    
     try:
-        response = cl_client.chat(
-            model=config.OLLAMA_MODEL,
-            messages=[
-                {'role': 'system', 'content': SYSTEM_PROMPT},
-                {'role': 'user', 'content': f"Research Topic: {request.topic}\nSources: {', '.join(request.sources)}\nProvide a scientific synthesis of found evidence."}
-            ]
-        )
-        summary = response['message']['content']
+        summary = await call_ollama(SYSTEM_PROMPT, user_prompt, config.OLLAMA_MODEL)
+        if not summary or "LLM call failed" in summary:
+            raise Exception("Empty or failed LLM response")
     except Exception as e:
         logger.error("ollama_research_failed", error=str(e))
         summary = f"Research summary failed: {str(e)}. Using fallback synthesis for {request.topic}."
