@@ -1,0 +1,109 @@
+# DHG CME Research Agent - Docker Compose
+# Part of DHG AI Factory v3.5 architecture
+
+services:
+  # ==========================================================================
+  # RESEARCH AGENT
+  # ==========================================================================
+  research-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dhg-cme-research-agent
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY}
+      - NCBI_API_KEY=${NCBI_API_KEY}
+      - NCBI_EMAIL=${NCBI_EMAIL:-research@digitalharmonygroup.com}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=dhg_cme_research
+      - POSTGRES_USER=${POSTGRES_USER:-dhg_research}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - REDIS_URL=redis://redis:6379/0
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ./outputs:/app/outputs
+      - ./cache:/app/cache
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - dhg-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    labels:
+      - "ai.factory.service=research-agent"
+      - "ai.factory.domain=cme"
+
+  # ==========================================================================
+  # POSTGRESQL (with pgvector for citation embeddings)
+  # ==========================================================================
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: dhg-cme-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=dhg_cme_research
+      - POSTGRES_USER=${POSTGRES_USER:-dhg_research}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./config/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - dhg-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dhg_research} -d dhg_cme_research"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================================================
+  # REDIS (for caching and job queues)
+  # ==========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: dhg-cme-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - dhg-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# ==========================================================================
+# VOLUMES
+# ==========================================================================
+volumes:
+  postgres_data:
+    name: dhg-cme-postgres-data
+  redis_data:
+    name: dhg-cme-redis-data
+
+# ==========================================================================
+# NETWORKS
+# ==========================================================================
+networks:
+  dhg-network:
+    name: dhg-ai-factory
+    external: true

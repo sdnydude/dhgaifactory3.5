@@ -1,0 +1,7 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "cme_research": "./src/agent.py:graph"
+  },
+  "env": ".env"
+}

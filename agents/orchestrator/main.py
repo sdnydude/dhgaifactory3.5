@@ -1295,3 +1295,14 @@ async def shutdown_event():
     await agent_client.client.aclose()
     await shutdown_langgraph()
     logger.info("orchestrator_shutdown")
+
+# =============================================================================
+# ANTIGRAVITY SESSION STORAGE ENDPOINTS
+# =============================================================================
+
+# Import antigravity router
+import sys
+sys.path.insert(0, "/home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/registry")
+from antigravity_endpoints import router as antigravity_router
+
+app.include_router(antigravity_router)

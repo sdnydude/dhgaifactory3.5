@@ -1,9 +1,11 @@
+from datetime import datetime
+import uuid
 """
 DHG Registry - SQLAlchemy Models
 Media, Transcripts, Segments, Events tables
 """
-from sqlalchemy import Column, String, Integer, BigInteger, Float, Text, DateTime, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy import Column, String, Integer, BigInteger, Float, Text, DateTime, ForeignKey, Index
+from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -159,3 +161,160 @@ class Artifact(Base):
     # Relationships
     conversation = relationship("Conversation", back_populates="artifacts")
     message = relationship("Message", back_populates="artifacts")
+
+
+# =============================================================================
+# AGENT REGISTRY MODELS (for LangSmith Cloud)
+# =============================================================================
+
+class Agent(Base):
+    __tablename__ = "agents"
+    
+    id = Column(String, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    version = Column(String, nullable=False)
+    division = Column(String, nullable=False)
+    type = Column(String, nullable=False)
+    description = Column(Text)
+    
+    # Deployment info
+    deployment_type = Column(String, default="langsmith_cloud")
+    deployment_url = Column(String)
+    langsmith_deployment_id = Column(String)
+    langsmith_org = Column(String)
+    
+    # GitHub integration
+    github_repo = Column(String)
+    github_branch = Column(String, default="main")
+    github_path = Column(String)
+    
+    # Legacy self-hosted (backward compatibility)
+    endpoint = Column(String)
+    
+    # Capabilities and schemas (JSONB for flexibility)
+    capabilities = Column(JSONB)
+    io_schema = Column(JSONB)
+    models = Column(JSONB)
+    external_apis = Column(JSONB)
+    observability = Column(JSONB)
+    
+    # Status
+    status = Column(String, default="healthy")
+    last_heartbeat = Column(DateTime(timezone=True))
+    
+    # Timestamps
+    registered_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    heartbeats = relationship("AgentHeartbeat", back_populates="agent", cascade="all, delete-orphan")
+
+
+class AgentHeartbeat(Base):
+    __tablename__ = "agent_heartbeats"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    agent_id = Column(String, ForeignKey("agents.id", ondelete="CASCADE"), nullable=False, index=True)
+    
+    status = Column(String, nullable=False)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    
+    # Model status
+    models = Column(JSONB)
+    
+    # Metrics
+    requests_total = Column(Integer, default=0)
+    requests_success = Column(Integer, default=0)
+    requests_failed = Column(Integer, default=0)
+    avg_latency_ms = Column(Float, default=0.0)
+    total_tokens = Column(Integer, default=0)
+    total_cost_usd = Column(Float, default=0.0)
+    
+    # LangSmith Cloud metrics
+    langsmith_deployment_status = Column(String)
+    langsmith_traces_count = Column(Integer)
+    deployment_tier = Column(String)
+    
+    # Relationship
+    agent = relationship("Agent", back_populates="heartbeats")
+
+
+# =============================================================================
+# ANTIGRAVITY TRACKING MODELS
+# =============================================================================
+
+class AntigravityChat(Base):
+    __tablename__ = "antigravity_chats"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    conversation_id = Column(String, unique=True, nullable=False, index=True)
+    title = Column(Text)
+    summary = Column(Text)
+    user_objective = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    last_modified = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    message_count = Column(Integer, default=0)
+    total_tokens = Column(Integer, default=0)
+    total_cost_usd = Column(Float, default=0.0)
+    status = Column(String, default="active", index=True)
+    tags = Column(ARRAY(String))
+    extra_processing_metadata = Column('metadata', JSONB)
+    
+    # Relationship
+    files = relationship("AntigravityFile", back_populates="chat", cascade="all, delete-orphan")
+
+
+class AntigravityFile(Base):
+    __tablename__ = "antigravity_files"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    conversation_id = Column(String, ForeignKey("antigravity_chats.conversation_id", ondelete="CASCADE"), nullable=False, index=True)
+    file_path = Column(Text, nullable=False)
+    file_type = Column(String, index=True)
+    file_size_bytes = Column(BigInteger)
+    artifact_type = Column(String, index=True)
+    summary = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    last_modified = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    extra_processing_metadata = Column('metadata', JSONB)
+    
+    # Relationship
+    chat = relationship("AntigravityChat", back_populates="files")
+
+
+# =============================================================================
+# RESEARCH REQUEST MODELS
+# =============================================================================
+
+class ResearchRequest(Base):
+    """Research request tracking"""
+    __tablename__ = "research_requests"
+    
+    request_id = Column(String, primary_key=True, default=lambda: f"req_{uuid.uuid4().hex[:12]}")
+    user_id = Column(String, nullable=False, index=True)
+    agent_type = Column(String, nullable=False, default="cme_research")
+    status = Column(String, nullable=False, default="pending", index=True)  # pending, running, completed, failed
+    
+    # Input parameters (JSON)
+    input_params = Column(JSONB, nullable=False)
+    
+    # Output summary (JSON)
+    output_summary = Column(JSONB, nullable=True)
+    
+    # Metadata (JSON)
+    processing_metadata = Column(JSONB, nullable=True)
+    
+    # Error tracking
+    error_message = Column(Text, nullable=True)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Indexes
+    __table_args__ = (
+        Index("idx_research_user_created", "user_id", "created_at"),
+        Index("idx_research_status_created", "status", "created_at"),
+    )

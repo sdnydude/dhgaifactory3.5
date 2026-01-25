@@ -68,25 +68,27 @@ db_connections = Gauge(
 # Database Setup
 # ============================================================================
 def get_database_url() -> str:
-    """Get database URL with password from secret file"""
+    """Get database URL with password from env or files"""
+    # 1. Use DATABASE_URL if explicitly provided
+    db_url = os.getenv("DATABASE_URL")
+    if db_url:
+        return db_url
+        
+    # 2. Get password from secret file or env
     db_password_file = os.getenv("DB_PASSWORD_FILE", "/run/secrets/db_password")
     try:
-        with open(db_password_file, 'r') as f:
+        with open(db_password_file, "r") as f:
             password = f.read().strip()
     except FileNotFoundError:
-        # Fallback for local development
-        password = os.getenv("DB_PASSWORD", "dhg_password")
+        password = os.getenv("DB_PASSWORD", "weenie64")
     
-    db_url = os.getenv("DATABASE_URL", "postgresql://dhg_user@registry-db:5432/dhg_registry")
-    # Insert password into URL
-    if "@" in db_url:
-        protocol, rest = db_url.split("://", 1)
-        user_host = rest.split("@", 1)
-        if len(user_host) == 2:
-            user, host = user_host
-            db_url = f"{protocol}://{user}:{password}@{host}"
+    # 3. Build from components
+    user = os.getenv("DB_USER", "dhg")
+    host = os.getenv("DB_HOST", "localhost")
+    port = os.getenv("DB_PORT", "5432")
+    name = os.getenv("DB_NAME", "dhg_registry")
     
-    return db_url
+    return f"postgresql://{user}:{password}@{host}:{port}/{name}"
 
 
 DATABASE_URL = get_database_url()
@@ -240,6 +242,16 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+# Import routers
+from agent_endpoints import router as agent_router
+from antigravity_endpoints import router as antigravity_router
+from research_endpoints import router as research_router
+
+# Include routers
+app.include_router(agent_router)
+app.include_router(antigravity_router)
+app.include_router(research_router)
+
 
 
 # ============================================================================

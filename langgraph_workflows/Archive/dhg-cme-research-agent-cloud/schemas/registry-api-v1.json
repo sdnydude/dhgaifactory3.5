@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://digitalharmonygroup.com/ai-factory/schemas/registry-api-v1.json",
+  "title": "DHG AI Factory Central Registry API Schema",
+  "description": "API schema for the AI Factory central registry service",
+  "version": "1.0.0",
+  
+  "definitions": {
+    "AgentRegistration": {
+      "type": "object",
+      "description": "Register an agent with the registry",
+      "required": ["service"],
+      "properties": {
+        "service": { "$ref": "#/definitions/ServiceIdentity" },
+        "capabilities": { "$ref": "#/definitions/Capabilities" },
+        "io_schema": { "$ref": "#/definitions/IOSchema" },
+        "models": { "$ref": "#/definitions/ModelRegistry" },
+        "external_apis": { "$ref": "#/definitions/ExternalAPIs" },
+        "observability": { "$ref": "#/definitions/Observability" }
+      }
+    },
+    
+    "ServiceIdentity": {
+      "type": "object",
+      "required": ["id", "name", "version", "division", "type"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "name": { "type": "string" },
+        "version": { "type": "string" },
+        "division": { "type": "string", "enum": ["DHG CME", "DHG Studios", "DHG AI", "DHG Productions", "Streamcubation"] },
+        "type": { "type": "string", "enum": ["research_agent", "content_agent", "automation_agent", "analysis_agent", "orchestrator"] },
+        "description": { "type": "string" }
+      }
+    },
+    
+    "Capabilities": {
+      "type": "object",
+      "properties": {
+        "primary": { "type": "array", "items": { "type": "string" } },
+        "secondary": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    
+    "IOSchema": {
+      "type": "object",
+      "properties": {
+        "inputs": { "type": "object" },
+        "outputs": { "type": "object" }
+      }
+    },
+    
+    "ModelRegistry": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "provider": { "type": "string" },
+          "model_id": { "type": "string" },
+          "status": { "type": "string" },
+          "use_cases": { "type": "array", "items": { "type": "string" } },
+          "cost": { "type": "object" },
+          "local": { "type": "boolean" }
+        }
+      }
+    },
+    
+    "ExternalAPIs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "type": { "type": "string" },
+          "endpoint": { "type": "string" },
+          "auth_required": { "type": "boolean" }
+        }
+      }
+    },
+    
+    "Observability": {
+      "type": "object",
+      "properties": {
+        "langsmith_project": { "type": "string" },
+        "tracing": { "type": "boolean" }
+      }
+    },
+    
+    "Heartbeat": {
+      "type": "object",
+      "properties": {
+        "status": { "type": "string", "enum": ["healthy", "degraded", "unhealthy"] },
+        "models": { "$ref": "#/definitions/ModelRegistry" },
+        "metrics": {
+          "type": "object",
+          "properties": {
+            "requests_total": { "type": "integer" },
+            "requests_success": { "type": "integer" },
+            "requests_failed": { "type": "integer" },
+            "avg_latency_ms": { "type": "number" },
+            "total_tokens": { "type": "integer" },
+            "total_cost_usd": { "type": "number" }
+          }
+        }
+      }
+    }
+  },
+  
+  "paths": {
+    "/api/v1/agents/register": {
+      "POST": {
+        "description": "Register a new agent",
+        "requestBody": { "$ref": "#/definitions/AgentRegistration" },
+        "responses": {
+          "200": { "description": "Agent registered successfully" },
+          "400": { "description": "Invalid manifest" },
+          "409": { "description": "Agent already registered" }
+        }
+      }
+    },
+    "/api/v1/agents/{service_id}": {
+      "GET": {
+        "description": "Get agent details",
+        "responses": {
+          "200": { "$ref": "#/definitions/AgentRegistration" },
+          "404": { "description": "Agent not found" }
+        }
+      },
+      "DELETE": {
+        "description": "Deregister agent",
+        "responses": {
+          "200": { "description": "Agent deregistered" }
+        }
+      }
+    },
+    "/api/v1/agents/{service_id}/heartbeat": {
+      "POST": {
+        "description": "Send heartbeat",
+        "requestBody": { "$ref": "#/definitions/Heartbeat" },
+        "responses": {
+          "200": { "description": "Heartbeat received" }
+        }
+      }
+    },
+    "/api/v1/agents": {
+      "GET": {
+        "description": "List all registered agents",
+        "parameters": [
+          { "name": "division", "in": "query", "type": "string" },
+          { "name": "type", "in": "query", "type": "string" },
+          { "name": "capability", "in": "query", "type": "string" }
+        ],
+        "responses": {
+          "200": {
+            "type": "array",
+            "items": { "$ref": "#/definitions/AgentRegistration" }
+          }
+        }
+      }
+    },
+    "/api/v1/models": {
+      "GET": {
+        "description": "List all available models across agents",
+        "parameters": [
+          { "name": "provider", "in": "query", "type": "string" },
+          { "name": "status", "in": "query", "type": "string" },
+          { "name": "local", "in": "query", "type": "boolean" }
+        ],
+        "responses": {
+          "200": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "agent_id": { "type": "string" },
+                "model": { "$ref": "#/definitions/ModelRegistry" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/discover": {
+      "POST": {
+        "description": "Discover agents by capability",
+        "requestBody": {
+          "type": "object",
+          "properties": {
+            "capability": { "type": "string" },
+            "prefer_local": { "type": "boolean" },
+            "max_cost": { "type": "number" }
+          }
+        },
+        "responses": {
+          "200": {
+            "type": "array",
+            "items": { "$ref": "#/definitions/AgentRegistration" }
+          }
+        }
+      }
+    }
+  }
+}

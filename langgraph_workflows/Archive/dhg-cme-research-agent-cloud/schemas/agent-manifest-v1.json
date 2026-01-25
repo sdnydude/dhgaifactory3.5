@@ -1,0 +1,168 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://digitalharmonygroup.com/ai-factory/schemas/agent-manifest-v1.json",
+  "title": "DHG AI Factory Agent Manifest Schema",
+  "description": "Standardized schema for registering agents with DHG AI Factory Central Registry",
+  "version": "1.0.0",
+  "type": "object",
+  "required": ["service", "capabilities", "io_schema"],
+  "properties": {
+    "service": {
+      "type": "object",
+      "description": "Service identity and metadata",
+      "required": ["id", "name", "version", "division", "type"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$",
+          "description": "Unique service identifier (lowercase, hyphens only)"
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable service name"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "Semantic version (e.g., 2.1.0)"
+        },
+        "division": {
+          "type": "string",
+          "enum": ["DHG CME", "DHG Studios", "DHG AI", "DHG Productions", "Streamcubation"],
+          "description": "DHG division owning this agent"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["research_agent", "content_agent", "automation_agent", "analysis_agent", "orchestrator"],
+          "description": "Agent type category"
+        },
+        "description": {
+          "type": "string",
+          "description": "Brief description of agent purpose"
+        }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "description": "What this agent can do",
+      "properties": {
+        "primary": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Primary capabilities (core functions)"
+        },
+        "secondary": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Secondary capabilities (additional features)"
+        }
+      }
+    },
+    "io_schema": {
+      "type": "object",
+      "description": "Input/Output schema for agent invocation",
+      "properties": {
+        "inputs": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string", "enum": ["string", "integer", "number", "boolean", "array", "object"] },
+              "required": { "type": "boolean" },
+              "default": {},
+              "enum": { "type": "array" },
+              "description": { "type": "string" }
+            }
+          }
+        },
+        "outputs": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string" },
+              "description": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "models": {
+      "type": "object",
+      "description": "Available LLM models and their configuration",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["provider", "model_id", "status"],
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": ["anthropic", "google", "openai", "ollama", "local"],
+            "description": "LLM provider"
+          },
+          "model_id": {
+            "type": "string",
+            "description": "Full model identifier"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["available", "no_api_key", "not_pulled", "ollama_not_running", "ollama_unreachable", "disabled"],
+            "description": "Current availability status"
+          },
+          "use_cases": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Intended use cases for this model"
+          },
+          "cost": {
+            "type": "object",
+            "properties": {
+              "input": { "type": "number", "description": "Cost per 1K input tokens" },
+              "output": { "type": "number", "description": "Cost per 1K output tokens" }
+            }
+          },
+          "context_window": {
+            "type": "integer",
+            "description": "Maximum context window in tokens"
+          },
+          "max_output": {
+            "type": "integer",
+            "description": "Maximum output tokens"
+          },
+          "local": {
+            "type": "boolean",
+            "description": "Whether this model runs locally"
+          },
+          "requires": {
+            "type": "string",
+            "description": "Requirements for this model (e.g., 'ollama with qwen3:14b pulled')"
+          }
+        }
+      }
+    },
+    "external_apis": {
+      "type": "array",
+      "description": "External API dependencies",
+      "items": {
+        "type": "object",
+        "required": ["name", "type"],
+        "properties": {
+          "name": { "type": "string" },
+          "type": { "type": "string", "enum": ["retriever", "tool", "database", "storage", "webhook"] },
+          "endpoint": { "type": "string", "format": "uri" },
+          "auth_required": { "type": "boolean" },
+          "rate_limit": { "type": "string" }
+        }
+      }
+    },
+    "observability": {
+      "type": "object",
+      "description": "Observability and monitoring configuration",
+      "properties": {
+        "langsmith_project": { "type": "string", "description": "LangSmith project name" },
+        "tracing": { "type": "boolean", "description": "Whether tracing is enabled" },
+        "metrics_endpoint": { "type": "string" },
+        "health_endpoint": { "type": "string" }
+      }
+    }
+  }
+}
