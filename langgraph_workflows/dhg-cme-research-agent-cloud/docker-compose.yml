@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  cme-research-agent:
+    build: .
+    container_name: dhg-cme-research-agent
+    ports:
+      - "2026:2026"
+    environment:
+      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
+      - LANGCHAIN_TRACING_V2=true
+      - LANGCHAIN_PROJECT=dhg-cme-research-agent
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY}
+      - NCBI_API_KEY=${NCBI_API_KEY:-}
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - AI_FACTORY_REGISTRY_URL=http://host.docker.internal:8500
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    volumes:
+      - ./src:/app/src
+      - ./langgraph.json:/app/langgraph.json
