@@ -29,8 +29,6 @@ Version: 2.1.0 (Cloud + Ollama + Registry)
 import os
 
 # Load secrets from Infisical at startup
-from .infisical_secrets import load_secrets
-load_secrets()
 import json
 from datetime import datetime
 import operator
