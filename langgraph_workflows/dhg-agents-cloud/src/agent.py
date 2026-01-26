@@ -687,11 +687,38 @@ async def perplexity_search_node(state: AgentState) -> dict:
 async def validate_sources_node(state: AgentState) -> dict:
     validated = []
     seen = set()
+    
+    # Process PubMed results
     for a in state.get("pubmed_results", []):
         key = a.get("pmid") or a.get("doi")
         if key and key not in seen and SourceValidator.validate(a):
             validated.append(a)
             seen.add(key)
+    
+    # Process Perplexity results
+    for result in state.get("perplexity_results", []):
+        if isinstance(result, dict):
+            citations = result.get("citations", [])
+            for citation in citations:
+                key = citation.get("url") or citation.get("title")
+                if key and key not in seen:
+                    validated.append({
+                        "title": citation.get("title", ""),
+                        "url": citation.get("url", ""),
+                        "source": "perplexity",
+                        "evidence_level": "narrative_review"
+                    })
+                    seen.add(key)
+            
+            # If no structured citations, use content as a source
+            if not citations and result.get("content"):
+                validated.append({
+                    "title": f"Perplexity Research: {state.get('topic', 'Research')}",
+                    "content": result.get("content", ""),
+                    "source": "perplexity",
+                    "evidence_level": "expert_opinion"
+                })
+    
     return {"validated_citations": validated}
 
 
