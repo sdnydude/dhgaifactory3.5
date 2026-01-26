@@ -661,7 +661,15 @@ async def pubmed_search_node(state: AgentState) -> dict:
             state.get("date_range_years", 5)
         )
         articles = await client.fetch_details(pmids)
-        min_level = EvidenceLevel(state.get("minimum_evidence_level", "cohort_case_control"))
+        # Handle evidence level - accept string like "2" or enum value
+        level_input = state.get("minimum_evidence_level", "cohort_case_control")
+        try:
+            if isinstance(level_input, str) and level_input.isdigit():
+                level_map = {"1": "systematic_review_meta_analysis", "2": "lower_quality_rct", "3": "case_series", "4": "expert_opinion", "5": "narrative_review"}
+                level_input = level_map.get(level_input, "cohort_case_control")
+            min_level = EvidenceLevel(level_input)
+        except (ValueError, KeyError):
+            min_level = EvidenceLevel.LEVEL_2B
         filtered = EvidenceGrader.filter_by_level(articles, min_level)
         return {"pubmed_results": filtered, "errors": state.get("errors", [])}
     except Exception as e:
@@ -843,7 +851,15 @@ async def finalize_node(state: AgentState, config: RunnableConfig) -> dict:
             output_summary=output_summary,
             metadata=metadata
         )
-    return {}
+    # Return final output for Studio visibility
+    return {
+        "synthesis": state.get("synthesis", ""),
+        "clinical_gaps": state.get("clinical_gaps", []),
+        "validated_citations": state.get("validated_citations", []),
+        "key_findings": state.get("key_findings", []),
+        "errors": state.get("errors", []),
+        "messages": [HumanMessage(content=state.get("synthesis", "No synthesis generated"))]
+    }
 # BUILD GRAPH
 # =============================================================================
 
