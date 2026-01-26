@@ -32,7 +32,8 @@ import os
 import json
 from datetime import datetime
 import operator
-from typing import TypedDict, Annotated, Literal, Optional, List, Dict, Any
+from typing import Annotated, Literal, Optional, List, Dict, Any
+from typing_extensions import TypedDict
 from dataclasses import dataclass, field
 from enum import Enum
 
