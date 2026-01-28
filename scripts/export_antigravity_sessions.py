@@ -9,9 +9,13 @@ Usage (on Mac where Antigravity is running):
     python3 export_antigravity_sessions.py --output sessions.json
 
 Auto-detection:
-    - Finds Antigravity process PID
+    - Finds language_server_macos process PID
     - Extracts CSRF token from process args
     - Determines port via lsof
+
+References:
+    - Reddit: https://www.reddit.com/r/google_antigravity/comments/1q8fw6e/
+    - CodexBar: https://github.com/steipete/CodexBar
 """
 
 import argparse
