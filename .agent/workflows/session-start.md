@@ -4,68 +4,62 @@ description: Run at the start of every session to verify server state
 
 > **RULE 0 (ABSOLUTE):** Never lie, sugarcoat, or hide the truth. See `.agent/rules/honesty.md`
 
-# Session Startup Workflow
+# Session Startup Workflow (Remote-SSH)
 
 // turbo-all
 
 Run this workflow at the beginning of every DHG AI Factory session.
 
+**Environment:** VS Code Remote-SSH on g700data1 (10.0.0.251)
+
 ---
 
 ## 0. MANDATORY: Read Critical Instructions First
 
-**Before ANY other action, read these files:**
-
-```bash
-# Read these files silently - DO NOT output their contents
-cat /Users/swebber64/manus-project/dhgaifactory3.5/.agent/rules/honesty.md
-cat /Users/swebber64/manus-project/dhgaifactory3.5/.agent/rules/verification-required.md
-cat /Users/swebber64/manus-project/dhgaifactory3.5/.agent/rules/proof-required.md
-cat /Users/swebber64/manus-project/dhgaifactory3.5/.agent/workflows/secret-safety.md
-cat /Users/swebber64/manus-project/dhgaifactory3.5/.agent/dhg-style-guide.css
-cat /Users/swebber64/manus-project/dhgaifactory3.5/.agent/dhg-style-guide.md
-cat /Users/swebber64/manus-project/dhgaifactory3.5/.agent/workflows/debug-protocol.md
-cat /Users/swebber64/manus-project/dhgaifactory3.5/.agent/workflows/server-work.md
-```
+**Read these files using view_file tool:**
+- `.agent/rules/honesty.md`
+- `.agent/rules/verification-required.md`
+- `.agent/rules/proof-required.md`
+- `.agent/workflows/secret-safety.md`
+- `.agent/dhg-style-guide.md`
+- `.agent/workflows/debug-protocol.md`
+- `.agent/workflows/server-work.md`
 
 **MANDATORY: Quote one line from honesty rules to prove you read them:**
 > Example: "Do NOT say 'done' or 'completed' without showing proof"
 
-**Confirm to user:**
-> "I have read: honesty, verification-required, proof-required, secret-safety, dhg-style-guide, debug-protocol, server-work. 
-> Quote: [INSERT ACTUAL QUOTE FROM HONESTY RULES HERE]
-> Ready to proceed."
-
 ---
 
-## 1. Verify SSH Connectivity
+## 1. Verify Server Environment
 
 ```bash
-ssh -i ~/.ssh/id_ed25519_fafstudios swebber64@10.0.0.251 'echo "✓ Connected to .251 at $(date)"'
+hostname && echo "✓ Connected to $(hostname) at $(date)"
 ```
 
 ## 2. Check Git Branch and Status
 
 ```bash
-ssh -i ~/.ssh/id_ed25519_fafstudios swebber64@10.0.0.251 'cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5 && echo "Branch:" && git branch --show-current && echo "" && echo "Status:" && git status --short'
+cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5 && echo "Branch:" && git branch --show-current && echo "" && echo "Status:" && git status --short
 ```
 
 ## 3. Recent Commits (Last 5)
 
 ```bash
-ssh -i ~/.ssh/id_ed25519_fafstudios swebber64@10.0.0.251 'cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5 && git log --oneline -5'
+cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5 && git log --oneline -5
 ```
 
 ## 4. Docker Services Status
 
 ```bash
-ssh -i ~/.ssh/id_ed25519_fafstudios swebber64@10.0.0.251 'cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5 && docker compose ps --format "table {{.Name}}\t{{.Status}}" 2>/dev/null | head -30'
+cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5 && docker compose ps --format "table {{.Name}}\t{{.Status}}" 2>/dev/null | head -30
 ```
 
 ## 5. Check Critical Services Health
 
+**Note:** Orchestrator (:8011) is EOL'd
+
 ```bash
-ssh -i ~/.ssh/id_ed25519_fafstudios swebber64@10.0.0.251 'for port in 8011 8002 8003 3010; do echo -n "Port $port: "; curl -s -o /dev/null -w "%{http_code}" http://localhost:$port/health 2>/dev/null || echo "N/A"; done'
+for port in 8002 8003 3010; do echo -n "Port $port: "; curl -s -o /dev/null -w "%{http_code}" http://localhost:$port/health 2>/dev/null || echo "N/A"; done
 ```
 
 ---
@@ -74,15 +68,14 @@ ssh -i ~/.ssh/id_ed25519_fafstudios swebber64@10.0.0.251 'for port in 8011 8002 
 
 Report findings to user:
 - Confirm you read all critical instructions
-- Current branch (should be `feature/librechat-integration` for active work)
+- Current branch (should be `feature/langgraph-migration` for active work)
 - Any uncommitted changes
 - Number of healthy vs unhealthy containers
 - Any services that need attention
 
-## CRITICAL REMINDERS FROM INSTRUCTIONS
+## CRITICAL REMINDERS
 
-After reading the files, remember:
 1. **NEVER expose API keys** - use masked output only
-2. **All work on .251 server** - not local Mac
-3. **Debug protocol** - one fix per hypothesis
-4. **DHG style guide** - use official colors
+2. **Debug protocol** - one fix per hypothesis
+3. **DHG style guide** - use official colors
+4. **All file tools work directly** - no SSH wrapping needed
