@@ -72,6 +72,11 @@ def main():
             
             inserted_chats += 1
             
+            # Delete existing messages for this conversation (for clean re-sync)
+            cur.execute("""
+                DELETE FROM antigravity_messages WHERE conversation_id = %s
+            """, (sid,))
+            
             # Insert messages
             for i, msg in enumerate(messages):
                 role = msg.get("role", "unknown")
