@@ -29,15 +29,11 @@ description: MANDATORY pre-flight check before every response - read global rule
 3. PROVE — Show the user the evidence
 4. THEN — Make the claim
 
-If you catch yourself violating: Stop immediately, state "I made an unverified claim. Let me verify," then run verification.
-
 ---
 
 ## Step 1: Acknowledge Global Rules
 
-Before responding, confirm you understand:
-
-1. **No Placeholders** — Never use TODO, TBD, FIXME, dummy values, or "Replace this later"
+1. **No Placeholders** — Never use TODO, TBD, FIXME, dummy values
 2. **No Truncated Files** — If a file is shown, it is complete
 3. **Truth Over Helpfulness** — Never fabricate files, values, or completeness
 4. **Debug Discipline** — ONE fix per hypothesis, track all attempts
@@ -45,47 +41,40 @@ Before responding, confirm you understand:
 
 ---
 
-## Step 2: Server-First Check (DHG AI Factory Project)
+## Step 2: EVERYTHING GOES ON .251 (NO EXCEPTIONS)
 
-For ANY file operation on the DHG AI Factory project:
+> **⚠️ THERE ARE NO EXCEPTIONS. EVERYTHING PROJECT-RELATED GOES ON THE SERVER.**
 
-**Pre-Flight Checklist:**
-- [ ] Target path is on 10.0.0.251, NOT local Mac?
-- [ ] Using SSH command, NOT write_to_file or replace_file_content tools?
-- [ ] Path starts with `/home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/`?
-
-**If any answer is NO → STOP and redirect to server.**
-
-**SSH Command:**
+**All file operations use SSH:**
 ```bash
-ssh -i ~/.ssh/id_ed25519_fafstudios swebber64@10.0.0.251 'command here'
+ssh -i ~/.ssh/id_ed25519_fafstudios swebber64@10.0.0.251 'command'
 ```
 
-**Project Path:**
+**Project path:**
 ```
 /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/
 ```
 
+**This includes:**
+- All documentation (docs/)
+- All code (agents/, registry/, tools/, etc.)
+- All images and assets (docs/assets/)
+- All configuration (.agent/, .env files, etc.)
+- All workflows and rules
+
+**Do NOT use:**
+- write_to_file tool for project files
+- replace_file_content tool for project files  
+- Local artifacts folder for project docs
+
+**Browser work accessing external services (LangSmith Cloud) is fine.
+
 ---
 
-## Step 3: Exceptions (Do NOT Require Server)
-
-- Local `.agent/` files (rules, workflows)
-- Browser-based work (Infisical UI, LibreChat UI)
-- Antigravity brain artifacts in `.gemini/antigravity/brain/` — **session artifacts only** (task.md, implementation_plan.md, walkthroughs)
-- Viewing screenshots or recordings
-
-> **⚠️ PROJECT DOCUMENTATION IS NOT AN EXCEPTION.**
-> Docs like REGISTRY_API.md, DHG_AGENTS_TEAM.md, planning docs, and images
-> MUST go directly to `.251:/home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/docs/`
-> Do NOT create them locally first then copy over.
-
----
-
-## Step 4: Before Responding
+## Step 3: Before Responding
 
 1. Have I violated any global rules?
-2. Am I about to create/edit a file on the Mac that should be on .251?
-3. Am I using heredocs correctly with single-quoted delimiters?
+2. Am I about to use a local file tool? → STOP, use SSH instead
+3. Am I creating a doc locally? → STOP, create on .251 directly
 
 If violations detected → FIX before responding.
