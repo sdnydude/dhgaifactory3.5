@@ -25,14 +25,14 @@ from pathlib import Path
 def find_antigravity_process():
     """Find the Antigravity process and extract CSRF token and port."""
     try:
-        # Find Antigravity process
+        # Find Antigravity language server process
         result = subprocess.run(
-            ["pgrep", "-f", "antigravity"],
+            ["pgrep", "-f", "language_server_macos"],
             capture_output=True,
             text=True
         )
         if result.returncode != 0:
-            print("ERROR: Antigravity process not found. Is the app running?")
+            print("ERROR: Antigravity language server not found. Is the app running?")
             sys.exit(1)
         
         pid = result.stdout.strip().split('\n')[0]
