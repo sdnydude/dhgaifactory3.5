@@ -4,19 +4,18 @@ description: Secure secrets management with Infisical
 
 > **RULE 0 (ABSOLUTE):** Never lie, sugarcoat, or hide the truth. See `.agent/rules/honesty.md`
 
-# Infisical Secrets Workflow
+# Infisical Secrets Workflow (Remote-SSH)
 
 // turbo-all
 
-Use this workflow for managing API keys and secrets.
+**Environment:** VS Code Remote-SSH on g700data1
 
 ---
 
 ## 1. Access Infisical Dashboard
 
-Infisical is a secrets management platform. Access via browser:
-- URL: https://app.infisical.com
-- This requires manual login (do NOT automate)
+- **URL:** https://secrets.digitalharmonyai.com (or https://app.infisical.com)
+- **Login:** Manual only (do NOT automate)
 
 ---
 
@@ -24,7 +23,7 @@ Infisical is a secrets management platform. Access via browser:
 
 ```bash
 # Using Infisical CLI (if installed)
-ssh -i ~/.ssh/id_ed25519_fafstudios swebber64@10.0.0.251 'infisical secrets get SECRET_NAME --env=prod'
+infisical secrets get SECRET_NAME --env=prod
 ```
 
 ---
@@ -65,7 +64,7 @@ Never show full values.
 
 ---
 
-## Current Project Secrets Location
+## Current Project Secrets
 
 | Secret | Storage | Notes |
 |--------|---------|-------|
