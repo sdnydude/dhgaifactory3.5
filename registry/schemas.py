@@ -2,6 +2,7 @@
 Pydantic schemas for AI Factory Registry API
 Updated for LangSmith Cloud deployment support
 """
+from uuid import UUID
 from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime
 from pydantic import BaseModel, Field
@@ -223,7 +224,7 @@ class AntigravityChatUpdate(BaseModel):
 
 
 class AntigravityChatResponse(BaseModel):
-    id: str
+    id: UUID
     conversation_id: str
     title: Optional[str]
     summary: Optional[str]
@@ -234,7 +235,7 @@ class AntigravityChatResponse(BaseModel):
     total_tokens: int
     total_cost_usd: float
     status: str
-    tags: List[str]
+    tags: Optional[List[str]] = []
     file_count: Optional[int] = 0
     
     class Config:

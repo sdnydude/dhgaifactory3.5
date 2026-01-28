@@ -19,30 +19,19 @@ if config.config_file_name is not None:
 # Target metadata for autogenerate support
 target_metadata = Base.metadata
 
-# Get database URL from environment
+# Get database URL from environment - consistent with database.py
 def get_url():
-    db_password_file = os.getenv("DB_PASSWORD_FILE", "/run/secrets/db_password")
-    try:
-        with open(db_password_file, 'r') as f:
-            password = f.read().strip()
-    except FileNotFoundError:
-        # Fallback for local development
-        password = os.getenv("DB_PASSWORD", "dhg_password")
-    
-    db_url = os.getenv("DATABASE_URL", "postgresql://dhg_user@registry-db:5432/dhg_registry")
-    # Insert password into URL
-    if "@" in db_url:
-        protocol, rest = db_url.split("://", 1)
-        user_host = rest.split("@", 1)
-        if len(user_host) == 2:
-            user, host = user_host
-            db_url = f"{protocol}://{user}:{password}@{host}"
-    
-    return db_url
+    DB_HOST = os.getenv("POSTGRES_HOST", "dhg-registry-db")
+    DB_PORT = os.getenv("POSTGRES_PORT", "5432")
+    DB_USER = os.getenv("POSTGRES_USER", "dhg")
+    DB_PASS = os.getenv("POSTGRES_PASSWORD", "changeme")
+    DB_NAME = os.getenv("POSTGRES_DB", "dhg_registry")
+
+    return f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
 
 def run_migrations_offline() -> None:
-    """Run migrations in 'offline' mode."""
+    """Run migrations in offline mode."""
     url = get_url()
     context.configure(
         url=url,
@@ -56,7 +45,7 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    """Run migrations in 'online' mode."""
+    """Run migrations in online mode."""
     configuration = config.get_section(config.config_ini_section)
     configuration["sqlalchemy.url"] = get_url()
     

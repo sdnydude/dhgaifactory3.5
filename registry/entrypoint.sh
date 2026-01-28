@@ -1,8 +1,11 @@
 #!/bin/bash
 set -e
 
-echo "Waiting for database to be ready..."
-until pg_isready -h registry-db -U dhg_user; do
+DB_HOST="${POSTGRES_HOST:-dhg-registry-db}"
+DB_USER="${POSTGRES_USER:-dhg}"
+
+echo "Waiting for database at ${DB_HOST} to be ready..."
+until pg_isready -h "${DB_HOST}" -U "${DB_USER}"; do
     echo "Database not ready, waiting..."
     sleep 2
 done
