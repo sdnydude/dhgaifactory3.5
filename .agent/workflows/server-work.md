@@ -1,115 +1,74 @@
 ---
-description: All DHG AI Factory work must be done on .251 server
+description: All DHG AI Factory work must be done on .251 server (Remote-SSH setup)
 ---
 
 > **RULE 0 (ABSOLUTE):** Never lie, sugarcoat, or hide the truth. See `.agent/rules/honesty.md`
 
-# Server-First Development Workflow
+# Server-First Development Workflow (Remote-SSH)
 
 // turbo-all
 
-## MANDATORY: All work for the DHG AI Factory project MUST be performed directly on the server at 10.0.0.251
+## Current Environment
+
+**VS Code Remote-SSH** is connected directly to **10.0.0.251 (g700data1)**.
+
+This means:
+- ✅ All file tools work directly on the server
+- ✅ No SSH wrapping required
+- ✅ `write_to_file`, `replace_file_content`, etc. operate natively on server paths
+- ✅ Commands run directly on the server
 
 ---
 
-## Pre-Flight Checklist (Run Before ANY File Operation)
-
-Before EVERY file create/edit:
-
-1. ☐ Target path is on 10.0.0.251, NOT local Mac?
-2. ☐ Using SSH command, NOT write_to_file tool?
-3. ☐ Path starts with `/home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/`?
-
-If any answer is NO → STOP and redirect to server.
-
----
-
-## Session Startup
-
-When starting a new session on this project:
-
-1. Verify SSH connectivity:
-```bash
-ssh -i ~/.ssh/id_ed25519_fafstudios swebber64@10.0.0.251 'echo "Connected to .251"'
-```
-
-2. Check git status on server:
-```bash
-ssh -i ~/.ssh/id_ed25519_fafstudios swebber64@10.0.0.251 'cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5 && git branch && git status --short'
-```
-
-3. Verify Docker services:
-```bash
-ssh -i ~/.ssh/id_ed25519_fafstudios swebber64@10.0.0.251 'cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5 && docker compose ps --format "table {{.Name}}\t{{.Status}}"'
-```
-
----
-
-## Rules:
-
-1. **DO NOT** create files on the local Mac and copy them to .251
-2. **DO NOT** write code, configs, or documentation to `/tmp` or local paths
-3. **ALL** file creation, editing, and commands must execute directly on 10.0.0.251 via SSH
-4. If you need to create a file, use: `ssh -i ~/.ssh/id_ed25519_fafstudios swebber64@10.0.0.251 'cat > /path/to/file << EOF ... EOF'`
-5. If you need to edit a file, use sed/vim via SSH or read/modify/write via SSH
-
----
-
-## Exceptions (require explicit user approval):
-
-- Browser-based work (Infisical UI, LibreChat UI, etc.) - runs locally by nature
-- Viewing screenshots or recordings for verification
-- Local `.agent/` files (rules, workflows) - configure local dev environment
-
----
-
-## SSH Connection:
-
-```bash
-ssh -i ~/.ssh/id_ed25519_fafstudios swebber64@10.0.0.251
-```
-
-## Project Path on Server:
+## Project Path
 
 ```
 /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/
 ```
 
-## Current Branch:
+## Current Branch
 
 ```
-feature/librechat-integration
+feature/langgraph-migration
 ```
 
 ---
 
-## Why:
+## Session Startup
 
-- User preference for all project files to live on the server
-- Avoids sync issues and duplicate files
-- Keeps the Mac clean of project artifacts
-- Server has GPU resources (RTX 5080) for running models
+When starting a new session:
 
----
-
-## File Creation on .251
-
-**ALWAYS use interactive SSH for creating/editing files:**
-
-1. SSH into the server
-2. Use nano or vim to edit
-3. Save and exit
-
-**NEVER:**
-- Create files on Mac and scp to .251
-- Use heredocs for complex multi-line files (quoting breaks)
-
-**If heredoc is needed:** Use single-quoted delimiter to prevent variable expansion:
+1. Verify you're on the server:
 ```bash
-ssh swebber64@10.0.0.251 'cat > /path/to/file << '\''EOF'\''
-content here
-EOF'
+hostname  # Should return: g700data1
 ```
+
+2. Check git status:
+```bash
+cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5 && git branch && git status --short
+```
+
+3. Verify Docker services:
+```bash
+cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5 && docker compose ps --format "table {{.Name}}\t{{.Status}}"
+```
+
+---
+
+## Rules
+
+1. All file operations happen directly on the server (no SSH wrapping needed)
+2. All paths are server paths (`/home/swebber64/...`)
+3. Standard file tools work normally in this environment
+
+---
+
+## Why Remote-SSH
+
+- Eliminates SSH wrapping complexity
+- Standard tooling works natively
+- No sync issues between Mac and server
+- Server has GPU resources (RTX 5080) for running models
 
 ---
 
@@ -126,4 +85,3 @@ EOF'
 
 If user says "it's not in the marketplace" - tell them to check the MODEL SELECTOR dropdown instead.
 
-If user SPECIFICALLY wants Agent Marketplace - that requires creating an agent through LibreChat's built-in agent builder UI using a backing model.

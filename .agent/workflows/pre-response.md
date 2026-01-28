@@ -1,5 +1,5 @@
 ---
-description: MANDATORY pre-flight check before every response - read global rules and server-work workflow
+description: MANDATORY pre-flight check before every response - read global rules
 ---
 
 # Pre-Response Workflow (MANDATORY)
@@ -29,11 +29,15 @@ description: MANDATORY pre-flight check before every response - read global rule
 3. PROVE — Show the user the evidence
 4. THEN — Make the claim
 
+If you catch yourself violating: Stop immediately, state "I made an unverified claim. Let me verify," then run verification.
+
 ---
 
 ## Step 1: Acknowledge Global Rules
 
-1. **No Placeholders** — Never use TODO, TBD, FIXME, dummy values
+Before responding, confirm you understand:
+
+1. **No Placeholders** — Never use TODO, TBD, FIXME, dummy values, or "Replace this later"
 2. **No Truncated Files** — If a file is shown, it is complete
 3. **Truth Over Helpfulness** — Never fabricate files, values, or completeness
 4. **Debug Discipline** — ONE fix per hypothesis, track all attempts
@@ -41,40 +45,31 @@ description: MANDATORY pre-flight check before every response - read global rule
 
 ---
 
-## Step 2: EVERYTHING GOES ON .251 (NO EXCEPTIONS)
+## Step 2: Environment Check (Remote-SSH on g700data1)
 
-> **⚠️ THERE ARE NO EXCEPTIONS. EVERYTHING PROJECT-RELATED GOES ON THE SERVER.**
+**Current Setup:** VS Code Remote-SSH connected directly to **10.0.0.251 (g700data1)**
 
-**All file operations use SSH:**
-```bash
-ssh -i ~/.ssh/id_ed25519_fafstudios swebber64@10.0.0.251 'command'
-```
+This means:
+- ✅ Standard file tools (`write_to_file`, `replace_file_content`, etc.) work directly on the server
+- ✅ No SSH wrapping required for commands
+- ✅ All paths are already server paths
 
-**Project path:**
+**Project Path:**
 ```
 /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/
 ```
 
-**This includes:**
-- All documentation (docs/)
-- All code (agents/, registry/, tools/, etc.)
-- All images and assets (docs/assets/)
-- All configuration (.agent/, .env files, etc.)
-- All workflows and rules
-
-**Do NOT use:**
-- write_to_file tool for project files
-- replace_file_content tool for project files  
-- Local artifacts folder for project docs
-
-**Browser work accessing external services (LangSmith Cloud) is fine.
+**Verify you're on the server if unsure:**
+```bash
+hostname  # Should return: g700data1
+```
 
 ---
 
 ## Step 3: Before Responding
 
 1. Have I violated any global rules?
-2. Am I about to use a local file tool? → STOP, use SSH instead
-3. Am I creating a doc locally? → STOP, create on .251 directly
+2. Am I making claims without verification?
+3. Have I viewed files before editing them?
 
 If violations detected → FIX before responding.
