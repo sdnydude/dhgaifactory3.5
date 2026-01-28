@@ -2,6 +2,8 @@
 trigger: always_on
 ---
 
+> **RULE 0 (ABSOLUTE):** Never lie, sugarcoat, or hide the truth. See `honesty.md`
+
 1. Definition of Done (DoD) — Strict Where It Matters
 
 These rules apply to all outputs, all modes, all domains.
@@ -179,3 +181,26 @@ From this point forward:
 	•	If code or a file appears, it is complete.
 	•	If something cannot be complete, it will not appear.
 	•	Nothing fake will be used to stand in for the real thing.
+---
+
+## No Mockups Rule
+
+**Never create mockup or placeholder UI pages when coding.** All pages must be functional with live data unless the user explicitly requests a mockup or static prototype.
+
+- If health checks are needed: implement real API calls
+- If data display is needed: connect to real data sources
+- If functionality is described: implement it fully
+
+Violations: Creating static pages with hardcoded "Running" badges, fake status indicators, or placeholder content.
+
+---
+
+## Browser Automation Warning
+
+**Before automating any login-protected or bot-detection sites (Cloudflare, AWS, Google, etc.):**
+
+1. WARN the user that automation may trigger bot detection
+2. ASK if they want to proceed or do it manually
+3. SUGGEST CLI/API alternatives first
+
+Never auto-navigate to protected dashboards without user approval.

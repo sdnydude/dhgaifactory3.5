@@ -1,0 +1,396 @@
+[Skip to main content](https://infisical.com/docs/cli/commands/export#content-area)
+[Infisical home page](https://infisical.com)
+- [Log In](https://app.infisical.com/login)
+- [Start for Free](https://app.infisical.com/signup)
+- [Start for Free](https://app.infisical.com/signup)
+[Log In](https://app.infisical.com/login)
+[Start for Free](https://app.infisical.com/signup)
+[Start for Free](https://app.infisical.com/signup)
+[Platform](https://infisical.com/docs/documentation/getting-started/overview)
+[CLI Reference](https://infisical.com/docs/cli/overview)
+[API Reference](https://infisical.com/docs/api-reference/overview/introduction)
+[SDKs](https://infisical.com/docs/sdks/overview)
+[Changelog](https://infisical.com/docs/changelog/overview)
+
+##### Command line
+- [Install](https://infisical.com/docs/cli/overview)
+- [Quickstart](https://infisical.com/docs/cli/usage)
+- Core commands[infisical login](https://infisical.com/docs/cli/commands/login)[infisical init](https://infisical.com/docs/cli/commands/init)[infisical run](https://infisical.com/docs/cli/commands/run)[infisical secrets](https://infisical.com/docs/cli/commands/secrets)[infisical dynamic-secrets](https://infisical.com/docs/cli/commands/dynamic-secrets)[infisical ssh](https://infisical.com/docs/cli/commands/ssh)[infisical gateway](https://infisical.com/docs/cli/commands/gateway)[infisical relay](https://infisical.com/docs/cli/commands/relay)[infisical bootstrap](https://infisical.com/docs/cli/commands/bootstrap)[infisical export](https://infisical.com/docs/cli/commands/export)[infisical token](https://infisical.com/docs/cli/commands/token)[infisical service-token](https://infisical.com/docs/cli/commands/service-token)[infisical vault](https://infisical.com/docs/cli/commands/vault)[infisical user](https://infisical.com/docs/cli/commands/user)[infisical reset](https://infisical.com/docs/cli/commands/reset)infisical scan
+- [infisical login](https://infisical.com/docs/cli/commands/login)
+- [infisical init](https://infisical.com/docs/cli/commands/init)
+- [infisical run](https://infisical.com/docs/cli/commands/run)
+- [infisical secrets](https://infisical.com/docs/cli/commands/secrets)
+- [infisical dynamic-secrets](https://infisical.com/docs/cli/commands/dynamic-secrets)
+- [infisical ssh](https://infisical.com/docs/cli/commands/ssh)
+- [infisical gateway](https://infisical.com/docs/cli/commands/gateway)
+- [infisical relay](https://infisical.com/docs/cli/commands/relay)
+- [infisical bootstrap](https://infisical.com/docs/cli/commands/bootstrap)
+- [infisical export](https://infisical.com/docs/cli/commands/export)
+- [infisical token](https://infisical.com/docs/cli/commands/token)
+- [infisical service-token](https://infisical.com/docs/cli/commands/service-token)
+- [infisical vault](https://infisical.com/docs/cli/commands/vault)
+- [infisical user](https://infisical.com/docs/cli/commands/user)
+- [infisical reset](https://infisical.com/docs/cli/commands/reset)
+- infisical scan
+- [Secret scanning](https://infisical.com/docs/cli/scanning-overview)
+- [Project config file](https://infisical.com/docs/cli/project-config)
+- [FAQ](https://infisical.com/docs/cli/faq)
+[Install](https://infisical.com/docs/cli/overview)
+[Quickstart](https://infisical.com/docs/cli/usage)
+- [infisical login](https://infisical.com/docs/cli/commands/login)
+- [infisical init](https://infisical.com/docs/cli/commands/init)
+- [infisical run](https://infisical.com/docs/cli/commands/run)
+- [infisical secrets](https://infisical.com/docs/cli/commands/secrets)
+- [infisical dynamic-secrets](https://infisical.com/docs/cli/commands/dynamic-secrets)
+- [infisical ssh](https://infisical.com/docs/cli/commands/ssh)
+- [infisical gateway](https://infisical.com/docs/cli/commands/gateway)
+- [infisical relay](https://infisical.com/docs/cli/commands/relay)
+- [infisical bootstrap](https://infisical.com/docs/cli/commands/bootstrap)
+- [infisical export](https://infisical.com/docs/cli/commands/export)
+- [infisical token](https://infisical.com/docs/cli/commands/token)
+- [infisical service-token](https://infisical.com/docs/cli/commands/service-token)
+- [infisical vault](https://infisical.com/docs/cli/commands/vault)
+- [infisical user](https://infisical.com/docs/cli/commands/user)
+- [infisical reset](https://infisical.com/docs/cli/commands/reset)
+- infisical scan
+[infisical login](https://infisical.com/docs/cli/commands/login)
+[infisical init](https://infisical.com/docs/cli/commands/init)
+
+[infisical run](https://infisical.com/docs/cli/commands/run)
+[infisical secrets](https://infisical.com/docs/cli/commands/secrets)
+[infisical dynamic-secrets](https://infisical.com/docs/cli/commands/dynamic-secrets)
+[infisical ssh](https://infisical.com/docs/cli/commands/ssh)
+[infisical gateway](https://infisical.com/docs/cli/commands/gateway)
+[infisical relay](https://infisical.com/docs/cli/commands/relay)
+[infisical bootstrap](https://infisical.com/docs/cli/commands/bootstrap)
+[infisical export](https://infisical.com/docs/cli/commands/export)
+[infisical token](https://infisical.com/docs/cli/commands/token)
+[infisical service-token](https://infisical.com/docs/cli/commands/service-token)
+[infisical vault](https://infisical.com/docs/cli/commands/vault)
+[infisical user](https://infisical.com/docs/cli/commands/user)
+[infisical reset](https://infisical.com/docs/cli/commands/reset)
+[Secret scanning](https://infisical.com/docs/cli/scanning-overview)
+[Project config file](https://infisical.com/docs/cli/project-config)
+[FAQ](https://infisical.com/docs/cli/faq)
+- [Description](https://infisical.com/docs/cli/commands/export#description)
+- [Subcommands & flags](https://infisical.com/docs/cli/commands/export#subcommands-%26-flags)
+[Description](https://infisical.com/docs/cli/commands/export#description)
+[Subcommands & flags](https://infisical.com/docs/cli/commands/export#subcommands-%26-flags)
+
+# infisical export
+
+Export Infisical secrets from CLI into different file formats
+
+```
+infisical export [options]
+```
+
+
+```
+infisical export [options]
+```
+
+## [​](https://infisical.com/docs/cli/commands/export#description)Description
+[​](https://infisical.com/docs/cli/commands/export#description)
+
+```
+--output-file
+```
+
+## [​](https://infisical.com/docs/cli/commands/export#subcommands-&-flags)Subcommands & flags
+[​](https://infisical.com/docs/cli/commands/export#subcommands-&-flags)
+infisical export
+
+```
+$ infisical export # Export variables to a .env file infisical export > .env infisical export --output-file=./.env # Export variables to a .env file (with export keyword) infisical export --format=dotenv-export > .env infisical export --format=dotenv-export --output-file=./.env # Export variables to a JSON file infisical export --format=json > secrets.json infisical export --format=json --output-file=./secrets.json # Export variables to a YAML file infisical export --format=yaml > secrets.yaml infisical export --format=yaml --output-file=./secrets.yaml # Render secrets using a custom template file infisical export --template=<path to template>
+```
+
+
+```
+$ infisical export # Export variables to a .env file infisical export > .env infisical export --output-file=./.env # Export variables to a .env file (with export keyword) infisical export --format=dotenv-export > .env infisical export --format=dotenv-export --output-file=./.env # Export variables to a JSON file infisical export --format=json > secrets.json infisical export --format=json --output-file=./secrets.json # Export variables to a YAML file infisical export --format=yaml > secrets.yaml infisical export --format=yaml --output-file=./secrets.yaml # Render secrets using a custom template file infisical export --template=<path to template>
+```
+
+### [​](https://infisical.com/docs/cli/commands/export#environment-variables)Environment variables
+
+[​](https://infisical.com/docs/cli/commands/export#environment-variables)
+INFISICAL_TOKEN
+[machine identities](https://infisical.com/docs/documentation/platform/identities/machine-identities)
+
+```
+# Example export INFISICAL_TOKEN=$(infisical login --method=universal-auth --client-id=<identity-client-id> --client-secret=<identity-client-secret> --silent --plain) # --plain flag will output only the token, so it can be fed to an environment variable. --silent will disable any update messages.
+```
+
+
+```
+# Example export INFISICAL_TOKEN=$(infisical login --method=universal-auth --client-id=<identity-client-id> --client-secret=<identity-client-secret> --silent --plain) # --plain flag will output only the token, so it can be fed to an environment variable. --silent will disable any update messages.
+```
+
+
+```
+# Example export INFISICAL_TOKEN=<service-token>
+```
+
+
+```
+# Example export INFISICAL_TOKEN=<service-token>
+```
+
+INFISICAL_DISABLE_UPDATE_CHECK
+
+```
+# Example export INFISICAL_DISABLE_UPDATE_CHECK=true
+```
+
+
+```
+# Example export INFISICAL_DISABLE_UPDATE_CHECK=true
+```
+
+### [​](https://infisical.com/docs/cli/commands/export#flags)flags
+
+[​](https://infisical.com/docs/cli/commands/export#flags)
+--output-file
+
+```
+# Export to specific file infisical export --format=json --output-file=./secrets.json # Export to directory (uses default filename based on format) infisical export --format=yaml --output-file=./
+```
+
+
+```
+# Export to specific file infisical export --format=json --output-file=./secrets.json # Export to directory (uses default filename based on format) infisical export --format=yaml --output-file=./
+```
+
+
+```
+--output-file
+```
+
+- Secrets are saved directly to the specified file
+- A success message is displayed showing the file path
+- For directories: adds default filename secrets.{format} (e.g., secrets.json, secrets.yaml)
+- For dotenv formats in directories: uses .env as the filename
+
+```
+secrets.{format}
+```
+
+
+```
+secrets.json
+```
+
+
+```
+secrets.yaml
+```
+
+
+```
+.env
+```
+
+
+```
+--output-file
+```
+
+- Output is sent to stdout (standard output)
+- You can use shell redirection like infisical export > secrets.json
+- Maintains backwards compatibility with existing scripts
+
+```
+infisical export > secrets.json
+```
+
+--template
+
+```
+--template
+```
+
+
+```
+{{$secrets := secret "<infisical-project-id>" "<environment-slug>" "<folder-path>"}} {{$length := len $secrets}} {{- "{"}} {{- with $secrets }} {{- range $index, $secret := . }} "{{ $secret.Key }}": "{{ $secret.Value }}"{{if lt $index (minus $length 1)}},{{end}} {{- end }} {{- end }} {{ "}" -}}
+```
+
+
+```
+{{$secrets := secret "<infisical-project-id>" "<environment-slug>" "<folder-path>"}} {{$length := len $secrets}} {{- "{"}} {{- with $secrets }} {{- range $index, $secret := . }} "{{ $secret.Key }}": "{{ $secret.Value }}"{{if lt $index (minus $length 1)}},{{end}} {{- end }} {{- end }} {{ "}" -}}
+```
+
+
+```
+# Example infisical export --template="/path/to/template/file"
+```
+
+
+```
+# Example infisical export --template="/path/to/template/file"
+```
+
+--env
+
+```
+# Example infisical export --env=prod
+```
+
+
+```
+# Example infisical export --env=prod
+```
+
+
+```
+dev
+```
+
+--projectId
+
+```
+.infisical.json
+```
+
+
+```
+# Example infisical export --projectId=XXXXXXXXXXXXXX
+```
+
+
+```
+# Example infisical export --projectId=XXXXXXXXXXXXXX
+```
+
+--expand
+
+```
+${DOMAIN}
+```
+
+
+```
+true
+```
+
+--include-imports
+
+```
+true
+```
+
+--format
+
+```
+dotenv
+```
+
+
+```
+dotenv-export
+```
+
+
+```
+csv
+```
+
+
+```
+json
+```
+
+
+```
+yaml
+```
+
+
+```
+dotenv
+```
+
+--secret-overriding
+
+```
+true
+```
+
+--path
+
+```
+--path
+```
+
+
+```
+# Example infisical export --path="/path/to/folder" --env=dev
+```
+
+
+```
+# Example infisical export --path="/path/to/folder" --env=dev
+```
+
+--tags
+
+```
+# Example infisical export --tags=tag1,tag2,tag3 --env=dev
+```
+
+
+```
+# Example infisical export --tags=tag1,tag2,tag3 --env=dev
+```
+
+Was this page helpful?
+[Suggest edits](https://github.com/infisical/infisical/edit/main/docs/cli/commands/export.mdx)
+[Raise issue](https://github.com/infisical/infisical/issues/new?title=Issue on docs&body=Path: /cli/commands/export)
+[infisical bootstrap](https://infisical.com/docs/cli/commands/bootstrap)
+[infisical token](https://infisical.com/docs/cli/commands/token)
+[Infisical home page](https://infisical.com)
+[x](https://www.twitter.com/infisical/)
+[linkedin](https://www.linkedin.com/company/infisical/)
+[github](https://github.com/Infisical/infisical-cli)
+[slack](https://infisical.com/slack)
+PRODUCT
+[Secret Management](https://infisical.com/)
+[Secret Scanning](https://infisical.com/radar)
+[Share Secrets](https://app.infisical.com/share-secret)
+[Pricing](https://infisical.com/pricing)
+[Security](https://infisical.com/docs/internals/security)
+[Blog](https://infisical.com/blog)
+[Infisical vs Vault](https://infisical.com/infisical-vs-hashicorp-vault)
+[Forum](https://questions.infisical.com/)
+USE CASES
+[Infisical Agent](https://infisical.com/docs/documentation/getting-started/introduction)
+[Kubernetes](https://infisical.com/docs/integrations/platforms/kubernetes)
+[Dynamic Secrets](https://infisical.com/docs/documentation/platform/dynamic-secrets/overview)
+[Terraform](https://registry.terraform.io/providers/Infisical/infisical/latest/docs)
+[Ansible](https://infisical.com/docs/integrations/platforms/ansible)
+[Jenkins](https://infisical.com/docs/integrations/cicd/jenkins)
+[Docker](https://infisical.com/docs/integrations/platforms/docker-intro)
+[AWS ECS](https://infisical.com/docs/integrations/platforms/ecs-with-agent)
+[GitLab](https://infisical.com/docs/integrations/cicd/gitlab)
+[GitHub](https://infisical.com/docs/integrations/cicd/githubactions)
+
+### [​](https://infisical.com/docs/cli/commands/export#flags)flags
+
+[SDK](https://infisical.com/docs/sdks/overview)
+DEVELOPERS
+[Changelog](https://www.infisical.com/docs/changelog)
+[Status](https://status.infisical.com/)
+[Feedback & Requests](https://github.com/Infisical/infisical/issues)
+[Trust of Center](https://app.vanta.com/infisical.com/trust/hoop8cr78cuarxo9sztvs)
+[Open Source Friends](https://infisical.com/infisical-friends)
+[How to contribute](https://www.infisical.com/infisical-heroes)
+OTHERS
+[Customers](https://infisical.com/customers/traba)
+[Company Handbook](https://infisical.com/wiki/handbook/overview)
+[Careers](https://infisical.com/careers)
+[Terms of Service](https://infisical.com/terms)
+[Privacy Policy](https://infisical.com/privacy)
+[Subprocessors](https://infisical.com/subprocessors)
+[SLA](https://infisical.com/sla)
+[Team Email](https://infisical.com/cdn-cgi/l/email-protection#aedacbcfc3eec7c0c8c7ddc7cdcfc280cdc1c3)
+[Sales](https://infisical.com/cdn-cgi/l/email-protection#8bf8eae7eef8cbe2e5ede2f8e2e8eae7a5e8e4e6)
+[Support](https://infisical.com/slack)
+[Powered by](https://www.mintlify.com?utm_campaign=poweredBy&utm_medium=referral&utm_source=infisical)

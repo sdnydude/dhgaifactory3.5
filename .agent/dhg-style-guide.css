@@ -1,0 +1,83 @@
+/*
+ * Digital Harmony Group - Color & Style Guide
+ * ============================================
+ * Use these CSS variables for ALL DHG work.
+ * Supports both light and dark modes.
+ */
+
+:root {
+  /* Light Mode (default) */
+  --dhg-background:       #FAF9F7;
+  --dhg-surface:          #FFFFFF;
+  --dhg-surface-elevated: #FFFFFF;
+  --dhg-input-bg:         #FFFFFF;
+  --dhg-input-text:       #32374A;
+  --dhg-text-primary:     #32374A;
+  --dhg-text-secondary:   #71717A;
+  --dhg-text-placeholder: #A1A1AA;
+  --dhg-border:           #E4E4E7;
+  --dhg-border-focus:     #663399;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Dark Mode */
+    --dhg-background:       #1A1D24;
+    --dhg-surface:          #27272A;
+    --dhg-surface-elevated: #32374A;
+    --dhg-input-bg:         #27272A;
+    --dhg-input-text:       #FAF9F7;
+    --dhg-text-primary:     #FAF9F7;
+    --dhg-text-secondary:   #A1A1AA;
+    --dhg-text-placeholder: #71717A;
+    --dhg-border:           #3F3F46;
+    --dhg-border-focus:     #A78BFA;
+  }
+}
+
+/* Manual dark mode toggle class */
+[data-theme="dark"] {
+  --dhg-background:       #1A1D24;
+  --dhg-surface:          #27272A;
+  --dhg-surface-elevated: #32374A;
+  --dhg-input-bg:         #27272A;
+  --dhg-input-text:       #FAF9F7;
+  --dhg-text-primary:     #FAF9F7;
+  --dhg-text-secondary:   #A1A1AA;
+  --dhg-text-placeholder: #71717A;
+  --dhg-border:           #3F3F46;
+  --dhg-border-focus:     #A78BFA;
+}
+
+/* Apply to inputs */
+input, textarea, select {
+  background-color: var(--dhg-input-bg);
+  color: var(--dhg-input-text);
+  border: 1px solid var(--dhg-border);
+}
+
+input::placeholder, textarea::placeholder {
+  color: var(--dhg-text-placeholder);
+}
+
+/*
+ * Color Reference Quick Guide
+ * ===========================
+ * 
+ * LIGHT MODE:
+ * - Background:    #FAF9F7 (warm off-white)
+ * - Surface:       #FFFFFF (pure white)
+ * - Text Primary:  #32374A (dark blue-gray)
+ * - Text Secondary:#71717A (medium gray)
+ * - Border:        #E4E4E7 (light gray)
+ * - Focus:         #663399 (purple)
+ * 
+ * DARK MODE:
+ * - Background:    #1A1D24 (dark blue-black)
+ * - Surface:       #27272A (dark gray)
+ * - Elevated:      #32374A (medium dark)
+ * - Text Primary:  #FAF9F7 (warm white)
+ * - Text Secondary:#A1A1AA (light gray)
+ * - Border:        #3F3F46 (medium gray)
+ * - Focus:         #A78BFA (light purple)
+ */
