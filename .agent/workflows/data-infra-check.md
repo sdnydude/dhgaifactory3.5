@@ -42,7 +42,7 @@ docker ps --format "{{.Names}}" | grep redis | while read name; do docker exec $
 ### RAGFlow
 ```bash
 echo "=== RAGFlow ===" && \
-curl -s -o /dev/null -w "%{http_code}" http://localhost:8585 | grep -q "200\|302" && echo "✅ RAGFlow UI (port 8585): Accessible" || echo "❌ RAGFlow UI: Not accessible" && \
+curl -s -o /dev/null -w "%{http_code}" http://localhost:8585 | grep -qE "200|302|307" && echo "✅ RAGFlow UI (port 8585): Accessible" || echo "❌ RAGFlow UI: Not accessible" && \
 echo "RAGFlow Containers:" && \
 docker ps --format "table {{.Names}}\t{{.Status}}" | grep -E "ragflow|es01|minio"
 ```
@@ -50,7 +50,7 @@ docker ps --format "table {{.Names}}\t{{.Status}}" | grep -E "ragflow|es01|minio
 ### Dify (RAG + Workflows)
 ```bash
 echo "=== Dify ===" && \
-curl -s -o /dev/null -w "%{http_code}" http://localhost:3000 | grep -q "200\|302" && echo "✅ Dify UI (port 3000): Accessible" || echo "❌ Dify UI: Not accessible" && \
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3000 | grep -qE "200|302|307" && echo "✅ Dify UI (port 3000): Accessible" || echo "❌ Dify UI: Not accessible" && \
 echo "Dify Containers:" && \
 docker ps --format "table {{.Names}}\t{{.Status}}" | grep -E "docker-(api|worker|web|nginx|sandbox|plugin)"
 ```
@@ -80,7 +80,7 @@ echo "Console: http://10.0.0.251:9011"
 ### Infisical
 ```bash
 echo "=== Infisical Secrets ===" && \
-curl -s -o /dev/null -w "%{http_code}" http://localhost:8089 | grep -q "200\|302" && echo "✅ Infisical (port 8089): Accessible" || echo "❌ Infisical: Not accessible" && \
+curl -s -o /dev/null -w "%{http_code}" http://localhost:8089 | grep -qE "200|302|307" && echo "✅ Infisical (port 8089): Accessible" || echo "❌ Infisical: Not accessible" && \
 echo "URL: https://secrets.digitalharmonyai.com"
 ```
 
