@@ -108,8 +108,8 @@ def find_antigravity_process():
 
 
 def call_api(port, csrf_token, method, params=None):
-    """Call the LanguageServerService API."""
-    url = f"http://localhost:{port}/exa.language_server_pb.LanguageServerService/{method}"
+    """Call the LanguageServerService API (HTTPS with self-signed cert)."""
+    url = f"https://localhost:{port}/exa.language_server_pb.LanguageServerService/{method}"
     
     headers = {
         "Content-Type": "application/json",
@@ -119,7 +119,8 @@ def call_api(port, csrf_token, method, params=None):
     
     data = params or {}
     
-    response = requests.post(url, headers=headers, json=data)
+    # verify=False for self-signed localhost cert
+    response = requests.post(url, headers=headers, json=data, verify=False)
     
     if response.status_code != 200:
         print(f"ERROR: API call failed - {response.status_code}")
@@ -135,7 +136,19 @@ def get_all_trajectories(port, csrf_token):
     if not result:
         return []
     
-    trajectories = result.get("trajectories", result.get("cascades", []))
+    # Response is trajectorySummaries dict with cascade_id as key
+    summaries = result.get("trajectorySummaries", {})
+    trajectories = []
+    for cascade_id, data in summaries.items():
+        trajectories.append({
+            "id": cascade_id,
+            "trajectoryId": data.get("trajectoryId", cascade_id),
+            "title": data.get("summary", f"Session"),
+            "stepCount": data.get("stepCount", 0),
+            "createdTime": data.get("createdTime"),
+            "lastModifiedTime": data.get("lastModifiedTime")
+        })
+    
     print(f"Found {len(trajectories)} conversations")
     return trajectories
 
@@ -159,29 +172,60 @@ def export_sessions(port, csrf_token, output_path):
     
     sessions = []
     for i, traj in enumerate(trajectories):
-        cascade_id = traj.get("id", traj.get("cascadeId"))
-        title = traj.get("title", traj.get("name", f"Session {i+1}"))
+        # The dict key from trajectorySummaries IS the cascadeId
+        cascade_id = traj.get("id")
+        title = traj.get("title", f"Session {i+1}")
+        step_count = traj.get("stepCount", 1000)
         
-        print(f"  [{i+1}/{len(trajectories)}] Exporting: {title[:50]}...")
+        print(f"  [{i+1}/{len(trajectories)}] Exporting: {title[:50]}... ({step_count} steps)")
         
-        steps = get_trajectory_steps(port, csrf_token, cascade_id)
+        # Fetch steps using the cascadeId
+        steps = get_trajectory_steps(port, csrf_token, cascade_id, 0, step_count + 10)
         
         messages = []
         for step in steps:
-            # Map to expected format
-            role = step.get("role", "unknown")
-            content = step.get("content", step.get("text", ""))
+            step_type = step.get("type", "")
             
-            # Normalize role names
-            if role.lower() in ["user", "human"]:
-                role = "user"
-            elif role.lower() in ["assistant", "model", "ai"]:
-                role = "assistant"
+            # Parse user input steps
+            if step_type == "CORTEX_STEP_TYPE_USER_INPUT":
+                user_input = step.get("userInput", {})
+                content = user_input.get("userResponse", "")
+                if content:
+                    messages.append({
+                        "role": "user",
+                        "content": content
+                    })
             
-            messages.append({
-                "role": role,
-                "content": content
-            })
+            # Parse tool calls (assistant actions)
+            elif step_type == "CORTEX_STEP_TYPE_TOOL_CALL":
+                tool_call = step.get("metadata", {}).get("toolCall", {})
+                tool_name = tool_call.get("name", "")
+                args_json = tool_call.get("argumentsJson", "")
+                if tool_name:
+                    messages.append({
+                        "role": "assistant",
+                        "content": f"[Tool: {tool_name}]\n{args_json[:500]}"
+                    })
+            
+            # Parse notify_user (assistant message to user)
+            elif step_type == "CORTEX_STEP_TYPE_NOTIFY_USER":
+                notify = step.get("notifyUser", {})
+                content = notify.get("message", "")
+                if content:
+                    messages.append({
+                        "role": "assistant",
+                        "content": content
+                    })
+            
+            # Parse conversation history (context)
+            elif step_type == "CORTEX_STEP_TYPE_CONVERSATION_HISTORY":
+                history = step.get("conversationHistory", {})
+                content = history.get("content", "")
+                if content and len(content) > 50:  # Skip empty/short
+                    messages.append({
+                        "role": "system",
+                        "content": f"[Conversation History]\n{content[:2000]}..."
+                    })
         
         sessions.append({
             "session_id": cascade_id,
