@@ -64,7 +64,7 @@ The Phase 1 plan listed 12+ containers:
 
 ---
 
-## Recommendations: Build on Existing, Dont Recreate
+## Recommendations: Build on Existing, Don't Recreate
 
 ### Use As-Is
 - `prometheus.yml` structure (add missing exporters)
@@ -86,8 +86,8 @@ Before finalizing compose, need to run these commands on .251:
 ```bash
 # Docker network topology
 docker network ls
-docker inspect dhg-registry-db --format="{{json .NetworkSettings.Networks}}" | jq
-docker inspect docker-mysql-1 --format="{{json .NetworkSettings.Networks}}" | jq
+docker inspect dhg-registry-db --format='{{json .NetworkSettings.Networks}}' | jq
+docker inspect docker-mysql-1 --format='{{json .NetworkSettings.Networks}}' | jq
 
 # Verify ports
 docker port docker-es01-1
