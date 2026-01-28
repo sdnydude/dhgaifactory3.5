@@ -1,73 +1,81 @@
 #!/usr/bin/env python3
-"""
-Ingest Antigravity markdown artifacts into CR database.
-"""
+"""Ingest Antigravity artifacts into CR database"""
 
 import os
+import sys
+import logging
 import json
-import hashlib
+import psycopg2
 from pathlib import Path
-from datetime import datetime
 
-# Configuration
-BACKUP_PATH = "/home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/swincoming/antigravity-backup-2026-01-26.zip/backup-2026-01-26T18-09-30-502Z/brain"
-OUTPUT_JSON = "/home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/swincoming/antigravity_artifacts.json"
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s"
+)
+logger = logging.getLogger(__name__)
 
-def extract_metadata(filepath):
-    """Extract metadata from markdown file."""
-    with open(filepath, "r", encoding="utf-8") as f:
-        content = f.read()
-    
-    # Get filename and session info
-    path = Path(filepath)
-    session_id = path.parent.name
-    filename = path.name
-    
-    # Calculate content hash
-    content_hash = hashlib.md5(content.encode()).hexdigest()
-    
-    return {
-        "session_id": session_id,
-        "filename": filename,
-        "filepath": str(filepath),
-        "content": content,
-        "content_hash": content_hash,
-        "char_count": len(content),
-        "line_count": content.count("\n") + 1,
-        "extracted_at": datetime.now().isoformat()
-    }
+def get_db_connection():
+    """Get database connection using environment variables."""
+    try:
+        conn = psycopg2.connect(
+            host=os.environ.get("DB_HOST", "localhost"),
+            database=os.environ.get("DB_NAME", "dhg_registry"),
+            user=os.environ.get("DB_USER", "dhg"),
+            password=os.environ.get("DB_PASSWORD", os.environ.get("PGPASSWORD"))
+        )
+        return conn
+    except Exception as e:
+        logger.error(f"Database connection failed: {e}")
+        raise
 
 def main():
-    brain_path = Path(BACKUP_PATH)
-    artifacts = []
+    """Main artifact ingestion function."""
+    if not os.environ.get("DB_PASSWORD") and not os.environ.get("PGPASSWORD"):
+        logger.error("DB_PASSWORD or PGPASSWORD environment variable required")
+        sys.exit(1)
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    # Find artifact files
+    artifacts_dir = Path("/home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/swincoming")
     
-    print(f"Scanning {brain_path}...")
-    
-    # Find all markdown files
-    for md_file in brain_path.rglob("*.md"):
-        # Skip resolved/metadata versions
-        if ".resolved" in str(md_file) or ".metadata" in str(md_file):
-            continue
+    if not artifacts_dir.exists():
+        logger.error(f"Artifacts directory not found: {artifacts_dir}")
+        sys.exit(1)
+
+    # Find markdown files
+    md_files = list(artifacts_dir.rglob("*.md"))
+    logger.info(f"Found {len(md_files)} markdown artifacts")
+
+    inserted = 0
+    try:
+        for md_file in md_files:
+            content = md_file.read_text(errors="ignore")
+            filename = md_file.name
+            filepath = str(md_file)
+            
+            cur.execute("""
+                INSERT INTO antigravity_artifacts (filename, filepath, content, file_type, source)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (filepath) DO UPDATE SET
+                    content = EXCLUDED.content,
+                    updated_at = NOW()
+            """, (filename, filepath, content, "markdown", "antigravity_export"))
+            
+            inserted += 1
+            
+        conn.commit()
+        logger.info(f"Done! Inserted/updated {inserted} artifacts.")
         
-        try:
-            artifact = extract_metadata(md_file)
-            artifacts.append(artifact)
-            print(f"  Extracted: {artifact[\"session_id\"]}/{artifact[\"filename\"]} ({artifact[\"char_count\"]} chars)")
-        except Exception as e:
-            print(f"  Error processing {md_file}: {e}")
-    
-    print(f"\nTotal: {len(artifacts)} artifacts")
-    
-    # Save to JSON
-    with open(OUTPUT_JSON, "w", encoding="utf-8") as f:
-        json.dump(artifacts, f, indent=2)
-    
-    print(f"Saved to {OUTPUT_JSON}")
-    
-    # Summary stats
-    total_chars = sum(a["char_count"] for a in artifacts)
-    print(f"Total content: {total_chars:,} characters")
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Error during artifact ingestion: {e}")
+        raise
+    finally:
+        cur.close()
+        conn.close()
 
 if __name__ == "__main__":
     main()
-SCRIPT'
