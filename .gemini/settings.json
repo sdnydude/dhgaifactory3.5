@@ -1,0 +1,27 @@
+{
+    "agentManagerEnabled": true,
+    "knowledge": {
+        "enabled": true,
+        "autoIndex": true,
+        "includePatterns": [
+            "**/*.md",
+            "**/*.py",
+            "**/*.json",
+            "**/*.yaml",
+            "**/*.yml",
+            ".agent/**/*"
+        ],
+        "excludePatterns": [
+            "node_modules/**",
+            ".git/**",
+            "__pycache__/**",
+            "*.pyc",
+            ".venv/**",
+            "venv/**"
+        ]
+    },
+    "memory": {
+        "enabled": true,
+        "persistAcrossSessions": true
+    }
+}

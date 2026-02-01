@@ -62,6 +62,19 @@ cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5 && docker compose ps --forma
 for port in 8002 8003 3010; do echo -n "Port $port: "; curl -s -o /dev/null -w "%{http_code}" http://localhost:$port/health 2>/dev/null || echo "N/A"; done
 ```
 
+## 6. Check Planning Files (If Complex Task)
+
+If this session involves a complex task (5+ tool calls expected):
+
+```bash
+ls -la task_plan.md findings.md progress.md 2>/dev/null || echo "No planning files found - create them if starting complex work"
+```
+
+If files exist, read them to recover context:
+```bash
+head -50 task_plan.md 2>/dev/null
+```
+
 ---
 
 ## After Running

@@ -1,0 +1,688 @@
+# DHG CME 12-Agent System - Intake Form Schema
+# =============================================
+# Complete specification for the 47-field intake form across 10 sections.
+# This schema validates input before pipeline execution begins.
+#
+# Usage:
+#   - Frontend form generation
+#   - API request validation
+#   - Documentation reference
+
+openapi: "3.0.0"
+info:
+  title: DHG CME Grant Intake Form
+  version: "2.0"
+  description: |
+    47-field intake form that initiates the 12-agent CME grant generation pipeline.
+    All fields feed into agent state and influence downstream document generation.
+
+# =============================================================================
+# SCHEMA DEFINITIONS
+# =============================================================================
+
+components:
+  schemas:
+    
+    # -------------------------------------------------------------------------
+    # Section A: Project Basics (5 fields)
+    # -------------------------------------------------------------------------
+    SectionA_ProjectBasics:
+      type: object
+      description: "Core project identification and scope"
+      required:
+        - project_name
+        - therapeutic_area
+        - disease_state
+        - target_audience_primary
+      properties:
+        project_name:
+          type: string
+          description: "Human-readable project identifier"
+          minLength: 5
+          maxLength: 200
+          example: "SGLT2 Inhibitors in Heart Failure: Bridging Evidence to Practice"
+        
+        therapeutic_area:
+          type: string
+          description: "Broad medical category"
+          enum:
+            - Cardiology
+            - Oncology
+            - Neurology
+            - Endocrinology
+            - Immunology
+            - Infectious Disease
+            - Pulmonology
+            - Gastroenterology
+            - Nephrology
+            - Hematology
+            - Dermatology
+            - Rheumatology
+            - Psychiatry
+            - Other
+          example: "Cardiology"
+        
+        disease_state:
+          type: string
+          description: "Specific condition or disease focus"
+          minLength: 3
+          maxLength: 200
+          example: "Heart Failure with Reduced Ejection Fraction (HFrEF)"
+        
+        target_audience_primary:
+          type: array
+          description: "Primary HCP specialties for this activity"
+          minItems: 1
+          maxItems: 5
+          items:
+            type: string
+            enum:
+              - Cardiologists
+              - Primary Care Physicians
+              - Internal Medicine
+              - Family Medicine
+              - Nurse Practitioners
+              - Physician Assistants
+              - Pharmacists
+              - Nurses
+              - Endocrinologists
+              - Oncologists
+              - Neurologists
+              - Emergency Medicine
+              - Hospitalists
+              - Other Specialists
+          example: ["Cardiologists", "Internal Medicine", "Primary Care Physicians"]
+        
+        target_audience_secondary:
+          type: array
+          description: "Secondary HCP audience (optional)"
+          maxItems: 3
+          items:
+            type: string
+          example: ["Pharmacists", "Nurse Practitioners"]
+    
+    # -------------------------------------------------------------------------
+    # Section B: Educational Context (6 fields)
+    # -------------------------------------------------------------------------
+    SectionB_EducationalContext:
+      type: object
+      description: "Educational needs and desired outcomes"
+      required:
+        - identified_gaps
+        - gap_evidence_sources
+        - desired_outcomes
+        - moore_level_target
+        - practice_change_goals
+        - patient_impact_goals
+      properties:
+        identified_gaps:
+          type: array
+          description: "Known or suspected educational gaps to address"
+          minItems: 1
+          maxItems: 8
+          items:
+            type: string
+            minLength: 20
+            maxLength: 500
+          example:
+            - "Clinicians underutilize SGLT2 inhibitors despite guideline recommendations"
+            - "Knowledge gaps exist regarding patient selection criteria"
+            - "Monitoring protocols are inconsistently implemented"
+        
+        gap_evidence_sources:
+          type: array
+          description: "Sources supporting identified gaps"
+          minItems: 1
+          items:
+            type: string
+            enum:
+              - Published literature
+              - Registry data
+              - Claims analysis
+              - Practice surveys
+              - Prior needs assessment
+              - Advisory board input
+              - Guideline updates
+              - Quality metrics
+              - Other
+          example: ["Published literature", "Registry data", "Practice surveys"]
+        
+        desired_outcomes:
+          type: array
+          description: "What learners should be able to do after the activity"
+          minItems: 2
+          maxItems: 6
+          items:
+            type: string
+            minLength: 20
+            maxLength: 300
+          example:
+            - "Identify appropriate candidates for SGLT2 inhibitor therapy"
+            - "Initiate therapy using evidence-based protocols"
+            - "Implement monitoring strategies for safety and efficacy"
+        
+        moore_level_target:
+          type: string
+          description: "Primary Moore's Framework outcome level target"
+          enum:
+            - "3a"  # Declarative Knowledge
+            - "3b"  # Procedural Knowledge
+            - "4"   # Competence
+            - "5"   # Performance
+            - "6"   # Patient Health (rare)
+          default: "5"
+          example: "5"
+        
+        practice_change_goals:
+          type: array
+          description: "Specific practice changes expected from education"
+          minItems: 1
+          maxItems: 5
+          items:
+            type: string
+            minLength: 20
+            maxLength: 300
+          example:
+            - "Increase SGLT2i prescribing rate in eligible HFrEF patients by 25%"
+            - "Reduce time from diagnosis to therapy initiation"
+        
+        patient_impact_goals:
+          type: array
+          description: "Expected downstream effects on patient outcomes"
+          minItems: 1
+          maxItems: 3
+          items:
+            type: string
+            minLength: 20
+            maxLength: 300
+          example:
+            - "Reduce heart failure hospitalizations"
+            - "Improve quality of life metrics"
+    
+    # -------------------------------------------------------------------------
+    # Section C: Commercial Supporter Information (4 fields)
+    # -------------------------------------------------------------------------
+    SectionC_SupporterInfo:
+      type: object
+      description: "Commercial support and funding context"
+      required:
+        - supporter_company
+        - supporter_products
+        - supporter_therapeutic_focus
+        - grant_amount_requested
+      properties:
+        supporter_company:
+          type: string
+          description: "Name of commercial supporter"
+          minLength: 2
+          maxLength: 100
+          example: "AstraZeneca"
+        
+        supporter_products:
+          type: array
+          description: "Supporter's relevant products in this therapeutic area"
+          minItems: 1
+          maxItems: 5
+          items:
+            type: string
+          example: ["Farxiga (dapagliflozin)"]
+        
+        supporter_therapeutic_focus:
+          type: string
+          description: "Supporter's strategic interest in this area"
+          minLength: 20
+          maxLength: 500
+          example: "SGLT2 inhibition for cardiorenal protection in heart failure"
+        
+        grant_amount_requested:
+          type: number
+          description: "Requested funding amount in USD"
+          minimum: 10000
+          maximum: 5000000
+          example: 350000
+    
+    # -------------------------------------------------------------------------
+    # Section D: Activity Format (5 fields)
+    # -------------------------------------------------------------------------
+    SectionD_ActivityFormat:
+      type: object
+      description: "Educational format and delivery specifications"
+      required:
+        - format_type
+        - format_details
+        - duration_hours
+        - credits_requested
+      properties:
+        format_type:
+          type: string
+          description: "Primary activity format"
+          enum:
+            - live
+            - enduring
+            - blended
+            - series
+          example: "blended"
+        
+        format_details:
+          type: string
+          description: "Detailed format description"
+          minLength: 50
+          maxLength: 1000
+          example: "2-hour live virtual symposium with 3 expert faculty, followed by 4 enduring case-based modules (15 minutes each) over 8 weeks"
+        
+        duration_hours:
+          type: number
+          description: "Total learner engagement time in hours"
+          minimum: 0.25
+          maximum: 40
+          example: 3.0
+        
+        credits_requested:
+          type: number
+          description: "CME/CE credits to be awarded"
+          minimum: 0.25
+          maximum: 40
+          example: 3.0
+        
+        delivery_platform:
+          type: string
+          description: "Platform for content delivery (optional)"
+          maxLength: 200
+          example: "Custom LMS with Zoom integration for live component"
+    
+    # -------------------------------------------------------------------------
+    # Section E: Accreditation (4 fields)
+    # -------------------------------------------------------------------------
+    SectionE_Accreditation:
+      type: object
+      description: "Accreditation requirements and compliance"
+      required:
+        - accreditation_types
+        - joint_accreditation
+        - moc_points_requested
+        - off_label_content
+      properties:
+        accreditation_types:
+          type: array
+          description: "Credit types to be offered"
+          minItems: 1
+          items:
+            type: string
+            enum:
+              - "AMA PRA Category 1"
+              - "ANCC"
+              - "ACPE"
+              - "AAPA"
+              - "AAFP"
+              - "APA"
+              - "CDR"
+              - "Other"
+          example: ["AMA PRA Category 1", "ANCC", "ACPE"]
+        
+        joint_accreditation:
+          type: boolean
+          description: "Whether joint accreditation (IPCE) is requested"
+          default: false
+          example: true
+        
+        moc_points_requested:
+          type: boolean
+          description: "Whether ABMS MOC points are requested"
+          default: false
+          example: true
+        
+        off_label_content:
+          type: boolean
+          description: "Whether off-label use will be discussed"
+          default: false
+          example: false
+    
+    # -------------------------------------------------------------------------
+    # Section F: Clinical Content Focus (6 fields)
+    # -------------------------------------------------------------------------
+    SectionF_ClinicalContent:
+      type: object
+      description: "Clinical and scientific content specifications"
+      required:
+        - key_clinical_topics
+        - treatment_focus
+        - competitor_products
+        - guideline_references
+      properties:
+        key_clinical_topics:
+          type: array
+          description: "Primary clinical topics to be addressed"
+          minItems: 2
+          maxItems: 10
+          items:
+            type: string
+            minLength: 5
+            maxLength: 200
+          example:
+            - "Mechanism of action of SGLT2 inhibitors in heart failure"
+            - "Patient selection and candidacy assessment"
+            - "Initiation and titration protocols"
+            - "Safety monitoring and management"
+        
+        treatment_focus:
+          type: array
+          description: "Treatment modalities to be discussed"
+          minItems: 1
+          maxItems: 10
+          items:
+            type: string
+          example:
+            - "SGLT2 inhibitors"
+            - "Guideline-directed medical therapy"
+            - "Combination strategies"
+        
+        competitor_products:
+          type: array
+          description: "Competitor products that should be included for fair balance"
+          items:
+            type: string
+          example:
+            - "Jardiance (empagliflozin)"
+            - "Invokana (canagliflozin)"
+        
+        guideline_references:
+          type: array
+          description: "Key guidelines to be referenced"
+          minItems: 1
+          items:
+            type: string
+          example:
+            - "2022 AHA/ACC/HFSA Heart Failure Guidelines"
+            - "2023 ESC Guidelines for Heart Failure"
+        
+        emerging_data:
+          type: string
+          description: "Emerging data or trials to incorporate (optional)"
+          maxLength: 500
+          example: "DELIVER trial subgroup analyses, EMPULSE trial data"
+        
+        controversy_areas:
+          type: array
+          description: "Areas of clinical controversy or debate (optional)"
+          items:
+            type: string
+          example:
+            - "Use in HFpEF vs HFrEF"
+            - "Timing of initiation (inpatient vs outpatient)"
+    
+    # -------------------------------------------------------------------------
+    # Section G: Faculty Specifications (4 fields)
+    # -------------------------------------------------------------------------
+    SectionG_FacultySpecs:
+      type: object
+      description: "Faculty requirements and specifications"
+      required:
+        - faculty_count
+        - specialty_requirements
+        - geographic_diversity
+        - kol_level
+      properties:
+        faculty_count:
+          type: integer
+          description: "Number of faculty needed"
+          minimum: 1
+          maximum: 10
+          example: 3
+        
+        specialty_requirements:
+          type: array
+          description: "Required specialties among faculty"
+          minItems: 1
+          items:
+            type: string
+          example:
+            - "Advanced Heart Failure Cardiology"
+            - "General Cardiology"
+            - "Clinical Pharmacy"
+        
+        geographic_diversity:
+          type: boolean
+          description: "Whether geographic diversity is required"
+          default: true
+          example: true
+        
+        kol_level:
+          type: string
+          description: "Level of key opinion leader required"
+          enum:
+            - national
+            - regional
+            - community
+          default: "national"
+          example: "national"
+    
+    # -------------------------------------------------------------------------
+    # Section H: Target Audience Details (5 fields)
+    # -------------------------------------------------------------------------
+    SectionH_AudienceDetails:
+      type: object
+      description: "Detailed audience characteristics"
+      required:
+        - audience_size_target
+        - practice_settings
+        - experience_level
+        - prior_knowledge_assumed
+      properties:
+        audience_size_target:
+          type: integer
+          description: "Target number of learners"
+          minimum: 50
+          maximum: 100000
+          example: 2500
+        
+        practice_settings:
+          type: array
+          description: "Practice settings of target audience"
+          minItems: 1
+          items:
+            type: string
+            enum:
+              - Academic Medical Center
+              - Community Hospital
+              - Private Practice
+              - Health System
+              - VA/Military
+              - FQHC
+              - Retail Pharmacy
+              - Other
+          example: ["Community Hospital", "Private Practice", "Health System"]
+        
+        experience_level:
+          type: string
+          description: "General experience level of target audience"
+          enum:
+            - early_career
+            - mid_career
+            - experienced
+            - mixed
+          default: "mixed"
+          example: "mixed"
+        
+        geographic_focus:
+          type: string
+          description: "Geographic targeting (optional)"
+          maxLength: 200
+          example: "Nationwide with emphasis on underserved regions"
+        
+        prior_knowledge_assumed:
+          type: string
+          description: "Baseline knowledge expected of learners"
+          minLength: 20
+          maxLength: 500
+          example: "Familiarity with heart failure pathophysiology and current GDMT; no prior SGLT2i experience required"
+    
+    # -------------------------------------------------------------------------
+    # Section I: Timeline (4 fields)
+    # -------------------------------------------------------------------------
+    SectionI_Timeline:
+      type: object
+      description: "Project timeline and milestones"
+      required:
+        - submission_deadline
+        - target_launch_date
+        - grant_period_months
+      properties:
+        submission_deadline:
+          type: string
+          format: date
+          description: "Grant submission deadline"
+          example: "2025-03-15"
+        
+        target_launch_date:
+          type: string
+          format: date
+          description: "Target activity launch date"
+          example: "2025-07-01"
+        
+        grant_period_months:
+          type: integer
+          description: "Grant performance period in months"
+          minimum: 3
+          maximum: 36
+          example: 12
+        
+        milestone_dates:
+          type: object
+          description: "Key milestone dates (optional)"
+          additionalProperties:
+            type: string
+            format: date
+          example:
+            content_development_complete: "2025-05-01"
+            faculty_confirmed: "2025-04-15"
+            pilot_launch: "2025-06-15"
+    
+    # -------------------------------------------------------------------------
+    # Section J: Special Requirements (4 fields)
+    # -------------------------------------------------------------------------
+    SectionJ_SpecialRequirements:
+      type: object
+      description: "Special requirements and constraints"
+      required:
+        - health_equity_focus
+      properties:
+        health_equity_focus:
+          type: boolean
+          description: "Whether health equity is a focus area"
+          default: false
+          example: true
+        
+        health_equity_populations:
+          type: array
+          description: "Specific populations for health equity focus (if applicable)"
+          items:
+            type: string
+          example:
+            - "African American patients with HF"
+            - "Rural communities"
+            - "Underinsured populations"
+        
+        innovation_requirements:
+          type: string
+          description: "Specific innovation requirements from supporter (optional)"
+          maxLength: 1000
+          example: "Must include AI-driven case simulation component and gamified assessment"
+        
+        supporter_restrictions:
+          type: string
+          description: "Any restrictions from supporter (optional)"
+          maxLength: 500
+          example: "No direct comparison with competitor products in promotional materials"
+
+    # -------------------------------------------------------------------------
+    # Complete Intake Form
+    # -------------------------------------------------------------------------
+    IntakeForm:
+      type: object
+      description: "Complete 47-field intake form"
+      required:
+        - section_a
+        - section_b
+        - section_c
+        - section_d
+        - section_e
+        - section_f
+        - section_g
+        - section_h
+        - section_i
+        - section_j
+      properties:
+        section_a:
+          $ref: '#/components/schemas/SectionA_ProjectBasics'
+        section_b:
+          $ref: '#/components/schemas/SectionB_EducationalContext'
+        section_c:
+          $ref: '#/components/schemas/SectionC_SupporterInfo'
+        section_d:
+          $ref: '#/components/schemas/SectionD_ActivityFormat'
+        section_e:
+          $ref: '#/components/schemas/SectionE_Accreditation'
+        section_f:
+          $ref: '#/components/schemas/SectionF_ClinicalContent'
+        section_g:
+          $ref: '#/components/schemas/SectionG_FacultySpecs'
+        section_h:
+          $ref: '#/components/schemas/SectionH_AudienceDetails'
+        section_i:
+          $ref: '#/components/schemas/SectionI_Timeline'
+        section_j:
+          $ref: '#/components/schemas/SectionJ_SpecialRequirements'
+
+# =============================================================================
+# API ENDPOINT
+# =============================================================================
+
+paths:
+  /api/v2/intake:
+    post:
+      summary: Submit CME grant intake form
+      description: |
+        Validates and processes intake form data, then initiates
+        the 12-agent grant generation pipeline.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IntakeForm'
+      responses:
+        '202':
+          description: Intake accepted, pipeline initiated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  project_id:
+                    type: string
+                    description: Unique project identifier
+                  status:
+                    type: string
+                    enum: [intake, processing]
+                  message:
+                    type: string
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  validation_errors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        field:
+                          type: string
+                        message:
+                          type: string
+        '500':
+          description: Server error
