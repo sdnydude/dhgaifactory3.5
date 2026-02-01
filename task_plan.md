@@ -35,9 +35,29 @@ Phase 3: Backend API — `pending`
 - [x] Create project CRUD endpoints
 - [x] Create pipeline control endpoints (start/pause/resume/cancel)
 - [x] Create webhook for LangGraph callbacks
-- [ ] Create database migration for cme_projects table
-- [ ] Connect form submission to API (update CMEIntakePanel.tsx)
-- [ ] Deploy updated registry API
+- [x] Create database migration for cme_projects table (003_add_cme_projects.sql)
+
+#### Phase 3.2: Database Integration (Current)
+- [ ] Add SQLAlchemy ORM models to cme_endpoints.py
+  - CMEProject model
+  - CMEAgentOutput model
+- [ ] Remove in-memory store (_cme_projects dict)
+- [ ] Update 11 endpoints to use database:
+  - [ ] POST /api/v2/projects (create)
+  - [ ] GET /api/v2/projects (list)
+  - [ ] GET /api/v2/projects/{id} (get)
+  - [ ] POST /api/v2/projects/{id}/start
+  - [ ] GET /api/v2/projects/{id}/status
+  - [ ] POST /api/v2/projects/{id}/pause
+  - [ ] POST /api/v2/projects/{id}/resume
+  - [ ] POST /api/v2/projects/{id}/cancel
+  - [ ] GET /api/v2/projects/{id}/outputs
+  - [ ] GET /api/v2/projects/{id}/outputs/{agent}
+  - [ ] POST /api/v2/webhook/agent-complete
+- [ ] Restart registry-api container
+- [ ] Test API endpoints with curl
+- [ ] Test form submission from LibreChat
+- [ ] Verify data persists in PostgreSQL
 
 ### Phase 3.5: LangGraph Agent Development (Pending)
 **Approach:** Build and test agents one at a time

@@ -107,4 +107,62 @@ CR (prompts table) ──push──> LibreChat
 - Planning scripts: `scripts/sync_planning_files.py`, `generate_planning_embeddings.py`, `search_planning_docs.py`
 - Dify: https://dify.digitalharmonyai.com/
 
+---
 
+## CME Database Integration Research (2026-02-01)
+
+### Database Schema (003_add_cme_projects.sql)
+
+**cme_projects table columns:**
+- `id` UUID (PK, auto-gen)
+- `name` VARCHAR(255) NOT NULL
+- `status` ENUM (intake/processing/review/complete/failed/cancelled)
+- `intake` JSONB (47-field form)
+- `current_agent`, `progress_percent`, `agents_completed[]`, `agents_pending[]`
+- `pipeline_thread_id`, `langsmith_run_id`
+- `outputs` JSONB, `errors` JSONB
+- `human_review_*` fields
+- Timestamps: `created_at`, `updated_at`, `started_at`, `completed_at`
+
+**cme_agent_outputs table columns:**
+- `id` UUID (PK), `project_id` UUID (FK)
+- `agent_name`, `output_type`, `content` JSONB
+- `quality_score` FLOAT, `langsmith_trace_id`
+- `created_at`
+
+### ORM Patterns (from models.py)
+
+- Base class on line 14: `Base = declarative_base()`
+- UUID: `Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)`
+- JSONB: `Column(JSONB, nullable=True)`
+- ARRAY: `Column(ARRAY(String))`
+- Timestamps: `Column(DateTime(timezone=True), server_default=func.now())`
+
+### CRUD Patterns (from api.py)
+
+```python
+# CREATE
+db_obj = Model(**data.model_dump())
+db.add(db_obj)
+db.commit()
+db.refresh(db_obj)
+
+# LIST
+items = db.query(Model).offset(skip).limit(limit).all()
+
+# GET
+item = db.query(Model).filter(Model.id == id).first()
+if not item:
+    raise HTTPException(status_code=404)
+
+# UPDATE
+item.field = value
+db.commit()
+```
+
+### Key Decisions
+
+1. Add models to `models.py` (not inline in endpoints)
+2. Import models in `cme_endpoints.py`
+3. Follow exact CRUD patterns from api.py
+4. Use string values for ENUM status (PostgreSQL ENUM already created)

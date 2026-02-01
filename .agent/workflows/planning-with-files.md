@@ -121,21 +121,43 @@ Filesystem = Disk (persistent, unlimited)
 ### 1. Create Plan First
 Never start a complex task without `task_plan.md`. Non-negotiable.
 
-### 2. The 2-Action Rule
+### 2. Research Before Implementation (MANDATORY)
+> "Act on RESEARCH, not ASSUMPTIONS."
+
+Before writing ANY implementation code:
+1. **View existing code** - Understand current patterns, imports, structures
+2. **Document findings** - Add to `findings.md` BEFORE implementing
+3. **Identify patterns** - How do similar features work in this codebase?
+4. **Only then implement** - Based on documented research, not assumptions
+
+**Violations:**
+- ❌ Assuming how a database table is structured
+- ❌ Guessing import patterns
+- ❌ Implementing without viewing related code
+- ❌ Making changes based on memory of other projects
+
+**Correct approach:**
+- ✅ View the migration/schema file
+- ✅ View existing model definitions
+- ✅ View similar endpoint implementations
+- ✅ Document patterns in findings.md
+- ✅ Then create step-by-step implementation plan
+
+### 3. The 2-Action Rule
 > "After every 2 view/browser/search operations, IMMEDIATELY save key findings to text files."
 
 This prevents visual/multimodal information from being lost.
 
-### 3. Read Before Decide
+### 4. Read Before Decide
 Before major decisions, read the plan file. This keeps goals in your attention window.
 
-### 4. Update After Act
+### 5. Update After Act
 After completing any phase:
 - Mark phase status: `in_progress` → `complete`
 - Log any errors encountered
 - Note files created/modified
 
-### 5. Log ALL Errors
+### 6. Log ALL Errors
 Every error goes in the plan file. This builds knowledge and prevents repetition.
 
 ```markdown
@@ -146,7 +168,7 @@ Every error goes in the plan file. This builds knowledge and prevents repetition
 | API timeout | 2 | Added retry logic |
 ```
 
-### 6. Never Repeat Failures
+### 7. Never Repeat Failures
 ```
 if action_failed:
     next_action != same_action
