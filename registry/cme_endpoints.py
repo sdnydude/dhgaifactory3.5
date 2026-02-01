@@ -18,6 +18,7 @@ import httpx
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from database import get_db
+from models import CMEProject, CMEAgentOutput
 
 # Import metrics from main API
 try:
@@ -246,12 +247,8 @@ class AgentOutput(BaseModel):
 
 
 # =============================================================================
-# IN-MEMORY STORE (temporary until DB migration)
+# DATABASE OPERATIONS HELPERS
 # =============================================================================
-# This is a temporary in-memory store for development
-# Replace with database operations after migration
-
-_cme_projects: Dict[str, Dict[str, Any]] = {}
 
 
 # =============================================================================
@@ -307,47 +304,43 @@ async def create_cme_project(
     """
     start = time.time()
     try:
-        project_id = str(uuid.uuid4())
-        now = datetime.utcnow()
-        
         # Convert intake to dict for storage
         intake_dict = intake.model_dump()
         
-        # Store project (in-memory for now, DB later)
-        _cme_projects[project_id] = {
-            "id": project_id,
-            "name": intake.section_a.project_name,
-            "status": CMEProjectStatus.INTAKE,
-            "intake": intake_dict,
-            "current_agent": None,
-            "progress_percent": 0,
-            "outputs": {},
-            "errors": [],
-            "human_review_status": None,
-            "pipeline_thread_id": None,
-            "created_at": now,
-            "updated_at": now,
-            "started_at": None,
-            "completed_at": None,
-            "agents_completed": [],
-            "agents_pending": [
+        # Create project in database
+        db_project = CMEProject(
+            name=intake.section_a.project_name,
+            status="intake",
+            intake=intake_dict,
+            current_agent=None,
+            progress_percent=0,
+            outputs={},
+            errors=[],
+            human_review_status=None,
+            pipeline_thread_id=None,
+            agents_completed=[],
+            agents_pending=[
                 "research", "clinical", "gap_analysis", "needs_assessment",
                 "learning_objectives", "curriculum", "protocol", "marketing",
                 "grant_writer", "prose_quality", "compliance", "package_assembly"
             ]
-        }
+        )
+        db.add(db_project)
+        db.commit()
+        db.refresh(db_project)
         
         registry_write_operations.labels(operation="create_cme_project").inc()
         registry_write_latency.observe((time.time() - start) * 1000)
         
         return CMEProjectCreateResponse(
-            project_id=project_id,
+            project_id=str(db_project.id),
             status=CMEProjectStatus.INTAKE,
             message=f"CME project '{intake.section_a.project_name}' created successfully",
-            created_at=now
+            created_at=db_project.created_at
         )
         
     except Exception as e:
+        db.rollback()
         registry_errors.labels(error_type="create_cme_project").inc()
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -362,27 +355,27 @@ async def list_cme_projects(
     """List all CME projects with optional status filtering"""
     start = time.time()
     try:
-        projects = list(_cme_projects.values())
+        query = db.query(CMEProject)
         
         # Filter by status if provided
         if status:
-            projects = [p for p in projects if p["status"] == status]
+            query = query.filter(CMEProject.status == status.value)
         
         # Pagination
-        projects = projects[skip:skip + limit]
+        projects = query.order_by(CMEProject.created_at.desc()).offset(skip).limit(limit).all()
         
         result = [
             CMEProjectDetail(
-                id=p["id"],
-                name=p["name"],
-                status=p["status"],
-                current_agent=p.get("current_agent"),
-                progress_percent=p.get("progress_percent", 0),
-                intake=p["intake"],
-                created_at=p["created_at"],
-                updated_at=p["updated_at"],
-                outputs_available=list(p.get("outputs", {}).keys()),
-                human_review_status=p.get("human_review_status")
+                id=str(p.id),
+                name=p.name,
+                status=CMEProjectStatus(p.status),
+                current_agent=p.current_agent,
+                progress_percent=p.progress_percent or 0,
+                intake=p.intake,
+                created_at=p.created_at,
+                updated_at=p.updated_at,
+                outputs_available=list(p.outputs.keys()) if p.outputs else [],
+                human_review_status=p.human_review_status
             )
             for p in projects
         ]
@@ -402,25 +395,24 @@ async def get_cme_project(project_id: str, db: Session = Depends(get_db)):
     """Get details for a specific CME project"""
     start = time.time()
     try:
-        if project_id not in _cme_projects:
+        p = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+        if not p:
             raise HTTPException(status_code=404, detail="CME project not found")
-        
-        p = _cme_projects[project_id]
         
         registry_read_operations.labels(operation="get_cme_project").inc()
         registry_read_latency.observe((time.time() - start) * 1000)
         
         return CMEProjectDetail(
-            id=p["id"],
-            name=p["name"],
-            status=p["status"],
-            current_agent=p.get("current_agent"),
-            progress_percent=p.get("progress_percent", 0),
-            intake=p["intake"],
-            created_at=p["created_at"],
-            updated_at=p["updated_at"],
-            outputs_available=list(p.get("outputs", {}).keys()),
-            human_review_status=p.get("human_review_status")
+            id=str(p.id),
+            name=p.name,
+            status=CMEProjectStatus(p.status),
+            current_agent=p.current_agent,
+            progress_percent=p.progress_percent or 0,
+            intake=p.intake,
+            created_at=p.created_at,
+            updated_at=p.updated_at,
+            outputs_available=list(p.outputs.keys()) if p.outputs else [],
+            human_review_status=p.human_review_status
         )
         
     except HTTPException:
@@ -443,46 +435,48 @@ async def start_cme_pipeline(
     """Start the 12-agent LangGraph pipeline for a CME project"""
     start = time.time()
     try:
-        if project_id not in _cme_projects:
+        project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+        if not project:
             raise HTTPException(status_code=404, detail="CME project not found")
         
-        project = _cme_projects[project_id]
-        
-        if project["status"] not in [CMEProjectStatus.INTAKE, CMEProjectStatus.FAILED]:
+        if project.status not in ["intake", "failed"]:
             raise HTTPException(
                 status_code=400,
-                detail=f"Cannot start pipeline: project status is {project['status']}"
+                detail=f"Cannot start pipeline: project status is {project.status}"
             )
         
         # Update project status
         now = datetime.utcnow()
-        project["status"] = CMEProjectStatus.PROCESSING
-        project["started_at"] = now
-        project["updated_at"] = now
-        project["current_agent"] = "research"  # First agent
+        project.status = "processing"
+        project.started_at = now
+        project.current_agent = "research"  # First agent
         
         # Trigger LangGraph pipeline in background
-        thread_id = await trigger_langgraph_pipeline(project_id, project["intake"])
-        project["pipeline_thread_id"] = thread_id
+        thread_id = await trigger_langgraph_pipeline(str(project.id), project.intake)
+        project.pipeline_thread_id = thread_id
+        
+        db.commit()
+        db.refresh(project)
         
         registry_write_operations.labels(operation="start_cme_pipeline").inc()
         registry_write_latency.observe((time.time() - start) * 1000)
         
         return ExecutionStatus(
-            project_id=project_id,
-            status=project["status"],
-            current_agent=project["current_agent"],
-            progress_percent=project["progress_percent"],
-            agents_completed=project.get("agents_completed", []),
-            agents_pending=project.get("agents_pending", []),
-            errors=project.get("errors", []),
-            started_at=project["started_at"],
-            estimated_completion=None  # Could calculate based on historical data
+            project_id=str(project.id),
+            status=CMEProjectStatus(project.status),
+            current_agent=project.current_agent,
+            progress_percent=project.progress_percent or 0,
+            agents_completed=project.agents_completed or [],
+            agents_pending=project.agents_pending or [],
+            errors=project.errors or [],
+            started_at=project.started_at,
+            estimated_completion=None
         )
         
     except HTTPException:
         raise
     except Exception as e:
+        db.rollback()
         registry_errors.labels(error_type="start_cme_pipeline").inc()
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -492,23 +486,22 @@ async def get_cme_pipeline_status(project_id: str, db: Session = Depends(get_db)
     """Get current execution status of the CME pipeline"""
     start = time.time()
     try:
-        if project_id not in _cme_projects:
+        project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+        if not project:
             raise HTTPException(status_code=404, detail="CME project not found")
-        
-        project = _cme_projects[project_id]
         
         registry_read_operations.labels(operation="get_cme_pipeline_status").inc()
         registry_read_latency.observe((time.time() - start) * 1000)
         
         return ExecutionStatus(
-            project_id=project_id,
-            status=project["status"],
-            current_agent=project.get("current_agent"),
-            progress_percent=project.get("progress_percent", 0),
-            agents_completed=project.get("agents_completed", []),
-            agents_pending=project.get("agents_pending", []),
-            errors=project.get("errors", []),
-            started_at=project.get("started_at"),
+            project_id=str(project.id),
+            status=CMEProjectStatus(project.status),
+            current_agent=project.current_agent,
+            progress_percent=project.progress_percent or 0,
+            agents_completed=project.agents_completed or [],
+            agents_pending=project.agents_pending or [],
+            errors=project.errors or [],
+            started_at=project.started_at,
             estimated_completion=None
         )
         
@@ -522,48 +515,46 @@ async def get_cme_pipeline_status(project_id: str, db: Session = Depends(get_db)
 @router.post("/projects/{project_id}/pause")
 async def pause_cme_pipeline(project_id: str, db: Session = Depends(get_db)):
     """Pause pipeline execution (for human review gates)"""
-    if project_id not in _cme_projects:
+    project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+    if not project:
         raise HTTPException(status_code=404, detail="CME project not found")
     
-    project = _cme_projects[project_id]
-    
-    if project["status"] != CMEProjectStatus.PROCESSING:
+    if project.status != "processing":
         raise HTTPException(status_code=400, detail="Pipeline is not running")
     
-    project["status"] = CMEProjectStatus.REVIEW
-    project["updated_at"] = datetime.utcnow()
+    project.status = "review"
+    db.commit()
     
-    return {"status": "paused", "project_id": project_id}
+    return {"status": "paused", "project_id": str(project.id)}
 
 
 @router.post("/projects/{project_id}/resume")
 async def resume_cme_pipeline(project_id: str, db: Session = Depends(get_db)):
     """Resume pipeline execution after human review"""
-    if project_id not in _cme_projects:
+    project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+    if not project:
         raise HTTPException(status_code=404, detail="CME project not found")
     
-    project = _cme_projects[project_id]
-    
-    if project["status"] != CMEProjectStatus.REVIEW:
+    if project.status != "review":
         raise HTTPException(status_code=400, detail="Pipeline is not paused")
     
-    project["status"] = CMEProjectStatus.PROCESSING
-    project["updated_at"] = datetime.utcnow()
+    project.status = "processing"
+    db.commit()
     
-    return {"status": "resumed", "project_id": project_id}
+    return {"status": "resumed", "project_id": str(project.id)}
 
 
 @router.post("/projects/{project_id}/cancel")
 async def cancel_cme_pipeline(project_id: str, db: Session = Depends(get_db)):
     """Cancel pipeline execution"""
-    if project_id not in _cme_projects:
+    project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+    if not project:
         raise HTTPException(status_code=404, detail="CME project not found")
     
-    project = _cme_projects[project_id]
-    project["status"] = CMEProjectStatus.CANCELLED
-    project["updated_at"] = datetime.utcnow()
+    project.status = "cancelled"
+    db.commit()
     
-    return {"status": "cancelled", "project_id": project_id}
+    return {"status": "cancelled", "project_id": str(project.id)}
 
 
 # =============================================================================
@@ -573,21 +564,22 @@ async def cancel_cme_pipeline(project_id: str, db: Session = Depends(get_db)):
 @router.get("/projects/{project_id}/outputs", response_model=List[AgentOutput])
 async def list_cme_outputs(project_id: str, db: Session = Depends(get_db)):
     """List all agent outputs for a CME project"""
-    if project_id not in _cme_projects:
+    project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+    if not project:
         raise HTTPException(status_code=404, detail="CME project not found")
     
-    project = _cme_projects[project_id]
-    outputs = project.get("outputs", {})
+    # Query outputs from cme_agent_outputs table
+    outputs = db.query(CMEAgentOutput).filter(CMEAgentOutput.project_id == project_id).all()
     
     return [
         AgentOutput(
-            agent_name=agent_name,
-            output_type=output.get("type", "document"),
-            content=output.get("content", {}),
-            created_at=output.get("created_at", project["created_at"]),
-            quality_score=output.get("quality_score")
+            agent_name=o.agent_name,
+            output_type=o.output_type,
+            content=o.content,
+            created_at=o.created_at,
+            quality_score=o.quality_score
         )
-        for agent_name, output in outputs.items()
+        for o in outputs
     ]
 
 
@@ -598,23 +590,24 @@ async def get_cme_agent_output(
     db: Session = Depends(get_db)
 ):
     """Get output from a specific agent"""
-    if project_id not in _cme_projects:
+    project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+    if not project:
         raise HTTPException(status_code=404, detail="CME project not found")
     
-    project = _cme_projects[project_id]
-    outputs = project.get("outputs", {})
+    output = db.query(CMEAgentOutput).filter(
+        CMEAgentOutput.project_id == project_id,
+        CMEAgentOutput.agent_name == agent_name
+    ).first()
     
-    if agent_name not in outputs:
+    if not output:
         raise HTTPException(status_code=404, detail=f"No output from agent: {agent_name}")
     
-    output = outputs[agent_name]
-    
     return AgentOutput(
-        agent_name=agent_name,
-        output_type=output.get("type", "document"),
-        content=output.get("content", {}),
-        created_at=output.get("created_at", project["created_at"]),
-        quality_score=output.get("quality_score")
+        agent_name=output.agent_name,
+        output_type=output.output_type,
+        content=output.content,
+        created_at=output.created_at,
+        quality_score=output.quality_score
     )
 
 
@@ -634,42 +627,48 @@ async def agent_complete_webhook(
     Webhook called by LangGraph when an agent completes.
     Updates project state with agent output.
     """
-    if project_id not in _cme_projects:
+    project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+    if not project:
         raise HTTPException(status_code=404, detail="CME project not found")
     
-    project = _cme_projects[project_id]
     now = datetime.utcnow()
     
-    # Store output
-    if "outputs" not in project:
-        project["outputs"] = {}
+    # Store output in cme_agent_outputs table
+    db_output = CMEAgentOutput(
+        project_id=project.id,
+        agent_name=agent_name,
+        output_type=output.get("type", "document"),
+        content=output,
+        quality_score=quality_score
+    )
+    db.add(db_output)
     
-    project["outputs"][agent_name] = {
-        "type": output.get("type", "document"),
-        "content": output,
-        "created_at": now,
-        "quality_score": quality_score
-    }
+    # Update project progress
+    agents_pending = list(project.agents_pending or [])
+    agents_completed = list(project.agents_completed or [])
     
-    # Update progress
-    if agent_name in project.get("agents_pending", []):
-        project["agents_pending"].remove(agent_name)
-        project["agents_completed"].append(agent_name)
+    if agent_name in agents_pending:
+        agents_pending.remove(agent_name)
+        agents_completed.append(agent_name)
     
-    project["progress_percent"] = calculate_progress(project["agents_completed"])
-    project["updated_at"] = now
+    project.agents_pending = agents_pending
+    project.agents_completed = agents_completed
+    project.progress_percent = calculate_progress(agents_completed)
     
     # Set next agent
-    if project["agents_pending"]:
-        project["current_agent"] = project["agents_pending"][0]
+    if agents_pending:
+        project.current_agent = agents_pending[0]
     else:
-        project["current_agent"] = None
-        project["status"] = CMEProjectStatus.COMPLETE
-        project["completed_at"] = now
+        project.current_agent = None
+        project.status = "complete"
+        project.completed_at = now
+    
+    db.commit()
     
     return {
         "status": "received",
-        "project_id": project_id,
+        "project_id": str(project.id),
         "agent": agent_name,
-        "progress": project["progress_percent"]
+        "progress": project.progress_percent
     }
+

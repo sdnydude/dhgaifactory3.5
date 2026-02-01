@@ -318,3 +318,73 @@ class ResearchRequest(Base):
         Index("idx_research_user_created", "user_id", "created_at"),
         Index("idx_research_status_created", "status", "created_at"),
     )
+
+
+# =============================================================================
+# CME PROJECT MODELS
+# =============================================================================
+
+class CMEProject(Base):
+    """CME Grant projects with intake data and pipeline execution status"""
+    __tablename__ = "cme_projects"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    
+    # Project basics
+    name = Column(String(255), nullable=False)
+    status = Column(String(50), nullable=False, default="intake")  # intake/processing/review/complete/failed/cancelled
+    
+    # Full intake form stored as JSONB (10 sections, 47 fields)
+    intake = Column(JSONB, nullable=False)
+    
+    # Pipeline execution tracking
+    current_agent = Column(String(100), nullable=True)
+    progress_percent = Column(Integer, default=0)
+    agents_completed = Column(ARRAY(String), default=[])
+    agents_pending = Column(ARRAY(String), default=[])
+    
+    # LangGraph integration
+    pipeline_thread_id = Column(String(100), nullable=True)
+    langsmith_run_id = Column(String(100), nullable=True)
+    
+    # Outputs from each agent stored as JSONB
+    outputs = Column(JSONB, default={})
+    
+    # Error tracking
+    errors = Column(JSONB, default=[])
+    
+    # Human review
+    human_review_status = Column(String(50), nullable=True)
+    human_review_notes = Column(Text, nullable=True)
+    reviewed_by = Column(String(255), nullable=True)
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    
+    # Relationships
+    agent_outputs = relationship("CMEAgentOutput", back_populates="project", cascade="all, delete-orphan")
+
+
+class CMEAgentOutput(Base):
+    """Individual outputs from each agent in the 12-agent pipeline"""
+    __tablename__ = "cme_agent_outputs"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("cme_projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    
+    agent_name = Column(String(100), nullable=False, index=True)
+    output_type = Column(String(100), nullable=False)
+    content = Column(JSONB, nullable=False)
+    quality_score = Column(Float, nullable=True)
+    
+    # LangSmith trace reference
+    langsmith_trace_id = Column(String(100), nullable=True)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    
+    # Relationship
+    project = relationship("CMEProject", back_populates="agent_outputs")
