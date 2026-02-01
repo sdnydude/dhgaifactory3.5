@@ -92,9 +92,9 @@ CREATE TABLE IF NOT EXISTS cme_agent_outputs (
 CREATE INDEX IF NOT EXISTS idx_cme_outputs_project_id ON cme_agent_outputs(project_id);
 CREATE INDEX IF NOT EXISTS idx_cme_outputs_agent_name ON cme_agent_outputs(agent_name);
 
--- Grant permissions
-GRANT ALL PRIVILEGES ON TABLE cme_projects TO swebber64;
-GRANT ALL PRIVILEGES ON TABLE cme_agent_outputs TO swebber64;
+-- Grant permissions (dhg is the DB owner)
+GRANT ALL PRIVILEGES ON TABLE cme_projects TO dhg;
+GRANT ALL PRIVILEGES ON TABLE cme_agent_outputs TO dhg;
 
 -- Add comment for documentation
 COMMENT ON TABLE cme_projects IS 'CME Grant projects with intake data and pipeline execution status';
