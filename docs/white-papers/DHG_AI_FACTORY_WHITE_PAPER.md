@@ -13,7 +13,7 @@ When Jennifer Walsh, CEO of Digital Harmony Group, gathered her division leaders
 
 Simultaneously, the "AI Question" loomed over the agenda. Each division had experimented with isolated tools. Marketing had a subscription to a copywriting bot; Operations was testing a scheduling agent; the CME team was dabbling with research assistants. The result was digital chaos: data trapped in silos, inconsistent brand voices, compliance risks hidden in black boxes, and the promise of efficiency lost in the friction of managing a dozen disconnected "copilots."
 
-The challenge wasn't a lack of technology; it was a lack of **workforce management**.
+The challenge wasn't a lack of tools; it was a lack of **workforce management**.
 
 Jennifer realized that AI wasn't just a software upgrade to be installed on a server; it was a new labor force to be led. And like any labor force, it required structure, role clarity, onboarding protocols, and accountability. Hiring a thousand disconnected interns creates organizational chaos; building a coordinated team creates enterprise value.
 
@@ -50,7 +50,7 @@ The DHG AI Factory solves this by providing a unified management layer for digit
 
 **[VISUAL 2: The Managed vs. Unmanaged Workforce]**
 *Split visual comparison:*
-*Left (Chaos): Disconnected tools, messy lines of communication, human workers overwhelmed by "shadow IT," data trapped in separate boxes.*
+*Left (Chaos): Disconnected tools, messy lines of communication, human workers overwhelmed by "shadow IT," data trapped in separate boxes. Label: "The Shadow Workforce."*
 *Right (Harmony): Clean hierarchy. Human leader at top. Agents (Doc, Ace, Sage) aligned below in clear lanes. Data flowing smoothly between agents through a shared core. Label: "The Managed Workforce."*
 
 ### Principles of the Managed Digital Workforce
@@ -78,19 +78,21 @@ In the CME Division, Director Sarah Chen doesn't say "I used the AI tool to gene
 *Bottom: Infrastructure Support (The "Office" they work in)*
 
 ### The Research & Content Team
-*   **Doc (Research Scientist)**: Doc is the tireless academic of the team. Give him a topic, and he scours PubMed, CDC data, CMS databases, and clinical guidelines. He is configured with strict truthfulness parameters—he doesn't "hallucinate" (make up facts), which is a common risk with generic tools. He cites every claim back to a verified source.
+*   **Doc (Research Scientist)**: Doc is the tireless academic of the team. Give him a topic, and he scours PubMed, CDC data, CMS databases, and clinical guidelines. He is configured with strict truthfulness parameters—he doesn't "hallucinate" (make up facts); he cites. He provides the raw evidence foundation for everything the team builds.
 *   **Sage (Medical Director/Writer)**: Sage takes Doc's research and weaves it into professional medical narrative. Sage understands the nuance of "patient-centric language" (focusing on the person, not the disease) and the specific tone required for high-stakes grants. He is trained on successful past grants, ensuring he mimics the organization's best writing style.
+*   **Ink (Copywriter)**: Ink handles the promotional side. Once Sage writes the clinical content, Ink adapts it for email newsletters, social media teasers, and brochure copy, ensuring the message is engaging without losing accuracy.
 
 ### The Quality & Compliance Team
 *   **Ace (Compliance Officer)**: Ace is the strict auditor. He naturally has an adversarial relationship with Sage. He doesn't create content; he critiques it. He has memorized the ACCME Standards for Integrity and Independence and the OIG Compliance Program Guidance. He scans every output for "commercial bias" (favoring one drug company over another) or lack of "fair balance" (discussing risks as well as benefits). If he sees an issue, he flags it for correction.
-*   **Prof (Curriculum Designer)**: Prof ensures educational rigor. While Sage writes the content, Prof structures it into learning objectives that map to Bloom's Taxonomy (a framework for classifying educational goals from simple recall to complex creation). he ensures every educational activity has clear, measurable goals.
-*   **Chart (Outcomes Analyst)**: Chart cares about results. He designs the assessment frameworks using Moore's Levels (a 7-level scale measuring everything from participation to patient health improvement) to ensure educational programs can prove their real-world impact.
+*   **Prof (Curriculum Designer)**: Prof ensures educational rigor. While Sage writes the content, Prof structures it into learning objectives that map to Bloom's Taxonomy (a framework for classifying educational goals from simple recall to complex creation). He ensures every educational activity has clear, measurable goals.
+*   **Chart (Outcomes Analyst)**: Chart cares about results. He designs the assessment frameworks using Moore's Levels (a 7-level scale measuring everything from participation to patient health improvement) to ensure educational programs can prove their real-world impact. He analyzes pre-test and post-test data patterns to recommend improved questions.
 
 ### The Creative & Production Team
 *   **Lens (Creative Director)**: Lens thinks in visuals. He creates the charts, infographics, and slide decks that accompany the text. He ensures visual consistency across the brand, applying the correct color palettes and font hierarchies automatically.
 *   **Director (Production Lead)**: Director runs the show. He generates minute-by-minute "run-of-show" documents (the master schedule for a live event), shot lists, contingency plans, and logistical schedules for the Studio team. He anticipates bottlenecks before they happen.
 *   **Script (Teleprompter Lead)**: Script ensures the talent sounds good. He writes teleprompter copy optimized for speaking cadence, timing, and breath pauses. He converts written prose into spoken word.
 *   **Clip (Editor)**: Clip lives in post-production. He watches hours of raw footage to find the 30-second gold nuggets for social media, tagging distinct moments for distribution. He generates transcripts, matches captions, and identifies potential viral moments.
+*   **Live (Stream Monitor)**: Live works in real-time. During a broadcast, Live monitors the audio stream and suggests lower-thirds (graphics) based on the keywords the speaker mentions, feeding cues to the human operator.
 
 ---
 
