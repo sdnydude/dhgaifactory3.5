@@ -1,12 +1,14 @@
 # DHG AI Factory - Master To-Do List
-**Last Updated:** Jan 28, 2026
+**Last Updated:** Feb 2, 2026
 
 ## System Status
-- **Running Containers:** 11 dhg-prefixed + supporting services
-- **Healthy Agents:** 7/8 (Orchestrator /health returns 404)
+- **Running Containers:** 11 dhg-prefixed (10 healthy, 1 no healthcheck)
+- **Healthy Agents:** 7/7 (Orchestrator EOL'd)
 - **Key Services:** All healthy
-- **GPU:** RTX 5080 (4% utilization)
-- **Disk:** 8% used (136GB / 1.9TB)
+- **GPU:** RTX 5080 (1% utilization, 4.7GB/16GB)
+- **Disk:** 9% used (146GB / 1.9TB)
+- **LibreChat:** Running on :3010
+- **Ollama Models:** nomic-embed-text, qwen3:14b
 
 ---
 
@@ -18,18 +20,36 @@ No blockers.
 
 ## P1: Active Sprint
 
-### Observability Stack (NEW)
+### CME Intake Form (IN PROGRESS)
+- [x] PostgreSQL database schema (003_add_cme_projects.sql)
+- [x] CME endpoints integrated with database
+- [x] JSONB datetime serialization fix
+- [ ] LibreChat CME sidebar integration
+- [ ] Human Review Requirements implementation
+
+### LibreChat Agent Features (IN PROGRESS)
+- [x] Agents config in librechat.yaml
+- [ ] Enable Artifacts for agents
+- [ ] Enable Tools selection for agents
+- [ ] Test agent tool capabilities
+
+### Observability Stack
 - [ ] Deploy Prometheus/Grafana/Loki stack
 - [ ] Configure database exporters
 - [ ] Set up Grafana dashboards
 - [ ] Configure Alertmanager
 
-### Antigravity Session Sync (IN PROGRESS)
-- [ ] Build sync agent using local API (port 58575)
-- [ ] Convert .pb files via GetCascadeTrajectory endpoint
-- [ ] Ingest new sessions to CR with deduplication
+---
+
+## P2: Next Up
+
+### Antigravity Session Sync
+- [x] Build sync agent using local API (port 58575)
 - [x] Created generate_embeddings.py script
+- [x] Export via GetCascadeTrajectory endpoint working
+- [x] Deduplication fixed (delete before re-insert)
 - [ ] Run embedding generation (4974 messages, 0 with embeddings)
+- [ ] Automate daily sync
 
 ### RAGFlow Setup
 - [x] RAGFlow running at ragflow.digitalharmonyai.com
@@ -44,23 +64,23 @@ No blockers.
 
 ---
 
-## P2: Next Up
+## P3: LibreChat Features
 
-### LibreChat Features
 - [x] **Web Search (Tavily)** - Configured Jan 18
 - [ ] **Memory** - Persistent context across chats
-- [ ] **Artifacts** - Generative UI output
+- [ ] **Artifacts** - Generative UI output (agent feature)
 - [ ] **MCP Integration** - Connect to external tools
+
+---
+
+## P4: Security & Media
 
 ### Security
 - [ ] **Build DHG Security Agent** (2 hrs)
   - Manage Cloudflare Access
   - Fetch analytics via GraphQL API
 
----
-
-## P3: Video Content Pipeline
-
+### Video Content Pipeline
 - [ ] Vimeo API Integration
 - [ ] YouTube API Integration
 - [ ] Video Ingestion Pipeline
@@ -68,7 +88,7 @@ No blockers.
 
 ---
 
-## P4: Backlog
+## P5: Backlog
 
 - [ ] Code Interpreter
 - [ ] Claude Files API
@@ -77,6 +97,21 @@ No blockers.
 - [ ] Upgrade Infisical CLI
 
 ---
+
+## Completed (Jan 29 - Feb 2, 2026)
+
+- [x] CME intake form PostgreSQL integration (b9b53df)
+- [x] CME JSONB datetime serialization fix (c82233c)
+- [x] Planning-with-files skill research-first requirement (e71559f)
+- [x] Infisical workflow DB role fix (a819922)
+- [x] CME intake form improvements (8f5f91b)
+- [x] Teammate onboarding guide for Antigravity (5d85535)
+- [x] Agent planning and progress tracking files (a769507)
+- [x] Planning-with-files skill installed (0cb0757)
+- [x] Antigravity deduplication fixed (21acaa9)
+- [x] Antigravity export HTTPS/cascadeId fixes (e7f744b)
+- [x] Antigravity session sync scripts and workflow (b1c4e61)
+- [x] All workflows updated for Remote-SSH (d9f04af)
 
 ## Completed (Jan 27-28, 2026)
 
