@@ -2,37 +2,29 @@
 
 > **Digital Harmony Group** — Pioneering the Future of Intelligent Automation
 
-![DHG AI Agent Workforce](./assets/dhg_agents_workflow.png)
-
 ---
 
 ## Agent Architecture Overview
 
-The DHG AI Factory operates with a multi-agent architecture where specialized AI agents collaborate to deliver CME content, medical research, and educational materials. **MAX** serves as the Master Orchestrator, coordinating all agent interactions through the Core AI Factory.
+The DHG AI Factory operates with a multi-agent architecture where specialized AI agents collaborate to deliver CME content, medical research, and educational materials.
 
 ---
 
 ## 🤖 Technical Agent Registry
 
-| Name | Agent ID | Role | Status | Features | Multi-Agent Connections | Tech Stack |
-|------|----------|------|--------|----------|------------------------|------------|
-| **MAX** | `orchestrator` | Master Orchestrator | 🟡 Planned | Request routing, agent coordination, load balancing, failover | All agents | LangGraph, Ollama |
-| **DOC** | `research` | CME Research Agent | 🟢 Active | PubMed search, clinical evidence synthesis, gap analysis, literature review | SAGE, INK, PROF | LangSmith Cloud, GPT-4o |
-| **SAGE** | `medical-llm` | Medical Language Model | 🟢 Active | Medical terminology, clinical validation, drug interactions, ICD-10 coding | DOC, ACE, VET | OpenAI GPT-4o, Medical ontologies |
-| **ACE** | `qa-compliance` | QA & Compliance | 🟢 Active | ACCME compliance, disclosure review, bias detection, regulatory checks | All content agents | Custom validators |
-| **BLUE** | `architect` | System Architect | 🟡 Planned | Infrastructure design, API schemas, database modeling | BOLT, SHIP | Architecture tools |
-| **SCOUT** | `discovery` | Discovery Agent | 🟡 Planned | Trend detection, emerging topics, opportunity identification | HAWK, DOC | Web scraping, APIs |
-| **BOLT** | `implementation` | Implementation Agent | 🟡 Planned | Code generation, feature implementation, bug fixes | BLUE, SHIP | Code LLMs |
-| **INK** | `scribe` | Documentation Scribe | 🟡 Planned | Content writing, summaries, transcription formatting | DOC, LENS | GPT-4o |
-| **HAWK** | `competitor-intel` | Competitor Intelligence | 🟢 Active | Market analysis, competitive landscape, pricing intelligence | SCOUT, REX | Web research |
-| **PROF** | `curriculum` | Curriculum Designer | 🟢 Active | Learning objectives, module structuring, assessment design | DOC, CHART | Educational frameworks |
-| **CHART** | `outcomes` | Outcomes Analyst | 🟢 Active | Effectiveness metrics, learning outcomes, gap closure tracking | PROF, ACE | Analytics |
-| **LENS** | `visuals` | Visual Content Creator | 🟢 Active | Image generation, diagrams, slide decks, infographics | INK, PROF | DALL-E 3, GPT-4o Vision |
-| **REX** | `strategy` | Strategy Advisor | 🟡 Planned | Business strategy, market positioning, growth planning | HAWK, CHART | Strategic frameworks |
-| **SHIP** | `deployment` | Deployment Manager | 🟡 Planned | CI/CD, container orchestration, release management | BOLT, BLUE | Docker, K8s |
-| **VET** | `qa-manager` | QA Manager | 🟡 Planned | Test planning, quality gates, verification workflows | ACE, All agents | Testing frameworks |
+| Name | Agent ID | Role | Status | Port | Features |
+|------|----------|------|--------|------|----------|
+| **DOC** | `research` | CME Research Agent | 🟢 Active | 8003 | PubMed search, clinical evidence synthesis, gap analysis |
+| **SAGE** | `medical-llm` | Medical Language Model | 🟢 Active | 8002 | Medical terminology, clinical validation, ICD-10 coding |
+| **ACE** | `qa-compliance` | QA & Compliance | 🟢 Active | 8007 | ACCME compliance, disclosure review, bias detection |
+| **HAWK** | `competitor-intel` | Competitor Intelligence | 🟢 Active | 8006 | Market analysis, competitive landscape |
+| **PROF** | `curriculum` | Curriculum Designer | 🟢 Active | 8004 | Learning objectives, module structuring |
+| **CHART** | `outcomes` | Outcomes Analyst | 🟢 Active | 8005 | Moore Levels 3-5, effectiveness metrics |
+| **LENS** | `visuals` | Visual Content Creator | 🟢 Active | 8008 | Image generation, diagrams, infographics |
+| **SCOUT** | `session-logger` | Session Logger | 🟢 Active | 8009 | Session tracking, audit trail |
+| **BRAND** | `logo-maker` | Logo Maker | 🟢 Active | 8012 | Brand asset generation |
 
-**Legend:** 🟢 Active (deployed) | 🟡 Planned (in development)
+**Legend:** 🟢 Active (deployed & healthy) | 🟡 Planned (in development)
 
 ---
 
@@ -40,36 +32,34 @@ The DHG AI Factory operates with a multi-agent architecture where specialized AI
 
 *Meet the team powering Digital Harmony Group AI operations*
 
-| Photo | Name | Title | Department | Reports To | Key Responsibilities | Expertise |
-|-------|------|-------|------------|------------|---------------------|-----------|
-| 👑 | **MAX** | Chief AI Orchestrator | Executive | CEO | Coordinates all AI operations, routes requests to specialists, ensures quality delivery | Multi-agent coordination, workflow optimization |
-| 🔬 | **DOC** | Senior Research Scientist | R&D | MAX | Conducts medical literature reviews, synthesizes clinical evidence, identifies practice gaps | PubMed, clinical research, evidence synthesis |
-| 💚 | **SAGE** | Medical Director | Clinical | MAX | Validates medical accuracy, ensures clinical relevance, reviews drug information | Internal medicine, pharmacology, medical terminology |
-| 🛡️ | **ACE** | Compliance Officer | Legal & Regulatory | MAX | Ensures ACCME compliance, reviews disclosures, validates regulatory adherence | Healthcare regulations, CME accreditation |
-| 📐 | **BLUE** | Enterprise Architect | Engineering | MAX | Designs system architecture, defines API standards, models data structures | System design, cloud architecture |
-| 🔭 | **SCOUT** | Trend Analyst | Strategy | REX | Identifies emerging medical education topics, tracks market trends | Market research, trend analysis |
-| ⚡ | **BOLT** | Lead Developer | Engineering | BLUE | Implements features, writes production code, fixes bugs | Full-stack development, AI/ML |
-| ✒️ | **INK** | Content Editor | Content | DOC | Writes documentation, creates summaries, polishes content | Technical writing, medical communication |
-| 🦅 | **HAWK** | Competitive Intelligence Lead | Strategy | REX | Monitors competitors, analyzes market positioning, tracks industry changes | Business intelligence, market analysis |
-| 🎓 | **PROF** | Curriculum Director | Education | MAX | Designs learning modules, creates assessments, structures educational content | Instructional design, adult learning |
-| 📊 | **CHART** | Analytics Manager | Operations | PROF | Tracks learning outcomes, measures effectiveness, reports on KPIs | Data analytics, educational measurement |
-| 📸 | **LENS** | Creative Director | Design | MAX | Creates visual content, designs presentations, produces infographics | Graphic design, visual communication |
-| ♟️ | **REX** | VP of Strategy | Executive | CEO | Develops business strategy, guides market positioning, plans growth initiatives | Strategic planning, business development |
-| 🚀 | **SHIP** | DevOps Manager | Engineering | BLUE | Manages deployments, maintains CI/CD, ensures system reliability | DevOps, cloud infrastructure, SRE |
-| ✅ | **VET** | QA Director | Quality | ACE | Oversees testing, establishes quality gates, validates deliverables | Quality assurance, test automation |
+| Icon | Name | Title | Key Responsibilities |
+|------|------|-------|---------------------|
+| 🔬 | **DOC** | Senior Research Scientist | Medical literature reviews, clinical evidence synthesis |
+| 💚 | **SAGE** | Medical Director | Validates medical accuracy, clinical relevance |
+| 🛡️ | **ACE** | Compliance Officer | Ensures ACCME compliance, reviews disclosures |
+| 🦅 | **HAWK** | Competitive Intelligence Lead | Monitors competitors, analyzes market |
+| 🎓 | **PROF** | Curriculum Director | Designs learning modules, creates assessments |
+| 📊 | **CHART** | Analytics Manager | Tracks learning outcomes, measures effectiveness |
+| 📸 | **LENS** | Creative Director | Creates visual content, designs presentations |
+| 🔭 | **SCOUT** | Session Analyst | Tracks sessions, maintains audit trail |
+| 🎨 | **BRAND** | Brand Designer | Creates logos and brand assets |
 
 ---
 
-## Deployment Status
+## Deployment Status (Feb 2026)
 
 | Agent | Environment | Endpoint | Health |
 |-------|-------------|----------|--------|
-| DOC (Research) | LangSmith Cloud | `https://cme-research.langsmith.app` | ✅ Healthy |
-| SAGE (Medical) | LangSmith Cloud | Assistant in Research | ✅ Healthy |
-| Registry API | Docker (.251) | `http://10.0.0.251:8011` | ✅ Healthy |
-| LENS (Visuals) | Docker (.251) | Internal | ✅ Healthy |
-| MAX (Orchestrator) | Planned | TBD | 🟡 Development |
+| DOC (Research) | Docker (.251) | `http://localhost:8003` | ✅ Healthy |
+| SAGE (Medical) | Docker (.251) | `http://localhost:8002` | ✅ Healthy |
+| ACE (Compliance) | Docker (.251) | `http://localhost:8007` | ✅ Healthy |
+| HAWK (Intel) | Docker (.251) | `http://localhost:8006` | ✅ Healthy |
+| PROF (Curriculum) | Docker (.251) | `http://localhost:8004` | ✅ Healthy |
+| CHART (Outcomes) | Docker (.251) | `http://localhost:8005` | ✅ Healthy |
+| LENS (Visuals) | Docker (.251) | `http://localhost:8008` | ✅ Healthy |
+| SCOUT (Logger) | Docker (.251) | `http://localhost:8009` | ✅ Healthy |
+| BRAND (Logo) | Docker (.251) | `http://localhost:8012` | ✅ Healthy |
 
 ---
 
-*Last Updated: January 27, 2026*
+*Last Updated: February 2, 2026*

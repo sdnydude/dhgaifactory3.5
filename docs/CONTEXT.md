@@ -1,83 +1,45 @@
 # DHG AI Factory - Current Context
 
-**Last Updated:** Jan 25, 2026 2:25 PM
+**Last Updated:** Feb 2, 2026
 
-## Architecture Direction (from Jan 23-24 sessions)
+## Architecture (Current State)
 
-### The Decision: Docker → LangSmith Cloud
+### What's Running
 
-**FROM (Being Deprecated):**
-- Docker-based FastAPI agents on .251
-- Docker-based orchestrator routing requests
-- Self-hosted infrastructure
+| Component | Location | Status |
+|-----------|----------|--------|
+| **7 DHG Agents** | Docker on .251 | ✅ All healthy |
+| **LibreChat** | Docker on .251 | ✅ Port 3010 |
+| **PostgreSQL** | Docker on .251 | ✅ Registry DB |
+| **Ollama** | Docker on .251 | ✅ qwen3:14b, nomic-embed-text |
+| **pgAdmin** | Docker on .251 | ✅ Port 5050 |
 
-**TO (Target):**
-- All 16 agents on **LangSmith Cloud**
-- LibreChat connects **directly to LangSmith Cloud** endpoints
-- Registry for metadata/tracking only (not routing)
-- Agents deployed via **GitHub → LangSmith UI** (not CLI)
+### What's Deprecated
 
-### Key Insights from Previous Sessions
-
-1. **"Workflows run in cloud, not on .251"** - LangSmith Cloud hosts execution
-2. **"Deploy from GitHub, not CLI"** -  is for local testing only
-3. **No proxies needed** - Use LangServe for OpenAI-compatible endpoints
-4. **Studio is web-based** - at smith.langchain.com
-
-### What Stays
-- **Registry Database** - for tracking agents, requests, costs
-- **LibreChat** - as user interface
-- **Local Development** - testing on .251 before pushing to cloud
-
-### What Gets Deprecated
-- **Docker Orchestrator** - no longer needed when agents are in cloud
-- **FastAPI agent containers** - replaced by LangGraph Cloud agents
-- **Proxy endpoints** - LangServe provides OpenAI-compatibility natively
+| Component | Notes |
+|-----------|-------|
+| **Orchestrator (8011)** | EOL - agents accessed directly |
+| **LangSmith Cloud deployment** | Paused - local Docker working well |
 
 ---
 
-## Current State (Jan 25, 2026)
+## Active Work Streams
 
-### Running on .251
-| Service | Port | Status | Future |
-|---------|------|--------|--------|
-| CME Research Agent | 2026 | Running (dev) | Deploy to LangSmith Cloud |
-| Registry API | 8011 | Running | Keep (metadata only) |
-| Docker Orchestrator | 8000 | Unknown | DEPRECATE |
-| LibreChat | 3010 | Running | Keep |
+### 1. CME Intake Form (P1)
+- ✅ PostgreSQL database schema deployed
+- ✅ CME endpoints integrated with database
+- ✅ JSONB datetime serialization fixed
+- 🔲 LibreChat CME sidebar integration
+- 🔲 Human Review Requirements implementation
 
-### Migration Status
-- [x] CME Research Agent created on LangGraph
-- [x] Parallel search pattern implemented
-- [x] LangSmith Studio connected
-- [ ] Deploy to LangSmith Cloud (via GitHub)
-- [ ] LibreChat connects to cloud endpoint
-- [ ] Deprecate Docker orchestrator
+### 2. LibreChat Agent Features (P1)
+- ✅ Agent config in librechat.yaml
+- 🔲 Enable Artifacts for agents
+- 🔲 Enable Tools selection for agents
 
----
-
-## LibreChat Integration (Corrected)
-
-**WRONG approach (what I started doing):**
-- Add OpenAI endpoints to Docker orchestrator
-- LibreChat → Orchestrator → LangGraph agent
-
-**RIGHT approach:**
-- Deploy agent to LangSmith Cloud
-- LibreChat → LangSmith Cloud directly (via LangServe)
-- No orchestrator in the middle
-
-### librechat.yaml (Target)
-
-
----
-
-## Immediate Actions Needed
-
-1. **STOP** adding OpenAI endpoints to orchestrator (wrong direction)
-2. **REVERT** changes to orchestrator/main.py if any were made
-3. **Deploy CME Research Agent to LangSmith Cloud** via GitHub
-4. **Update librechat.yaml** to point to cloud endpoint
+### 3. Observability Stack (P2)
+- 🔲 Prometheus/Grafana/Loki deployment
+- 🔲 Database exporters
 
 ---
 
@@ -85,51 +47,49 @@
 
 | Port | Service | Notes |
 |------|---------|-------|
-| 2026 | CME Research (dev) | langgraph dev server, for testing |
-| 3010 | LibreChat | UI |
-| 8011 | Registry API | metadata storage |
-| 8500 | Registry (old) | may be deprecated |
+| 3010 | LibreChat | Main UI |
+| 5050 | pgAdmin | Database management |
+| 5432 | PostgreSQL | Registry database |
+| 8002 | Medical LLM Agent | |
+| 8003 | Research Agent | |
+| 8004 | Curriculum Agent | |
+| 8005 | Outcomes Agent | |
+| 8006 | Competitor Intel Agent | |
+| 8007 | QA/Compliance Agent | |
+| 8008 | Visuals/Media Agent | |
+| 8009 | Session Logger | |
+| 8012 | Logo Maker | |
+| 11434 | Ollama | Local LLM |
 
 ---
 
-## Data Storage Strategy (from Jan 24)
+## Data Storage
 
-### Dual-Write: CR + Onyx
+### PostgreSQL (Registry DB)
+- Agent metadata and capabilities
+- CME project intake data
+- Request/response logs
+- Antigravity session history
 
-All session context, decisions, and artifacts should be stored in:
-
-1. **Central Registry (CR)**
-   - Agent metadata, capabilities
-   - Request history
-   - Cost tracking
-   - Deployment status
-
-2. **Onyx Knowledge Base**
-   - Session context (like this CONTEXT.md)
-   - Architecture decisions
-   - SOPs and templates
-   - Searchable via RAG
-
-### What to Store
-
-| Data | CR | Onyx | Notes |
-|------|-----|------|-------|
-| Agent definitions | ✓ | ✓ | Metadata + docs |
-| Research results | ✓ | ✓ | Structured + searchable |
-| Session decisions | | ✓ | RAG-searchable context |
-| Cost/usage metrics | ✓ | | Structured only |
-| SOPs/templates | | ✓ | Documentation |
+### Ollama
+- **qwen3:14b** - General purpose LLM
+- **nomic-embed-text** - Embeddings for RAG
 
 ---
 
-## Outstanding TODOs from Previous Sessions
+## Key Files
 
-### From Jan 24 Task.md:
-- [ ] Onyx integration (dual-write)
-- [ ] LangSmith Assistants setup
-- [ ] MCP server deployment
+| File | Purpose |
+|------|---------|
+| `docs/TODO.md` | Active task list |
+| `docs/PROJECT_TRUTH.md` | System status source of truth |
+| `.agent/workflows/` | Automated workflows |
+| `registry/models.py` | Database models |
+| `registry/migrations/` | SQL migrations |
 
-### Architecture Decisions Pending:
-- Should new agents be LangGraph-only (no Docker)?
-- How do existing Docker agents migrate?
-- What's the orchestrator deprecation timeline?
+---
+
+## Git Info
+
+- **Branch:** `feature/langgraph-migration`
+- **Remote:** `https://github.com/sdnydude/dhgaifactory3.5.git`
