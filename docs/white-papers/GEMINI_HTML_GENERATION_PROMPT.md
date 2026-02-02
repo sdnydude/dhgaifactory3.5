@@ -21,13 +21,20 @@
 - **Sticky Table of Contents**: A sidebar that highlights the current section.
 - **Responsive implementation**: Collapses to single column on mobile.
 
-2.  **Visuals by "Nano Banana Pro" (Image Generation)**: 
-    - You must use **Nano Banana Pro** (Google's advanced image model) to generate the 11 visual assets defined in the Appendix.
-    - **Do not** code simple SVGs. Use the full power of the image generator.
-    - **Text Rendering**: Leverage Nano Banana Pro's superior text capability for the Dashboards, Org Charts, and Swimlanes. The text in the images must be legible and match the copy provided.
-    - **Character Consistency**: Ensure the characters (Sarah, Marcus) and Agent Avatars (Doc, Sage, Ace) remain consistent across all visuals (Visual 1, 3, and 6).
-    - **Style**: High-fidelity, 4K-ready, photorealistic-meets-illustrative style (premium corporate aesthetic).
-    - **Integration**: Generate the images, then embed them into the HTML layout (or provide specific placeholders if generation happens in a separate step).
+**Specific Instructions**:
+
+1.  **Strict Text Fidelity (CRITICAL)**: You are acting as a Typesetter and Developer, NOT an Editor.
+    - You must preserve the input text word-for-word.
+    - Do not summarize, shorten, or "improve" the copy.
+    - Do not fix what you perceive as typos unless they are obvious code errors.
+    - Your job is POSITIONAL only (layout), not EDITORIAL.
+
+2.  **Visuals Strategy (2-Step Process)**: 
+    - **Step A (HTML)**: In the HTML code, use `<img>` tags with local filenames for the visuals (e.g., `<img src="visual1_hybrid_workforce.png" class="visual-img">`). **DO NOT** generate SVG code. Use clean placeholders.
+    - **Step B (Image Prompts)**: After the HTML code block, provide a separate list of **11 Optimized Image Generation Prompts**. I will use these prompts with Nano Banana Pro to generate the actual assets.
+    - **Style for Prompts**: Write the prompts to enforce the "Nano Banana Pro" aesthetic: High-fidelity, 4K, photorealistic-meets-illustrative, consistent text rendering.
+
+3.  **Single File**: The output should comprise the `index.html` code block followed by the `Image Prompts` text block.
 
 **Input Data**:
 [PASTE THE FULL MARKDOWN CONTENT OF DHG_AI_FACTORY_WHITE_PAPER.MD HERE]
