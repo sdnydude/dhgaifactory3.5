@@ -190,18 +190,18 @@ DHG AI Factory runs entirely on-premises, deployed on dedicated hardware. This e
 
 **[VISUAL 9: Technical Data Flow]**
 *Technical architecture diagram showing data movement:*
-*Top layer: User Interfaces (LibreChat UI for humans to talk to agents / Custom Dashboards)*
-*Routing layer: The "Manager" (routing tasks to correct agents / Session Management)*
-*Agent layer: The Digital Staff (Containerized agents - Docker)*
-*Memory layer: PostgreSQL with pgvector (The shared filing cabinet)*
-*Cognition layer: Ollama (The brain - Local LLM Inference)*
-*External layer: Secure API Gateways to PubMed, Social Media, etc.*
+*Top layer: User Interfaces (LibreChat UI / Custom Dashboards)*
+*Routing layer: The "Manager" (routing tasks)*
+*Agent layer: The Digital Staff (Docker Containers)*
+*Memory layer: PostgreSQL (The shared filing cabinet)*
+*Cognition layer: Ollama (The brain)*
 
 The shared "Office" components include:
-*   **PostgreSQL with pgvector**: The filing cabinet where **Doc** stores research so **Director** can find it later. It provides "Long Term Memory" so agents don't forget facts between sessions.
-*   **Ollama (Local LLM)**: The brain power. By running locally, we avoid per-token costs and keep data private. We use models like `qwen2.5:14b` for general tasks and specialized fine-tunes for medical writing.
-*   **LibreChat**: The meeting room. This is the interface where Sarah and Marcus chat with **Doc** and **Director**. It supports multi-modal input (text, images, files) and preserves conversation history.
-*   **Docker Containers**: The cubicles. Each agent runs in its own isolated container, ensuring that if one crashes, the others keep working. This also allows for precise resource allocation—giving **Lens** more GPU power for rendering while **Ace** runs on CPU for text processing.
+
+*   **PostgreSQL with pgvector (The Filing Cabinet)**: PostgreSQL is an enterprise-grade database. The "pgvector" extension allows it to store "vectors"—mathematical representations of text meaning. This gives the agents **Long Term Memory**. It allows **Doc** to store thousands of research papers and instantly retrieve the one paragraph relevant to a specific question, a technique called RAG (Retrieval-Augmented Generation).
+*   **Ollama (The Brain Engine)**: Ollama is the runtime software that allows powerful AI models to run on our own servers rather than in the cloud. By running locally, we avoid the per-word costs of services like OpenAI, and we guarantee that no data is ever trained on by public models. We use models like `qwen2.5:14b` for general reasoning and specialized fine-tunes for medical writing.
+*   **LibreChat (The Meeting Room)**: LibreChat is the user interface platform. It looks and feels like ChatGPT, ensuring a zero-learning-curve experience for staff. It serves as the collaboration space where humans (Sarah, Marcus) chat with digital agents (**Doc**, **Director**). It supports uploading files, images, and maintaining long conversation histories.
+*   **Docker Containers (The Cubicles)**: Docker is a technology that packages software into standardized units called containers. Each of our agents runs in its own isolated container. This ensures reliability—if **Ace's** container crashes, **Doc** keeps working. It also allows for precise resource allocation, giving the video rendering agents more power while the text agents run efficiently in the background.
 
 ---
 
@@ -252,6 +252,24 @@ Deploying the AI Factory follows a "New Hire" protocol rather than a software in
 *   Roll out the digital workforce to the wider team.
 *   Measure capacity gains and ROI.
 *   Begin planning the next module.
+
+---
+
+# Glossary of Terms
+
+**Agent**: A specialized AI software program designed to perform a specific job role (e.g., Researcher, Auditor). Unlike a generic chatbot, an agent has specific instructions, access to specific tools, and a defined personality.
+
+**Containerization (Docker)**: A method of packaging software so it can run reliably on any computer. We use it to give each Agent its own isolated workspace, preventing conflicts and ensuring stability.
+
+**Inference**: The process of the AI actually "thinking" or generating a response. Running inference "locally" means the thinking happens on DHG's own computers, not in the cloud.
+
+**LLM (Large Language Model)**: The core AI technology that understands and generates human language (e.g., GPT-4, Llama 3). It is the "brain" inside the Agent.
+
+**Local / On-Premises**: Running software on physical servers located within DHG's own facilities, rather than renting servers from Amazon, Google, or Microsoft. This ensures maximum privacy and control.
+
+**RAG (Retrieval-Augmented Generation)**: A technique where the AI looks up relevant facts from a private database (like a "Need to Know" file) before answering a question. This prevents the AI from guessing or "hallucinating" facts.
+
+**Vector Database**: A specialized database that stores information by "meaning" rather than just keywords. It allows the AI to find relevant documents even if they don't use the exact same words as the search query.
 
 ---
 
