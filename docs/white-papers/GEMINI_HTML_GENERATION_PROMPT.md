@@ -21,21 +21,13 @@
 - **Sticky Table of Contents**: A sidebar that highlights the current section.
 - **Responsive implementation**: Collapses to single column on mobile.
 
-**Specific Instructions**:
-1.  **Strict Text Fidelity (CRITICAL)**: You are acting as a Typesetter and Developer, NOT an Editor.
-    - You must preserve the input text word-for-word.
-    - Do not summarize, shorten, or "improve" the copy.
-    - Do not fix what you perceive as typos unless they are obvious code errors.
-    - Your job is POSITIONAL only (layout), not EDITORIAL.
-
-2.  **Visuals by "Nano Banana Pro"**: 
-    - You must generate the SVG graphics yourself, but style them according to the "Nano Banana Pro" aesthetic:
-    - **Style Definition**: High-contrast, vibrant, slightly playful but professional (think "Stripe" or "Duolingo" business tier).
-    - Use clean lines, distinct geometry, and the DHG color palette.
-    - Do not use generic corporate stock art styles.
-    - Code these graphics as inline SVGs.
-
-3.  **Single File**: The output must be one `index.html` file containing all HTML, CSS, and JS. No external image dependencies.
+2.  **Visuals by "Nano Banana Pro" (Image Generation)**: 
+    - You must use **Nano Banana Pro** (Google's advanced image model) to generate the 11 visual assets defined in the Appendix.
+    - **Do not** code simple SVGs. Use the full power of the image generator.
+    - **Text Rendering**: Leverage Nano Banana Pro's superior text capability for the Dashboards, Org Charts, and Swimlanes. The text in the images must be legible and match the copy provided.
+    - **Character Consistency**: Ensure the characters (Sarah, Marcus) and Agent Avatars (Doc, Sage, Ace) remain consistent across all visuals (Visual 1, 3, and 6).
+    - **Style**: High-fidelity, 4K-ready, photorealistic-meets-illustrative style (premium corporate aesthetic).
+    - **Integration**: Generate the images, then embed them into the HTML layout (or provide specific placeholders if generation happens in a separate step).
 
 **Input Data**:
 [PASTE THE FULL MARKDOWN CONTENT OF DHG_AI_FACTORY_WHITE_PAPER.MD HERE]
