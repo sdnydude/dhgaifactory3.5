@@ -8,18 +8,71 @@
 
 | Component | Location | Status |
 |-----------|----------|--------|
-| **7 DHG Agents** | Docker on .251 | ✅ All healthy |
+| **9 DHG Agents** | Docker on .251 | ✅ All healthy |
 | **LibreChat** | Docker on .251 | ✅ Port 3010 |
 | **PostgreSQL** | Docker on .251 | ✅ Registry DB |
 | **Ollama** | Docker on .251 | ✅ qwen3:14b, nomic-embed-text |
 | **pgAdmin** | Docker on .251 | ✅ Port 5050 |
 
-### What's Deprecated
+### LLM Orchestration
 
-| Component | Notes |
-|-----------|-------|
-| **Orchestrator (8011)** | EOL - agents accessed directly |
-| **LangSmith Cloud deployment** | Paused - local Docker working well |
+Orchestration is handled by **LibreChat** via agent configuration. The old custom orchestrator service (port 8011) was deprecated.
+
+---
+
+## Agent Parallel Processing Patterns
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     PARALLEL PHASE 1                             │
+│  ┌──────────┐    ┌──────────────┐    ┌──────────┐               │
+│  │ Research │    │ Competitor   │    │ Visuals  │               │
+│  │  (8003)  │    │ Intel (8006) │    │  (8008)  │               │
+│  └────┬─────┘    └──────┬───────┘    └────┬─────┘               │
+└───────┼─────────────────┼─────────────────┼─────────────────────┘
+        │                 │                 │
+        ▼                 ▼                 │
+┌───────────────────────────────────────────┼─────────────────────┐
+│              SEQUENTIAL PHASE                                    │
+│  ┌────────────┐                           │                      │
+│  │ Medical LLM│ ◄── needs research ───────┘                      │
+│  │   (8002)   │                                                  │
+│  └─────┬──────┘                                                  │
+└────────┼────────────────────────────────────────────────────────┘
+         │
+┌────────┼────────────────────────────────────────────────────────┐
+│        ▼         PARALLEL PHASE 2                                │
+│  ┌───────────┐    ┌──────────┐                                   │
+│  │ Curriculum│    │ Outcomes │                                   │
+│  │   (8004)  │    │  (8005)  │                                   │
+│  └─────┬─────┘    └────┬─────┘                                   │
+└────────┼───────────────┼────────────────────────────────────────┘
+         │               │
+         ▼               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                  FINAL VALIDATION                                │
+│  ┌─────────────────────────────────────┐                        │
+│  │        QA/Compliance (8007)         │                        │
+│  │   Validates all outputs, last step  │                        │
+│  └─────────────────────────────────────┘                        │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Processing Summary
+
+| Phase | Agents | Notes |
+|-------|--------|-------|
+| **Parallel 1** | Research, Competitor Intel, Visuals | Independent data gathering |
+| **Sequential** | Medical LLM | Depends on research results |
+| **Parallel 2** | Curriculum, Outcomes | Can process content simultaneously |
+| **Final** | QA/Compliance | Must validate everything at end |
+
+### Support Agents (Always Available)
+
+| Agent | Port | Purpose |
+|-------|------|---------|
+| Session Logger | 8009 | Audit trail for all requests |
+| Logo Maker | 8012 | On-demand brand asset generation |
 
 ---
 
