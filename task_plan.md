@@ -37,27 +37,40 @@ Phase 3: Backend API — `pending`
 - [x] Create webhook for LangGraph callbacks
 - [x] Create database migration for cme_projects table (003_add_cme_projects.sql)
 
-#### Phase 3.2: Database Integration (Current)
-- [ ] Add SQLAlchemy ORM models to cme_endpoints.py
+#### Phase 3.2: Database Integration ✅
+- [x] Add SQLAlchemy ORM models to models.py
   - CMEProject model
   - CMEAgentOutput model
-- [ ] Remove in-memory store (_cme_projects dict)
-- [ ] Update 11 endpoints to use database:
-  - [ ] POST /api/v2/projects (create)
-  - [ ] GET /api/v2/projects (list)
-  - [ ] GET /api/v2/projects/{id} (get)
-  - [ ] POST /api/v2/projects/{id}/start
-  - [ ] GET /api/v2/projects/{id}/status
-  - [ ] POST /api/v2/projects/{id}/pause
-  - [ ] POST /api/v2/projects/{id}/resume
-  - [ ] POST /api/v2/projects/{id}/cancel
-  - [ ] GET /api/v2/projects/{id}/outputs
-  - [ ] GET /api/v2/projects/{id}/outputs/{agent}
-  - [ ] POST /api/v2/webhook/agent-complete
-- [ ] Restart registry-api container
-- [ ] Test API endpoints with curl
-- [ ] Test form submission from LibreChat
-- [ ] Verify data persists in PostgreSQL
+- [x] Remove in-memory store (_cme_projects dict)
+- [x] Update 10 endpoints to use database:
+  - [x] POST /api/v2/projects (create)
+  - [x] GET /api/v2/projects (list)
+  - [x] GET /api/v2/projects/{id} (get)
+  - [x] POST /api/v2/projects/{id}/start
+  - [x] GET /api/v2/projects/{id}/status
+  - [x] POST /api/v2/projects/{id}/pause
+  - [x] POST /api/v2/projects/{id}/resume
+  - [x] POST /api/v2/projects/{id}/cancel
+  - [x] GET /api/v2/projects/{id}/outputs
+  - [x] GET /api/v2/projects/{id}/outputs/{agent}
+  - [x] POST /api/v2/webhook/agent-complete
+- [x] Rebuild registry-api container with new code
+- [x] Verify data persists in PostgreSQL
+
+#### Phase 3.3: CSV Import (Pending)
+- [ ] Create POST /api/v2/projects/import endpoint
+- [ ] CSV parsing and validation
+- [ ] Column mapping to intake form fields
+- [ ] Batch insert with error handling
+- [ ] Frontend: File upload component in CME panel
+- [ ] Template CSV download
+
+#### Phase 3.4: HTTPS/SSL Setup (Pending)
+- [ ] Determine subdomain for registry-api (e.g., api.digitalharmonyai.com)
+- [ ] Set up Let's Encrypt/Certbot for SSL certificates
+- [ ] Configure nginx reverse proxy with SSL termination
+- [ ] Update frontend API URL to use HTTPS
+- [ ] Test Mixed Content resolved
 
 ### Phase 3.5: LangGraph Agent Development (Pending)
 **Approach:** Build and test agents one at a time

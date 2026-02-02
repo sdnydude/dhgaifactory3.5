@@ -304,8 +304,8 @@ async def create_cme_project(
     """
     start = time.time()
     try:
-        # Convert intake to dict for storage
-        intake_dict = intake.model_dump()
+        # Convert intake to dict for storage (mode='json' serializes datetimes to ISO strings)
+        intake_dict = intake.model_dump(mode='json')
         
         # Create project in database
         db_project = CMEProject(
