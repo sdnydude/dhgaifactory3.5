@@ -493,3 +493,74 @@ For organizations considering AI investment, the choice clarifies: build once ca
 - **Elements**: Concentric circles with module labels
 - **Style**: Growth visualization, solid/outline/dotted rings
 
+
+---
+
+# Addendum: Beyond Divisions — Products, Services, and Client Integration
+
+## Modules for Products and Services
+
+The modular architecture extends beyond internal divisions. Every DHG product and service represents a module opportunity:
+
+**Product Modules:**
+- DHG Needs Assessment Tool → CME Module powers this client-facing product
+- DHG Studio Services → Studio Module enables livestream production offerings
+- DHG Research Reports → Research agent delivers commercial research products
+
+**Service Modules:**
+- Grant Writing Services → CME Module with client-specific customization
+- Video Production Services → Studio Module configured for client workflows
+- Custom AI Training → Module templates adapted to client domains
+
+The same agents that serve DHG internally become the engine for client-facing products and services. Development investment pays returns through both operational efficiency and revenue-generating offerings.
+
+---
+
+## Integration with Existing Infrastructure
+
+DHG AI Factory modules are designed to **integrate with**, not replace, existing client infrastructure:
+
+**[INTEGRATION VISUAL: Hub-and-Spoke Integration Model]**
+*Central hub: DHG AI Factory Module*
+*Spokes connecting to:*
+- *Existing LMS (SCORM, xAPI)*
+- *Client CRM (Salesforce, HubSpot)*
+- *Video Platforms (Vimeo, Wistia, Brightcove)*
+- *Document Management (SharePoint, Google Drive)*
+- *Analytics (existing BI tools)*
+- *SSO/Identity (Azure AD, Okta)*
+
+### Integration Approach
+
+| Integration Type | Method | Example |
+|-----------------|--------|---------|
+| **API-First** | REST endpoints for all agent capabilities | Client app calls Research agent API |
+| **Webhook Events** | Push notifications on task completion | Notify client LMS when content ready |
+| **File-Based** | Import/export standard formats | Accept DOCX, export PDF/HTML |
+| **Embedded** | White-label UI components | Module panel in client portal |
+| **SSO** | Standard authentication protocols | Client users authenticate via their IdP |
+
+### What Stays, What Adds
+
+Clients don't abandon existing systems. The AI Factory module **adds capabilities** to what already works:
+
+- **Client keeps**: Their LMS, their CRM, their analytics, their workflows
+- **Module adds**: AI-powered content generation, automated research, quality assurance
+- **Result**: Enhanced existing stack, not wholesale replacement
+
+This integration philosophy reduces implementation friction. Clients don't need to migrate data, retrain staff on new platforms, or abandon working processes. The module slots into existing infrastructure like a capability upgrade.
+
+---
+
+## Positioning Summary
+
+> "Every division represents a module opportunity."
+
+**Expanded:**
+
+> "Every division, product, and service represents a module opportunity. AI Factory modules integrate with existing infrastructure—adding capabilities without requiring replacement."
+
+---
+
+*This addendum expands the white paper scope to address product/service applications and client integration scenarios.*
+
