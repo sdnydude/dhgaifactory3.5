@@ -78,17 +78,17 @@ In the CME Division, Director Sarah Chen doesn't say "I used the AI tool to gene
 *Bottom: Infrastructure Support (The "Office" they work in)*
 
 ### The Research & Content Team
-*   **Doc (Research Scientist)**: Doc is the tireless academic of the team. Give him a topic, and he scours PubMed, CDC data, CMS databases, and clinical guidelines. He is configured with strict truthfulness parameters—he doesn't hallucinate; he cites. He provides the raw evidence foundation for everything the team builds.
-*   **Sage (Medical Director/Writer)**: Sage takes Doc's research and weaves it into professional medical narrative. Sage understands the nuance of "patient-centric language" and the specific tone required for high-stakes grants. He is trained on successful past grants, ensuring he mimics the organization's best writing style.
+*   **Doc (Research Scientist)**: Doc is the tireless academic of the team. Give him a topic, and he scours PubMed, CDC data, CMS databases, and clinical guidelines. He is configured with strict truthfulness parameters—he doesn't "hallucinate" (make up facts), which is a common risk with generic tools. He cites every claim back to a verified source.
+*   **Sage (Medical Director/Writer)**: Sage takes Doc's research and weaves it into professional medical narrative. Sage understands the nuance of "patient-centric language" (focusing on the person, not the disease) and the specific tone required for high-stakes grants. He is trained on successful past grants, ensuring he mimics the organization's best writing style.
 
 ### The Quality & Compliance Team
-*   **Ace (Compliance Officer)**: Ace is the strict auditor. He naturally has an adversarial relationship with Sage. He doesn't create content; he critiques it. He has memorized the ACCME Standards for Integrity and Independence and the OIG Compliance Program Guidance. He scans every output for commercial bias, off-label promotion, or lack of fair balance. If he sees an issue, he flags it for correction.
-*   **Prof (Curriculum Designer)**: Prof ensures educational rigor. While Sage writes the content, Prof structures it into learning objectives that map to Bloom's Taxonomy, ensuring pedagogical soundness. He ensures every educational activity has clear, measurable goals.
-*   **Chart (Outcomes Analyst)**: Chart cares about results. He designs the assessment frameworks (Moore's Levels) to ensure educational programs can prove their impact. He analyzes pre-test and post-test data patterns to recommend improved questions.
+*   **Ace (Compliance Officer)**: Ace is the strict auditor. He naturally has an adversarial relationship with Sage. He doesn't create content; he critiques it. He has memorized the ACCME Standards for Integrity and Independence and the OIG Compliance Program Guidance. He scans every output for "commercial bias" (favoring one drug company over another) or lack of "fair balance" (discussing risks as well as benefits). If he sees an issue, he flags it for correction.
+*   **Prof (Curriculum Designer)**: Prof ensures educational rigor. While Sage writes the content, Prof structures it into learning objectives that map to Bloom's Taxonomy (a framework for classifying educational goals from simple recall to complex creation). he ensures every educational activity has clear, measurable goals.
+*   **Chart (Outcomes Analyst)**: Chart cares about results. He designs the assessment frameworks using Moore's Levels (a 7-level scale measuring everything from participation to patient health improvement) to ensure educational programs can prove their real-world impact.
 
 ### The Creative & Production Team
 *   **Lens (Creative Director)**: Lens thinks in visuals. He creates the charts, infographics, and slide decks that accompany the text. He ensures visual consistency across the brand, applying the correct color palettes and font hierarchies automatically.
-*   **Director (Production Lead)**: Director runs the show. He generates minute-by-minute run-of-show documents, shot lists, contingency plans, and logistical schedules for the Studio team. He anticipates bottlenecks before they happen.
+*   **Director (Production Lead)**: Director runs the show. He generates minute-by-minute "run-of-show" documents (the master schedule for a live event), shot lists, contingency plans, and logistical schedules for the Studio team. He anticipates bottlenecks before they happen.
 *   **Script (Teleprompter Lead)**: Script ensures the talent sounds good. He writes teleprompter copy optimized for speaking cadence, timing, and breath pauses. He converts written prose into spoken word.
 *   **Clip (Editor)**: Clip lives in post-production. He watches hours of raw footage to find the 30-second gold nuggets for social media, tagging distinct moments for distribution. He generates transcripts, matches captions, and identifies potential viral moments.
 
@@ -109,7 +109,7 @@ The deployment didn't look like a software install; it looked like team expansio
 *Use dialogue bubbles: "Research complete," "Drafting narrative," "Compliance check passed."*
 
 ### The New Workflow: A Day in the Life
-1.  **The Brief**: Sarah briefs the team. "We need a Needs Assessment for Type 2 Diabetes, focusing on social determinants of health in rural populations."
+1.  **The Brief**: Sarah briefs the team. "We need a Needs Assessment (the foundational document justifying why an educational program is necessary) for Type 2 Diabetes, focusing on social determinants of health in rural populations."
 2.  **Doc's Turn**: "I'll gather the latest ADA guidelines and prevalence data," Doc signals. He queries nine distinct databases simultaneously. Three minutes later, a 20-page research dossier is ready, complete with 50+ citations.
 3.  **Sage's Turn**: "I'll draft the narrative based on Doc's findings," Sage offers. He synthesizes the data into a 3,000-word document, weaving in statistics naturally and building a compelling case for education.
 4.  **Prof & Chart**: Simultaneously, Prof drafts the learning objectives while Chart designs the Moore's Level outcomes plan to measure the program's success.
@@ -145,7 +145,7 @@ The AI Factory "hired" his team. Because the factory is modular, adding the **St
 Marcus's new workflow demonstrated the power of the shared workforce:
 
 *   **Pre-Production**: **Director** creates the minute-by-minute run-of-show. **Script** writes the teleprompter copy. But uniquely, they call on **Doc** (the researcher from CME) to provide background stats on the speaker's topic. Doc bridges the gap between the medical content and the studio production.
-*   **Live Production**: **Lens** (shared with CME) creates real-time graphics and lower thirds. **Live** monitors the stream to suggest overlays based on spoken keywords.
+*   **Live Production**: **Lens** (shared with CME) creates real-time graphics and "lower thirds" (the graphic overlay showing a speaker's name and title). **Live** monitors the stream to suggest overlays based on spoken keywords.
 *   **Post-Production**: **Clip** analyzes the recording. He interacts with **Publish** to schedule social media posts across platforms.
 
 Marcus's team slashed pre-production time by 75% and automated 90% of the post-production clipping process. The same infrastructure that wrote medical grants was now producing live television. This proved the core thesis: specialized agents, sharing a common core, can serve vastly different business functions.
