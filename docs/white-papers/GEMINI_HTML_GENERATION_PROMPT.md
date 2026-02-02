@@ -22,12 +22,20 @@
 - **Responsive implementation**: Collapses to single column on mobile.
 
 **Specific Instructions**:
-1.  **Content**: Use the full text provided below. Do not summarize.
-2.  **Visuals**: You MUST generate the graphics described in the "Appendix: Visual Specifications" section using SVG code directly embedded in the HTML.
-    - Do not use placeholders like `[Insert Image Here]`.
-    - Actually code the SVG visuals (Org charts, Swimlanes, Bar charts).
-    - Make them look professional (gradients, rounded corners, clear labels).
-3.  **Single File**: The output must be one `index.html` file containing all HTML, CSS, and JS. No external image dependencies (use embedded SVGs or Data URIs).
+1.  **Strict Text Fidelity (CRITICAL)**: You are acting as a Typesetter and Developer, NOT an Editor.
+    - You must preserve the input text word-for-word.
+    - Do not summarize, shorten, or "improve" the copy.
+    - Do not fix what you perceive as typos unless they are obvious code errors.
+    - Your job is POSITIONAL only (layout), not EDITORIAL.
+
+2.  **Visuals by "Nano Banana Pro"**: 
+    - You must generate the SVG graphics yourself, but style them according to the "Nano Banana Pro" aesthetic:
+    - **Style Definition**: High-contrast, vibrant, slightly playful but professional (think "Stripe" or "Duolingo" business tier).
+    - Use clean lines, distinct geometry, and the DHG color palette.
+    - Do not use generic corporate stock art styles.
+    - Code these graphics as inline SVGs.
+
+3.  **Single File**: The output must be one `index.html` file containing all HTML, CSS, and JS. No external image dependencies.
 
 **Input Data**:
 [PASTE THE FULL MARKDOWN CONTENT OF DHG_AI_FACTORY_WHITE_PAPER.MD HERE]
