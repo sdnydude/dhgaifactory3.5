@@ -144,12 +144,12 @@ CHARACTER_TYPES = [
 
 SECTION_REQUIREMENTS = {
     "cold_open": {"min_words": 50, "max_words": 100, "character_required": True},
-    "disease_state_overview": {"min_words": 400, "max_words": 500},
-    "treatment_landscape": {"min_words": 400, "max_words": 500},
-    "practice_gaps": {"min_words": 600, "max_words": 800, "character_required": True},
-    "barriers": {"min_words": 400, "max_words": 500},
-    "educational_rationale": {"min_words": 400, "max_words": 500, "character_required": True},
-    "target_audience": {"min_words": 300, "max_words": 400},
+    "disease_state_overview": {"min_words": 125, "max_words": 300},
+    "treatment_landscape": {"min_words": 200, "max_words": 300},
+    "practice_gaps": {"min_words": 300, "max_words": 400, "character_required": True},
+    "barriers": {"min_words": 125, "max_words": 200},
+    "educational_rationale": {"min_words": 200, "max_words": 300, "character_required": True},
+    "target_audience": {"min_words": 125, "max_words": 200},
     "conclusion": {"min_words": 200, "max_words": 300, "character_required": True},
 }
 
@@ -406,7 +406,7 @@ Return ONLY the narrative text. No headers. No quotes."""
 
 @traceable(name="generate_disease_overview_node", run_type="chain")
 async def generate_disease_overview_node(state: NeedsAssessmentState) -> dict:
-    """Generate Disease State Overview section (400-500 words)."""
+    """Generate Disease State Overview section (125-300 words)."""
     
     disease_state = state.get("disease_state", "")
     therapeutic_area = state.get("therapeutic_area", "")
@@ -417,13 +417,12 @@ async def generate_disease_overview_node(state: NeedsAssessmentState) -> dict:
     system = """You are a senior medical writer creating a disease state overview for a CME grant.
 
 REQUIREMENTS:
-- 400-500 words
+- 125-300 words
 - Start with connecting the cold open character to the population
 - Include specific epidemiology data with citations
 - Include economic burden with citations
 - Include disease trajectory/projections
 - 80%+ flowing prose (no bullet points)
-- Minimum 4-sentence paragraphs
 - Embed data in prose, don't list it
 - Use active voice
 - Include specific numbers, not "many" or "significant"
@@ -448,7 +447,7 @@ EPIDEMIOLOGY DATA:
 RESEARCH CONTEXT:
 {research_summary[:1000] if research_summary else "Include current prevalence, mortality, and economic data"}
 
-Write 400-500 words of flowing prose. Start by connecting the character to the population."""
+Write 125-300 words of flowing prose. Start by connecting the character to the population."""
 
     result = await llm.generate(system, prompt, {"step": "disease_overview"})
     
@@ -476,7 +475,7 @@ Write 400-500 words of flowing prose. Start by connecting the character to the p
 
 @traceable(name="generate_treatment_landscape_node", run_type="chain")
 async def generate_treatment_landscape_node(state: NeedsAssessmentState) -> dict:
-    """Generate Current Treatment Landscape section (400-500 words)."""
+    """Generate Current Treatment Landscape section (200-300 words)."""
     
     disease_state = state.get("disease_state", "")
     research_summary = state.get("research_summary", "")
@@ -484,7 +483,7 @@ async def generate_treatment_landscape_node(state: NeedsAssessmentState) -> dict
     system = """You are a senior medical writer creating a treatment landscape section for a CME grant.
 
 REQUIREMENTS:
-- 400-500 words
+- 200-300 words
 - Guideline-recommended approaches with specific named guidelines
 - Available therapies with drug classes/names
 - Recent advances (specific drugs, trials)
@@ -506,7 +505,7 @@ Cover:
 Research context:
 {research_summary[:1500] if research_summary else "Use current standard of care for this condition"}
 
-Write 400-500 words of flowing prose."""
+Write 200-300 words of flowing prose."""
 
     result = await llm.generate(system, prompt, {"step": "treatment_landscape"})
     
@@ -528,7 +527,7 @@ Write 400-500 words of flowing prose."""
 
 @traceable(name="generate_practice_gaps_node", run_type="chain")
 async def generate_practice_gaps_node(state: NeedsAssessmentState) -> dict:
-    """Generate Practice Gaps section (600-800 words)."""
+    """Generate Practice Gaps section (300-400 words)."""
     
     gaps = state.get("gaps", [])
     character_name = state.get("character_name", "Maria Chen")
@@ -537,13 +536,12 @@ async def generate_practice_gaps_node(state: NeedsAssessmentState) -> dict:
     system = """You are a senior medical writer creating a practice gaps section for a CME grant.
 
 REQUIREMENTS:
-- 600-800 words
+- 300-400 words
 - Present each gap as a narrative with evidence
 - Include quantified evidence for each gap
 - Connect gaps to patient outcomes
 - Include character reference to illustrate at least one gap
 - 80%+ flowing prose
-- Each gap gets 150-200 words
 - Name specific studies supporting each gap
 
 Return ONLY the section content. No header."""
@@ -562,7 +560,7 @@ CHARACTER TO INCLUDE:
 {character_name} - use to illustrate one of the gaps naturally
 Example: "In {character_name.split()[0]}'s case, the gap manifested as..."
 
-Write 600-800 words. Each gap should be a full narrative paragraph with evidence."""
+Write 300-400 words. Each gap should be a narrative paragraph with evidence."""
 
     result = await llm.generate(system, prompt, {"step": "practice_gaps"})
     
@@ -589,7 +587,7 @@ Write 600-800 words. Each gap should be a full narrative paragraph with evidence
 
 @traceable(name="generate_barriers_node", run_type="chain")
 async def generate_barriers_node(state: NeedsAssessmentState) -> dict:
-    """Generate Barriers to Optimal Care section (400-500 words)."""
+    """Generate Barriers to Optimal Care section (125-200 words)."""
     
     clinical_barriers = state.get("clinical_barriers", [])
     disease_state = state.get("disease_state", "")
@@ -597,7 +595,7 @@ async def generate_barriers_node(state: NeedsAssessmentState) -> dict:
     system = """You are a senior medical writer creating a barriers section for a CME grant.
 
 REQUIREMENTS:
-- 400-500 words
+- 125-200 words
 - Categorize barriers: Clinician (knowledge, skill, attitude), System, Patient
 - Explain root causes
 - Connect barriers to gaps
@@ -617,7 +615,7 @@ Categorize into:
 2. System barriers (time, resources, workflow)
 3. Patient barriers (access, adherence, health literacy)
 
-Write 400-500 words explaining how each barrier perpetuates the practice gaps."""
+Write 125-200 words explaining how each barrier perpetuates the practice gaps."""
 
     result = await llm.generate(system, prompt, {"step": "barriers"})
     
@@ -639,7 +637,7 @@ Write 400-500 words explaining how each barrier perpetuates the practice gaps.""
 
 @traceable(name="generate_educational_rationale_node", run_type="chain")
 async def generate_educational_rationale_node(state: NeedsAssessmentState) -> dict:
-    """Generate Educational Rationale section (400-500 words)."""
+    """Generate Educational Rationale section (200-300 words)."""
     
     character_name = state.get("character_name", "Maria Chen")
     disease_state = state.get("disease_state", "")
@@ -648,7 +646,7 @@ async def generate_educational_rationale_node(state: NeedsAssessmentState) -> di
     system = """You are a senior medical writer creating an educational rationale for a CME grant.
 
 REQUIREMENTS:
-- 400-500 words
+- 200-300 words
 - Why education can address these gaps
 - What education must accomplish
 - Expected outcomes from education
@@ -665,7 +663,7 @@ GAPS EDUCATION WILL ADDRESS:
 CHARACTER TO INCLUDE:
 "Had {character_name.split()[0]}'s physician participated in education addressing these gaps..."
 
-Write 400-500 words making the case for why education can improve outcomes."""
+Write 200-300 words making the case for why education can improve outcomes."""
 
     result = await llm.generate(system, prompt, {"step": "educational_rationale"})
     
@@ -692,7 +690,7 @@ Write 400-500 words making the case for why education can improve outcomes."""
 
 @traceable(name="generate_target_audience_node", run_type="chain")
 async def generate_target_audience_node(state: NeedsAssessmentState) -> dict:
-    """Generate Target Audience section (300-400 words)."""
+    """Generate Target Audience section (125-200 words)."""
     
     target_audience = state.get("target_audience", "primary care physicians")
     disease_state = state.get("disease_state", "")
@@ -701,7 +699,7 @@ async def generate_target_audience_node(state: NeedsAssessmentState) -> dict:
     system = """You are a senior medical writer creating a target audience section for a CME grant.
 
 REQUIREMENTS:
-- 300-400 words
+- 125-200 words
 - Who needs this education
 - Why this audience
 - Specialty-specific considerations
@@ -721,7 +719,7 @@ Address:
 3. Specialty-specific knowledge needs
 4. Practice setting variations (academic, community, rural)
 
-Write 300-400 words."""
+Write 125-200 words."""
 
     result = await llm.generate(system, prompt, {"step": "target_audience"})
     
