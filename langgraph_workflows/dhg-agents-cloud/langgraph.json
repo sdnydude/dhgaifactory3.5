@@ -2,7 +2,8 @@
   "dependencies": ["."],
   "graphs": {
     "cme_research": "./src/agent.py:graph",
-    "needs_assessment": "./src/needs_assessment_agent.py:graph"
+    "needs_assessment": "./src/needs_assessment_agent.py:graph",
+    "prose_quality": "./src/prose_quality_agent.py:graph"
   },
   "env": ".env"
 }
