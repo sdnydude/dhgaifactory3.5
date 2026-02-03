@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Generate embeddings for antigravity_messages using sentence-transformers"""
+"""Generate embeddings for antigravity_messages using Ollama API"""
 
 import os
 import sys
 import logging
 import psycopg2
-from sentence_transformers import SentenceTransformer
+import requests
+import json
+import time
 
 # Configure logging
 logging.basicConfig(
@@ -13,6 +15,10 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+# Ollama configuration
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "nomic-embed-text")
 
 def get_db_connection():
     """Get database connection using environment variables."""
@@ -28,15 +34,34 @@ def get_db_connection():
         logger.error(f"Database connection failed: {e}")
         raise
 
+def get_embedding(text):
+    """Get embedding from Ollama."""
+    try:
+        response = requests.post(
+            f"{OLLAMA_URL}/api/embeddings",
+            json={
+                "model": EMBEDDING_MODEL,
+                "prompt": text
+            },
+            timeout=30
+        )
+        response.raise_for_status()
+        return response.json()["embedding"]
+    except Exception as e:
+        logger.error(f"Embedding generation failed: {e}")
+        return None
+
 def main():
-    """Main embedding generation function."""
     if not os.environ.get("DB_PASSWORD") and not os.environ.get("PGPASSWORD"):
         logger.error("DB_PASSWORD or PGPASSWORD environment variable required")
         sys.exit(1)
 
-    # Load model
-    logger.info("Loading embedding model...")
-    model = SentenceTransformer("all-MiniLM-L6-v2")
+    # Test Ollama
+    try:
+        requests.get(f"{OLLAMA_URL}/api/tags", timeout=5)
+    except Exception as e:
+        logger.error(f"Ollama unreachable: {e}")
+        sys.exit(1)
 
     conn = get_db_connection()
     cur = conn.cursor()
@@ -44,39 +69,42 @@ def main():
     # Get messages without embeddings
     cur.execute("""
         SELECT id, content FROM antigravity_messages 
-        WHERE embedding IS NULL AND content IS NOT NULL AND LENGTH(content) > 10
-        LIMIT 500
+        WHERE embedding IS NULL AND content IS NOT NULL AND LENGTH(content) > 5
+        LIMIT 1000
     """)
     rows = cur.fetchall()
 
-    logger.info(f"Processing {len(rows)} messages...")
+    logger.info(f"Processing {len(rows)} messages with {EMBEDDING_MODEL}...")
 
-    batch_size = 50
     updated = 0
+    errors = 0
 
     try:
-        for i in range(0, len(rows), batch_size):
-            batch = rows[i:i+batch_size]
-            ids = [r[0] for r in batch]
-            texts = [r[1][:8000] for r in batch]  # Truncate long texts
+        for i, (msg_id, content) in enumerate(rows):
+            # Truncate if too long (Ollama/Nomic has limits)
+            truncated_content = content[:8000]
             
-            embeddings = model.encode(texts)
+            embedding = get_embedding(truncated_content)
             
-            for msg_id, embedding in zip(ids, embeddings):
+            if embedding:
                 cur.execute(
-                    "UPDATE antigravity_messages SET embedding = %s WHERE id = %s",
-                    (embedding.tolist(), msg_id)
+                    "UPDATE antigravity_messages SET embedding = %s::vector WHERE id = %s",
+                    (embedding, msg_id)
                 )
                 updated += 1
-            
-            conn.commit()
-            logger.info(f"Processed {min(i+batch_size, len(rows))}/{len(rows)}")
+            else:
+                errors += 1
 
-        logger.info(f"Done! Updated {updated} messages with embeddings.")
+            if i % 20 == 0 and i > 0:
+                conn.commit()
+                logger.info(f"Progress: {i}/{len(rows)} messages embedded")
+
+        conn.commit()
+        logger.info(f"Done! Updated {updated} messages. Errors: {errors}")
         
     except Exception as e:
         conn.rollback()
-        logger.error(f"Error during embedding generation: {e}")
+        logger.error(f"Error during loop: {e}")
         raise
     finally:
         cur.close()

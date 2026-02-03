@@ -35,7 +35,7 @@ except ImportError:
     registry_errors = Counter('registry_errors', 'Registry errors', ['error_type'])
 
 
-router = APIRouter(prefix="/api/v2", tags=["cme"])
+router = APIRouter(prefix="/api/cme", tags=["cme"])
 
 
 # =============================================================================
@@ -137,8 +137,8 @@ class SectionG_Content(BaseModel):
 
 class SectionH_Logistics(BaseModel):
     """Section H: Logistics (5 fields)"""
-    target_launch_date: Optional[datetime] = None
-    expiration_date: Optional[datetime] = None
+    target_launch_date: Optional[str] = None
+    expiration_date: Optional[str] = None
     distribution_channels: Optional[List[str]] = None
     geo_restrictions: Optional[List[str]] = None
     language_requirements: Optional[List[str]] = None

@@ -25,7 +25,7 @@ Phase 3: Backend API — `pending`
 - [x] Create planning-sync workflow
 - [x] Create generate_planning_embeddings.py script
 - [x] Create search_planning_docs.py script
-- [x] Update session-start workflow with planning check
+- [x] Update session-start workflow withplanning check
 - [x] Test full pipeline: sync → embeddings → search (15 embeddings generated)
 
 ### Phase 3: Backend API (In Progress)
@@ -99,6 +99,18 @@ Phase 3: Backend API — `pending`
 - [ ] Medical literature → RAGFlow
 - [ ] User uploads → LibreChat rag_api
 - [ ] Build unified search across knowledge stores
+
+### Phase 6: Reporting & Multimodal (New)
+#### Phase 6.1: Pixeltable Implementation (P2)
+- [ ] Add `pixeltable` to `scripts/requirements.txt`
+- [ ] Create Proof-of-Concept script `scripts/poc_pixeltable_video.py`
+  - [ ] Ingest a dummy video from `swincoming/`
+  - [ ] Extract frames and store in Postgres
+- [ ] Evaluate for replacing current RAG ingestion pipeline
+
+#### Phase 6.2: Observability Stack (P2)
+- [ ] Prometheus/Grafana/Loki deployment
+- [ ] Database exporters
 
 ## System Architecture
 

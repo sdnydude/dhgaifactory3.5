@@ -21,6 +21,11 @@ target_metadata = Base.metadata
 
 # Get database URL from environment - consistent with database.py
 def get_url():
+    # Check for direct URL override
+    url = os.getenv("DATABASE_URL")
+    if url:
+        return url
+
     DB_HOST = os.getenv("POSTGRES_HOST", "dhg-registry-db")
     DB_PORT = os.getenv("POSTGRES_PORT", "5432")
     DB_USER = os.getenv("POSTGRES_USER", "dhg")

@@ -39,3 +39,24 @@ services:
       timeout: 10s
       retries: 3
     restart: unless-stopped
+
+  registry-api:
+    build:
+      context: ./registry
+      dockerfile: Dockerfile
+    container_name: dhg-registry-api
+    ports:
+      - "8011:8000"
+    environment:
+      - POSTGRES_USER=dhg
+      - POSTGRES_PASSWORD=weenie64
+      - POSTGRES_DB=dhg_registry
+      - POSTGRES_HOST=registry-db
+      - POSTGRES_PORT=5432
+      - DATABASE_URL=postgresql://dhg:weenie64@registry-db:5432/dhg_registry
+    depends_on:
+      registry-db:
+        condition: service_healthy
+    networks:
+      - dhg-network
+    restart: unless-stopped
