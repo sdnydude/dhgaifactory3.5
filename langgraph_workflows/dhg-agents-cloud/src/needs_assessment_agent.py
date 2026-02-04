@@ -68,7 +68,40 @@ BANNED_PATTERNS = [
     r"it goes without saying",
     r"a myriad of",
     r"a plethora of",
+    r"multifaceted",
+    r"landscape",  # When used metaphorically
+    r"navigat",  # navigate, navigating
 ]
+
+# Prompt injection for ALL section generation - explicit replacements
+BANNED_PATTERNS_GUIDANCE = """
+CRITICAL - NEVER USE THESE WORDS OR PHRASES (use the alternative instead):
+- "robust" → use: "strong", "reliable", "well-established", "effective"
+- "paradigm" → use: "approach", "model", "framework", "method"
+- "multifaceted" → use: "complex", "varied", "multiple aspects of"
+- "navigate/navigating" → use: "manage", "address", "work through", "handle"
+- "landscape" (metaphorical) → use: "environment", "field", "current state", "options"
+- "holistic" → use: "comprehensive", "integrated", "complete", "whole-patient"
+- "leverage" → use: "use", "apply", "employ", "utilize"
+- "delve/delving" → use: "examine", "explore", "investigate", "study"
+- "cutting-edge" → use: "latest", "newest", "recent", "advanced"
+- "state-of-the-art" → use: "modern", "current", "latest"
+- "best practices" → use: "recommended approaches", "evidence-based methods"
+- "furthermore/moreover/additionally" at start → use: "Also,", "In addition,", or restructure
+- Em dashes (—) → use: commas, semicolons, or parentheses
+- "It's important to note" → Just state the fact directly
+- "underscores the importance" → use: "highlights", "demonstrates", "shows"
+
+SECTION HEADERS - Use these exact titles:
+- "Disease State Overview" (not "Disease Landscape")
+- "Current Treatment Options" (not "Treatment Landscape")
+- "Practice Gaps" (not "Care Landscape")
+- "Barriers to Optimal Care"
+- "Educational Rationale"
+- "Target Audience"
+- "Conclusion"
+"""
+
 
 
 def check_banned_patterns(text: str) -> List[str]:
@@ -414,7 +447,7 @@ async def generate_disease_overview_node(state: NeedsAssessmentState) -> dict:
     epidemiology = state.get("epidemiology", {})
     research_summary = state.get("research_summary", "")
     
-    system = """You are a senior medical writer creating a disease state overview for a CME grant.
+    system = f"""You are a senior medical writer creating a disease state overview for a CME grant.
 
 REQUIREMENTS:
 - 125-300 words
@@ -427,12 +460,7 @@ REQUIREMENTS:
 - Use active voice
 - Include specific numbers, not "many" or "significant"
 
-BANNED PATTERNS (will cause rejection):
-- Em dashes (—)
-- "It's important to note"
-- "Furthermore," as paragraph starter
-- "In today's healthcare landscape"
-- Generic phrases without data
+{BANNED_PATTERNS_GUIDANCE}
 
 Return ONLY the section content. No section header."""
 
@@ -473,14 +501,14 @@ Write 125-300 words of flowing prose. Start by connecting the character to the p
     }
 
 
-@traceable(name="generate_treatment_landscape_node", run_type="chain")
-async def generate_treatment_landscape_node(state: NeedsAssessmentState) -> dict:
-    """Generate Current Treatment Landscape section (200-300 words)."""
+@traceable(name="generate_treatment_options_node", run_type="chain")
+async def generate_treatment_options_node(state: NeedsAssessmentState) -> dict:
+    """Generate Current Treatment Options section (200-300 words)."""
     
     disease_state = state.get("disease_state", "")
     research_summary = state.get("research_summary", "")
     
-    system = """You are a senior medical writer creating a treatment landscape section for a CME grant.
+    system = f"""You are a senior medical writer creating a treatment options section for a CME grant.
 
 REQUIREMENTS:
 - 200-300 words
@@ -492,9 +520,11 @@ REQUIREMENTS:
 - Active voice
 - All claims backed by specific citations
 
+{BANNED_PATTERNS_GUIDANCE}
+
 Return ONLY the section content. No header."""
 
-    prompt = f"""Write the Current Treatment Landscape section for {disease_state}.
+    prompt = f"""Write the Current Treatment Options section for {disease_state}.
 
 Cover:
 1. Guideline-recommended approach (name specific guidelines like ACC/AHA)
@@ -533,7 +563,7 @@ async def generate_practice_gaps_node(state: NeedsAssessmentState) -> dict:
     character_name = state.get("character_name", "Maria Chen")
     disease_state = state.get("disease_state", "")
     
-    system = """You are a senior medical writer creating a practice gaps section for a CME grant.
+    system = f"""You are a senior medical writer creating a practice gaps section for a CME grant.
 
 REQUIREMENTS:
 - 300-400 words
@@ -543,6 +573,8 @@ REQUIREMENTS:
 - Include character reference to illustrate at least one gap
 - 80%+ flowing prose
 - Name specific studies supporting each gap
+
+{BANNED_PATTERNS_GUIDANCE}
 
 Return ONLY the section content. No header."""
 
@@ -592,7 +624,7 @@ async def generate_barriers_node(state: NeedsAssessmentState) -> dict:
     clinical_barriers = state.get("clinical_barriers", [])
     disease_state = state.get("disease_state", "")
     
-    system = """You are a senior medical writer creating a barriers section for a CME grant.
+    system = f"""You are a senior medical writer creating a barriers section for a CME grant.
 
 REQUIREMENTS:
 - 125-200 words
@@ -600,6 +632,8 @@ REQUIREMENTS:
 - Explain root causes
 - Connect barriers to gaps
 - 80%+ flowing prose
+
+{BANNED_PATTERNS_GUIDANCE}
 
 Return ONLY the section content. No header."""
 
@@ -643,7 +677,7 @@ async def generate_educational_rationale_node(state: NeedsAssessmentState) -> di
     disease_state = state.get("disease_state", "")
     gaps = state.get("gaps", [])
     
-    system = """You are a senior medical writer creating an educational rationale for a CME grant.
+    system = f"""You are a senior medical writer creating an educational rationale for a CME grant.
 
 REQUIREMENTS:
 - 200-300 words
@@ -652,6 +686,8 @@ REQUIREMENTS:
 - Expected outcomes from education
 - Include character reference in outcome context
 - 80%+ flowing prose
+
+{BANNED_PATTERNS_GUIDANCE}
 
 Return ONLY the section content. No header."""
 
@@ -696,7 +732,7 @@ async def generate_target_audience_node(state: NeedsAssessmentState) -> dict:
     disease_state = state.get("disease_state", "")
     geographic_focus = state.get("geographic_focus", "")
     
-    system = """You are a senior medical writer creating a target audience section for a CME grant.
+    system = f"""You are a senior medical writer creating a target audience section for a CME grant.
 
 REQUIREMENTS:
 - 125-200 words
@@ -705,6 +741,8 @@ REQUIREMENTS:
 - Specialty-specific considerations
 - Practice setting context
 - 80%+ flowing prose
+
+{BANNED_PATTERNS_GUIDANCE}
 
 Return ONLY the section content. No header."""
 
@@ -746,7 +784,7 @@ async def generate_conclusion_node(state: NeedsAssessmentState) -> dict:
     character_name = state.get("character_name", "Maria Chen")
     disease_state = state.get("disease_state", "")
     
-    system = """You are a senior medical writer creating a conclusion for a CME needs assessment.
+    system = f"""You are a senior medical writer creating a conclusion for a CME needs assessment.
 
 REQUIREMENTS:
 - 200-300 words
@@ -755,6 +793,8 @@ REQUIREMENTS:
 - Final character reference looking forward
 - 80%+ flowing prose
 - End on an aspirational note
+
+{BANNED_PATTERNS_GUIDANCE}
 
 Return ONLY the section content. No header."""
 
@@ -801,7 +841,7 @@ async def assemble_document_node(state: NeedsAssessmentState) -> dict:
         "## Disease State Overview",
         state.get("disease_state_overview", ""),
         "",
-        "## Current Treatment Landscape",
+        "## Current Treatment Options",
         state.get("treatment_landscape", ""),
         "",
         "## Practice Gaps",
@@ -859,7 +899,7 @@ def create_needs_assessment_graph() -> StateGraph:
     graph.add_node("create_character", create_character_node)
     graph.add_node("generate_cold_open", generate_cold_open_node)
     graph.add_node("generate_disease_overview", generate_disease_overview_node)
-    graph.add_node("generate_treatment_landscape", generate_treatment_landscape_node)
+    graph.add_node("generate_treatment_options", generate_treatment_options_node)
     graph.add_node("generate_practice_gaps", generate_practice_gaps_node)
     graph.add_node("generate_barriers", generate_barriers_node)
     graph.add_node("generate_educational_rationale", generate_educational_rationale_node)
@@ -871,8 +911,8 @@ def create_needs_assessment_graph() -> StateGraph:
     graph.set_entry_point("create_character")
     graph.add_edge("create_character", "generate_cold_open")
     graph.add_edge("generate_cold_open", "generate_disease_overview")
-    graph.add_edge("generate_disease_overview", "generate_treatment_landscape")
-    graph.add_edge("generate_treatment_landscape", "generate_practice_gaps")
+    graph.add_edge("generate_disease_overview", "generate_treatment_options")
+    graph.add_edge("generate_treatment_options", "generate_practice_gaps")
     graph.add_edge("generate_practice_gaps", "generate_barriers")
     graph.add_edge("generate_barriers", "generate_educational_rationale")
     graph.add_edge("generate_educational_rationale", "generate_target_audience")
