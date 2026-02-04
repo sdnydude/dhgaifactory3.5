@@ -525,6 +525,10 @@ def create_grant_writer_graph():
     return workflow.compile()
 
 
+# Compile for LangGraph Cloud
+graph = create_grant_writer_graph()
+
+
 if __name__ == "__main__":
     graph = create_grant_writer_graph()
     

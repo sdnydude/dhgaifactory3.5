@@ -418,6 +418,10 @@ def create_compliance_graph():
     return workflow.compile()
 
 
+# Compile for LangGraph Cloud
+graph = create_compliance_graph()
+
+
 if __name__ == "__main__":
     graph = create_compliance_graph()
     

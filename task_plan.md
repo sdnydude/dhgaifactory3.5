@@ -25,7 +25,7 @@ Phase 3: Backend API — `pending`
 - [x] Create planning-sync workflow
 - [x] Create generate_planning_embeddings.py script
 - [x] Create search_planning_docs.py script
-- [x] Update session-start workflow withplanning check
+- [x] Update session-start workflow withagent compared t planning check
 - [x] Test full pipeline: sync → embeddings → search (15 embeddings generated)
 
 ### Phase 3: Backend API (In Progress)
@@ -72,17 +72,18 @@ Phase 3: Backend API — `pending`
 - [ ] Update frontend API URL to use HTTPS
 - [ ] Test Mixed Content resolved
 
-### Phase 3.5: LangGraph Agent Development (Pending)
+### Phase 3.5: LangGraph Agent Development (Complete)
 **Approach:** Build and test agents one at a time
 **First agent:** Needs Assessment
 
-- [ ] Build Needs Assessment agent in LangGraph
-- [ ] Test Needs Assessment agent standalone
-- [ ] Connect to pipeline orchestrator
-- [ ] Build remaining 11 agents incrementally:
-  - Research, Clinical, Gap Analysis, Learning Objectives
-  - Curriculum, Protocol, Marketing, Grant Writer
-  - Prose Quality, Compliance, Package Assembly
+- [x] Build Needs Assessment agent in LangGraph
+- [x] Test Needs Assessment agent standalone
+- [x] Connect to pipeline orchestrator
+- [x] Build remaining 11 agents incrementally:
+  - [x] Research, Clinical, Gap Analysis, Learning Objectives
+  - [x] Curriculum, Protocol, Marketing
+  - [x] Grant Writer (Partially implemented)
+  - [ ] Prose Quality, Compliance, Package Assembly
 
 ### Phase 4: Prompt Library Sync (Pending)
 - [ ] Create prompts table in CR (PostgreSQL)
