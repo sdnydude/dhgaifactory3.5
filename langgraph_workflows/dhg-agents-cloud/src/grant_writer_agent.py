@@ -7,6 +7,8 @@ LangGraph Cloud Ready:
 - Iteratively drafts each section of the grant
 - Ensures consistency in voice, terminology, and data
 - Produces a comprehensive YAML-structured grant package
+
+Model: Claude Opus 4.5 (claude-opus-4-20250514)
 """
 
 import os
@@ -40,6 +42,8 @@ class GrantWriterState(TypedDict):
     budget_breakdown: Dict[str, Any]
     organization_info: Dict[str, Any]
     accreditation_statement: str
+    therapeutic_area: str
+    target_audience: str
     
     # Needs Assessment Agent Output
     needs_assessment_output: Dict[str, Any]
@@ -83,6 +87,7 @@ class GrantWriterState(TypedDict):
     
     # Final Output
     grant_package_output: Dict[str, Any]
+    complete_document_markdown: str
     
     # Metadata
     agent_version: str
@@ -93,19 +98,19 @@ class GrantWriterState(TypedDict):
 
 
 # =============================================================================
-# LLM CLIENT
+# LLM CLIENT - CLAUDE OPUS 4.5
 # =============================================================================
 
 class LLMClient:
-    """Claude-based LLM client for grant writing."""
+    """Claude Opus 4.5 LLM client for grant writing."""
     
     def __init__(self):
         self.model = ChatAnthropic(
-            model="claude-sonnet-4-20250514",
+            model="claude-opus-4-20250514",
             max_tokens=8192
         )
-        self.cost_per_1k_input = 0.003
-        self.cost_per_1k_output = 0.015
+        self.cost_per_1k_input = 0.015
+        self.cost_per_1k_output = 0.075
     
     @traceable(name="grant_writer_llm_call", run_type="llm")
     async def generate(self, system: str, prompt: str, metadata: dict = None) -> dict:
@@ -157,7 +162,7 @@ PROHIBITED:
 - "Delve into", "It's important to note", "In conclusion"
 - Promotional language about supporter products
 - Inconsistencies or contradictions between sections
-- Placeholder text
+- Placeholder text or TODO markers
 """
 
 
@@ -173,6 +178,7 @@ async def draft_cover_letter_node(state: GrantWriterState) -> dict:
     supporter_company = state.get("supporter_company", "")
     supporter_contact = state.get("supporter_contact", "")
     amount = state.get("requested_amount", "")
+    therapeutic_area = state.get("therapeutic_area", "")
     
     gap_summary = json.dumps(state.get("gap_analysis_output", {}).get("gap_summary", ""), indent=2)
     objectives = json.dumps(state.get("learning_objectives_output", {}), indent=2)
@@ -190,6 +196,7 @@ You are drafting the COVER LETTER. Return a JSON object:
     prompt = f"""Draft a cover letter for a CME grant proposal.
     
     PROJECT TITLE: {project_title}
+    THERAPEUTIC AREA: {therapeutic_area}
     SUPPORTER: {supporter_company} (Contact: {supporter_contact})
     REQUESTED AMOUNT: {amount}
     
@@ -216,7 +223,8 @@ You are drafting the COVER LETTER. Return a JSON object:
         "cover_letter": data,
         "sections_completed": state.get("sections_completed", []) + ["cover_letter"],
         "total_tokens": prev_tokens + result["total_tokens"],
-        "total_cost": prev_cost + result["cost"]
+        "total_cost": prev_cost + result["cost"],
+        "model_used": "claude-opus-4-20250514"
     }
 
 
@@ -227,6 +235,9 @@ async def draft_executive_summary_node(state: GrantWriterState) -> dict:
     needs = state.get("needs_assessment_output", {})
     curriculum = state.get("curriculum_design_output", {})
     marketing = state.get("marketing_plan_output", {})
+    project_title = state.get("project_title", "")
+    therapeutic_area = state.get("therapeutic_area", "")
+    requested_amount = state.get("requested_amount", "")
     
     system = f"""{GRANT_WRITER_SYSTEM_PROMPT}
 
@@ -241,7 +252,11 @@ You are drafting the EXECUTIVE SUMMARY. Return a JSON object:
     ]
 }}"""
 
-    prompt = f"""Draft an executive summary.
+    prompt = f"""Draft an executive summary for this CME grant proposal.
+    
+    PROJECT TITLE: {project_title}
+    THERAPEUTIC AREA: {therapeutic_area}
+    REQUESTED AMOUNT: {requested_amount}
     
     NEEDS ASSESSMENT HIGHLIGHTS:
     {json.dumps(needs, indent=2)[:2000]}
@@ -275,17 +290,15 @@ You are drafting the EXECUTIVE SUMMARY. Return a JSON object:
 
 @traceable(name="integrate_needs_assessment_node", run_type="chain")
 async def integrate_needs_assessment_node(state: GrantWriterState) -> dict:
-    """Integrate the full Needs Assessment."""
+    """Integrate the full Needs Assessment from upstream agent."""
     
-    # Primarily a pass-through of the upstream agent's output, potentially with formatting
     needs_output = state.get("needs_assessment_output", {})
-    
-    # In a real scenario, LLM might check consistency or format it
     
     return {
         "needs_assessment_section": {
-            "content": needs_output.get("full_narrative", ""),
-            "sections_included": ["educational_need", "professional_practice_gaps", "educational_learning_objectives"]
+            "content": needs_output.get("full_narrative", json.dumps(needs_output, indent=2)),
+            "sections_included": ["educational_need", "professional_practice_gaps", "educational_learning_objectives"],
+            "word_count": len(needs_output.get("full_narrative", "").split())
         },
         "sections_completed": state.get("sections_completed", []) + ["needs_assessment"]
     }
@@ -297,11 +310,17 @@ async def format_learning_objectives_node(state: GrantWriterState) -> dict:
     
     objectives = state.get("learning_objectives_output", {})
     
+    objectives_list = objectives.get("objectives", [])
+    formatted_objectives = "\n".join([
+        f"- {obj.get('text', obj) if isinstance(obj, dict) else obj}"
+        for obj in objectives_list
+    ]) if objectives_list else json.dumps(objectives, indent=2)
+    
     return {
         "learning_objectives_section": {
-            "content": json.dumps(objectives, indent=2), # Placeholder formatting
-            "objectives_count": len(objectives.get("objectives", [])),
-            "moore_level_summary": "Competence and Performance" 
+            "content": formatted_objectives,
+            "objectives_count": len(objectives_list) if objectives_list else 0,
+            "moore_level_summary": objectives.get("moore_level", "Competence and Performance")
         },
         "sections_completed": state.get("sections_completed", []) + ["learning_objectives"]
     }
@@ -315,9 +334,11 @@ async def integrate_curriculum_node(state: GrantWriterState) -> dict:
     
     return {
         "curriculum_section": {
-            "content": json.dumps(curriculum, indent=2),
+            "content": curriculum.get("curriculum_narrative", json.dumps(curriculum, indent=2)),
             "innovation_section": curriculum.get("innovation_element", ""),
-            "format_summary": curriculum.get("activity_format", "")
+            "format_summary": curriculum.get("activity_format", ""),
+            "duration": curriculum.get("duration", ""),
+            "modules": curriculum.get("modules", [])
         },
         "sections_completed": state.get("sections_completed", []) + ["curriculum"]
     }
@@ -325,33 +346,70 @@ async def integrate_curriculum_node(state: GrantWriterState) -> dict:
 
 @traceable(name="create_faculty_section_node", run_type="chain")
 async def create_faculty_section_node(state: GrantWriterState) -> dict:
-    """Create Faculty and Planning Committee section."""
+    """Create Faculty and Planning Committee section using LLM."""
     
-    # This might require generation if not fully provided upstream, 
-    # but often is derived from curriculum or intake.
+    therapeutic_area = state.get("therapeutic_area", "")
+    curriculum = state.get("curriculum_design_output", {})
+    org_info = state.get("organization_info", {})
     
-    # Placeholder implementation
+    system = f"""{GRANT_WRITER_SYSTEM_PROMPT}
+
+You are drafting the FACULTY AND PLANNING COMMITTEE section. Return a JSON object:
+{{
+    "content": "Full narrative text (200-300 words) describing faculty selection criteria and planning committee composition",
+    "faculty_selection_criteria": ["criterion 1", "criterion 2"],
+    "planning_committee_roles": ["role 1", "role 2"],
+    "disclosure_statement": "Statement about COI identification and resolution"
+}}"""
+
+    prompt = f"""Draft the Faculty and Planning Committee section for a CME grant.
+
+THERAPEUTIC AREA: {therapeutic_area}
+
+CURRICULUM OVERVIEW:
+{json.dumps(curriculum, indent=2)[:1500]}
+
+ORGANIZATION INFO:
+{json.dumps(org_info, indent=2)[:500]}
+
+Requirements:
+1. Describe criteria for selecting faculty with relevant expertise
+2. Outline planning committee composition and roles
+3. Include statement on conflict of interest identification and resolution
+4. Reference ACCME requirements for independence"""
+
+    result = await llm.generate(system, prompt, {"step": "faculty_section"})
+    
+    try:
+        match = re.search(r'\{[\s\S]*\}', result["content"])
+        data = json.loads(match.group()) if match else {"content": result["content"]}
+    except:
+        data = {"content": result["content"]}
+        
+    prev_tokens = state.get("total_tokens", 0)
+    prev_cost = state.get("total_cost", 0.0)
+    
     return {
-        "faculty_section": {
-            "content": "Proposed Faculty and Planning Committee...",
-            "faculty_list": [],
-            "disclosure_statement": "All relevant financial relationships will be disclosed..."
-        },
-        "sections_completed": state.get("sections_completed", []) + ["faculty"]
+        "faculty_section": data,
+        "sections_completed": state.get("sections_completed", []) + ["faculty"],
+        "total_tokens": prev_tokens + result["total_tokens"],
+        "total_cost": prev_cost + result["cost"]
     }
 
 
 @traceable(name="integrate_outcomes_node", run_type="chain")
 async def integrate_outcomes_node(state: GrantWriterState) -> dict:
-    """Integrate Outcomes and Evaluation Plan."""
+    """Integrate Outcomes and Evaluation Plan from Research Protocol."""
     
     protocol = state.get("research_protocol_output", {})
     
     return {
         "outcomes_section": {
-            "content": protocol.get("protocol_narrative", ""),
-            "primary_outcomes": "Knowledge, Competence, Performance",
-            "timeline": "Pre, Post, 60-day Follow-up"
+            "content": protocol.get("protocol_narrative", json.dumps(protocol, indent=2)),
+            "primary_outcomes": protocol.get("primary_outcomes", ["Knowledge", "Competence", "Performance"]),
+            "measurement_instruments": protocol.get("instruments", []),
+            "timeline": protocol.get("timeline", "Pre, Post, 60-day Follow-up"),
+            "sample_size": protocol.get("sample_size", "")
         },
         "sections_completed": state.get("sections_completed", []) + ["outcomes"]
     }
@@ -365,9 +423,11 @@ async def integrate_marketing_node(state: GrantWriterState) -> dict:
     
     return {
         "marketing_section": {
-            "content": marketing.get("narrative_plan", ""),
+            "content": marketing.get("narrative_plan", json.dumps(marketing, indent=2)),
             "target_audience": marketing.get("target_audience_definition", ""),
-            "projected_reach": str(marketing.get("total_reach_estimate", 0))
+            "channels": marketing.get("channels", []),
+            "projected_reach": str(marketing.get("total_reach_estimate", 0)),
+            "timeline": marketing.get("timeline", "")
         },
         "sections_completed": state.get("sections_completed", []) + ["marketing"]
     }
@@ -375,20 +435,62 @@ async def integrate_marketing_node(state: GrantWriterState) -> dict:
 
 @traceable(name="create_budget_section_node", run_type="chain")
 async def create_budget_section_node(state: GrantWriterState) -> dict:
-    """Create Budget section."""
+    """Create Budget section with LLM-generated justification."""
     
     budget_breakdown = state.get("budget_breakdown", {})
     total = state.get("requested_amount", "0")
+    project_title = state.get("project_title", "")
+    curriculum = state.get("curriculum_design_output", {})
+    marketing = state.get("marketing_plan_output", {})
     
-    # In a full impl, LLM might justify costs or format a table
+    system = f"""{GRANT_WRITER_SYSTEM_PROMPT}
+
+You are drafting the BUDGET JUSTIFICATION section. Return a JSON object:
+{{
+    "content": "Full narrative budget justification (300-400 words)",
+    "total_requested": "amount",
+    "budget_categories": {{
+        "category_name": {{"amount": "X", "justification": "text"}}
+    }},
+    "cost_effectiveness_statement": "Brief statement on value"
+}}"""
+
+    prompt = f"""Draft the Budget Justification section for a CME grant.
+
+PROJECT TITLE: {project_title}
+TOTAL REQUESTED: {total}
+
+BUDGET BREAKDOWN PROVIDED:
+{json.dumps(budget_breakdown, indent=2)}
+
+CURRICULUM (for context):
+{json.dumps(curriculum, indent=2)[:1000]}
+
+MARKETING (for context):
+{json.dumps(marketing, indent=2)[:500]}
+
+Requirements:
+1. Justify each budget category with educational rationale
+2. Connect costs to educational outcomes
+3. Demonstrate cost-effectiveness
+4. Align with industry standards for CME activities"""
+
+    result = await llm.generate(system, prompt, {"step": "budget_section"})
+    
+    try:
+        match = re.search(r'\{[\s\S]*\}', result["content"])
+        data = json.loads(match.group()) if match else {"content": result["content"], "total_requested": total, "budget_categories": budget_breakdown}
+    except:
+        data = {"content": result["content"], "total_requested": total, "budget_categories": budget_breakdown}
+        
+    prev_tokens = state.get("total_tokens", 0)
+    prev_cost = state.get("total_cost", 0.0)
     
     return {
-        "budget_section": {
-            "content": "Detailed Budget Explanation...",
-            "total_requested": total,
-            "budget_categories": budget_breakdown
-        },
-        "sections_completed": state.get("sections_completed", []) + ["budget"]
+        "budget_section": data,
+        "sections_completed": state.get("sections_completed", []) + ["budget"],
+        "total_tokens": prev_tokens + result["total_tokens"],
+        "total_cost": prev_cost + result["cost"]
     }
 
 
@@ -397,22 +499,30 @@ async def draft_org_qualifications_node(state: GrantWriterState) -> dict:
     """Draft Organizational Qualifications."""
     
     org_info = state.get("organization_info", {})
+    therapeutic_area = state.get("therapeutic_area", "")
     
     system = f"""{GRANT_WRITER_SYSTEM_PROMPT}
 
 You are drafting the ORGANIZATIONAL QUALIFICATIONS section. Return a JSON object:
 {{
-    "content": "Text describing org capabilities",
+    "content": "Text describing org capabilities (200-300 words)",
     "accreditation_status": "Status",
-    "experience": "Relevant experience summary"
+    "experience": "Relevant experience summary",
+    "track_record": "Prior educational outcomes"
 }}"""
 
-    prompt = f"""Describe the organization's qualifications.
+    prompt = f"""Describe the organization's qualifications for executing this CME program.
     
-    ORG INFO:
-    {json.dumps(org_info, indent=2)}
+THERAPEUTIC AREA: {therapeutic_area}
+
+ORG INFO:
+{json.dumps(org_info, indent=2)}
     
-    Emphasize experience in this therapeutic area and accreditation status."""
+Emphasize:
+1. Accreditation status and compliance history
+2. Experience in this therapeutic area
+3. Track record of successful educational outcomes
+4. Infrastructure and capabilities"""
 
     result = await llm.generate(system, prompt, {"step": "org_qualifications"})
 
@@ -435,31 +545,168 @@ You are drafting the ORGANIZATIONAL QUALIFICATIONS section. Return a JSON object
 
 @traceable(name="draft_independence_node", run_type="chain")
 async def draft_independence_node(state: GrantWriterState) -> dict:
-    """Draft Independence and Compliance section."""
+    """Draft Independence and Compliance section using LLM."""
     
-    statement = state.get("accreditation_statement", "")
+    accreditation_statement = state.get("accreditation_statement", "")
+    supporter_company = state.get("supporter_company", "")
+    org_info = state.get("organization_info", {})
+    
+    system = f"""{GRANT_WRITER_SYSTEM_PROMPT}
+
+You are drafting the INDEPENDENCE AND COMPLIANCE section. Return a JSON object:
+{{
+    "content": "Full narrative (250-350 words) on independence from commercial interest",
+    "accme_standards": "Statement of compliance with specific ACCME standards",
+    "disclosure_policy": "COI disclosure and mitigation policy",
+    "content_validation": "Process for ensuring fair balance",
+    "separation_of_promotion": "Statement on separation from promotional activities"
+}}"""
+
+    prompt = f"""Draft the Independence and Compliance section for a CME grant.
+
+COMMERCIAL SUPPORTER: {supporter_company}
+ACCREDITATION STATEMENT: {accreditation_statement}
+
+ORGANIZATION INFO:
+{json.dumps(org_info, indent=2)[:500]}
+
+Requirements (ACCME Standards for Integrity and Independence):
+1. Provider maintains control over all content decisions
+2. All relevant financial relationships identified and resolved
+3. Content is fair, balanced, and free of commercial bias
+4. Promotion separated from education
+5. Disclosure provided to learners"""
+
+    result = await llm.generate(system, prompt, {"step": "independence_section"})
+
+    try:
+        match = re.search(r'\{[\s\S]*\}', result["content"])
+        data = json.loads(match.group()) if match else {"content": result["content"]}
+    except:
+        data = {"content": result["content"]}
+        
+    prev_tokens = state.get("total_tokens", 0)
+    prev_cost = state.get("total_cost", 0.0)
     
     return {
-        "independence_section": {
-            "content": "Statement on independence from commercial interest...",
-            "accme_standards": "Fully compliant with ACCME Standards for Integrity and Independence",
-            "disclosure_policy": "All relevant financial relationships will be mitigated..."
-        },
-        "sections_completed": state.get("sections_completed", []) + ["independence"]
+        "independence_section": data,
+        "sections_completed": state.get("sections_completed", []) + ["independence"],
+        "total_tokens": prev_tokens + result["total_tokens"],
+        "total_cost": prev_cost + result["cost"]
     }
+
+
+def _extract_section_content(section: Dict[str, Any]) -> str:
+    """Extract the main content from a section dictionary."""
+    if isinstance(section, str):
+        return section
+    if isinstance(section, dict):
+        return section.get("content", json.dumps(section, indent=2))
+    return str(section)
 
 
 @traceable(name="assemble_package_node", run_type="chain")
 async def assemble_package_node(state: GrantWriterState) -> dict:
-    """Assemble the final Grant Package Output."""
+    """Assemble the final Grant Package Output with actual document generation."""
+    
+    project_title = state.get("project_title", "CME Grant Proposal")
+    activity_title = state.get("activity_title", "")
+    supporter_company = state.get("supporter_company", "")
+    
+    # Build the complete Markdown document
+    sections = []
+    
+    # Title Page
+    sections.append(f"# {project_title}")
+    if activity_title:
+        sections.append(f"## {activity_title}")
+    sections.append(f"\n**Submitted to:** {supporter_company}")
+    sections.append(f"**Date:** {datetime.now().strftime('%B %d, %Y')}")
+    sections.append(f"**Requested Amount:** {state.get('requested_amount', 'TBD')}")
+    sections.append("\n---\n")
+    
+    # Cover Letter
+    sections.append("## Cover Letter")
+    sections.append(_extract_section_content(state.get("cover_letter", {})))
+    sections.append("\n---\n")
+    
+    # Executive Summary
+    sections.append("## Executive Summary")
+    sections.append(_extract_section_content(state.get("executive_summary", {})))
+    sections.append("\n---\n")
+    
+    # Needs Assessment
+    sections.append("## Needs Assessment")
+    sections.append(_extract_section_content(state.get("needs_assessment_section", {})))
+    sections.append("\n---\n")
+    
+    # Learning Objectives
+    sections.append("## Learning Objectives")
+    sections.append(_extract_section_content(state.get("learning_objectives_section", {})))
+    sections.append("\n---\n")
+    
+    # Curriculum and Educational Design
+    sections.append("## Curriculum and Educational Design")
+    sections.append(_extract_section_content(state.get("curriculum_section", {})))
+    sections.append("\n---\n")
+    
+    # Faculty and Planning Committee
+    sections.append("## Faculty and Planning Committee")
+    sections.append(_extract_section_content(state.get("faculty_section", {})))
+    sections.append("\n---\n")
+    
+    # Outcomes and Evaluation
+    sections.append("## Outcomes and Evaluation Plan")
+    sections.append(_extract_section_content(state.get("outcomes_section", {})))
+    sections.append("\n---\n")
+    
+    # Marketing and Audience Generation
+    sections.append("## Marketing and Audience Generation")
+    sections.append(_extract_section_content(state.get("marketing_section", {})))
+    sections.append("\n---\n")
+    
+    # Budget
+    sections.append("## Budget Justification")
+    sections.append(_extract_section_content(state.get("budget_section", {})))
+    sections.append("\n---\n")
+    
+    # Organizational Qualifications
+    sections.append("## Organizational Qualifications")
+    sections.append(_extract_section_content(state.get("org_qualifications_section", {})))
+    sections.append("\n---\n")
+    
+    # Independence and Compliance
+    sections.append("## Independence and Compliance Statement")
+    sections.append(_extract_section_content(state.get("independence_section", {})))
+    sections.append("\n---\n")
+    
+    # Appendices
+    appendices = state.get("appendices", [])
+    if appendices:
+        sections.append("## Appendices")
+        for i, appendix in enumerate(appendices, 1):
+            sections.append(f"### Appendix {i}: {appendix.get('title', 'Untitled')}")
+            sections.append(_extract_section_content(appendix))
+    
+    # Join all sections
+    complete_document = "\n\n".join(sections)
+    
+    # Count words
+    word_count = len(complete_document.split())
+    
+    # Estimate pages (approx 500 words per page)
+    page_estimate = (word_count // 500) + 1
     
     package = {
         "metadata": {
-            "agent_version": "2.0",
+            "agent_version": "2.1-opus",
             "execution_timestamp": datetime.now().isoformat(),
-            # Placeholder counts
-            "total_word_count": 0,
-            "total_pages_estimated": 0
+            "model_used": "claude-opus-4-20250514",
+            "total_word_count": word_count,
+            "total_pages_estimated": page_estimate,
+            "sections_completed": state.get("sections_completed", []),
+            "total_tokens_used": state.get("total_tokens", 0),
+            "total_cost": state.get("total_cost", 0.0)
         },
         "cover_letter": state.get("cover_letter"),
         "executive_summary": state.get("executive_summary"),
@@ -472,13 +719,12 @@ async def assemble_package_node(state: GrantWriterState) -> dict:
         "budget": state.get("budget_section"),
         "organizational_qualifications": state.get("org_qualifications_section"),
         "independence_and_compliance": state.get("independence_section"),
-        "appendices": [],
-        # In a real system, we'd join all contents into a single markdown string here
-        "complete_document": "Full compiled document text..."
+        "appendices": appendices
     }
     
     return {
         "grant_package_output": package,
+        "complete_document_markdown": complete_document,
         "sections_completed": state.get("sections_completed", []) + ["package_assembly"]
     }
 

@@ -83,15 +83,15 @@ class ComplianceState(TypedDict):
 # =============================================================================
 
 class LLMClient:
-    """Claude-based LLM client for compliance review."""
+    """Claude Opus 4.5 LLM client for compliance review."""
     
     def __init__(self):
         self.model = ChatAnthropic(
-            model="claude-sonnet-4-20250514",
+            model="claude-opus-4-20250514",
             max_tokens=8192
         )
-        self.cost_per_1k_input = 0.003
-        self.cost_per_1k_output = 0.015
+        self.cost_per_1k_input = 0.015
+        self.cost_per_1k_output = 0.075
     
     @traceable(name="compliance_llm_call", run_type="llm")
     async def generate(self, system: str, prompt: str, metadata: dict = None) -> dict:
