@@ -79,6 +79,7 @@ class ResearchState(TypedDict):
     
     # === OUTPUT ===
     research_report: Dict[str, Any]
+    research_document: str  # Rendered prose document
     
     # Metadata
     search_queries_executed: int
@@ -88,6 +89,7 @@ class ResearchState(TypedDict):
     model_used: str
     total_tokens: int
     total_cost: float
+
 
 
 # =============================================================================
@@ -869,9 +871,80 @@ async def assemble_research_report_node(state: ResearchState) -> dict:
     }
 
 
+@traceable(name="render_research_document_node", run_type="chain")
+async def render_research_document_node(state: ResearchState) -> dict:
+    """Render the research report as a readable prose document."""
+    
+    disease = state.get("disease_state", "")
+    report = state.get("research_report", {})
+    
+    system = """You are a medical writer converting structured research data into a cohesive, readable research report.
+
+FORMATTING RULES:
+- Use markdown headers (## for main sections)
+- Write flowing prose paragraphs, not bullet points
+- Include inline citations in format (Author, Journal Year)
+- 80%+ prose density
+- Active voice
+- Specific numbers and data throughout
+
+STRUCTURE:
+1. Executive Summary (2-3 paragraphs)
+2. Epidemiology and Disease Burden
+3. Economic Impact
+4. Current Treatment Landscape
+5. Clinical Practice Guidelines
+6. Market Context (if applicable)
+7. Evidence Gaps and Research Priorities
+8. References
+
+Do NOT use:
+- Em dashes (—)
+- "It's important to note"
+- "Studies show" without naming the study
+- Bullet points in the main text
+"""
+    
+    prompt = f"""Convert this research data on {disease} into a cohesive research document.
+
+RESEARCH DATA:
+{json.dumps(report, indent=2)[:12000]}
+
+Write a complete, readable research document following the structure above. Use full sentences and paragraphs. Include all key statistics with their citations inline."""
+
+    result = await llm.generate(system, prompt, {"step": "render_document"})
+    
+    document = result["content"]
+    
+    # Add references section from citations
+    citations = report.get("citations", [])
+    if citations:
+        document += "\n\n## References\n\n"
+        for i, c in enumerate(citations[:30], 1):
+            authors = c.get("authors", "Unknown")
+            title = c.get("title", "")
+            journal = c.get("journal", "")
+            year = c.get("year", "")
+            pmid = c.get("pmid", "")
+            document += f"{i}. {authors}. {title}. *{journal}*. {year}."
+            if pmid:
+                document += f" PMID: {pmid}"
+            document += "\n\n"
+    
+    prev_tokens = state.get("total_tokens", 0)
+    prev_cost = state.get("total_cost", 0.0)
+    
+    return {
+        "research_document": document,
+        "total_tokens": prev_tokens + result["total_tokens"],
+        "total_cost": prev_cost + result["cost"]
+    }
+
+
 # =============================================================================
 # BUILD GRAPH
 # =============================================================================
+
 
 def create_research_graph() -> StateGraph:
     """Create the Research Agent graph."""
@@ -886,8 +959,9 @@ def create_research_graph() -> StateGraph:
     graph.add_node("research_market_intelligence", research_market_intelligence_node)
     graph.add_node("synthesize_research", synthesize_research_node)
     graph.add_node("assemble_report", assemble_research_report_node)
+    graph.add_node("render_document", render_research_document_node)
     
-    # Flow: parallel research -> synthesis -> assembly
+    # Flow: research -> synthesis -> assembly -> render
     graph.set_entry_point("research_epidemiology")
     
     # Sequential for now (can be parallelized later)
@@ -897,9 +971,11 @@ def create_research_graph() -> StateGraph:
     graph.add_edge("research_guidelines", "research_market_intelligence")
     graph.add_edge("research_market_intelligence", "synthesize_research")
     graph.add_edge("synthesize_research", "assemble_report")
-    graph.add_edge("assemble_report", END)
+    graph.add_edge("assemble_report", "render_document")
+    graph.add_edge("render_document", END)
     
     return graph
+
 
 
 # Compile the graph for LangGraph Cloud
