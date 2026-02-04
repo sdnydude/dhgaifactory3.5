@@ -10,7 +10,9 @@
     "learning_objectives": "./src/learning_objectives_agent.py:graph",
     "curriculum_design": "./src/curriculum_design_agent.py:graph",
     "research_protocol": "./src/research_protocol_agent.py:graph",
-    "marketing_plan": "./src/marketing_plan_agent.py:graph"
+    "marketing_plan": "./src/marketing_plan_agent.py:graph",
+    "grant_writer": "./src/grant_writer_agent.py:graph",
+    "compliance_review": "./src/compliance_review_agent.py:graph"
   },
   "env": ".env"
 }
