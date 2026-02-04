@@ -6,10 +6,12 @@
     "prose_quality": "./src/prose_quality_agent.py:graph",
     "research": "./src/research_agent.py:graph",
     "clinical_practice": "./src/clinical_practice_agent.py:graph",
-    "gap_analysis": "./src/gap_analysis_agent.py:graph"
+    "gap_analysis": "./src/gap_analysis_agent.py:graph",
+    "learning_objectives": "./src/learning_objectives_agent.py:graph"
   },
   "env": ".env"
 }
+
 
 
 
