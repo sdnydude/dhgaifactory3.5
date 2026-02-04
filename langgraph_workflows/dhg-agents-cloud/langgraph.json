@@ -5,9 +5,11 @@
     "needs_assessment": "./src/needs_assessment_agent.py:graph",
     "prose_quality": "./src/prose_quality_agent.py:graph",
     "research": "./src/research_agent.py:graph",
-    "clinical_practice": "./src/clinical_practice_agent.py:graph"
+    "clinical_practice": "./src/clinical_practice_agent.py:graph",
+    "gap_analysis": "./src/gap_analysis_agent.py:graph"
   },
   "env": ".env"
 }
+
 
 
