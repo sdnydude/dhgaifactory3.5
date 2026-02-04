@@ -81,8 +81,19 @@ NEVER use em dashes (—). Replace with:
   - Use parentheses: "The drug — approved in 2022 — reduces mortality" → "The drug (approved in 2022) reduces mortality"
   - Split into two sentences if needed
 
+NEVER use colons (:) in prose except for citations. Replace with:
+  - "The evidence is clear: patients need..." → "The evidence clearly shows that patients need..."
+  - "This illustrates the gap: delayed..." → "This illustrates how delays in..."
+  - "Consider the challenge: many clinicians..." → "Many clinicians face the challenge of..."
+
 NEVER start a paragraph with: "Furthermore,", "Moreover,", "Additionally,"
   - Instead use: "Also,", "In addition,", or just start with the content
+
+ALWAYS name specific studies - never use generic references:
+  - WRONG: "Studies show..." or "Studies indicate..." or "Research suggests..."
+  - RIGHT: "The DELIVER trial showed..." or "Registry data from COMPASS-HF indicates..."
+  - WRONG: "Population-level studies indicate..."
+  - RIGHT: "The Swedish Heart Failure Registry found..."
 
 === BANNED WORDS - USE ALTERNATIVES ===
 - "robust" → use: "strong", "reliable", "well-established", "effective"
@@ -111,6 +122,7 @@ NEVER start a paragraph with: "Furthermore,", "Moreover,", "Additionally,"
 - "Target Audience"
 - "Conclusion"
 """
+
 
 
 
