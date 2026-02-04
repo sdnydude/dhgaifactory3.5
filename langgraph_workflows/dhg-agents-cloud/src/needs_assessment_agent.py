@@ -75,7 +75,16 @@ BANNED_PATTERNS = [
 
 # Prompt injection for ALL section generation - explicit replacements
 BANNED_PATTERNS_GUIDANCE = """
-CRITICAL - NEVER USE THESE WORDS OR PHRASES (use the alternative instead):
+=== HIGH PRIORITY FORMATTING RULES ===
+NEVER use em dashes (—). Replace with:
+  - Use a comma instead: "The treatment — SGLT2 inhibitors — works" → "The treatment, SGLT2 inhibitors, works"
+  - Use parentheses: "The drug — approved in 2022 — reduces mortality" → "The drug (approved in 2022) reduces mortality"
+  - Split into two sentences if needed
+
+NEVER start a paragraph with: "Furthermore,", "Moreover,", "Additionally,"
+  - Instead use: "Also,", "In addition,", or just start with the content
+
+=== BANNED WORDS - USE ALTERNATIVES ===
 - "robust" → use: "strong", "reliable", "well-established", "effective"
 - "paradigm" → use: "approach", "model", "framework", "method"
 - "multifaceted" → use: "complex", "varied", "multiple aspects of"
@@ -87,12 +96,13 @@ CRITICAL - NEVER USE THESE WORDS OR PHRASES (use the alternative instead):
 - "cutting-edge" → use: "latest", "newest", "recent", "advanced"
 - "state-of-the-art" → use: "modern", "current", "latest"
 - "best practices" → use: "recommended approaches", "evidence-based methods"
-- "furthermore/moreover/additionally" at start → use: "Also,", "In addition,", or restructure
-- Em dashes (—) → use: commas, semicolons, or parentheses
+- "myriad of" → use: "many", "numerous", "multiple"
+- "plethora of" → use: "many", "numerous", "wide range of"
 - "It's important to note" → Just state the fact directly
 - "underscores the importance" → use: "highlights", "demonstrates", "shows"
+- "serves as a testament" → use: "demonstrates", "shows", "illustrates"
 
-SECTION HEADERS - Use these exact titles:
+=== SECTION HEADERS (Use Exactly) ===
 - "Disease State Overview" (not "Disease Landscape")
 - "Current Treatment Options" (not "Treatment Landscape")
 - "Practice Gaps" (not "Care Landscape")
@@ -101,6 +111,7 @@ SECTION HEADERS - Use these exact titles:
 - "Target Audience"
 - "Conclusion"
 """
+
 
 
 
