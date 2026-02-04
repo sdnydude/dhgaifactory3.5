@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
-import { MessageSquare, Sliders, Activity, FileText } from 'lucide-react';
+import { MessageSquare, Sliders, Activity, FileText, ClipboardCheck } from 'lucide-react';
+import ReviewPanel from './panels/ReviewPanel';
 
 const ResizeHandle = () => (
     <PanelResizeHandle
@@ -260,7 +261,8 @@ const PANELS = {
     chat: { component: ChatPanelContent, icon: MessageSquare, label: 'Chat', minSize: 25, defaultSize: 50 },
     tools: { component: ToolsPanelContent, icon: Sliders, label: 'Tools', minSize: 15, defaultSize: 25 },
     agents: { component: AgentsPanelContent, icon: Activity, label: 'Agents', minSize: 15, defaultSize: 15 },
-    artifacts: { component: ArtifactsPanelContent, icon: FileText, label: 'Artifacts', minSize: 15, defaultSize: 10 }
+    artifacts: { component: ArtifactsPanelContent, icon: FileText, label: 'Artifacts', minSize: 15, defaultSize: 10 },
+    review: { component: ReviewPanel, icon: ClipboardCheck, label: 'Review', minSize: 25, defaultSize: 35 }
 };
 
 const MultiPanelLayout = ({ messages, onSendMessage, isProcessing }) => {

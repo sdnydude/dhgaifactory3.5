@@ -19,7 +19,7 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB
 
 # revision identifiers
 revision = '003_add_cme_review'
-down_revision = '002_add_claude_data'
+down_revision = '002_claude_data'
 branch_labels = None
 depends_on = None
 
