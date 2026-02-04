@@ -12,7 +12,11 @@
     "research_protocol": "./src/research_protocol_agent.py:graph",
     "marketing_plan": "./src/marketing_plan_agent.py:graph",
     "grant_writer": "./src/grant_writer_agent.py:graph",
-    "compliance_review": "./src/compliance_review_agent.py:graph"
+    "compliance_review": "./src/compliance_review_agent.py:graph",
+    "needs_package": "./src/orchestrator.py:needs_graph",
+    "curriculum_package": "./src/orchestrator.py:curriculum_graph",
+    "grant_package": "./src/orchestrator.py:grant_graph",
+    "full_pipeline": "./src/orchestrator.py:full_graph"
   },
   "env": ".env"
 }
