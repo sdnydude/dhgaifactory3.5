@@ -1022,3 +1022,4 @@ if __name__ == "__main__":
             print(f"- {section}: {'✓' if data and 'error' not in data else '✗'}")
     
     asyncio.run(test())
+
