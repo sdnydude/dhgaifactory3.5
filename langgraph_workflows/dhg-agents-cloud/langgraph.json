@@ -7,10 +7,12 @@
     "research": "./src/research_agent.py:graph",
     "clinical_practice": "./src/clinical_practice_agent.py:graph",
     "gap_analysis": "./src/gap_analysis_agent.py:graph",
-    "learning_objectives": "./src/learning_objectives_agent.py:graph"
+    "learning_objectives": "./src/learning_objectives_agent.py:graph",
+    "curriculum_design": "./src/curriculum_design_agent.py:graph"
   },
   "env": ".env"
 }
+
 
 
 
