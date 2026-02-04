@@ -367,6 +367,7 @@ class CMEProject(Base):
     
     # Relationships
     agent_outputs = relationship("CMEAgentOutput", back_populates="project", cascade="all, delete-orphan")
+    review_assignments = relationship("CMEReviewAssignment", back_populates="project", cascade="all, delete-orphan")
 
 
 class CMEAgentOutput(Base):
@@ -388,3 +389,77 @@ class CMEAgentOutput(Base):
     
     # Relationship
     project = relationship("CMEProject", back_populates="agent_outputs")
+
+
+# =============================================================================
+# CME REVIEW WORKFLOW MODELS (Decisions R1-R7)
+# =============================================================================
+
+class CMEReviewerConfig(Base):
+    """Admin-configurable list of reviewers (R1)"""
+    __tablename__ = "cme_reviewer_config"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    
+    # Reviewer identity
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    display_name = Column(String(255), nullable=False)
+    
+    # Configuration
+    is_active = Column(Boolean, default=True, nullable=False)
+    max_concurrent_reviews = Column(Integer, default=5)  # Workload limit
+    
+    # Notification preferences
+    notify_email = Column(Boolean, default=True)
+    notify_google_chat = Column(Boolean, default=True)
+    google_chat_webhook_url = Column(String(500), nullable=True)
+    
+    # Stats
+    total_reviews = Column(Integer, default=0)
+    avg_review_time_hours = Column(Float, nullable=True)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    
+    # Relationships
+    assignments = relationship("CMEReviewAssignment", back_populates="reviewer")
+
+
+class CMEReviewAssignment(Base):
+    """Individual review assignment with SLA tracking (R2-R5)"""
+    __tablename__ = "cme_review_assignments"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    
+    # Foreign keys
+    project_id = Column(UUID(as_uuid=True), ForeignKey("cme_projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    reviewer_id = Column(UUID(as_uuid=True), ForeignKey("cme_reviewer_config.id"), nullable=False, index=True)
+    
+    # Assignment order (1, 2, or 3 per R2)
+    reviewer_order = Column(Integer, nullable=False)
+    
+    # Status: pending, active, approved, revision_requested, timeout, skipped
+    status = Column(String(50), nullable=False, default="pending")
+    
+    # SLA tracking (R3: 24 hours)
+    assigned_at = Column(DateTime(timezone=True), nullable=True)
+    sla_deadline = Column(DateTime(timezone=True), nullable=True)  # assigned_at + 24h
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    
+    # Review content
+    decision = Column(String(50), nullable=True)  # approved, revision_requested
+    notes = Column(Text, nullable=True)
+    
+    # Plate JS annotations (stored as JSONB for inline suggestions)
+    annotations = Column(JSONB, default=[])
+    
+    # Notification tracking
+    reminder_sent_at = Column(DateTime(timezone=True), nullable=True)
+    escalation_sent_at = Column(DateTime(timezone=True), nullable=True)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    
+    # Relationships
+    project = relationship("CMEProject", back_populates="review_assignments")
+    reviewer = relationship("CMEReviewerConfig", back_populates="assignments")
+

@@ -18,7 +18,7 @@ import httpx
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from database import get_db
-from models import CMEProject, CMEAgentOutput
+from models import CMEProject, CMEAgentOutput, CMEReviewerConfig, CMEReviewAssignment
 
 # Import metrics from main API
 try:
@@ -672,3 +672,319 @@ async def agent_complete_webhook(
         "progress": project.progress_percent
     }
 
+
+# =============================================================================
+# REVIEWER CONFIGURATION ENDPOINTS (Decision R1)
+# =============================================================================
+
+class ReviewerCreate(BaseModel):
+    """Schema for creating a reviewer"""
+    email: str = Field(..., description="Reviewer email address")
+    display_name: str = Field(..., description="Display name")
+    notify_email: bool = Field(default=True)
+    notify_google_chat: bool = Field(default=False)
+    google_chat_webhook_url: Optional[str] = None
+    max_concurrent_reviews: int = Field(default=5)
+
+
+class ReviewerResponse(BaseModel):
+    """Schema for reviewer response"""
+    id: str
+    email: str
+    display_name: str
+    is_active: bool
+    max_concurrent_reviews: int
+    notify_email: bool
+    notify_google_chat: bool
+    total_reviews: int
+    avg_review_time_hours: Optional[float]
+
+
+@router.get("/reviewers", response_model=List[ReviewerResponse])
+async def list_reviewers(
+    active_only: bool = True,
+    db: Session = Depends(get_db)
+):
+    """List all configured reviewers"""
+    query = db.query(CMEReviewerConfig)
+    if active_only:
+        query = query.filter(CMEReviewerConfig.is_active == True)
+    reviewers = query.all()
+    
+    return [
+        ReviewerResponse(
+            id=str(r.id),
+            email=r.email,
+            display_name=r.display_name,
+            is_active=r.is_active,
+            max_concurrent_reviews=r.max_concurrent_reviews,
+            notify_email=r.notify_email,
+            notify_google_chat=r.notify_google_chat,
+            total_reviews=r.total_reviews or 0,
+            avg_review_time_hours=r.avg_review_time_hours
+        )
+        for r in reviewers
+    ]
+
+
+@router.post("/reviewers", response_model=ReviewerResponse, status_code=status.HTTP_201_CREATED)
+async def create_reviewer(
+    reviewer: ReviewerCreate,
+    db: Session = Depends(get_db)
+):
+    """Add a new reviewer to the configuration"""
+    existing = db.query(CMEReviewerConfig).filter(CMEReviewerConfig.email == reviewer.email).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Reviewer with this email already exists")
+    
+    db_reviewer = CMEReviewerConfig(
+        email=reviewer.email,
+        display_name=reviewer.display_name,
+        notify_email=reviewer.notify_email,
+        notify_google_chat=reviewer.notify_google_chat,
+        google_chat_webhook_url=reviewer.google_chat_webhook_url,
+        max_concurrent_reviews=reviewer.max_concurrent_reviews
+    )
+    db.add(db_reviewer)
+    db.commit()
+    db.refresh(db_reviewer)
+    
+    return ReviewerResponse(
+        id=str(db_reviewer.id),
+        email=db_reviewer.email,
+        display_name=db_reviewer.display_name,
+        is_active=db_reviewer.is_active,
+        max_concurrent_reviews=db_reviewer.max_concurrent_reviews,
+        notify_email=db_reviewer.notify_email,
+        notify_google_chat=db_reviewer.notify_google_chat,
+        total_reviews=0,
+        avg_review_time_hours=None
+    )
+
+
+@router.delete("/reviewers/{reviewer_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def deactivate_reviewer(
+    reviewer_id: str,
+    db: Session = Depends(get_db)
+):
+    """Deactivate a reviewer (soft delete)"""
+    reviewer = db.query(CMEReviewerConfig).filter(CMEReviewerConfig.id == reviewer_id).first()
+    if not reviewer:
+        raise HTTPException(status_code=404, detail="Reviewer not found")
+    
+    reviewer.is_active = False
+    db.commit()
+
+
+# =============================================================================
+# REVIEW ASSIGNMENT ENDPOINTS (Decisions R2-R5)
+# =============================================================================
+
+class SubmitForReviewRequest(BaseModel):
+    """Schema for submitting a project for review"""
+    reviewer_emails: List[str] = Field(..., max_length=3, description="Up to 3 reviewer emails in order")
+
+
+class ReviewAssignmentResponse(BaseModel):
+    """Schema for review assignment response"""
+    id: str
+    project_id: str
+    reviewer_email: str
+    reviewer_name: str
+    reviewer_order: int
+    status: str
+    assigned_at: Optional[datetime]
+    sla_deadline: Optional[datetime]
+    completed_at: Optional[datetime]
+
+
+@router.post("/projects/{project_id}/submit-for-review")
+async def submit_for_review(
+    project_id: str,
+    request: SubmitForReviewRequest,
+    db: Session = Depends(get_db)
+):
+    """Submit a project for human review (Decision R2: up to 3 reviewers)"""
+    project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    if len(request.reviewer_emails) > 3:
+        raise HTTPException(status_code=400, detail="Maximum 3 reviewers allowed (R2)")
+    
+    # Validate all reviewers exist and are active
+    assignments = []
+    for order, email in enumerate(request.reviewer_emails, start=1):
+        reviewer = db.query(CMEReviewerConfig).filter(
+            CMEReviewerConfig.email == email,
+            CMEReviewerConfig.is_active == True
+        ).first()
+        if not reviewer:
+            raise HTTPException(status_code=400, detail=f"Reviewer not found or inactive: {email}")
+        
+        # Create assignment
+        now = datetime.utcnow()
+        sla_hours = 24  # Decision R3
+        
+        assignment = CMEReviewAssignment(
+            project_id=project.id,
+            reviewer_id=reviewer.id,
+            reviewer_order=order,
+            status="active" if order == 1 else "pending",
+            assigned_at=now if order == 1 else None,
+            sla_deadline=datetime.utcnow().replace(hour=now.hour + sla_hours) if order == 1 else None
+        )
+        db.add(assignment)
+        assignments.append({
+            "email": email,
+            "order": order,
+            "status": assignment.status
+        })
+    
+    # Update project status
+    project.status = "review"
+    project.human_review_status = "pending"
+    db.commit()
+    
+    return {
+        "project_id": project_id,
+        "status": "submitted_for_review",
+        "assignments": assignments
+    }
+
+
+@router.get("/projects/{project_id}/review-status")
+async def get_review_status(
+    project_id: str,
+    db: Session = Depends(get_db)
+):
+    """Get current review status for a project"""
+    project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    assignments = db.query(CMEReviewAssignment).filter(
+        CMEReviewAssignment.project_id == project_id
+    ).order_by(CMEReviewAssignment.reviewer_order).all()
+    
+    return {
+        "project_id": project_id,
+        "project_status": project.status,
+        "review_status": project.human_review_status,
+        "assignments": [
+            {
+                "id": str(a.id),
+                "order": a.reviewer_order,
+                "status": a.status,
+                "assigned_at": a.assigned_at.isoformat() if a.assigned_at else None,
+                "sla_deadline": a.sla_deadline.isoformat() if a.sla_deadline else None,
+                "completed_at": a.completed_at.isoformat() if a.completed_at else None,
+                "decision": a.decision,
+                "notes": a.notes
+            }
+            for a in assignments
+        ]
+    }
+
+
+class SubmitReviewRequest(BaseModel):
+    """Schema for submitting a review decision"""
+    decision: str = Field(..., pattern="^(approved|revision_requested)$")
+    notes: Optional[str] = None
+    annotations: Optional[List[Dict[str, Any]]] = None
+
+
+@router.post("/projects/{project_id}/review")
+async def submit_review(
+    project_id: str,
+    request: SubmitReviewRequest,
+    reviewer_email: str,  # In production, get from auth token
+    db: Session = Depends(get_db)
+):
+    """Submit a review decision with optional Plate JS annotations"""
+    # Find the active assignment for this reviewer
+    assignment = db.query(CMEReviewAssignment).join(CMEReviewerConfig).filter(
+        CMEReviewAssignment.project_id == project_id,
+        CMEReviewerConfig.email == reviewer_email,
+        CMEReviewAssignment.status == "active"
+    ).first()
+    
+    if not assignment:
+        raise HTTPException(status_code=404, detail="No active review assignment found for this reviewer")
+    
+    now = datetime.utcnow()
+    
+    # Update assignment
+    assignment.status = request.decision
+    assignment.decision = request.decision
+    assignment.notes = request.notes
+    assignment.annotations = request.annotations or []
+    assignment.completed_at = now
+    
+    project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+    
+    if request.decision == "approved":
+        # Check if this is the final reviewer
+        next_assignment = db.query(CMEReviewAssignment).filter(
+            CMEReviewAssignment.project_id == project_id,
+            CMEReviewAssignment.status == "pending"
+        ).order_by(CMEReviewAssignment.reviewer_order).first()
+        
+        if next_assignment:
+            # Activate next reviewer
+            next_assignment.status = "active"
+            next_assignment.assigned_at = now
+            from datetime import timedelta
+            next_assignment.sla_deadline = now + timedelta(hours=24)
+        else:
+            # All reviewers approved
+            project.human_review_status = "approved"
+            project.status = "complete"
+            project.reviewed_at = now
+            project.completed_at = now
+    else:
+        # Revision requested
+        project.human_review_status = "revision_requested"
+        project.human_review_notes = request.notes
+    
+    db.commit()
+    
+    return {
+        "project_id": project_id,
+        "decision": request.decision,
+        "assignment_id": str(assignment.id),
+        "project_status": project.status
+    }
+
+
+@router.get("/my-reviews")
+async def get_my_reviews(
+    reviewer_email: str,  # In production, get from auth token
+    status_filter: Optional[str] = "active",
+    db: Session = Depends(get_db)
+):
+    """Get pending reviews for current user"""
+    query = db.query(CMEReviewAssignment).join(CMEReviewerConfig).filter(
+        CMEReviewerConfig.email == reviewer_email
+    )
+    
+    if status_filter:
+        query = query.filter(CMEReviewAssignment.status == status_filter)
+    
+    assignments = query.order_by(CMEReviewAssignment.assigned_at).all()
+    
+    result = []
+    for a in assignments:
+        project = db.query(CMEProject).filter(CMEProject.id == a.project_id).first()
+        result.append({
+            "assignment_id": str(a.id),
+            "project_id": str(a.project_id),
+            "project_name": project.name if project else "Unknown",
+            "order": a.reviewer_order,
+            "status": a.status,
+            "assigned_at": a.assigned_at.isoformat() if a.assigned_at else None,
+            "sla_deadline": a.sla_deadline.isoformat() if a.sla_deadline else None,
+            "hours_remaining": ((a.sla_deadline - datetime.utcnow()).total_seconds() / 3600) if a.sla_deadline else None
+        })
+    
+    return {"reviews": result, "count": len(result)}
