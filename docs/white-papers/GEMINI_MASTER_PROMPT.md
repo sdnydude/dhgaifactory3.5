@@ -15,9 +15,6 @@
     - **Background**: White / Off-white (#F5F7FA)
 
 **Interactive Features**:
-- **Interactive Graphics**: Using SVG and simple CSS/JS animations.
-    - *Example*: Hovering over an agent's name in the Org Chart should show a tooltip with their role description.
-    - *Example*: The Timeline should scroll or reveal phases on click.
 - **Sticky Table of Contents**: A sidebar that highlights the current section.
 - **Responsive implementation**: Collapses to single column on mobile.
 
@@ -37,4 +34,5 @@
 3.  **Single File**: The output should comprise the `index.html` code block followed by the `Image Prompts` text block.
 
 **Input Data**:
-[PASTE THE FULL MARKDOWN CONTENT OF DHG_AI_FACTORY_WHITE_PAPER.MD HERE]
+
+[PASTE THE FULL CONTENT OF DHG_AI_FACTORY_WHITE_PAPER.MD HERE]

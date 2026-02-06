@@ -1,0 +1,181 @@
+## https://www.librechat.ai/docs/configuration/librechat_yaml/object_structure/agents#exampleExample
+```
+endpoints: agents: recursionLimit: 50 maxRecursionLimit: 100 disableBuilder: false # (optional) Agent Capabilities available to all users. Omit the ones you wish to exclude. Defaults to list below. # capabilities: ["execute_code", "file_search", "actions", "tools", "artifacts", "context", "ocr", "chain", "web_search"] # (optional) File citation configuration for file_search capability maxCitations: 30 # Maximum total citations in responses (1-50) maxCitationsPerFile: 7 # Maximum citations from each file (1-10) minRelevanceScore: 0.45 # Minimum relevance score threshold (0.0-1.0)
+```
+
+
+```
+endpoints: agents: recursionLimit: 50 maxRecursionLimit: 100 disableBuilder: false # (optional) Agent Capabilities available to all users. Omit the ones you wish to exclude. Defaults to list below. # capabilities: ["execute_code", "file_search", "actions", "tools", "artifacts", "context", "ocr", "chain", "web_search"] # (optional) File citation configuration for file_search capability maxCitations: 30 # Maximum total citations in responses (1-50) maxCitationsPerFile: 7 # Maximum citations from each file (1-10) minRelevanceScore: 0.45 # Minimum relevance score threshold (0.0-1.0)
+```
+
+This configuration enables the builder interface for agents.
+
+## https://www.librechat.ai/docs/configuration/librechat_yaml/object_structure/agents#recursionlimitrecursionLimit
+Default: 25
+
+```
+25
+```
+
+Example:
+
+```
+recursionLimit: 50
+```
+
+
+```
+recursionLimit: 50
+```
+
+For more information about agent steps, see [Max Agent Steps](https://www.librechat.ai/docs/features/agents#max-agent-steps).
+
+## https://www.librechat.ai/docs/configuration/librechat_yaml/object_structure/agents#maxrecursionlimitmaxRecursionLimit
+Default: If omitted, defaults to the value of recursionLimit or 25 if recursionLimit is also omitted.
+Example:
+
+```
+maxRecursionLimit: 100
+```
+
+
+```
+maxRecursionLimit: 100
+```
+
+For more information about agent steps, see [Max Agent Steps](https://www.librechat.ai/docs/features/agents#max-agent-steps).
+
+## https://www.librechat.ai/docs/configuration/librechat_yaml/object_structure/agents#disablebuilderdisableBuilder
+Default: false
+
+```
+false
+```
+
+Example:
+
+```
+disableBuilder: false
+```
+
+
+```
+disableBuilder: false
+```
+
+## https://www.librechat.ai/docs/configuration/librechat_yaml/object_structure/agents#allowedprovidersallowedProviders
+Default: [] (empty list, all providers allowed)
+
+```
+[]
+```
+
+Note: Must be one of the following, or a custom endpoint name as defined in your [configuration](https://www.librechat.ai/docs/configuration/librechat_yaml/object_structure/custom_endpoint#name):
+- openAI, azureOpenAI, google, anthropic, assistants, azureAssistants, bedrock
+
+```
+openAI, azureOpenAI, google, anthropic, assistants, azureAssistants, bedrock
+```
+
+Example:
+
+```
+allowedProviders: - openAI - google
+```
+
+
+```
+allowedProviders: - openAI - google
+```
+
+## https://www.librechat.ai/docs/configuration/librechat_yaml/object_structure/agents#capabilitiescapabilities
+Default: ["execute_code", "file_search", "actions", "tools", "artifacts", "context", "ocr", "chain", "web_search"]
+
+```
+["execute_code", "file_search", "actions", "tools", "artifacts", "context", "ocr", "chain", "web_search"]
+```
+
+Example:
+
+```
+capabilities: - "execute_code" - "file_search" - "actions" - "tools" - "artifacts" - "context" - "ocr" - "chain" - "web_search"
+```
+
+
+```
+capabilities: - "execute_code" - "file_search" - "actions" - "tools" - "artifacts" - "context" - "ocr" - "chain" - "web_search"
+```
+
+Note: This field is optional. If omitted, the default behavior is to include all the capabilities listed in the default.
+
+## https://www.librechat.ai/docs/configuration/librechat_yaml/object_structure/agents#maxcitationsmaxCitations
+Default: 30
+
+```
+30
+```
+
+Range: 1-50
+
+```
+1-50
+```
+
+Example:
+
+```
+maxCitations: 30
+```
+
+
+```
+maxCitations: 30
+```
+
+## https://www.librechat.ai/docs/configuration/librechat_yaml/object_structure/agents#maxcitationsperfilemaxCitationsPerFile
+Default: 7
+
+```
+7
+```
+
+Range: 1-10
+
+```
+1-10
+```
+
+Example:
+
+```
+maxCitationsPerFile: 7
+```
+
+
+```
+maxCitationsPerFile: 7
+```
+
+## https://www.librechat.ai/docs/configuration/librechat_yaml/object_structure/agents#minrelevancescoreminRelevanceScore
+Default: 0.45 (45% relevance threshold)
+
+```
+0.45
+```
+
+Range: 0.0-1.0
+
+```
+0.0-1.0
+```
+
+Example:
+
+```
+minRelevanceScore: 0.45
+```
+
+
+```
+minRelevanceScore: 0.45
+```
