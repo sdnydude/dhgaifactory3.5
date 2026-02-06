@@ -250,6 +250,8 @@ from antigravity_endpoints import router as antigravity_router
 from research_endpoints import router as research_router
 from claude_endpoints import router as claude_router
 from cme_endpoints import router as cme_router
+from import_api import router as import_router
+from search_api import router as search_router
 
 # Include routers
 app.include_router(agent_router)
@@ -257,6 +259,8 @@ app.include_router(antigravity_router)
 app.include_router(research_router)
 app.include_router(claude_router)
 app.include_router(cme_router)
+app.include_router(import_router)
+app.include_router(search_router)
 
 # Add CORS middleware
 app.add_middleware(
