@@ -567,6 +567,8 @@ async def develop_statistical_plan_node(state: ResearchProtocolState) -> dict:
     
     outcomes = state.get("outcome_measures", {})
     target_n = state.get("target_enrollment", 200)
+    disease = state.get("disease_state", "")
+    therapeutic_area = state.get("therapeutic_area", "")
     
     system = f"""{RESEARCH_PROTOCOL_SYSTEM_PROMPT}
 
@@ -589,7 +591,7 @@ You are developing a STATISTICAL ANALYSIS PLAN. Return a JSON object:
     "handling_missing_data": "Paragraph describing missing data approach..."
 }}"""
     
-    prompt = f"""Develop statistical plan for CME outcomes research.
+    prompt = f"""Develop statistical plan for {disease} CME outcomes research in {therapeutic_area}.
 Target enrollment: {target_n}
 Expected completers: ~{int(target_n * 0.6)} (40% attrition)
 
@@ -600,9 +602,9 @@ SECONDARY OUTCOMES:
 {json.dumps(outcomes.get('secondary_outcomes', [])[:3], indent=2)}
 
 Create a statistical plan that:
-1. Is appropriate for pre-post educational outcomes
+1. Is appropriate for {disease} educational outcomes
 2. Addresses missing data realistically
-3. Includes relevant subgroup analyses
+3. Includes relevant subgroup analyses for {therapeutic_area}
 4. Uses appropriate methods for data types
 
 Return ONLY valid JSON."""
