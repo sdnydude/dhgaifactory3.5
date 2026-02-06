@@ -42,6 +42,7 @@ Before responding, confirm you understand:
 3. **Truth Over Helpfulness** — Never fabricate files, values, or completeness
 4. **Debug Discipline** — ONE fix per hypothesis, track all attempts
 5. **Pre-Edit Verification** — View files before editing, state purpose and impact
+6. **LangChain Docs** — When researching LangGraph/LangSmith/LangChain, ALWAYS start at https://docs.langchain.com/
 
 ---
 
