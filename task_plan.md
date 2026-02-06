@@ -82,8 +82,9 @@ Phase 3: Backend API — `pending`
 - [x] Build remaining 11 agents incrementally:
   - [x] Research, Clinical, Gap Analysis, Learning Objectives
   - [x] Curriculum, Protocol, Marketing
-  - [x] Grant Writer (Partially implemented)
-  - [ ] Prose Quality, Compliance, Package Assembly
+  - [x] Grant Writer (Opus 4.5, full assembly)
+  - [x] Compliance Review (Opus 4.5)
+  - [ ] Prose Quality, Orchestrator
 
 ### Phase 4: Prompt Library Sync (Pending)
 - [ ] Create prompts table in CR (PostgreSQL)
