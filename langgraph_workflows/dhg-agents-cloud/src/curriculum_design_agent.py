@@ -205,6 +205,8 @@ async def design_format_node(state: CurriculumDesignState) -> dict:
     modality = state.get("modality", "Hybrid")
     format_pref = state.get("educational_format", "Live symposium")
     audience = state.get("target_audience", "")
+    therapeutic_area = state.get("therapeutic_area", "")
+    disease = state.get("disease_state", "")
     
     system = f"""{CURRICULUM_SYSTEM_PROMPT}
 
@@ -240,7 +242,12 @@ Ensure active learning is at least 40% of total time."""
             level_counts["level_3"] += 1
     
     prompt = f"""Design the educational format for a {duration}-minute {modality} CME activity.
-Target audience: {audience}
+
+CLINICAL FOCUS:
+- Therapeutic Area: {therapeutic_area}
+- Disease State: {disease}
+- Target Audience: {audience}
+
 Format preference: {format_pref}
 
 OBJECTIVE LEVEL DISTRIBUTION:
@@ -249,10 +256,11 @@ OBJECTIVE LEVEL DISTRIBUTION:
 - Level 3 (Knowledge): {level_counts['level_3']} objectives
 
 Design a session structure that:
-1. Addresses Level 5/4 objectives with active methods (cases, practice)
-2. Minimizes pure lecture time
-3. Includes embedded assessment
-4. Has realistic time allocations
+1. Is specifically tailored to {disease} education
+2. Addresses Level 5/4 objectives with active methods (cases, practice)
+3. Minimizes pure lecture time
+4. Includes embedded assessment relevant to {therapeutic_area}
+5. Has realistic time allocations
 
 Return ONLY valid JSON."""
 
@@ -596,6 +604,8 @@ async def design_assessment_strategy_node(state: CurriculumDesignState) -> dict:
     """Design the assessment strategy."""
     
     objectives = state.get("learning_objectives_report", {}).get("objectives", [])
+    therapeutic_area = state.get("therapeutic_area", "")
+    disease = state.get("disease_state", "")
     
     system = f"""{CURRICULUM_SYSTEM_PROMPT}
 
@@ -632,16 +642,17 @@ You are designing the ASSESSMENT STRATEGY. Return a JSON object:
         for o in objectives
     ]
     
-    prompt = f"""Design assessment strategy for CME activity.
+    prompt = f"""Design assessment strategy for {disease} CME activity in {therapeutic_area}.
 
 OBJECTIVE MEASUREMENT PLANS:
 {json.dumps(measurements, indent=2)}
 
 Design assessments that:
-1. Are embedded throughout (not just at end)
-2. Align with Moore levels (cases for Level 4-5, knowledge checks for Level 3)
-3. Include practice change follow-up
-4. Have realistic implementation
+1. Are specific to {disease} clinical practice
+2. Are embedded throughout (not just at end)
+3. Align with Moore levels (cases for Level 4-5, knowledge checks for Level 3)
+4. Include practice change follow-up relevant to {therapeutic_area}
+5. Have realistic implementation
 
 Return ONLY valid JSON."""
 
