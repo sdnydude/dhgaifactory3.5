@@ -2,18 +2,39 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const StudioContext = createContext();
 
-// Internal agents (always available)
-const INTERNAL_AGENTS = [
-    { name: 'Medical LLM', type: 'internal', description: 'Healthcare & clinical analysis' },
-    { name: 'Research', type: 'internal', description: 'Literature & data research' },
-    { name: 'Curriculum', type: 'internal', description: 'Training design' },
-    { name: 'Outcomes', type: 'internal', description: 'Analytics & metrics' },
-    { name: 'QA/Compliance', type: 'internal', description: 'Regulatory review' }
+// CME Agent Team (12-agent system)
+const CME_AGENTS = [
+    // Research & Analysis
+    { name: 'Medical Research', type: 'cme-agent', description: 'Research guidelines & literature', category: 'research' },
+    { name: 'Clinical Practice', type: 'cme-agent', description: 'Analyze practice patterns', category: 'research' },
+    { name: 'Gap Analysis', type: 'cme-agent', description: 'Identify knowledge gaps', category: 'research' },
+    // Program Design
+    { name: 'Needs Assessment', type: 'cme-agent', description: 'Generate needs assessment', category: 'design' },
+    { name: 'Learning Objectives', type: 'cme-agent', description: 'Create learning objectives', category: 'design' },
+    { name: 'Curriculum Design', type: 'cme-agent', description: 'Design curriculum structure', category: 'design' },
+    { name: 'Research Protocol', type: 'cme-agent', description: 'Create research protocols', category: 'design' },
+    // Marketing
+    { name: 'Marketing Plan', type: 'cme-agent', description: 'Develop marketing strategy', category: 'marketing' },
+    // Final Deliverables
+    { name: 'Grant Writer', type: 'cme-agent', description: 'Write grant application', category: 'deliverables' },
+    { name: 'Prose QA', type: 'cme-agent', description: 'Quality assurance check', category: 'qa' },
+    { name: 'Compliance Review', type: 'cme-agent', description: 'Regulatory compliance', category: 'qa' }
 ];
+
+// Recipe workflows (orchestrated agent chains)
+const CME_RECIPES = [
+    { name: 'Full Pipeline', type: 'cme-recipe', description: 'Complete CME grant workflow', agents: 'all' },
+    { name: 'Needs Package', type: 'cme-recipe', description: 'Research → Gap → Needs Assessment', agents: '1-3,5' },
+    { name: 'Curriculum Package', type: 'cme-recipe', description: 'Design curriculum + objectives', agents: '5-8' },
+    { name: 'Grant Package', type: 'cme-recipe', description: 'Grant writing + QA + compliance', agents: '10-12' }
+];
+
 
 export const StudioProvider = ({ children }) => {
     const [selectedModel, setSelectedModel] = useState(null);
-    const [availableModels, setAvailableModels] = useState([...INTERNAL_AGENTS]);
+    const [availableModels, setAvailableModels] = useState([...CME_AGENTS, ...CME_RECIPES]);
+    const [cmeAgents] = useState(CME_AGENTS);
+    const [cmeRecipes] = useState(CME_RECIPES);
     const [ollamaModels, setOllamaModels] = useState([]);
     const [rightPanelOpen, setRightPanelOpen] = useState(true);
     const [rightPanelContent, setRightPanelContent] = useState('prompt-tools');
@@ -39,7 +60,7 @@ export const StudioProvider = ({ children }) => {
                             size_gb: m.size_gb
                         }));
                         setOllamaModels(ollamaList);
-                        setAvailableModels([...INTERNAL_AGENTS, ...ollamaList]);
+                        setAvailableModels([...CME_AGENTS, ...CME_RECIPES, ...ollamaList]);
                     }
                 }
             } catch (error) {
@@ -81,6 +102,8 @@ export const StudioProvider = ({ children }) => {
         setSelectedModel,
         availableModels,
         ollamaModels,
+        cmeAgents,
+        cmeRecipes,
         rightPanelOpen,
         setRightPanelOpen,
         rightPanelContent,

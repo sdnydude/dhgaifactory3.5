@@ -1,16 +1,11 @@
 /**
- * ReviewPanel - Document Review with Plate JS
- * =============================================
- * Implements Decision R7: Plate JS for Markdown review with inline suggestions.
- * 
- * Features:
- * - Display grant document in rich text editor
- * - Highlight text and add comments
- * - Track all annotations as change list
- * - Submit review decision with annotations
+ * ReviewPanel - Document Review with Inline Annotations
+ * ======================================================
+ * Two-column layout: 80% document, 20% controls
+ * Inline highlighting of comments and suggestions
  */
 
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { 
   Check, 
   X, 
@@ -21,21 +16,9 @@ import {
   FileText,
   ChevronDown,
   ChevronUp,
-  Trash2
+  Trash2,
+  Edit3
 } from 'lucide-react';
-
-// Note: Plate JS requires installation: npm install @udecode/plate-core slate slate-react
-// For now, we'll use a simpler implementation that can be upgraded to Plate later
-
-// Annotation type
-const createAnnotation = (id, selection, comment, type = 'comment') => ({
-  id,
-  selection,
-  comment,
-  type, // 'comment' | 'suggestion' | 'revision'
-  createdAt: new Date().toISOString(),
-  resolved: false
-});
 
 const ReviewPanel = ({ 
   projectId, 
@@ -51,10 +34,11 @@ const ReviewPanel = ({
   const [commentText, setCommentText] = useState('');
   const [showCommentInput, setShowCommentInput] = useState(false);
   const [reviewNotes, setReviewNotes] = useState('');
-  const [showAnnotations, setShowAnnotations] = useState(true);
   const [decision, setDecision] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hoursRemaining, setHoursRemaining] = useState(null);
+  const [activeAnnotation, setActiveAnnotation] = useState(null);
+  const documentRef = useRef(null);
 
   // Calculate SLA hours remaining
   useEffect(() => {
@@ -71,42 +55,113 @@ const ReviewPanel = ({
     }
   }, [slaDeadline]);
 
-  // Handle text selection
+  // Handle text selection in document
   const handleTextSelection = useCallback(() => {
     const selection = window.getSelection();
-    if (selection && selection.toString().trim()) {
-      setSelectedText(selection.toString());
-      setSelectionRange({
-        start: selection.anchorOffset,
-        end: selection.focusOffset,
-        text: selection.toString()
-      });
-      setShowCommentInput(true);
+    if (selection && selection.toString().trim() && documentRef.current) {
+      const range = selection.getRangeAt(0);
+      
+      // Check if selection is within document area
+      if (documentRef.current.contains(range.commonAncestorContainer)) {
+        setSelectedText(selection.toString());
+        setSelectionRange({
+          text: selection.toString(),
+          startOffset: range.startOffset,
+          endOffset: range.endOffset
+        });
+        setShowCommentInput(true);
+      }
     }
   }, []);
 
-  // Add annotation
+  // Add annotation with inline highlight
   const addAnnotation = useCallback((type) => {
     if (!selectedText || !commentText) return;
     
-    const annotation = createAnnotation(
-      `ann-${Date.now()}`,
-      selectionRange,
-      commentText,
-      type
-    );
+    const annotation = {
+      id: `ann-${Date.now()}`,
+      selection: selectionRange,
+      comment: commentText,
+      type,
+      createdAt: new Date().toISOString(),
+      resolved: false
+    };
     
     setAnnotations(prev => [...prev, annotation]);
     setCommentText('');
     setSelectedText('');
     setSelectionRange(null);
     setShowCommentInput(false);
+    
+    // Clear browser selection
+    window.getSelection()?.removeAllRanges();
   }, [selectedText, commentText, selectionRange]);
 
   // Remove annotation
   const removeAnnotation = useCallback((id) => {
     setAnnotations(prev => prev.filter(a => a.id !== id));
-  }, []);
+    if (activeAnnotation === id) setActiveAnnotation(null);
+  }, [activeAnnotation]);
+
+  // Render document with inline highlights
+  const renderDocumentWithHighlights = () => {
+    if (!documentContent) {
+      return (
+        <div style={styles.placeholder}>
+          <FileText size={48} opacity={0.3} />
+          <p>Loading document...</p>
+        </div>
+      );
+    }
+
+    // Create a temporary div to parse HTML
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = documentContent;
+    let textContent = tempDiv.textContent || tempDiv.innerText || '';
+    
+    // If no annotations, return plain content
+    if (annotations.length === 0) {
+      return (
+        <div 
+          style={styles.markdownContent}
+          dangerouslySetInnerHTML={{ __html: documentContent }}
+        />
+      );
+    }
+
+    // Build highlighted version
+    // Sort annotations by their position in text
+    const sortedAnnotations = [...annotations].sort((a, b) => {
+      const posA = textContent.indexOf(a.selection.text);
+      const posB = textContent.indexOf(b.selection.text);
+      return posB - posA; // Reverse to replace from end first
+    });
+
+    let highlightedContent = documentContent;
+    
+    sortedAnnotations.forEach(ann => {
+      const escapedText = ann.selection.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`(${escapedText})`, 'g');
+      const highlightColor = ann.type === 'suggestion' ? '#fef3c7' : '#dbeafe';
+      const borderColor = ann.type === 'suggestion' ? '#f59e0b' : '#3b82f6';
+      const isActive = activeAnnotation === ann.id;
+      
+      highlightedContent = highlightedContent.replace(regex, 
+        `<mark data-annotation-id="${ann.id}" style="background-color: ${highlightColor}; border-bottom: 2px solid ${borderColor}; padding: 2px 4px; border-radius: 2px; cursor: pointer; ${isActive ? 'box-shadow: 0 0 0 2px ' + borderColor + ';' : ''}">$1</mark>`
+      );
+    });
+
+    return (
+      <div 
+        style={styles.markdownContent}
+        dangerouslySetInnerHTML={{ __html: highlightedContent }}
+        onClick={(e) => {
+          const annId = e.target.dataset?.annotationId;
+          if (annId) setActiveAnnotation(annId);
+        }}
+      />
+    );
+  };
 
   // Submit review
   const handleSubmitReview = async () => {
@@ -131,7 +186,7 @@ const ReviewPanel = ({
     }
   };
 
-  // SLA warning styling
+  // SLA styling
   const getSlaStyle = () => {
     if (!hoursRemaining) return {};
     if (hoursRemaining < 4) return { color: '#ef4444', fontWeight: 600 };
@@ -140,7 +195,7 @@ const ReviewPanel = ({
   };
 
   return (
-    <div className="review-panel" style={styles.container}>
+    <div style={styles.container}>
       {/* Header */}
       <div style={styles.header}>
         <div style={styles.headerLeft}>
@@ -160,164 +215,178 @@ const ReviewPanel = ({
         </div>
       </div>
 
-      {/* Document Content */}
-      <div 
-        style={styles.documentArea}
-        onMouseUp={handleTextSelection}
-      >
-        <div style={styles.documentContent}>
-          {documentContent ? (
-            <div 
-              style={styles.markdownContent}
-              dangerouslySetInnerHTML={{ __html: documentContent }}
-            />
-          ) : (
-            <div style={styles.placeholder}>
-              <FileText size={48} opacity={0.3} />
-              <p>Loading document...</p>
+      {/* Main Layout - 80/20 split */}
+      <div style={styles.mainLayout}>
+        {/* Document Area - 80% */}
+        <div style={styles.documentColumn}>
+          <div 
+            ref={documentRef}
+            style={styles.documentArea}
+            onMouseUp={handleTextSelection}
+          >
+            {renderDocumentWithHighlights()}
+          </div>
+
+          {/* Comment Input (floating at bottom of document) */}
+          {showCommentInput && selectedText && (
+            <div style={styles.commentInput}>
+              <div style={styles.selectedTextPreview}>
+                <strong>Selected:</strong> "{selectedText.substring(0, 80)}{selectedText.length > 80 ? '...' : ''}"
+              </div>
+              <textarea
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                placeholder="Add your comment or suggestion..."
+                style={styles.textarea}
+                rows={2}
+                autoFocus
+              />
+              <div style={styles.commentActions}>
+                <button
+                  onClick={() => addAnnotation('comment')}
+                  style={{
+                    ...styles.actionButton,
+                    ...styles.commentButton,
+                    opacity: commentText ? 1 : 0.5
+                  }}
+                  disabled={!commentText}
+                >
+                  <MessageSquare size={14} />
+                  Comment
+                </button>
+                <button
+                  onClick={() => addAnnotation('suggestion')}
+                  style={{
+                    ...styles.actionButton,
+                    ...styles.suggestionButton,
+                    opacity: commentText ? 1 : 0.5
+                  }}
+                  disabled={!commentText}
+                >
+                  <Edit3 size={14} />
+                  Suggest Change
+                </button>
+                <button
+                  onClick={() => {
+                    setShowCommentInput(false);
+                    setSelectedText('');
+                    setCommentText('');
+                    window.getSelection()?.removeAllRanges();
+                  }}
+                  style={styles.cancelButton}
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           )}
         </div>
-      </div>
 
-      {/* Comment Input (shows when text selected) */}
-      {showCommentInput && selectedText && (
-        <div style={styles.commentInput}>
-          <div style={styles.selectedTextPreview}>
-            <strong>Selected:</strong> "{selectedText.substring(0, 100)}..."
-          </div>
-          <textarea
-            value={commentText}
-            onChange={(e) => setCommentText(e.target.value)}
-            placeholder="Add your comment or suggestion..."
-            style={styles.textarea}
-            rows={3}
-          />
-          <div style={styles.commentActions}>
-            <button
-              onClick={() => addAnnotation('comment')}
-              style={styles.commentButton}
-              disabled={!commentText}
-            >
+        {/* Controls Panel - 20% */}
+        <div style={styles.controlsColumn}>
+          {/* Annotations List */}
+          <div style={styles.section}>
+            <div style={styles.sectionHeader}>
               <MessageSquare size={16} />
-              Comment
-            </button>
-            <button
-              onClick={() => addAnnotation('suggestion')}
-              style={{ ...styles.commentButton, ...styles.suggestionButton }}
-              disabled={!commentText}
-            >
-              <AlertTriangle size={16} />
-              Suggest Change
-            </button>
-            <button
-              onClick={() => {
-                setShowCommentInput(false);
-                setSelectedText('');
-                setCommentText('');
-              }}
-              style={styles.cancelButton}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Annotations List */}
-      <div style={styles.annotationsSection}>
-        <button 
-          onClick={() => setShowAnnotations(!showAnnotations)}
-          style={styles.annotationsToggle}
-        >
-          <span>Annotations ({annotations.length})</span>
-          {showAnnotations ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-        </button>
-        
-        {showAnnotations && (
-          <div style={styles.annotationsList}>
-            {annotations.length === 0 ? (
-              <p style={styles.noAnnotations}>
-                Select text in the document to add comments or suggestions.
-              </p>
-            ) : (
-              annotations.map((ann) => (
-                <div key={ann.id} style={styles.annotationItem}>
-                  <div style={styles.annotationHeader}>
-                    <span style={{
-                      ...styles.annotationType,
-                      backgroundColor: ann.type === 'suggestion' ? '#fef3c7' : '#dbeafe'
-                    }}>
-                      {ann.type === 'suggestion' ? 'Suggestion' : 'Comment'}
-                    </span>
-                    <button 
-                      onClick={() => removeAnnotation(ann.id)}
-                      style={styles.deleteButton}
-                    >
-                      <Trash2 size={14} />
-                    </button>
+              <span>Annotations ({annotations.length})</span>
+            </div>
+            <div style={styles.annotationsList}>
+              {annotations.length === 0 ? (
+                <p style={styles.emptyText}>
+                  Select text to add comments
+                </p>
+              ) : (
+                annotations.map((ann) => (
+                  <div 
+                    key={ann.id} 
+                    style={{
+                      ...styles.annotationItem,
+                      borderLeft: `3px solid ${ann.type === 'suggestion' ? '#f59e0b' : '#3b82f6'}`,
+                      backgroundColor: activeAnnotation === ann.id ? '#2a2a2a' : '#1a1a1a'
+                    }}
+                    onClick={() => setActiveAnnotation(ann.id)}
+                  >
+                    <div style={styles.annotationHeader}>
+                      <span style={{
+                        ...styles.annotationType,
+                        backgroundColor: ann.type === 'suggestion' ? '#fef3c7' : '#dbeafe',
+                        color: '#1a1a1a'
+                      }}>
+                        {ann.type === 'suggestion' ? 'Suggestion' : 'Comment'}
+                      </span>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); removeAnnotation(ann.id); }}
+                        style={styles.deleteButton}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                    <div style={styles.annotationQuote}>"{ann.selection.text.substring(0, 40)}..."</div>
+                    <div style={styles.annotationComment}>{ann.comment}</div>
                   </div>
-                  <div style={styles.annotationText}>"{ann.selection.text}"</div>
-                  <div style={styles.annotationComment}>{ann.comment}</div>
-                </div>
-              ))
-            )}
+                ))
+              )}
+            </div>
           </div>
-        )}
-      </div>
 
-      {/* Review Notes */}
-      <div style={styles.reviewNotes}>
-        <label style={styles.label}>Overall Review Notes</label>
-        <textarea
-          value={reviewNotes}
-          onChange={(e) => setReviewNotes(e.target.value)}
-          placeholder="Add any overall notes for the author..."
-          style={styles.textarea}
-          rows={3}
-        />
-      </div>
+          {/* Review Notes */}
+          <div style={styles.section}>
+            <div style={styles.sectionHeader}>
+              <FileText size={16} />
+              <span>Review Notes</span>
+            </div>
+            <textarea
+              value={reviewNotes}
+              onChange={(e) => setReviewNotes(e.target.value)}
+              placeholder="Overall notes..."
+              style={styles.notesTextarea}
+              rows={3}
+            />
+          </div>
 
-      {/* Decision Buttons */}
-      <div style={styles.decisionSection}>
-        <label style={styles.label}>Decision</label>
-        <div style={styles.decisionButtons}>
+          {/* Decision */}
+          <div style={styles.section}>
+            <div style={styles.sectionHeader}>
+              <Check size={16} />
+              <span>Decision</span>
+            </div>
+            <div style={styles.decisionButtons}>
+              <button
+                onClick={() => setDecision('approved')}
+                style={{
+                  ...styles.decisionButton,
+                  ...(decision === 'approved' ? styles.approvedSelected : {})
+                }}
+              >
+                <Check size={16} />
+                Approve
+              </button>
+              <button
+                onClick={() => setDecision('revision_requested')}
+                style={{
+                  ...styles.decisionButton,
+                  ...(decision === 'revision_requested' ? styles.revisionSelected : {})
+                }}
+              >
+                <AlertTriangle size={16} />
+                Revise
+              </button>
+            </div>
+          </div>
+
+          {/* Submit */}
           <button
-            onClick={() => setDecision('approved')}
+            onClick={handleSubmitReview}
+            disabled={!decision || isSubmitting}
             style={{
-              ...styles.decisionButton,
-              ...(decision === 'approved' ? styles.approvedSelected : {})
+              ...styles.submitButton,
+              opacity: (!decision || isSubmitting) ? 0.5 : 1
             }}
           >
-            <Check size={20} />
-            Approve
-          </button>
-          <button
-            onClick={() => setDecision('revision_requested')}
-            style={{
-              ...styles.decisionButton,
-              ...(decision === 'revision_requested' ? styles.revisionSelected : {})
-            }}
-          >
-            <AlertTriangle size={20} />
-            Request Revision
+            <Send size={16} />
+            {isSubmitting ? 'Submitting...' : 'Submit Review'}
           </button>
         </div>
-      </div>
-
-      {/* Submit */}
-      <div style={styles.submitSection}>
-        <button
-          onClick={handleSubmitReview}
-          disabled={!decision || isSubmitting}
-          style={{
-            ...styles.submitButton,
-            opacity: (!decision || isSubmitting) ? 0.5 : 1
-          }}
-        >
-          <Send size={18} />
-          {isSubmitting ? 'Submitting...' : 'Submit Review'}
-        </button>
       </div>
     </div>
   );
@@ -329,91 +398,112 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     height: '100%',
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#0a0a0a',
     color: '#e5e5e5',
-    borderRadius: '8px',
     overflow: 'hidden'
   },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: '12px 16px',
+    padding: '12px 20px',
     borderBottom: '1px solid #333',
-    backgroundColor: '#252525'
+    backgroundColor: '#1a1a1a',
+    flexShrink: 0
   },
   headerLeft: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px'
+    gap: '10px'
   },
   headerRight: {
     display: 'flex',
     alignItems: 'center',
-    gap: '12px'
+    gap: '16px'
   },
   title: {
-    fontSize: '14px',
+    fontSize: '15px',
     fontWeight: 600
   },
   slaIndicator: {
     display: 'flex',
     alignItems: 'center',
-    gap: '4px',
-    fontSize: '12px'
+    gap: '6px',
+    fontSize: '13px'
   },
   closeButton: {
     background: 'none',
     border: 'none',
-    color: '#888',
+    color: '#666',
     cursor: 'pointer',
     padding: '4px'
   },
+  
+  // Main 80/20 layout
+  mainLayout: {
+    display: 'flex',
+    flex: 1,
+    overflow: 'hidden'
+  },
+  documentColumn: {
+    width: '80%',
+    display: 'flex',
+    flexDirection: 'column',
+    borderRight: '1px solid #333',
+    position: 'relative'
+  },
+  controlsColumn: {
+    width: '20%',
+    minWidth: '280px',
+    display: 'flex',
+    flexDirection: 'column',
+    backgroundColor: '#141414',
+    overflow: 'auto'
+  },
+  
+  // Document area
   documentArea: {
     flex: 1,
     overflow: 'auto',
-    padding: '16px',
+    padding: '32px 48px',
     backgroundColor: '#0d0d0d'
   },
-  documentContent: {
-    maxWidth: '800px',
-    margin: '0 auto'
-  },
   markdownContent: {
-    lineHeight: 1.7,
-    fontSize: '14px',
-    '& h1, & h2, & h3': {
-      marginTop: '24px',
-      marginBottom: '12px'
-    },
-    '& p': {
-      marginBottom: '12px'
-    }
+    maxWidth: '900px',
+    lineHeight: 1.8,
+    fontSize: '15px',
+    color: '#e0e0e0'
   },
   placeholder: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    height: '200px',
-    color: '#666'
+    height: '300px',
+    color: '#555'
   },
+  
+  // Comment input (floating)
   commentInput: {
-    padding: '12px 16px',
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: '12px 20px',
+    backgroundColor: '#1a1a1a',
     borderTop: '1px solid #333',
-    backgroundColor: '#252525'
+    boxShadow: '0 -4px 20px rgba(0,0,0,0.3)'
   },
   selectedTextPreview: {
     fontSize: '12px',
     color: '#888',
-    marginBottom: '8px',
-    fontStyle: 'italic'
+    marginBottom: '8px'
   },
   textarea: {
     width: '100%',
-    padding: '8px 12px',
-    backgroundColor: '#1a1a1a',
-    border: '1px solid #333',
+    padding: '10px 12px',
+    backgroundColor: '#252525',
+    border: '1px solid #444',
     borderRadius: '6px',
     color: '#e5e5e5',
     fontSize: '13px',
@@ -423,127 +513,132 @@ const styles = {
   commentActions: {
     display: 'flex',
     gap: '8px',
-    marginTop: '8px'
+    marginTop: '10px'
   },
-  commentButton: {
+  actionButton: {
     display: 'flex',
     alignItems: 'center',
-    gap: '4px',
-    padding: '6px 12px',
-    backgroundColor: '#3b82f6',
-    color: 'white',
+    gap: '6px',
+    padding: '8px 14px',
     border: 'none',
-    borderRadius: '4px',
+    borderRadius: '6px',
     fontSize: '12px',
+    fontWeight: 500,
     cursor: 'pointer'
   },
+  commentButton: {
+    backgroundColor: '#3b82f6',
+    color: 'white'
+  },
   suggestionButton: {
-    backgroundColor: '#f59e0b'
+    backgroundColor: '#f59e0b',
+    color: 'white'
   },
   cancelButton: {
-    padding: '6px 12px',
+    padding: '8px 14px',
     backgroundColor: 'transparent',
     color: '#888',
     border: '1px solid #444',
-    borderRadius: '4px',
+    borderRadius: '6px',
     fontSize: '12px',
     cursor: 'pointer'
   },
-  annotationsSection: {
-    borderTop: '1px solid #333'
+  
+  // Controls panel sections
+  section: {
+    padding: '16px',
+    borderBottom: '1px solid #252525'
   },
-  annotationsToggle: {
+  sectionHeader: {
     display: 'flex',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    width: '100%',
-    padding: '12px 16px',
-    backgroundColor: '#252525',
-    border: 'none',
-    color: '#e5e5e5',
-    cursor: 'pointer',
-    fontSize: '13px',
-    fontWeight: 500
+    gap: '8px',
+    fontSize: '12px',
+    fontWeight: 600,
+    color: '#888',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+    marginBottom: '12px'
   },
   annotationsList: {
-    maxHeight: '200px',
-    overflow: 'auto',
-    padding: '8px 16px'
+    maxHeight: '250px',
+    overflow: 'auto'
   },
-  noAnnotations: {
+  emptyText: {
     fontSize: '12px',
-    color: '#666',
+    color: '#555',
     textAlign: 'center',
-    padding: '16px'
+    padding: '20px 0'
   },
   annotationItem: {
-    padding: '8px 12px',
+    padding: '10px',
     backgroundColor: '#1a1a1a',
     borderRadius: '6px',
-    marginBottom: '8px'
+    marginBottom: '8px',
+    cursor: 'pointer'
   },
   annotationHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: '4px'
+    marginBottom: '6px'
   },
   annotationType: {
-    fontSize: '10px',
+    fontSize: '9px',
     padding: '2px 6px',
     borderRadius: '3px',
-    fontWeight: 500,
-    color: '#1a1a1a'
+    fontWeight: 600,
+    textTransform: 'uppercase'
   },
   deleteButton: {
     background: 'none',
     border: 'none',
-    color: '#666',
+    color: '#555',
     cursor: 'pointer',
     padding: '2px'
   },
-  annotationText: {
-    fontSize: '12px',
-    color: '#888',
-    marginBottom: '4px',
-    fontStyle: 'italic'
+  annotationQuote: {
+    fontSize: '11px',
+    color: '#666',
+    fontStyle: 'italic',
+    marginBottom: '4px'
   },
   annotationComment: {
-    fontSize: '13px'
-  },
-  reviewNotes: {
-    padding: '12px 16px',
-    borderTop: '1px solid #333'
-  },
-  label: {
-    display: 'block',
     fontSize: '12px',
-    fontWeight: 500,
-    marginBottom: '8px',
-    color: '#888'
+    color: '#ccc'
   },
-  decisionSection: {
-    padding: '12px 16px',
-    borderTop: '1px solid #333'
+  
+  // Notes
+  notesTextarea: {
+    width: '100%',
+    padding: '10px',
+    backgroundColor: '#1a1a1a',
+    border: '1px solid #333',
+    borderRadius: '6px',
+    color: '#e5e5e5',
+    fontSize: '12px',
+    resize: 'none',
+    outline: 'none'
   },
+  
+  // Decision buttons
   decisionButtons: {
     display: 'flex',
-    gap: '12px'
+    gap: '8px'
   },
   decisionButton: {
     flex: 1,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '8px',
-    padding: '12px',
-    backgroundColor: '#252525',
+    gap: '6px',
+    padding: '10px',
+    backgroundColor: '#1a1a1a',
     border: '2px solid #333',
-    borderRadius: '8px',
+    borderRadius: '6px',
     color: '#888',
-    fontSize: '14px',
-    cursor: 'pointer',
-    transition: 'all 0.2s'
+    fontSize: '12px',
+    cursor: 'pointer'
   },
   approvedSelected: {
     backgroundColor: '#166534',
@@ -555,24 +650,21 @@ const styles = {
     borderColor: '#f59e0b',
     color: 'white'
   },
-  submitSection: {
-    padding: '12px 16px',
-    borderTop: '1px solid #333',
-    backgroundColor: '#252525'
-  },
+  
+  // Submit
   submitButton: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     gap: '8px',
-    width: '100%',
-    padding: '12px',
+    margin: '16px',
+    padding: '14px',
     backgroundColor: '#3b82f6',
     border: 'none',
     borderRadius: '8px',
     color: 'white',
     fontSize: '14px',
-    fontWeight: 500,
+    fontWeight: 600,
     cursor: 'pointer'
   }
 };

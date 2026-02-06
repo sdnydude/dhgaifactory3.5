@@ -32,12 +32,17 @@ const AgentStatusPanel = () => {
     };
 
     const agents = [
-        { id: 'medical-llm', name: 'Medical LLM', icon: Cpu },
-        { id: 'research', name: 'Research', icon: Server },
-        { id: 'curriculum', name: 'Curriculum', icon: Server },
-        { id: 'outcomes', name: 'Outcomes', icon: Server },
-        { id: 'competitor-intel', name: 'Competitor Intel', icon: Server },
-        { id: 'qa-compliance', name: 'QA/Compliance', icon: Server }
+        { id: 'medical-research', name: 'Medical Research', icon: Server },
+        { id: 'clinical-practice', name: 'Clinical Practice', icon: Server },
+        { id: 'gap-analysis', name: 'Gap Analysis', icon: Server },
+        { id: 'needs-assessment', name: 'Needs Assessment', icon: Server },
+        { id: 'learning-objectives', name: 'Learning Objectives', icon: Server },
+        { id: 'curriculum-design', name: 'Curriculum Design', icon: Server },
+        { id: 'research-protocol', name: 'Research Protocol', icon: Server },
+        { id: 'marketing-plan', name: 'Marketing Plan', icon: Server },
+        { id: 'grant-writer', name: 'Grant Writer', icon: Cpu },
+        { id: 'prose-qa', name: 'Prose QA', icon: Server },
+        { id: 'compliance-review', name: 'Compliance Review', icon: Server }
     ];
 
     return (

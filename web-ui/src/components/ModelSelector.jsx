@@ -5,10 +5,30 @@ import { useStudio } from '../context/StudioContext';
 
 const ModelSelector = ({ selectedModel, onSelectModel }) => {
     const [isOpen, setIsOpen] = useState(false);
-    const { availableModels, ollamaModels } = useStudio();
+    const { availableModels, ollamaModels, cmeAgents, cmeRecipes } = useStudio();
 
     // Build model groups dynamically
     const modelGroups = [
+        {
+            category: 'CME Instruments',
+            icon: <Zap size={16} />,
+            items: (cmeAgents || []).map(m => ({
+                id: m.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+                name: m.name,
+                provider: m.description || 'CME Agent',
+                type: 'cme-agent'
+            }))
+        },
+        {
+            category: 'CME Compositions',
+            icon: <Cpu size={16} />,
+            items: (cmeRecipes || []).map(m => ({
+                id: m.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+                name: m.name,
+                provider: m.description || 'Workflow',
+                type: 'cme-recipe'
+            }))
+        },
         {
             category: 'Cloud Models',
             icon: <Cloud size={16} />,
@@ -27,18 +47,6 @@ const ModelSelector = ({ selectedModel, onSelectModel }) => {
                 provider: m.description || 'Ollama',
                 type: 'ollama'
             }))
-        },
-        {
-            category: 'DHG Agents',
-            icon: <Zap size={16} />,
-            items: availableModels
-                .filter(m => m.type === 'internal')
-                .map(m => ({
-                    id: m.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
-                    name: m.name,
-                    provider: m.description || 'Internal',
-                    type: 'internal'
-                }))
         }
     ].filter(group => group.items.length > 0);
 
@@ -66,9 +74,15 @@ const ModelSelector = ({ selectedModel, onSelectModel }) => {
                 className="hover-glass"
             >
                 <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-                    <span style={{ color: active.type === 'ollama' ? '#10b981' : 'var(--color-dhg-primary)' }}>
+                    <span style={{ color: 
+                        active.type === 'ollama' ? '#10b981' : 
+                        active.type === 'cme-agent' ? '#f59e0b' :
+                        active.type === 'cme-recipe' ? '#8b5cf6' :
+                        'var(--color-dhg-primary)' 
+                    }}>
                         {active.type === 'ollama' ? <Server size={16} /> :
-                            active.type === 'cloud' ? <Cloud size={16} /> : <Zap size={16} />}
+                            active.type === 'cloud' ? <Cloud size={16} /> : 
+                            active.type === 'cme-recipe' ? <Cpu size={16} /> : <Zap size={16} />}
                     </span>
                     <span style={{ fontWeight: 500 }}>{active.name}</span>
                 </span>
@@ -123,7 +137,10 @@ const ModelSelector = ({ selectedModel, onSelectModel }) => {
                                             padding: 'var(--space-2) var(--space-3)',
                                             borderRadius: 'var(--radius-md)',
                                             background: active.id === item.id ?
-                                                (item.type === 'ollama' ? '#10b981' : 'var(--color-dhg-primary)') :
+                                                (item.type === 'ollama' ? '#10b981' : 
+                                                 item.type === 'cme-agent' ? '#f59e0b' :
+                                                 item.type === 'cme-recipe' ? '#8b5cf6' :
+                                                 'var(--color-dhg-primary)') :
                                                 'transparent',
                                             color: active.id === item.id ? 'white' : 'var(--color-text)',
                                             border: 'none',

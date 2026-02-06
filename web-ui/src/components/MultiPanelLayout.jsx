@@ -215,9 +215,14 @@ const ToolsPanelContent = () => (
 
 const AgentsPanelContent = () => (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-        <PanelHeader icon={Activity} title="Agents" />
+        <PanelHeader icon={Activity} title="CME Instruments" />
         <div style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-4)' }}>
-            {['Medical LLM', 'Research', 'Curriculum', 'Outcomes', 'QA/Compliance'].map(agent => (
+            {[
+                'Medical Research', 'Clinical Practice', 'Gap Analysis',
+                'Needs Assessment', 'Learning Objectives', 'Curriculum Design',
+                'Research Protocol', 'Marketing Plan', 'Grant Writer',
+                'Prose QA', 'Compliance Review'
+            ].map(agent => (
                 <div key={agent} style={{
                     padding: 'var(--space-3)',
                     background: 'var(--color-surface-panel)',

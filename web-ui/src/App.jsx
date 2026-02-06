@@ -6,6 +6,7 @@ import { useWebSocket } from './hooks/useWebSocket';
 import AdminPage from './pages/AdminPage';
 import SettingsPage from './pages/SettingsPage';
 import { useStudio, StudioProvider } from './context/StudioContext';
+import ReviewPanel from './components/panels/ReviewPanel';
 
 const WalkthroughPage = () => (
   <div style={{ padding: 'var(--space-8)', color: 'var(--color-text)', maxWidth: '60rem', margin: '0 auto' }}>
@@ -20,6 +21,19 @@ const WalkthroughPage = () => (
         <li>Advanced Admin Telemetry</li>
       </ul>
     </div>
+  </div>
+);
+
+const ReviewPage = () => (
+  <div style={{ height: '100vh', width: '100%', background: '#0a0a0a' }}>
+    <ReviewPanel
+      projectId="demo"
+      projectName="CME Grant Review Demo"
+      documentContent="<h1>CME Grant Proposal</h1><p>This is a sample document for review. You can select any text to add comments or suggestions.</p><h2>Background</h2><p>The proposed program addresses gaps in cardiology training for primary care physicians.</p><h2>Objectives</h2><ul><li>Improve diagnostic accuracy</li><li>Reduce referral delays</li><li>Enhance patient outcomes</li></ul>"
+      slaDeadline={new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()}
+      onSubmitReview={(data) => { console.log('Review submitted:', data); alert('Review submitted: ' + data.decision); }}
+      onClose={() => window.history.back()}
+    />
   </div>
 );
 
@@ -95,6 +109,7 @@ const AppInner = () => {
         <Route path="settings" element={<SettingsPage />} />
         <Route path="walkthrough" element={<WalkthroughPage />} />
       </Route>
+      <Route path="/review" element={<ReviewPage />} />
     </Routes>
   );
 };

@@ -169,15 +169,20 @@ const ChatTabContent = () => (
 const AgentsTabContent = () => (
     <div style={{ padding: 'var(--space-4)' }}>
         <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginBottom: 'var(--space-3)' }}>
-            Select AI Agent
+            CME Instruments
         </div>
         {[
-            { name: 'Medical LLM', desc: 'Healthcare & clinical', status: 'online' },
-            { name: 'Research', desc: 'Literature & data', status: 'online' },
-            { name: 'Curriculum', desc: 'Training design', status: 'online' },
-            { name: 'Outcomes', desc: 'Analytics & metrics', status: 'idle' },
-            { name: 'QA/Compliance', desc: 'Regulatory review', status: 'online' },
-            { name: 'Competitor Intel', desc: 'Market analysis', status: 'offline' }
+            { name: 'Medical Research', desc: 'Research guidelines & literature', status: 'online' },
+            { name: 'Clinical Practice', desc: 'Analyze practice patterns', status: 'online' },
+            { name: 'Gap Analysis', desc: 'Identify knowledge gaps', status: 'online' },
+            { name: 'Needs Assessment', desc: 'Generate needs assessment', status: 'online' },
+            { name: 'Learning Objectives', desc: 'Create learning objectives', status: 'online' },
+            { name: 'Curriculum Design', desc: 'Design curriculum structure', status: 'online' },
+            { name: 'Research Protocol', desc: 'Create research protocols', status: 'online' },
+            { name: 'Marketing Plan', desc: 'Develop marketing strategy', status: 'online' },
+            { name: 'Grant Writer', desc: 'Write grant application', status: 'online' },
+            { name: 'Prose QA', desc: 'Quality assurance check', status: 'online' },
+            { name: 'Compliance Review', desc: 'Regulatory compliance', status: 'online' }
         ].map(agent => (
             <div key={agent.name} style={{
                 padding: 'var(--space-3)',
