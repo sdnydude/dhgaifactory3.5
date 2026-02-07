@@ -10,6 +10,7 @@
 | 4 | Scope Priority | Agents first vs UI first | **Agents first** | 2026-02-03 | User backlogged project system |
 | 5 | Agent Source Docs | Create new vs Use existing | **DHG-CME-12-Agent-Docs** | 2026-02-03 | Complete specs already exist |
 | 6 | Implementation Order | All at once vs Incremental | **Start with Needs Assessment (#5)** | 2026-02-03 | Per README: "Highest complexity, proves pattern" |
+| 10 | Orchestrator Pattern | Sequential vs Recipe-Based | **Recipe-Based with Parallel Execution** | 2026-02-04 | Composable recipes, parallel fan-out/fan-in, PostgresSaver checkpointing |
 
 ---
 
