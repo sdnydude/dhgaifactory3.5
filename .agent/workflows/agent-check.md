@@ -23,7 +23,7 @@ cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5 && echo "=== DOCKER CONTAINE
 **Primary CME agent backend on port 2026.**
 
 ```bash
-echo "=== LANGGRAPH SERVER (2026) ===" && status=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 2 http://localhost:2026/ok 2>/dev/null) && if [ "$status" = "200" ]; then echo "✓ LangGraph running (localhost:2026)"; else echo "✗ LangGraph not responding ($status)"; fi && echo "" && echo "Available graphs:" && curl -s http://localhost:2026/info 2>/dev/null | jq -r '.graphs | keys[]' 2>/dev/null || echo "Could not fetch graphs"
+echo "=== LANGGRAPH SERVER (2026) ===" && status=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 2 http://localhost:2026/ok 2>/dev/null) && if [ "$status" = "200" ]; then echo "✓ LangGraph running (localhost:2026)"; else echo "✗ LangGraph not responding ($status)"; fi && echo "" && echo "Server info:" && curl -s http://localhost:2026/info 2>/dev/null | jq '{version, langgraph_py_version}' 2>/dev/null && echo "" && echo "Registered graphs (via /assistants/search):" && curl -s -X POST http://localhost:2026/assistants/search -H "Content-Type: application/json" -d '{"limit": 50}' 2>/dev/null | jq -r '.[].graph_id' 2>/dev/null | sort -u || echo "Could not fetch graphs"
 ```
 
 ## 3. Legacy Agent Endpoints (Deprecated)
@@ -61,7 +61,7 @@ cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5 && echo "=== TODO.md SUMMARY
 ## 8. CME Agent Implementation Status
 
 ```bash
-cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5 && echo "=== CME AGENT IMPLEMENTATION ===" && echo "LangGraph agents (agents/cme-*):" && ls -d agents/cme-*/ 2>/dev/null | wc -l && echo "" && echo "Agent directories:" && ls agents/cme-*/ 2>/dev/null || echo "No cme-* agents found"
+cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5 && echo "=== CME AGENT IMPLEMENTATION ===" && echo "" && echo "Graphs in langgraph.json:" && cat langgraph_workflows/dhg-agents-cloud/langgraph.json 2>/dev/null | jq -r '.graphs | keys[]' | sort && echo "" && echo "Total graphs: $(cat langgraph_workflows/dhg-agents-cloud/langgraph.json 2>/dev/null | jq '.graphs | length')" && echo "" && echo "Agent source files:" && ls langgraph_workflows/dhg-agents-cloud/src/*_agent.py 2>/dev/null | sed 's|.*/||' | sort || echo "No agent files found"
 ```
 
 ## 9. Recent Activity (Last 5 Commits)

@@ -1,0 +1,65 @@
+# DHG Audio Analysis Agent — Docker Compose
+# Per Build Spec Section 6.1
+# Uses existing dhg-ollama container on host
+
+services:
+  audio-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dhg-audio-agent
+    ports:
+      - "8101:8000"
+    environment:
+      # Use host's ollama via extra_hosts (see below)
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.1:8b-instruct-q4_K_M}
+      - WHISPER_MODEL_SIZE=${WHISPER_MODEL_SIZE:-large-v3}
+      - WHISPER_DEVICE=cuda
+      - WHISPER_COMPUTE_TYPE=int8
+      - HF_TOKEN=${HF_TOKEN:-}
+      - POSTGRES_URL=postgresql+asyncpg://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-pass}@postgres:5432/${POSTGRES_DB:-audio_agent}
+      - AUDIO_UPLOAD_DIR=/data/audio
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - audio-data:/data/audio
+      - huggingface-cache:/root/.cache/huggingface
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - postgres
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    networks:
+      - audio-net
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: dhg-audio-postgres
+    ports:
+      - "5434:5432"  # Changed to 5434 to avoid conflict
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-pass}
+      - POSTGRES_DB=${POSTGRES_DB:-audio_agent}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d:ro
+    restart: unless-stopped
+    networks:
+      - audio-net
+
+volumes:
+  audio-data:
+  huggingface-cache:
+  postgres-data:
+
+networks:
+  audio-net:
+    driver: bridge

@@ -1,0 +1,64 @@
+{
+  "timestamp": "2026-02-06T19:14:10.041920",
+  "elapsed_seconds": 3169.157848,
+  "success": [
+    "1_hfpef/learning_objectives",
+    "1_hfpef/curriculum_design",
+    "1_hfpef/research_protocol",
+    "1_hfpef/marketing_plan",
+    "1_hfpef/grant_writer",
+    "2_hyperthyroid/learning_objectives",
+    "2_hyperthyroid/research_protocol",
+    "2_hyperthyroid/marketing_plan",
+    "2_hyperthyroid/grant_writer",
+    "3_chronic_cough/learning_objectives",
+    "3_chronic_cough/curriculum_design",
+    "3_chronic_cough/research_protocol",
+    "3_chronic_cough/marketing_plan",
+    "3_chronic_cough/grant_writer",
+    "4_adhd/learning_objectives",
+    "4_adhd/curriculum_design",
+    "4_adhd/research_protocol",
+    "4_adhd/marketing_plan",
+    "4_adhd/grant_writer",
+    "5_polymyalgia_rheumatica/learning_objectives",
+    "5_polymyalgia_rheumatica/research_protocol",
+    "5_polymyalgia_rheumatica/grant_writer"
+  ],
+  "failed": [
+    {
+      "run": "1_hfpef/compliance_review",
+      "error": "write() argument must be str, not dict"
+    },
+    {
+      "run": "2_hyperthyroid/curriculum_design",
+      "error": "Timeout waiting for agent completion"
+    },
+    {
+      "run": "2_hyperthyroid/compliance_review",
+      "error": "write() argument must be str, not dict"
+    },
+    {
+      "run": "3_chronic_cough/compliance_review",
+      "error": "write() argument must be str, not dict"
+    },
+    {
+      "run": "4_adhd/compliance_review",
+      "error": "write() argument must be str, not dict"
+    },
+    {
+      "run": "5_polymyalgia_rheumatica/curriculum_design",
+      "error": "Timeout waiting for agent completion"
+    },
+    {
+      "run": "5_polymyalgia_rheumatica/marketing_plan",
+      "error": "Server disconnected without sending a response."
+    },
+    {
+      "run": "5_polymyalgia_rheumatica/compliance_review",
+      "error": "write() argument must be str, not dict"
+    }
+  ],
+  "total_tokens": 266258,
+  "total_cost": 3.7256700000000005
+}
