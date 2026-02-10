@@ -1,9 +1,9 @@
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
-python-multipart==0.0.6
+python-multipart==0.0.22
 faster-whisper==1.0.3
 httpx==0.25.0
 prometheus-client==0.19.0
 pydantic==2.5.0
 pydantic-settings==2.1.0
-requests==2.31.0
+requests==2.32.4
