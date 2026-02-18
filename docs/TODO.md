@@ -1,40 +1,54 @@
 # DHG AI Factory - Master To-Do List
-**Last Updated:** Feb 2, 2026
+**Last Updated:** Feb 18, 2026 (10:55 EST)
 
 ## System Status
-- **Running Containers:** 11 dhg-prefixed (10 healthy, 1 no healthcheck)
-- **Healthy Agents:** 7/7 (Orchestrator EOL'd)
-- **Key Services:** All healthy
-- **GPU:** RTX 5080 (1% utilization, 4.7GB/16GB)
-- **Disk:** 9% used (146GB / 1.9TB)
-- **LibreChat:** Running on :3010
-- **Ollama Models:** nomic-embed-text, qwen3:14b
+- **Running Containers:** 54 total across all stacks
+- **DHG Stack:** 25 containers (22 healthy, 3 no healthcheck: dhg-ollama, dhg-transcribe-qdrant, dhg-worker)
+- **LangGraph Server:** Running on :2026 (v0.7.16, 15 graphs)
+- **GPU:** RTX 5080 (0% utilization, 4.0GB/16GB VRAM)
+- **Disk:** 11% used (183GB / 1.9TB)
+- **LibreChat:** Running on :3010 — **BEING DEPRECATED**
+- **Ollama Models:** llama3.1:8b, nomic-embed-text, qwen3:14b
+- **Observability:** Prometheus ✓ (:9090), Grafana ✓ (:3001), Loki ✓ (:3100)
+
+### Container Groups
+| Stack | Count | Status |
+|---|---|---|
+| DHG AI Factory | 25 | 22 healthy |
+| Transcribe Pipeline | 9 | All running |
+| Dify | 8 | All running |
+| Infisical | 6 | 5 healthy, 1 crash-looping (Exit 255) |
+| LibreChat | 3 | Running (being deprecated) |
+| RAGFlow | 1 | Running (:8585) |
+| pgAdmin | 1 | Running (:5050) |
 
 ---
 
-## P0: Blockers - CLEAR
+## P0: Blockers
 
-No blockers.
+- [ ] **`infisical` container crash-looping** (Exit 255) — investigate logs, may affect secret sync
 
 ---
 
 ## P1: Active Sprint
 
-### CME Intake Form (IN PROGRESS)
+### Frontend Migration — LibreChat → LangGraph Native
+- [ ] Deploy Open Agent Platform (agent management, intake forms, multi-agent)
+- [ ] Deploy Agent Inbox (CME human review queue)
+- [ ] Deploy Open Canvas (writer document editing)
+- [ ] Wire all three to LangGraph Cloud (prod) and :2026 (dev)
+- [ ] Update agents to emit HumanInterrupt schema for Agent Inbox
+- [ ] Remove LibreChat from active use
+
+### CME Workflow
 - [x] PostgreSQL database schema (003_add_cme_projects.sql)
 - [x] CME endpoints integrated with database
 - [x] JSONB datetime serialization fix
-- [ ] LibreChat CME sidebar integration
-- [ ] Human Review Requirements implementation
-
-### LibreChat Agent Features (IN PROGRESS)
-- [x] Agents config in librechat.yaml
-- [ ] Enable Artifacts for agents
-- [ ] Enable Tools selection for agents
-- [ ] Test agent tool capabilities
+- [ ] Human Review Requirements implementation (via Agent Inbox)
 
 ### Observability Stack
-- [ ] Deploy Prometheus/Grafana/Loki stack
+- [x] Deploy Prometheus/Grafana/Loki stack
+- [x] Healthchecks on all monitorable containers (22/25 healthy)
 - [ ] Configure database exporters
 - [ ] Set up Grafana dashboards
 - [ ] Configure Alertmanager
@@ -64,12 +78,13 @@ No blockers.
 
 ---
 
-## P3: LibreChat Features
+## P3: LangGraph Frontend Features
 
-- [x] **Web Search (Tavily)** - Configured Jan 18
-- [ ] **Memory** - Persistent context across chats
-- [ ] **Artifacts** - Generative UI output (agent feature)
-- [ ] **MCP Integration** - Connect to external tools
+- [ ] **Generative UI** - Domain panels (leads, projects, CMS) rendered inline in chat
+- [ ] **MCP Integration** - Connect agents to external tools via Open Agent Platform
+- [ ] **Memory** - Persistent context via LangGraph checkpointing
+- [ ] **LLManager** - Approval workflow with reflection for CME review
+- [ ] **Healthchecks** - Add to dhg-ollama, dhg-transcribe-qdrant, dhg-worker
 
 ---
 
@@ -97,6 +112,23 @@ No blockers.
 - [ ] Upgrade Infisical CLI
 
 ---
+
+## Completed (Feb 18, 2026)
+
+- [x] Full agent-check: 54 containers inventoried across all stacks
+- [x] LangGraph frontend strategy decided: LibreChat → Open Agent Platform + Agent Inbox + Open Canvas
+- [x] 17-option LangGraph frontend comparative table researched and documented
+- [x] TODO.md updated with accurate system status
+
+## Completed (Feb 3 - Feb 17, 2026)
+
+- [x] Audio agent added to LangGraph (647b3dd)
+- [x] Recipe-Based Orchestrator implemented (92d0d2f)
+- [x] Marketing Plan agent created
+- [x] Docker healthchecks added for Grafana, Loki, Prometheus, registry-api
+- [x] Registry-API Docker image rebuilt (fixed missing Alembic migration 003)
+- [x] LangGraph proxy and docker override (4c45b69)
+- [x] Research protocol + curriculum design: disease_state/therapeutic_area fields
 
 ## Completed (Jan 29 - Feb 2, 2026)
 

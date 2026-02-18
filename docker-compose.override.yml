@@ -57,6 +57,11 @@ services:
     depends_on:
       registry-db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks:
       - dhg-network
     restart: unless-stopped
@@ -72,6 +77,11 @@ services:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=30d'
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks:
       - dhg-network
     restart: unless-stopped
@@ -85,6 +95,11 @@ services:
       - ./observability/loki:/etc/loki
       - loki_data:/loki
     command: -config.file=/etc/loki/loki-config.yml
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:3100/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks:
       - dhg-network
     restart: unless-stopped
@@ -104,6 +119,11 @@ services:
     depends_on:
       - prometheus
       - loki
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks:
       - dhg-network
     restart: unless-stopped
