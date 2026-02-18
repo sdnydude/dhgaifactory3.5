@@ -33,29 +33,19 @@ scrape_configs:
     metrics_path: '/metrics'
     scrape_interval: 10s
 
-  # ASR service
-  - job_name: 'asr-service'
+
+  # PostgreSQL metrics via postgres-exporter
+  - job_name: 'postgres'
     static_configs:
-      - targets: ['asr-service:8000']
+      - targets: ['postgres-exporter:9187']
         labels:
-          service: 'asr-service'
-    metrics_path: '/metrics'
-    scrape_interval: 10s
+          service: 'registry-db'
+    scrape_interval: 30s
 
-  # PostgreSQL metrics (if we add postgres_exporter later)
-  # - job_name: 'postgres'
-  #   static_configs:
-  #     - targets: ['postgres-exporter:9187']
-
-  # Node metrics (system-level)
-  # - job_name: 'node'
-  #   static_configs:
-  #     - targets: ['node-exporter:9100']
-
-  # Node Exporter (host metrics)
+  # Node Exporter (host metrics) — uses host network, reachable via dhg-network gateway
   - job_name: 'node-exporter'
     static_configs:
-      - targets: ['node-exporter:9100']
+      - targets: ['172.18.0.1:9100']
         labels:
           service: 'node-exporter'
     scrape_interval: 15s

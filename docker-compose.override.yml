@@ -128,6 +128,49 @@ services:
       - dhg-network
     restart: unless-stopped
 
+  node-exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: dhg-node-exporter
+    pid: host
+    network_mode: host
+    volumes:
+      - /:/host:ro,rslave
+    command:
+      - '--path.rootfs=/host'
+    restart: unless-stopped
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.47.2
+    container_name: dhg-cadvisor
+    privileged: true
+    ports:
+      - "8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    devices:
+      - /dev/kmsg
+    restart: unless-stopped
+    networks:
+      - dhg-network
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: dhg-postgres-exporter
+    ports:
+      - "9187:9187"
+    environment:
+      - DATA_SOURCE_NAME=postgresql://dhg:weenie64@registry-db:5432/dhg_registry?sslmode=disable
+    depends_on:
+      registry-db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - dhg-network
+
 volumes:
   prometheus_data:
   loki_data:
