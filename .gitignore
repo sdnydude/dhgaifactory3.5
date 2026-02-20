@@ -8,10 +8,10 @@ __pycache__/
 *$py.class
 *.so
 .Python
-venv/
-.venv/
-ENV/
-env/
+**/venv/
+**/.venv/
+**/ENV/
+**/env/
 
 # Data & Logs
 logs/
@@ -25,7 +25,8 @@ models/
 .idea/
 *.swp
 *.swo
-.DS_Store
+**/.DS_Store
+**/._.DS_Store
 
 # Docker
 *.pid

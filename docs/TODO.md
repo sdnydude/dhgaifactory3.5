@@ -1,15 +1,14 @@
 # DHG AI Factory - Master To-Do List
-**Last Updated:** Feb 18, 2026 (10:55 EST)
+**Last Updated:** Feb 20, 2026 (12:57 EST)
 
 ## System Status
-- **Running Containers:** 54 total across all stacks
-- **DHG Stack:** 25 containers (22 healthy, 3 no healthcheck: dhg-ollama, dhg-transcribe-qdrant, dhg-worker)
+- **DHG Containers:** 31 running (30 healthy, 1 no-healthcheck: dhg-ollama)
 - **LangGraph Server:** Running on :2026 (v0.7.16, 15 graphs)
 - **GPU:** RTX 5080 (0% utilization, 4.0GB/16GB VRAM)
-- **Disk:** 11% used (183GB / 1.9TB)
+- **Disk:** 11% used (184GB / 1.9TB)
 - **LibreChat:** Running on :3010 — **BEING DEPRECATED**
 - **Ollama Models:** llama3.1:8b, nomic-embed-text, qwen3:14b
-- **Observability:** Prometheus ✓ (:9090), Grafana ✓ (:3001), Loki ✓ (:3100)
+- **Observability:** Prometheus ✓ (:9090), Grafana ✓ (:3001), Loki ✓ (:3100), cAdvisor ✓ (:8080), Node Exporter ✓, Postgres Exporter ✓ (:9187)
 
 ### Container Groups
 | Stack | Count | Status |
@@ -48,10 +47,14 @@
 
 ### Observability Stack
 - [x] Deploy Prometheus/Grafana/Loki stack
-- [x] Healthchecks on all monitorable containers (22/25 healthy)
-- [ ] Configure database exporters
+- [x] Healthchecks on all monitorable containers (30/31 healthy)
+- [x] Deploy node-exporter, cAdvisor, postgres-exporter
+- [x] Fix cAdvisor Docker API compat (v0.49.1 → v0.51.0)
+- [x] Prometheus scrape config: self, registry-api, postgres, node-exporter, cadvisor
+- [ ] Observability refactoring — reviewing OTel-native plan (Docker SD, Loki 3.x, Tempo tracing)
 - [ ] Set up Grafana dashboards
 - [ ] Configure Alertmanager
+- [ ] Add Loki log collection (no containers shipping logs yet)
 
 ---
 
@@ -113,12 +116,20 @@
 
 ---
 
+## Completed (Feb 20, 2026)
+
+- [x] Agent check: 31 DHG containers running (30 healthy)
+- [x] TODO.md updated with current system status
+
 ## Completed (Feb 18, 2026)
 
 - [x] Full agent-check: 54 containers inventoried across all stacks
 - [x] LangGraph frontend strategy decided: LibreChat → Open Agent Platform + Agent Inbox + Open Canvas
 - [x] 17-option LangGraph frontend comparative table researched and documented
-- [x] TODO.md updated with accurate system status
+- [x] Observability: deployed node-exporter, cAdvisor, postgres-exporter (68c1f72)
+- [x] Observability: fixed cAdvisor v0.49.1 → v0.51.0 for Docker API 1.44+ compat (64675d4)
+- [x] Observability: created Loki datasource for Grafana, fixed dashboard mount
+- [x] Reviewed Claude's OTel-native observability refactoring plan
 
 ## Completed (Feb 3 - Feb 17, 2026)
 
