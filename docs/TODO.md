@@ -1,11 +1,11 @@
 # DHG AI Factory - Master To-Do List
-**Last Updated:** Feb 20, 2026 (12:57 EST)
+**Last Updated:** Feb 26, 2026 (18:40 EST)
 
 ## System Status
-- **DHG Containers:** 31 running (30 healthy, 1 no-healthcheck: dhg-ollama)
+- **DHG Containers:** 30 running (29 healthy, 4 no-healthcheck: ollama, node-exporter, postgres-exporter, transcribe-qdrant)
 - **LangGraph Server:** Running on :2026 (v0.7.16, 15 graphs)
-- **GPU:** RTX 5080 (0% utilization, 4.0GB/16GB VRAM)
-- **Disk:** 11% used (184GB / 1.9TB)
+- **GPU:** RTX 5080 (10% utilization, 4.7GB/16GB VRAM — dhg-transcribe pipeline active)
+- **Disk:** 11% used (186GB / 1.9TB)
 - **LibreChat:** Running on :3010 — **BEING DEPRECATED**
 - **Ollama Models:** llama3.1:8b, nomic-embed-text, qwen3:14b
 - **Observability:** Prometheus ✓ (:9090), Grafana ✓ (:3001), Loki ✓ (:3100), cAdvisor ✓ (:8080), Node Exporter ✓, Postgres Exporter ✓ (:9187)
@@ -115,6 +115,14 @@
 - [ ] Upgrade Infisical CLI
 
 ---
+
+## Completed (Feb 26, 2026)
+
+- [x] Agent check: 30 DHG containers running (29 healthy)
+- [x] Fixed registry-db down (exited 5 days ago) — restarted, registry-api recovered to healthy
+- [x] Unstaged accidentally staged files (venv/, website/)
+- [x] Identified GPU usage: dhg-transcribe pipeline (4GB VRAM, PID 5525)
+- [x] TODO.md updated with current system status
 
 ## Completed (Feb 20, 2026)
 
