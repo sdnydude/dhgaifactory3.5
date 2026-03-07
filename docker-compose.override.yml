@@ -176,7 +176,37 @@ services:
     networks:
       - dhg-network
 
+  promtail:
+    image: grafana/promtail:2.9.0
+    container_name: dhg-promtail
+    volumes:
+      - ./observability/promtail:/etc/promtail
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: -config.file=/etc/promtail/promtail-config.yml
+    depends_on:
+      - loki
+    networks:
+      - dhg-network
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:2.3.1
+    container_name: dhg-tempo
+    ports:
+      - "3200:3200"
+      - "4317:4317"
+      - "4318:4318"
+    volumes:
+      - ./observability/tempo:/etc/tempo
+      - tempo_data:/var/tempo
+    command: -config.file=/etc/tempo/tempo-config.yml
+    networks:
+      - dhg-network
+    restart: unless-stopped
+
 volumes:
   prometheus_data:
   loki_data:
   grafana_data:
+  tempo_data:
