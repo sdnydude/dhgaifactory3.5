@@ -49,7 +49,6 @@ services:
       - ./agents/shared:/app/shared
       - ./logs:/logs
     ports:
-      - "8011:8000"
       - "2024:2024"
     depends_on:
       registry-db:
@@ -216,7 +215,7 @@ services:
     ports:
       - "3005:5173"
     environment:
-      - VITE_ORCHESTRATOR_URL=ws://10.0.0.251:8011/ws
+      - VITE_ORCHESTRATOR_URL=${VITE_ORCHESTRATOR_URL:-ws://localhost:8011/ws}
     networks:
       - dhg-network
     restart: unless-stopped
