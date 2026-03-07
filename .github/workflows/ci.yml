@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  lint-python:
+    name: Lint Python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install ruff
+      - run: ruff check registry/ langgraph_workflows/dhg-agents-cloud/src/ --select E,F,W --ignore E501
+
+  lint-js:
+    name: Lint JavaScript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: cd web-ui && npm ci
+      - run: cd web-ui && npm run lint
+
+  test-registry:
+    name: Test Registry API
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg15
+        env:
+          POSTGRES_USER: dhg
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: dhg_registry
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dhg -d dhg_registry"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r registry/requirements.txt pytest httpx
+      - run: pytest registry/ -v --tb=short
+        env:
+          DATABASE_URL: postgresql://dhg:testpass@localhost:5432/dhg_registry
+
+  validate-compose:
+    name: Validate Docker Compose
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose config --quiet
+      - run: docker compose -f langgraph_workflows/dhg-agents-cloud/docker-compose.yml config --quiet

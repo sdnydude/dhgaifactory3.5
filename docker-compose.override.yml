@@ -45,6 +45,10 @@ services:
       context: ./registry
       dockerfile: Dockerfile
     container_name: dhg-registry-api
+    labels:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "8000"
+      prometheus.io/path: "/metrics"
     ports:
       - "8011:8000"
     environment:
@@ -73,6 +77,7 @@ services:
     volumes:
       - ./observability/prometheus:/etc/prometheus
       - prometheus_data:/prometheus
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'

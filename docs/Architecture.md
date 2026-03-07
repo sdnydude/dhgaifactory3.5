@@ -1,5 +1,7 @@
 # System Architecture
 
+> **Canonical source of truth:** See `CLAUDE.md` in the project root for the current architecture, known issues, and technology stack. This file provides supplementary diagrams.
+
 The DHG AI Factory is designed as a modular, local-first AI processing stack. It leverages containerization for consistency and scalability, with a focus on observability and data integrity.
 
 ## High-Level Overview

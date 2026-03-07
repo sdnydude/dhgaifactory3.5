@@ -57,3 +57,31 @@ scrape_configs:
         labels:
           service: 'cadvisor'
     scrape_interval: 15s
+
+  # Docker Service Discovery — auto-discovers containers with
+  # prometheus.io/scrape=true label. Add these Docker labels to any
+  # service to opt in:
+  #   labels:
+  #     prometheus.io/scrape: "true"
+  #     prometheus.io/port: "8000"
+  #     prometheus.io/path: "/metrics"
+  - job_name: 'docker-sd'
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 30s
+        filters:
+          - name: label
+            values: ["prometheus.io/scrape=true"]
+    relabel_configs:
+      - source_labels: [__meta_docker_container_label_prometheus_io_scrape]
+        regex: "true"
+        action: keep
+      - source_labels: [__meta_docker_network_ip, __meta_docker_container_label_prometheus_io_port]
+        separator: ':'
+        target_label: __address__
+      - source_labels: [__meta_docker_container_name]
+        regex: /(.+)
+        target_label: container
+      - source_labels: [__meta_docker_container_label_prometheus_io_path]
+        target_label: __metrics_path__
+        regex: (.+)
