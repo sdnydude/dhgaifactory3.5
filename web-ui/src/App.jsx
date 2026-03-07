@@ -68,7 +68,7 @@ const AppInner = () => {
       addMessage({ role: 'user', content });
       setIsProcessing(true);
       try {
-        const response = await fetch('http://10.0.0.251:8011/api/ollama/chat', {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/ollama/chat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ model: selectedModel.name, message: content })

@@ -8,7 +8,7 @@ const AgentStatusPanel = () => {
     useEffect(() => {
         const fetchStatus = async () => {
             try {
-                const wsUrl = import.meta.env.VITE_WS_URL || 'ws://10.0.0.251:8011';
+                const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8011';
                 const httpUrl = wsUrl.replace('ws://', 'http://').replace('/ws', '');
                 const res = await fetch(`${httpUrl}/health`);
                 const data = await res.json();

@@ -49,7 +49,7 @@ export const StudioProvider = ({ children }) => {
     useEffect(() => {
         const fetchOllamaModels = async () => {
             try {
-                const response = await fetch('http://10.0.0.251:8011/api/ollama/models');
+                const response = await fetch(`${import.meta.env.VITE_API_URL}/api/ollama/models`);
                 if (response.ok) {
                     const data = await response.json();
                     if (data.models && data.models.length > 0) {

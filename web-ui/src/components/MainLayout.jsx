@@ -291,7 +291,7 @@ const PromptCheckerTool = () => {
         if (!prompt.trim()) return;
         setLoading(true);
         try {
-            const response = await fetch('http://10.0.0.251:8011/api/prompt-analyze', {
+            const response = await fetch(`${import.meta.env.VITE_API_URL}/api/prompt-analyze`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ prompt })
@@ -409,7 +409,7 @@ const TranscriptionTool = () => {
         setLoading(true);
         setResult(null);
         try {
-            const response = await fetch('http://10.0.0.251:8011/api/transcribe', {
+            const response = await fetch(`${import.meta.env.VITE_API_URL}/api/transcribe`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ url, project_type: projectType })
@@ -647,7 +647,7 @@ const VisualsToolPanel = ({ onGeneratedImages }) => {
         try {
             const newResults = [];
             for (const visualType of selectedTypes) {
-                const response = await fetch('http://10.0.0.251:8008/generate', {
+                const response = await fetch(`${import.meta.env.VITE_VISUALS_URL}/generate`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
