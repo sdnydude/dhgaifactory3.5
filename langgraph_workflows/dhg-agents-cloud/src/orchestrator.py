@@ -745,16 +745,6 @@ async def human_review_node(state: CMEPipelineState) -> dict:
     }
 
 
-@traceable(name="human_review_gate", run_type="chain")
-async def human_review_gate(state: CMEPipelineState) -> dict:
-    """Legacy human review checkpoint — used by curriculum/grant/full graphs until migrated to interrupt()."""
-    return {
-        "status": PipelineStatus.AWAITING_REVIEW.value,
-        "current_step": "human_review_pending",
-        "updated_at": datetime.now().isoformat()
-    }
-
-
 MAX_REVIEW_ROUNDS = 3
 
 
@@ -1020,17 +1010,6 @@ def route_after_compliance(state: CMEPipelineState) -> Literal["continue", "revi
         return "revision_required"
 
 
-def route_after_human_review(state: CMEPipelineState) -> Literal["approved", "revision_requested", "rejected"]:
-    """Route after human review gate."""
-    status = state.get("human_review_status", "pending")
-    if status == "approved":
-        return "approved"
-    elif status == "revision_requested":
-        return "revision_requested"
-    else:
-        return "rejected"  # Default to rejected for unknown status
-
-
 def route_after_human_review_interrupt(state: CMEPipelineState) -> Literal["approved", "revision", "rejected"]:
     """Route after human review interrupt based on human_review_status set by human_review_node."""
     status = state.get("human_review_status", "rejected")
@@ -1102,29 +1081,27 @@ def create_needs_package_graph():
 # =============================================================================
 
 def create_curriculum_package_graph():
-    """Create the Curriculum Package recipe with parallel execution."""
-    
+    """Create the Curriculum Package recipe with parallel execution and interrupt-based review."""
+
     workflow = StateGraph(CMEPipelineState)
-    
-    # Needs phase (with parallel research)
+
     workflow.add_node("early_research", run_early_research_parallel)
     workflow.add_node("gap_analysis", run_gap_analysis_agent)
     workflow.add_node("learning_objectives", run_learning_objectives_agent)
     workflow.add_node("needs_assessment", run_needs_assessment_agent)
     workflow.add_node("prose_quality_1", run_prose_quality_pass_1)
-    
-    # Curriculum phase (parallel)
-    workflow.add_node("design_phase", run_design_phase_parallel)  # Parallel!
-    workflow.add_node("human_review", human_review_gate)
+    workflow.add_node("design_phase", run_design_phase_parallel)
+    workflow.add_node("human_review", human_review_node)
+    workflow.add_node("process_feedback", process_review_feedback)
+    workflow.add_node("complete", mark_complete)
     workflow.add_node("failed", mark_failed)
-    
-    # Flow
+
     workflow.set_entry_point("early_research")
     workflow.add_edge("early_research", "gap_analysis")
     workflow.add_edge("gap_analysis", "learning_objectives")
     workflow.add_edge("learning_objectives", "needs_assessment")
     workflow.add_edge("needs_assessment", "prose_quality_1")
-    
+
     workflow.add_conditional_edges(
         "prose_quality_1",
         route_after_prose_quality_1,
@@ -1134,11 +1111,24 @@ def create_curriculum_package_graph():
             "human_intervention": "failed"
         }
     )
-    
+
     workflow.add_edge("design_phase", "human_review")
-    workflow.add_edge("human_review", END)
+
+    workflow.add_conditional_edges(
+        "human_review",
+        route_after_human_review_interrupt,
+        {
+            "approved": "complete",
+            "revision": "process_feedback",
+            "rejected": "failed"
+        }
+    )
+
+    workflow.add_edge("process_feedback", "design_phase")
+
+    workflow.add_edge("complete", END)
     workflow.add_edge("failed", END)
-    
+
     return workflow.compile()
 
 
@@ -1148,38 +1138,30 @@ def create_curriculum_package_graph():
 # =============================================================================
 
 def create_grant_package_graph():
-    """Create the Grant Package recipe with full parallel execution."""
-    
+    """Create the Grant Package recipe with interrupt-based review."""
+
     workflow = StateGraph(CMEPipelineState)
-    
-    # Early phase (parallel research)
+
     workflow.add_node("early_research", run_early_research_parallel)
     workflow.add_node("gap_analysis", run_gap_analysis_agent)
     workflow.add_node("learning_objectives", run_learning_objectives_agent)
     workflow.add_node("needs_assessment", run_needs_assessment_agent)
     workflow.add_node("prose_quality_1", run_prose_quality_pass_1)
-    
-    # Design phase (parallel curriculum, protocol, marketing)
     workflow.add_node("design_phase", run_design_phase_parallel)
-    
-    # Grant assembly
     workflow.add_node("grant_writer", run_grant_writer_agent)
     workflow.add_node("prose_quality_2", run_prose_quality_pass_2)
     workflow.add_node("compliance", run_compliance_agent)
-    
-    # Final gates
-    workflow.add_node("human_review", human_review_gate)
+    workflow.add_node("human_review", human_review_node)
+    workflow.add_node("process_feedback", process_review_feedback)
     workflow.add_node("complete", mark_complete)
     workflow.add_node("failed", mark_failed)
-    
-    # Flow
+
     workflow.set_entry_point("early_research")
     workflow.add_edge("early_research", "gap_analysis")
     workflow.add_edge("gap_analysis", "learning_objectives")
     workflow.add_edge("learning_objectives", "needs_assessment")
     workflow.add_edge("needs_assessment", "prose_quality_1")
-    
-    # First prose quality gate
+
     workflow.add_conditional_edges(
         "prose_quality_1",
         route_after_prose_quality_1,
@@ -1189,11 +1171,10 @@ def create_grant_package_graph():
             "human_intervention": "failed"
         }
     )
-    
+
     workflow.add_edge("design_phase", "grant_writer")
     workflow.add_edge("grant_writer", "prose_quality_2")
-    
-    # Second prose quality gate
+
     workflow.add_conditional_edges(
         "prose_quality_2",
         route_after_prose_quality_2,
@@ -1203,8 +1184,7 @@ def create_grant_package_graph():
             "human_intervention": "failed"
         }
     )
-    
-    # Compliance gate
+
     workflow.add_conditional_edges(
         "compliance",
         route_after_compliance,
@@ -1213,11 +1193,22 @@ def create_grant_package_graph():
             "revision_required": "grant_writer"
         }
     )
-    
-    workflow.add_edge("human_review", "complete")
+
+    workflow.add_conditional_edges(
+        "human_review",
+        route_after_human_review_interrupt,
+        {
+            "approved": "complete",
+            "revision": "process_feedback",
+            "rejected": "failed"
+        }
+    )
+
+    workflow.add_edge("process_feedback", "grant_writer")
+
     workflow.add_edge("complete", END)
     workflow.add_edge("failed", END)
-    
+
     return workflow.compile()
 
 
@@ -1227,37 +1218,30 @@ def create_grant_package_graph():
 # =============================================================================
 
 def create_full_pipeline_graph():
-    """Create the Full Pipeline recipe with human review routing."""
-    
+    """Create the Full Pipeline recipe with interrupt-based human review routing."""
+
     workflow = StateGraph(CMEPipelineState)
-    
-    # Early phase (parallel research)
+
     workflow.add_node("early_research", run_early_research_parallel)
     workflow.add_node("gap_analysis", run_gap_analysis_agent)
     workflow.add_node("learning_objectives", run_learning_objectives_agent)
     workflow.add_node("needs_assessment", run_needs_assessment_agent)
     workflow.add_node("prose_quality_1", run_prose_quality_pass_1)
-    
-    # Design phase (parallel)
     workflow.add_node("design_phase", run_design_phase_parallel)
-    
-    # Grant assembly
     workflow.add_node("grant_writer", run_grant_writer_agent)
     workflow.add_node("prose_quality_2", run_prose_quality_pass_2)
     workflow.add_node("compliance", run_compliance_agent)
-    
-    # Human review with routing
-    workflow.add_node("human_review", human_review_gate)
+    workflow.add_node("human_review", human_review_node)
+    workflow.add_node("process_feedback", process_review_feedback)
     workflow.add_node("complete", mark_complete)
     workflow.add_node("failed", mark_failed)
-    
-    # Flow
+
     workflow.set_entry_point("early_research")
     workflow.add_edge("early_research", "gap_analysis")
     workflow.add_edge("gap_analysis", "learning_objectives")
     workflow.add_edge("learning_objectives", "needs_assessment")
     workflow.add_edge("needs_assessment", "prose_quality_1")
-    
+
     workflow.add_conditional_edges(
         "prose_quality_1",
         route_after_prose_quality_1,
@@ -1267,10 +1251,10 @@ def create_full_pipeline_graph():
             "human_intervention": "failed"
         }
     )
-    
+
     workflow.add_edge("design_phase", "grant_writer")
     workflow.add_edge("grant_writer", "prose_quality_2")
-    
+
     workflow.add_conditional_edges(
         "prose_quality_2",
         route_after_prose_quality_2,
@@ -1280,7 +1264,7 @@ def create_full_pipeline_graph():
             "human_intervention": "failed"
         }
     )
-    
+
     workflow.add_conditional_edges(
         "compliance",
         route_after_compliance,
@@ -1289,21 +1273,22 @@ def create_full_pipeline_graph():
             "revision_required": "grant_writer"
         }
     )
-    
-    # Human review routing
+
     workflow.add_conditional_edges(
         "human_review",
-        route_after_human_review,
+        route_after_human_review_interrupt,
         {
             "approved": "complete",
-            "revision_requested": "grant_writer",
+            "revision": "process_feedback",
             "rejected": "failed"
         }
     )
-    
+
+    workflow.add_edge("process_feedback", "grant_writer")
+
     workflow.add_edge("complete", END)
     workflow.add_edge("failed", END)
-    
+
     return workflow.compile()
 
 
@@ -1341,25 +1326,26 @@ full_graph = create_full_pipeline_graph()
 # =============================================================================
 
 async def create_checkpointed_needs_graph():
-    """Create needs graph with PostgresSaver checkpointing."""
+    """Create needs graph with PostgresSaver checkpointing and interrupt-based review."""
     checkpointer = await get_checkpointer()
     workflow = StateGraph(CMEPipelineState)
-    
-    # Add nodes (same as create_needs_package_graph)
+
     workflow.add_node("early_research", run_early_research_parallel)
     workflow.add_node("gap_analysis", run_gap_analysis_agent)
     workflow.add_node("learning_objectives", run_learning_objectives_agent)
     workflow.add_node("needs_assessment", run_needs_assessment_agent)
     workflow.add_node("prose_quality", run_prose_quality_pass_1)
-    workflow.add_node("human_review", human_review_gate)
+    workflow.add_node("human_review", human_review_node)
+    workflow.add_node("process_feedback", process_review_feedback)
+    workflow.add_node("complete", mark_complete)
     workflow.add_node("failed", mark_failed)
-    
+
     workflow.set_entry_point("early_research")
     workflow.add_edge("early_research", "gap_analysis")
     workflow.add_edge("gap_analysis", "learning_objectives")
     workflow.add_edge("learning_objectives", "needs_assessment")
     workflow.add_edge("needs_assessment", "prose_quality")
-    
+
     workflow.add_conditional_edges(
         "prose_quality",
         route_after_prose_quality_1,
@@ -1369,19 +1355,30 @@ async def create_checkpointed_needs_graph():
             "human_intervention": "failed"
         }
     )
-    
-    workflow.add_edge("human_review", END)
+
+    workflow.add_conditional_edges(
+        "human_review",
+        route_after_human_review_interrupt,
+        {
+            "approved": "complete",
+            "revision": "process_feedback",
+            "rejected": "failed"
+        }
+    )
+
+    workflow.add_edge("process_feedback", "needs_assessment")
+
+    workflow.add_edge("complete", END)
     workflow.add_edge("failed", END)
-    
+
     return workflow.compile(checkpointer=checkpointer)
 
 
 async def create_checkpointed_grant_graph():
-    """Create grant graph with PostgresSaver checkpointing."""
+    """Create grant graph with PostgresSaver checkpointing and interrupt-based review."""
     checkpointer = await get_checkpointer()
     workflow = StateGraph(CMEPipelineState)
-    
-    # Add all nodes
+
     workflow.add_node("early_research", run_early_research_parallel)
     workflow.add_node("gap_analysis", run_gap_analysis_agent)
     workflow.add_node("learning_objectives", run_learning_objectives_agent)
@@ -1391,16 +1388,17 @@ async def create_checkpointed_grant_graph():
     workflow.add_node("grant_writer", run_grant_writer_agent)
     workflow.add_node("prose_quality_2", run_prose_quality_pass_2)
     workflow.add_node("compliance", run_compliance_agent)
-    workflow.add_node("human_review", human_review_gate)
+    workflow.add_node("human_review", human_review_node)
+    workflow.add_node("process_feedback", process_review_feedback)
     workflow.add_node("complete", mark_complete)
     workflow.add_node("failed", mark_failed)
-    
+
     workflow.set_entry_point("early_research")
     workflow.add_edge("early_research", "gap_analysis")
     workflow.add_edge("gap_analysis", "learning_objectives")
     workflow.add_edge("learning_objectives", "needs_assessment")
     workflow.add_edge("needs_assessment", "prose_quality_1")
-    
+
     workflow.add_conditional_edges(
         "prose_quality_1",
         route_after_prose_quality_1,
@@ -1410,10 +1408,10 @@ async def create_checkpointed_grant_graph():
             "human_intervention": "failed"
         }
     )
-    
+
     workflow.add_edge("design_phase", "grant_writer")
     workflow.add_edge("grant_writer", "prose_quality_2")
-    
+
     workflow.add_conditional_edges(
         "prose_quality_2",
         route_after_prose_quality_2,
@@ -1423,7 +1421,7 @@ async def create_checkpointed_grant_graph():
             "human_intervention": "failed"
         }
     )
-    
+
     workflow.add_conditional_edges(
         "compliance",
         route_after_compliance,
@@ -1432,11 +1430,22 @@ async def create_checkpointed_grant_graph():
             "revision_required": "grant_writer"
         }
     )
-    
-    workflow.add_edge("human_review", "complete")
+
+    workflow.add_conditional_edges(
+        "human_review",
+        route_after_human_review_interrupt,
+        {
+            "approved": "complete",
+            "revision": "process_feedback",
+            "rejected": "failed"
+        }
+    )
+
+    workflow.add_edge("process_feedback", "grant_writer")
+
     workflow.add_edge("complete", END)
     workflow.add_edge("failed", END)
-    
+
     return workflow.compile(checkpointer=checkpointer)
 
 

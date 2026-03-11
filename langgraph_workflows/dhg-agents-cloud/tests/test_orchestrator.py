@@ -253,27 +253,6 @@ class TestRouteAfterCompliance:
         assert orch.route_after_compliance(sample_pipeline_state) == "revision_required"
 
 
-class TestRouteAfterHumanReview:
-    """Tests for route_after_human_review routing function (legacy)."""
-
-    def test_approved(self, sample_pipeline_state):
-        sample_pipeline_state["human_review_status"] = "approved"
-        assert orch.route_after_human_review(sample_pipeline_state) == "approved"
-
-    def test_revision_requested(self, sample_pipeline_state):
-        sample_pipeline_state["human_review_status"] = "revision_requested"
-        assert orch.route_after_human_review(sample_pipeline_state) == "revision_requested"
-
-    def test_rejected_default(self, sample_pipeline_state):
-        """Unknown or pending status defaults to rejected."""
-        sample_pipeline_state["human_review_status"] = "pending"
-        assert orch.route_after_human_review(sample_pipeline_state) == "rejected"
-
-    def test_rejected_when_none(self, sample_pipeline_state):
-        sample_pipeline_state["human_review_status"] = None
-        assert orch.route_after_human_review(sample_pipeline_state) == "rejected"
-
-
 class TestRouteAfterHumanReviewInterrupt:
     """Tests for route_after_human_review_interrupt routing function."""
 
@@ -352,7 +331,7 @@ class TestCurriculumPackageGraph:
         expected = {
             "early_research", "gap_analysis", "learning_objectives",
             "needs_assessment", "prose_quality_1", "design_phase",
-            "human_review", "failed",
+            "human_review", "process_feedback", "complete", "failed",
             "__start__", "__end__",
         }
         assert expected.issubset(nodes)
@@ -374,7 +353,7 @@ class TestGrantPackageGraph:
             "early_research", "gap_analysis", "learning_objectives",
             "needs_assessment", "prose_quality_1", "design_phase",
             "grant_writer", "prose_quality_2", "compliance",
-            "human_review", "complete", "failed",
+            "human_review", "process_feedback", "complete", "failed",
             "__start__", "__end__",
         }
         assert expected.issubset(nodes)
@@ -382,7 +361,7 @@ class TestGrantPackageGraph:
     def test_grant_graph_node_count(self):
         nodes = set(orch.grant_graph.get_graph().nodes.keys())
         agent_nodes = nodes - {"__start__", "__end__"}
-        assert len(agent_nodes) == 12
+        assert len(agent_nodes) == 13
 
 
 class TestFullPipelineGraph:
@@ -402,11 +381,12 @@ class TestFullPipelineGraph:
         assert full_nodes == grant_nodes
 
     def test_full_graph_has_human_review_routing(self):
-        """Full graph should have conditional edges from human_review node."""
+        """Full graph should have 3-way routing from human_review."""
         graph_repr = orch.full_graph.get_graph()
-        human_review_targets = [e[1] for e in graph_repr.edges if e[0] == "human_review"]
-        # In the full pipeline, human_review routes to complete, grant_writer (revision), or failed
-        assert len(human_review_targets) >= 2
+        hr_targets = sorted([e[1] for e in graph_repr.edges if e[0] == "human_review"])
+        assert "complete" in hr_targets
+        assert "process_feedback" in hr_targets
+        assert "failed" in hr_targets
 
 
 # ============================================================================
