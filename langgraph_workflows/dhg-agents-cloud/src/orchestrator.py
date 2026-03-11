@@ -27,6 +27,7 @@ from enum import Enum
 
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
+from langgraph.types import interrupt, Command
 
 # PostgresSaver is optional - fallback to in-memory if not available
 try:
@@ -131,6 +132,10 @@ class CMEPipelineState(TypedDict):
     human_review_status: Optional[str]  # pending, approved, revision_requested, rejected
     human_review_notes: Optional[str]
     human_reviewer: Optional[str]
+
+    # === REVIEW LOOP ===
+    review_comments: List[Dict[str, Any]]  # [{selectedText, comment, startOffset, endOffset, document_id, timestamp}]
+    review_round: int  # Tracks revision cycle (max 3)
     
     # === CONTROL ===
     current_step: str
@@ -672,13 +677,124 @@ async def run_compliance_agent(state: CMEPipelineState) -> dict:
         }
 
 
+@traceable(name="human_review_node", run_type="chain")
+async def human_review_node(state: CMEPipelineState) -> dict:
+    """Pause pipeline for human review via LangGraph interrupt().
+
+    Assembles review payload from current state and calls interrupt().
+    The graph pauses here until resumed with Command(resume={decision, comments}).
+    """
+    documents = {}
+    metrics = {}
+
+    if state.get("needs_assessment_output"):
+        na = state["needs_assessment_output"]
+        documents["needs_assessment"] = na.get("complete_document", "")
+        metrics["word_count"] = na.get("word_count", 0)
+        metrics["prose_density"] = na.get("prose_density", 0.0)
+        metrics["quality_passed"] = na.get("quality_passed", False)
+        metrics["banned_patterns_found"] = na.get("banned_patterns_found", [])
+
+    if state.get("curriculum_output"):
+        documents["curriculum_design"] = state["curriculum_output"].get("complete_document", "")
+
+    if state.get("protocol_output"):
+        documents["research_protocol"] = state["protocol_output"].get("complete_document", "")
+
+    if state.get("marketing_output"):
+        documents["marketing_plan"] = state["marketing_output"].get("complete_document", "")
+
+    if state.get("grant_package_output"):
+        documents["grant_package"] = state["grant_package_output"].get("complete_document_markdown", "")
+
+    if state.get("prose_quality_pass_1"):
+        metrics["prose_quality_pass_1"] = state["prose_quality_pass_1"]
+    if state.get("prose_quality_pass_2"):
+        metrics["prose_quality_pass_2"] = state["prose_quality_pass_2"]
+    if state.get("compliance_result"):
+        metrics["compliance_result"] = state["compliance_result"]
+
+    recipe = "needs_package"
+    if state.get("grant_package_output"):
+        recipe = "grant_package"
+    elif state.get("curriculum_output"):
+        recipe = "curriculum_package"
+
+    review_payload = {
+        "document": documents,
+        "metrics": metrics,
+        "recipe": recipe,
+        "project_id": state.get("project_id", ""),
+        "project_name": state.get("project_name", ""),
+        "review_round": state.get("review_round", 0),
+        "current_step": state.get("current_step", ""),
+    }
+
+    resume_value = interrupt(review_payload)
+
+    decision = resume_value.get("decision", "rejected")
+    comments = resume_value.get("comments", [])
+
+    return {
+        "human_review_status": decision,
+        "human_review_notes": resume_value.get("feedback", ""),
+        "review_comments": state.get("review_comments", []) + comments,
+        "status": PipelineStatus.AWAITING_REVIEW.value,
+        "current_step": f"human_review_{decision}",
+        "updated_at": datetime.now().isoformat(),
+    }
+
+
 @traceable(name="human_review_gate", run_type="chain")
 async def human_review_gate(state: CMEPipelineState) -> dict:
-    """Human review checkpoint - sets status to awaiting review."""
+    """Legacy human review checkpoint — used by curriculum/grant/full graphs until migrated to interrupt()."""
     return {
         "status": PipelineStatus.AWAITING_REVIEW.value,
         "current_step": "human_review_pending",
         "updated_at": datetime.now().isoformat()
+    }
+
+
+MAX_REVIEW_ROUNDS = 3
+
+
+@traceable(name="process_review_feedback", run_type="chain")
+async def process_review_feedback(state: CMEPipelineState) -> dict:
+    """Format reviewer comments into a structured message for the revision agent.
+
+    Reads review_comments from state and creates a HumanMessage that the
+    revision agent will see as context for targeted edits.
+    """
+    from langchain_core.messages import HumanMessage
+
+    review_round = state.get("review_round", 0) + 1
+
+    if review_round > MAX_REVIEW_ROUNDS:
+        return {
+            "status": PipelineStatus.FAILED.value,
+            "current_step": "maximum_revision_cycles_exceeded",
+            "updated_at": datetime.now().isoformat(),
+        }
+
+    comments = state.get("review_comments", [])
+
+    if comments:
+        lines = ["## Reviewer Comments (address each one):\n"]
+        for i, c in enumerate(comments, 1):
+            selected = c.get("selectedText", "")
+            comment = c.get("comment", "")
+            doc_id = c.get("document_id", "")
+            doc_prefix = f"[{doc_id}] " if doc_id else ""
+            lines.append(f'{i}. {doc_prefix}At "{selected}": "{comment}"')
+        feedback_text = "\n".join(lines)
+    else:
+        feedback_text = "## General revision requested\n\nThe reviewer requested revisions but did not provide specific inline comments. Please review the document for quality, accuracy, and completeness."
+
+    return {
+        "messages": [HumanMessage(content=feedback_text)],
+        "review_round": review_round,
+        "current_step": f"processing_review_feedback_round_{review_round}",
+        "updated_at": datetime.now().isoformat(),
     }
 
 
@@ -871,7 +987,7 @@ async def run_design_phase_parallel(state: CMEPipelineState) -> dict:
 
 def route_after_prose_quality_1(state: CMEPipelineState) -> Literal["continue", "retry_needs", "human_intervention"]:
     """Route after first prose quality pass."""
-    result = state.get("prose_quality_pass_1", {})
+    result = state.get("prose_quality_pass_1") or {}
     if result.get("overall_passed", False):
         return "continue"
     else:
@@ -897,7 +1013,7 @@ def route_after_prose_quality_2(state: CMEPipelineState) -> Literal["continue", 
 
 def route_after_compliance(state: CMEPipelineState) -> Literal["continue", "revision_required"]:
     """Route after compliance review."""
-    result = state.get("compliance_result", {})
+    result = state.get("compliance_result") or {}
     if result.get("overall_passed", False):
         return "continue"
     else:
@@ -915,33 +1031,43 @@ def route_after_human_review(state: CMEPipelineState) -> Literal["approved", "re
         return "rejected"  # Default to rejected for unknown status
 
 
+def route_after_human_review_interrupt(state: CMEPipelineState) -> Literal["approved", "revision", "rejected"]:
+    """Route after human review interrupt based on human_review_status set by human_review_node."""
+    status = state.get("human_review_status", "rejected")
+    if status == "approved":
+        return "approved"
+    elif status == "revision":
+        return "revision"
+    else:
+        return "rejected"
+
+
 # =============================================================================
 # RECIPE 1: NEEDS PACKAGE (with parallel execution)
 # Research + Clinical [parallel] → Gap Analysis → LO → Needs → Prose QA → Human Review
 # =============================================================================
 
 def create_needs_package_graph():
-    """Create the Needs Assessment Package recipe with parallel execution."""
-    
+    """Create the Needs Assessment Package recipe with parallel execution and interrupt-based review."""
+
     workflow = StateGraph(CMEPipelineState)
-    
-    # Add nodes
-    workflow.add_node("early_research", run_early_research_parallel)  # Parallel!
+
+    workflow.add_node("early_research", run_early_research_parallel)
     workflow.add_node("gap_analysis", run_gap_analysis_agent)
     workflow.add_node("learning_objectives", run_learning_objectives_agent)
     workflow.add_node("needs_assessment", run_needs_assessment_agent)
     workflow.add_node("prose_quality", run_prose_quality_pass_1)
-    workflow.add_node("human_review", human_review_gate)
+    workflow.add_node("human_review", human_review_node)
+    workflow.add_node("process_feedback", process_review_feedback)
+    workflow.add_node("complete", mark_complete)
     workflow.add_node("failed", mark_failed)
-    
-    # Flow with parallel early research
+
     workflow.set_entry_point("early_research")
     workflow.add_edge("early_research", "gap_analysis")
     workflow.add_edge("gap_analysis", "learning_objectives")
     workflow.add_edge("learning_objectives", "needs_assessment")
     workflow.add_edge("needs_assessment", "prose_quality")
-    
-    # Prose quality routing
+
     workflow.add_conditional_edges(
         "prose_quality",
         route_after_prose_quality_1,
@@ -951,10 +1077,22 @@ def create_needs_package_graph():
             "human_intervention": "failed"
         }
     )
-    
-    workflow.add_edge("human_review", END)
+
+    workflow.add_conditional_edges(
+        "human_review",
+        route_after_human_review_interrupt,
+        {
+            "approved": "complete",
+            "revision": "process_feedback",
+            "rejected": "failed"
+        }
+    )
+
+    workflow.add_edge("process_feedback", "needs_assessment")
+
+    workflow.add_edge("complete", END)
     workflow.add_edge("failed", END)
-    
+
     return workflow.compile()
 
 
@@ -1336,6 +1474,8 @@ def create_initial_state(
         human_review_status=None,
         human_review_notes=None,
         human_reviewer=None,
+        review_comments=[],
+        review_round=0,
         current_step="started",
         retry_count=0,
         messages=[],

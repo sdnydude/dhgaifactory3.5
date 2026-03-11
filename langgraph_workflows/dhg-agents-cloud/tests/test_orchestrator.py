@@ -6,6 +6,7 @@ Covers:
 - Routing functions (route_after_prose_quality_1/2, route_after_compliance, route_after_human_review)
 - Helper functions (create_error_record, create_initial_state, should_retry)
 - PipelineStatus and ErrorCategory enums
+- Human review interrupt and process_review_feedback nodes
 """
 
 from datetime import datetime
@@ -177,6 +178,18 @@ class TestCreateInitialState:
         assert state["human_reviewer"] is None
 
 
+class TestReviewStateFields:
+    """Tests for review-related state fields."""
+
+    def test_initial_state_has_review_comments(self):
+        state = orch.create_initial_state("p1", "P1", {})
+        assert state["review_comments"] == []
+
+    def test_initial_state_has_review_round(self):
+        state = orch.create_initial_state("p1", "P1", {})
+        assert state["review_round"] == 0
+
+
 # ============================================================================
 # Routing function tests
 # ============================================================================
@@ -241,7 +254,7 @@ class TestRouteAfterCompliance:
 
 
 class TestRouteAfterHumanReview:
-    """Tests for route_after_human_review routing function."""
+    """Tests for route_after_human_review routing function (legacy)."""
 
     def test_approved(self, sample_pipeline_state):
         sample_pipeline_state["human_review_status"] = "approved"
@@ -259,6 +272,26 @@ class TestRouteAfterHumanReview:
     def test_rejected_when_none(self, sample_pipeline_state):
         sample_pipeline_state["human_review_status"] = None
         assert orch.route_after_human_review(sample_pipeline_state) == "rejected"
+
+
+class TestRouteAfterHumanReviewInterrupt:
+    """Tests for route_after_human_review_interrupt routing function."""
+
+    def test_approved(self, sample_pipeline_state):
+        sample_pipeline_state["human_review_status"] = "approved"
+        assert orch.route_after_human_review_interrupt(sample_pipeline_state) == "approved"
+
+    def test_revision(self, sample_pipeline_state):
+        sample_pipeline_state["human_review_status"] = "revision"
+        assert orch.route_after_human_review_interrupt(sample_pipeline_state) == "revision"
+
+    def test_rejected_default(self, sample_pipeline_state):
+        sample_pipeline_state["human_review_status"] = "pending"
+        assert orch.route_after_human_review_interrupt(sample_pipeline_state) == "rejected"
+
+    def test_rejected_when_none(self, sample_pipeline_state):
+        sample_pipeline_state["human_review_status"] = None
+        assert orch.route_after_human_review_interrupt(sample_pipeline_state) == "rejected"
 
 
 # ============================================================================
@@ -280,7 +313,8 @@ class TestNeedsPackageGraph:
         nodes = set(orch.needs_graph.get_graph().nodes.keys())
         expected = {
             "early_research", "gap_analysis", "learning_objectives",
-            "needs_assessment", "prose_quality", "human_review", "failed",
+            "needs_assessment", "prose_quality", "human_review",
+            "process_feedback", "complete", "failed",
             "__start__", "__end__",
         }
         assert expected.issubset(nodes)
@@ -289,6 +323,14 @@ class TestNeedsPackageGraph:
         graph_repr = orch.needs_graph.get_graph()
         start_edges = [e for e in graph_repr.edges if e[0] == "__start__"]
         assert any(e[1] == "early_research" for e in start_edges)
+
+    def test_human_review_has_three_way_routing(self):
+        """Human review should route to complete, needs_assessment (revision), or failed."""
+        graph_repr = orch.needs_graph.get_graph()
+        hr_targets = sorted([e[1] for e in graph_repr.edges if e[0] == "human_review"])
+        assert "complete" in hr_targets
+        assert "process_feedback" in hr_targets
+        assert "failed" in hr_targets
 
 
 class TestCurriculumPackageGraph:
@@ -396,13 +438,7 @@ class TestConfiguration:
 
 
 class TestGateNodes:
-    """Tests for human_review_gate, mark_complete, mark_failed nodes."""
-
-    @pytest.mark.asyncio
-    async def test_human_review_gate_sets_awaiting_review(self, sample_pipeline_state):
-        result = await orch.human_review_gate(sample_pipeline_state)
-        assert result["status"] == "awaiting_review"
-        assert result["current_step"] == "human_review_pending"
+    """Tests for human_review_node, mark_complete, mark_failed nodes."""
 
     @pytest.mark.asyncio
     async def test_mark_complete_sets_status(self, sample_pipeline_state):
@@ -418,11 +454,96 @@ class TestGateNodes:
 
     @pytest.mark.asyncio
     async def test_gate_nodes_include_timestamp(self, sample_pipeline_state):
-        result = await orch.human_review_gate(sample_pipeline_state)
-        datetime.fromisoformat(result["updated_at"])
-
         result = await orch.mark_complete(sample_pipeline_state)
         datetime.fromisoformat(result["updated_at"])
 
         result = await orch.mark_failed(sample_pipeline_state)
         datetime.fromisoformat(result["updated_at"])
+
+
+class TestHumanReviewInterrupt:
+    """Tests for interrupt-based human review."""
+
+    def test_human_review_node_calls_interrupt(self, sample_pipeline_state):
+        """The human_review node should call interrupt() with a review payload."""
+        sample_pipeline_state["needs_assessment_output"] = {
+            "complete_document": "Test document content",
+            "word_count": 3200,
+            "prose_density": 0.85,
+            "quality_passed": True,
+            "banned_patterns_found": [],
+        }
+        sample_pipeline_state["prose_quality_pass_1"] = {
+            "overall_passed": True,
+            "feedback": "",
+        }
+
+        from unittest.mock import patch as mock_patch
+
+        with mock_patch("orchestrator.interrupt") as mock_interrupt:
+            mock_interrupt.side_effect = lambda payload: {"decision": "approved", "comments": []}
+            import asyncio
+            result = asyncio.get_event_loop().run_until_complete(
+                orch.human_review_node(sample_pipeline_state)
+            )
+            mock_interrupt.assert_called_once()
+            call_payload = mock_interrupt.call_args[0][0]
+            assert "document" in call_payload
+            assert "metrics" in call_payload
+            assert call_payload["recipe"] == "needs_package"
+
+    def test_route_after_interrupt_approved(self):
+        """When interrupt resumes with approved, route to complete/END."""
+        state = {"human_review_status": "approved"}
+        assert orch.route_after_human_review_interrupt(state) == "approved"
+
+    def test_route_after_interrupt_revision(self):
+        """When interrupt resumes with revision, route to revision agent."""
+        state = {"human_review_status": "revision"}
+        assert orch.route_after_human_review_interrupt(state) == "revision"
+
+    def test_route_after_interrupt_rejected(self):
+        """When interrupt resumes with rejected, route to failed."""
+        state = {"human_review_status": "rejected"}
+        assert orch.route_after_human_review_interrupt(state) == "rejected"
+
+
+class TestProcessReviewFeedback:
+    """Tests for process_review_feedback node."""
+
+    @pytest.mark.asyncio
+    async def test_formats_comments_into_message(self, sample_pipeline_state):
+        sample_pipeline_state["review_comments"] = [
+            {"selectedText": "The prevalence", "comment": "Add CDC data", "startOffset": 0, "endOffset": 14},
+            {"selectedText": "guidelines recommend", "comment": "Wrong area", "startOffset": 100, "endOffset": 120},
+        ]
+        result = await orch.process_review_feedback(sample_pipeline_state)
+        assert len(result["messages"]) == 1
+        msg_content = result["messages"][0].content
+        assert "The prevalence" in msg_content
+        assert "Add CDC data" in msg_content
+        assert "guidelines recommend" in msg_content
+
+    @pytest.mark.asyncio
+    async def test_increments_review_round(self, sample_pipeline_state):
+        sample_pipeline_state["review_comments"] = [
+            {"selectedText": "text", "comment": "fix", "startOffset": 0, "endOffset": 4},
+        ]
+        sample_pipeline_state["review_round"] = 1
+        result = await orch.process_review_feedback(sample_pipeline_state)
+        assert result["review_round"] == 2
+
+    @pytest.mark.asyncio
+    async def test_empty_comments_still_works(self, sample_pipeline_state):
+        sample_pipeline_state["review_comments"] = []
+        result = await orch.process_review_feedback(sample_pipeline_state)
+        assert result["review_round"] == 1
+        assert "General revision requested" in result["messages"][0].content
+
+    @pytest.mark.asyncio
+    async def test_max_revisions_routes_to_failed(self, sample_pipeline_state):
+        sample_pipeline_state["review_round"] = 3
+        sample_pipeline_state["review_comments"] = []
+        result = await orch.process_review_feedback(sample_pipeline_state)
+        assert result["status"] == "failed"
+        assert "maximum" in result["current_step"]

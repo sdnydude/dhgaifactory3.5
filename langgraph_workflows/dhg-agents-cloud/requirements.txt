@@ -2,7 +2,7 @@
 # With Qwen3 Ollama + AI Factory Registry
 
 # Core
-langgraph>=0.2.0
+langgraph>=0.2.53
 langchain>=0.3.0
 langchain-core>=0.3.0
 

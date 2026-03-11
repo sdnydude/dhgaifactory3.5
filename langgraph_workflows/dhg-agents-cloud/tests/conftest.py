@@ -173,4 +173,6 @@ def sample_pipeline_state():
         "errors": [],
         "last_checkpoint": now,
         "checkpoint_agent": "init",
+        "review_comments": [],
+        "review_round": 0,
     }
