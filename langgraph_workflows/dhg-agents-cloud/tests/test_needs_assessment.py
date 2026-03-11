@@ -116,6 +116,7 @@ class TestGraphConstruction:
         node_names = set(compiled.get_graph().nodes.keys())
 
         expected_nodes = {
+            "extract_topic",
             "create_character",
             "generate_cold_open",
             "generate_disease_overview",
@@ -126,27 +127,28 @@ class TestGraphConstruction:
             "generate_target_audience",
             "generate_conclusion",
             "assemble_document",
+            "generate_references",
             "__start__",
             "__end__",
         }
         assert expected_nodes.issubset(node_names)
 
-    def test_graph_has_ten_agent_nodes(self):
-        """The graph should have exactly 10 user-defined nodes (not counting __start__/__end__)."""
+    def test_graph_has_twelve_agent_nodes(self):
+        """The graph should have exactly 12 user-defined nodes (not counting __start__/__end__)."""
         graph = na.create_needs_assessment_graph()
         compiled = graph.compile()
         node_names = set(compiled.get_graph().nodes.keys())
         agent_nodes = node_names - {"__start__", "__end__"}
-        assert len(agent_nodes) == 10
+        assert len(agent_nodes) == 12
 
-    def test_entry_point_is_create_character(self):
+    def test_entry_point_is_extract_topic(self):
         graph = na.create_needs_assessment_graph()
         compiled = graph.compile()
         graph_repr = compiled.get_graph()
         start_edges = [
             e for e in graph_repr.edges if e[0] == "__start__"
         ]
-        assert any(e[1] == "create_character" for e in start_edges)
+        assert any(e[1] == "extract_topic" for e in start_edges)
 
     def test_module_level_graph_exists(self):
         """The module exports a pre-compiled graph at module level."""

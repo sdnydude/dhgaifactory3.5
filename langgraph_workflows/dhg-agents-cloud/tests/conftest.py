@@ -42,16 +42,20 @@ def mock_llm_response():
     The fixture yields the AsyncMock bound to ChatAnthropic.ainvoke so callers
     can customise return_value or side_effect per-test.
     """
-    with patch("langchain_anthropic.ChatAnthropic") as cls_mock:
-        instance = MagicMock()
-        cls_mock.return_value = instance
+    import needs_assessment_agent as na
 
-        async_invoke = AsyncMock(
-            return_value=_make_llm_response("default mock response")
-        )
-        instance.ainvoke = async_invoke
+    instance = MagicMock()
+    async_invoke = AsyncMock(
+        return_value=_make_llm_response("default mock response")
+    )
+    instance.ainvoke = async_invoke
 
+    with patch.object(na, "ChatAnthropic", return_value=instance):
+        # Reset the module-level singleton so it re-creates with the mock
+        na.llm._sonnet = None
         yield async_invoke
+        # Clean up: reset singleton so other tests start fresh
+        na.llm._sonnet = None
 
 
 # ---------------------------------------------------------------------------

@@ -36,7 +36,7 @@ DEPLOYMENT_ENV = os.getenv("DEPLOYMENT_ENVIRONMENT", "production")
 
 TEMPO_ENDPOINT = os.getenv(
     "OTEL_EXPORTER_OTLP_ENDPOINT",
-    "http://dhg-tempo:4317",
+    "http://localhost:4317",
 )
 
 # ---------------------------------------------------------------------------

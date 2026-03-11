@@ -17,7 +17,9 @@ RUN pip install --no-cache-dir 'langgraph-cli[inmem]'
 # Copy application code
 COPY src/ ./src/
 COPY schemas/ ./schemas/
+COPY tests/ ./tests/
 COPY langgraph.json .
+COPY pytest.ini .
 COPY .env .
 
 # Expose port for LangGraph dev server
