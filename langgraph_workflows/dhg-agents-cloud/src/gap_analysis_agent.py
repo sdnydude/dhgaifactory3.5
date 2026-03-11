@@ -24,7 +24,7 @@ from langsmith import traceable
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from extract_topic import extract_topic_node
-from pubmed_client import PubMedClient
+from pubmed_client import PubMedClient, build_references_section
 
 
 # =============================================================================
@@ -624,53 +624,11 @@ Write a complete, readable gap analysis report. Emphasize quantified deltas and 
 @traceable(name="generate_references_node", run_type="chain")
 async def generate_references_node(state: GapAnalysisState) -> dict:
     """Verify inline citations against PubMed and append AMA-formatted references."""
-
     document = state.get("gap_analysis_document", "")
-    disease = state.get("disease_state", "")
-    pubmed = PubMedClient()
+    disease_state = state.get("disease_state", "")
 
-    sentences = re.split(r'(?<=[.!?])\s+', document)
-    citation_pattern = re.compile(r'\[(\d+)\]')
-
-    citation_contexts: dict[int, str] = {}
-    for sentence in sentences:
-        found = citation_pattern.findall(sentence)
-        for num_str in found:
-            num = int(num_str)
-            if num not in citation_contexts:
-                clean = citation_pattern.sub('', sentence).strip()
-                citation_contexts[num] = clean
-
-    verified_refs: list[str] = []
-    unverified_nums: list[int] = []
-
-    for num in sorted(citation_contexts.keys()):
-        context = citation_contexts[num]
-        query = f"{context} {disease}"
-        results = await pubmed.search(query, max_results=1)
-
-        if not results:
-            words = context.split()
-            acronyms = [w for w in words if w.isupper() and len(w) >= 2]
-            if acronyms:
-                fallback_query = f"{' '.join(acronyms)} {disease}"
-                results = await pubmed.search(fallback_query, max_results=1)
-
-        if results:
-            formatted = pubmed.format_ama(results[0])
-            verified_refs.append(f"[{num}] {formatted}")
-        else:
-            unverified_nums.append(num)
-            verified_refs.append(f"[{num}] [UNVERIFIED] Context: \"{context[:120]}\"")
-
-    references_section = "\n\n---\n\n## References\n\n" + "\n\n".join(verified_refs)
-    if unverified_nums:
-        references_section += (
-            f"\n\n**Note:** References {', '.join(f'[{n}]' for n in unverified_nums)} "
-            "could not be verified against PubMed and require manual review."
-        )
-
-    final_document = document + references_section
+    refs_text, _, _ = await build_references_section(document, disease_state)
+    final_document = document + refs_text
 
     return {
         "gap_analysis_document": final_document,

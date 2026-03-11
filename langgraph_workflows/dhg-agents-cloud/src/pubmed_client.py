@@ -2,12 +2,15 @@
 Shared PubMed E-Utils API client.
 =================================
 Extracted from research_agent.py for reuse across agents.
+Includes build_references_section() for consistent PubMed-backed
+AMA reference generation across all content agents.
 """
 
+import re
 import httpx
 import xml.etree.ElementTree as ET
 from datetime import datetime
-from typing import List, Dict
+from typing import List, Dict, Tuple
 
 from langsmith import traceable
 
@@ -164,3 +167,115 @@ class PubMedClient:
             citation += f" {url}"
 
         return citation
+
+
+# ---------------------------------------------------------------------------
+# Shared reference-section builder
+# ---------------------------------------------------------------------------
+
+_STOP_WORDS = frozenset({
+    "This", "That", "These", "Those", "There", "They", "With",
+    "From", "About", "Into", "Over", "After", "Before", "During",
+    "Between", "Through", "Under", "While", "Where", "When", "Each",
+    "Many", "Most", "Some", "Such", "Only", "Also", "However",
+})
+
+
+def _extract_keywords(context_text: str) -> List[str]:
+    """Extract medical keywords from a citation context sentence.
+
+    Prioritises named trials (DAPA-CKD), drug names (-flozin, -glutide),
+    and capitalised medical terms over generic prose.
+    """
+    # Named trials / acronyms (DAPA-CKD, EMPEROR-Preserved, SGLT2, etc.)
+    trials = re.findall(r'[A-Z][A-Z0-9\-]{2,}(?:\-[A-Z][a-z]+)?', context_text)
+    # Drug names by suffix
+    drugs = re.findall(
+        r'\b\w+(?:mab|nib|lib|zumab|flozin|sartan|pril|olol|statin|tide|glutide)\b',
+        context_text, re.IGNORECASE,
+    )
+    keywords = list(dict.fromkeys(trials + drugs))  # deduplicate, preserve order
+    if keywords:
+        return keywords[:4]
+
+    # Fallback: capitalised medical terms minus stop words
+    medical_terms = [
+        t for t in re.findall(r'\b[A-Z][a-z]{3,}\b', context_text)
+        if t not in _STOP_WORDS
+    ]
+    return medical_terms[:5]
+
+
+def _extract_citation_contexts(document: str) -> Dict[int, List[str]]:
+    """Parse inline [N] citations from a document and return context per number."""
+    citation_contexts: Dict[int, List[str]] = {}
+    sentences = re.split(r'(?<=[.!?])\s+', document)
+
+    for sentence in sentences:
+        nums_in_sentence = re.findall(r'\[(\d+)\]', sentence)
+        for num_str in nums_in_sentence:
+            num = int(num_str)
+            clean = re.sub(r'\[\d+\]', '', sentence).strip()
+            clean = re.sub(r'^#{1,3}\s+.*$', '', clean, flags=re.MULTILINE).strip()
+            if clean and len(clean) > 20:
+                if num not in citation_contexts:
+                    citation_contexts[num] = []
+                citation_contexts[num].append(clean)
+    return citation_contexts
+
+
+async def build_references_section(document: str, disease_state: str) -> Tuple[str, int, int]:
+    """Build a PubMed-verified AMA references section for a document.
+
+    Args:
+        document: The full document text containing inline [N] citations.
+        disease_state: The medical topic for PubMed search context.
+
+    Returns:
+        Tuple of (references_text, verified_count, unverified_count).
+        references_text includes the "## References" header.
+    """
+    citation_contexts = _extract_citation_contexts(document)
+
+    if not citation_contexts:
+        return "\n\n## References\n\n[No inline citations found in document]", 0, 0
+
+    pubmed = PubMedClient()
+    verified_refs: List[Tuple[int, str]] = []
+    unverified_refs: List[Tuple[int, str]] = []
+    used_pmids: set = set()
+
+    for num in sorted(citation_contexts.keys()):
+        contexts = citation_contexts[num]
+        keywords = _extract_keywords(contexts[0])
+        query = f"{disease_state} {' '.join(keywords)}" if keywords else disease_state
+
+        found = False
+        try:
+            pmids = await pubmed.search(query, max_results=5, years=10)
+            fresh_pmids = [p for p in pmids if p not in used_pmids]
+            if fresh_pmids:
+                articles = await pubmed.fetch_details(fresh_pmids[:1])
+                if articles:
+                    article = articles[0]
+                    used_pmids.add(article["pmid"])
+                    verified_refs.append((num, pubmed.format_ama(article)))
+                    found = True
+        except Exception:
+            pass
+
+        if not found:
+            unverified_refs.append((num, contexts[0][:100]))
+
+    ref_lines = []
+    for num, citation in sorted(verified_refs, key=lambda x: x[0]):
+        ref_lines.append(f"{num}. {citation}")
+
+    if unverified_refs:
+        ref_lines.append("")
+        ref_lines.append("*The following citations could not be verified against PubMed:*")
+        for num, desc in sorted(unverified_refs, key=lambda x: x[0]):
+            ref_lines.append(f"{num}. [UNVERIFIED] {desc}")
+
+    references_text = "\n\n## References\n\n" + "\n".join(ref_lines)
+    return references_text, len(verified_refs), len(unverified_refs)

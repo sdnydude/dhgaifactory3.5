@@ -26,7 +26,7 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from extract_topic import extract_topic_node
-from pubmed_client import PubMedClient as SharedPubMedClient
+from pubmed_client import PubMedClient as SharedPubMedClient, build_references_section
 
 
 # =============================================================================
@@ -953,78 +953,11 @@ Write a complete, readable research document following the structure above. Use 
 @traceable(name="generate_references_node", run_type="chain")
 async def generate_references_node(state: ResearchState) -> dict:
     """Generate PubMed-verified AMA references for the full document."""
-
     document = state.get("research_document", "")
     disease_state = state.get("disease_state", "")
 
-    citation_contexts = {}
-    sentences = re.split(r'(?<=[.!?])\s+', document)
-
-    for sentence in sentences:
-        nums_in_sentence = re.findall(r'\[(\d+)\]', sentence)
-        for num_str in nums_in_sentence:
-            num = int(num_str)
-            clean = re.sub(r'\[\d+\]', '', sentence).strip()
-            clean = re.sub(r'^#{1,3}\s+.*$', '', clean, flags=re.MULTILINE).strip()
-            if clean and len(clean) > 20:
-                if num not in citation_contexts:
-                    citation_contexts[num] = []
-                citation_contexts[num].append(clean)
-
-    if not citation_contexts:
-        return {
-            "research_document": document + "\n\n## References\n\n[No inline citations found in document]",
-            "messages": [HumanMessage(content=f"---\n\n# Complete Research Report Document\n\n{document}\n\n## References\n\n[No inline citations found]")],
-        }
-
-    pubmed = SharedPubMedClient()
-    verified_refs = []
-    unverified_refs = []
-
-    for num in sorted(citation_contexts.keys()):
-        contexts = citation_contexts[num]
-        context_text = contexts[0][:150]
-        query = f"{disease_state} {context_text}"
-
-        try:
-            pmids = await pubmed.search(query, max_results=3, years=10)
-            if pmids:
-                articles = await pubmed.fetch_details(pmids[:1])
-                if articles:
-                    ama_citation = pubmed.format_ama(articles[0])
-                    verified_refs.append((num, ama_citation))
-                    continue
-        except Exception:
-            pass
-
-        try:
-            short_terms = re.findall(r'[A-Z][A-Z\-]{2,}', contexts[0])
-            if short_terms:
-                fallback_query = f"{disease_state} {' '.join(short_terms[:3])}"
-                pmids = await pubmed.search(fallback_query, max_results=3, years=10)
-                if pmids:
-                    articles = await pubmed.fetch_details(pmids[:1])
-                    if articles:
-                        ama_citation = pubmed.format_ama(articles[0])
-                        verified_refs.append((num, ama_citation))
-                        continue
-        except Exception:
-            pass
-
-        unverified_refs.append((num, contexts[0][:100]))
-
-    ref_lines = []
-    for num, citation in sorted(verified_refs, key=lambda x: x[0]):
-        ref_lines.append(f"{num}. {citation}")
-
-    if unverified_refs:
-        ref_lines.append("")
-        ref_lines.append("*The following citations could not be verified against PubMed:*")
-        for num, desc in sorted(unverified_refs, key=lambda x: x[0]):
-            ref_lines.append(f"{num}. [UNVERIFIED] {desc}")
-
-    references_text = "\n".join(ref_lines)
-    final_document = document + "\n\n## References\n\n" + references_text
+    refs_text, _, _ = await build_references_section(document, disease_state)
+    final_document = document + refs_text
 
     return {
         "research_document": final_document,
