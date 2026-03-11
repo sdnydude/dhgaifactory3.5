@@ -38,6 +38,9 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 
+# OpenTelemetry tracing (dual-export with LangSmith)
+from tracing import traced_node
+
 
 # =============================================================================
 # BANNED PATTERNS (De-AI-ification)
@@ -330,9 +333,10 @@ llm = NeedsAssessmentLLM()
 # =============================================================================
 
 @traceable(name="create_character_node", run_type="chain")
+@traced_node("needs_assessment_agent", "create_character_node")
 async def create_character_node(state: NeedsAssessmentState) -> dict:
     """Create the cold open character based on gap analysis."""
-    
+
     gaps = state.get("gaps", [])
     therapeutic_area = state.get("therapeutic_area", "")
     disease_state = state.get("disease_state", "")
@@ -854,6 +858,7 @@ Write 200-300 words synthesizing the need and calling for educational action."""
 
 
 @traceable(name="assemble_document_node", run_type="chain")
+@traced_node("needs_assessment_agent", "assemble_document_node")
 async def assemble_document_node(state: NeedsAssessmentState) -> dict:
     """Assemble complete document and run quality checks."""
     

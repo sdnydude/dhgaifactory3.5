@@ -5,11 +5,10 @@ global:
     cluster: 'dhg-ai-factory'
     environment: 'local'
 
-# Alertmanager configuration (optional for future)
-# alerting:
-#   alertmanagers:
-#     - static_configs:
-#         - targets: []
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['dhg-alertmanager:9093']
 
 # Load alert rules
 rule_files:

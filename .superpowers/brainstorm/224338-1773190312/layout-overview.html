@@ -1,0 +1,200 @@
+<h2>Section 1: Navigation & Layout</h2>
+<p class="subtitle">Which sidebar layout feels right for managing CME projects?</p>
+
+<div class="cards">
+  <!-- Option A: Full Sidebar -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 0; overflow: hidden;">
+      <div style="display: flex; height: 320px; font-family: 'Inter', system-ui, sans-serif; font-size: 12px;">
+        <!-- Sidebar -->
+        <div style="width: 220px; background: #1A1D24; color: #FAF9F7; padding: 16px; display: flex; flex-direction: column; gap: 4px; flex-shrink: 0;">
+          <!-- Logo -->
+          <div style="display: flex; align-items: center; gap: 8px; padding: 8px 4px; margin-bottom: 12px;">
+            <div style="width: 28px; height: 28px; background: #663399; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 10px; color: white;">AI</div>
+            <div>
+              <div style="font-weight: 600; font-size: 13px;">DHG AI Factory</div>
+              <div style="font-size: 9px; color: #A1A1AA;">AI Agents In Tune With You</div>
+            </div>
+          </div>
+          <!-- Nav Items -->
+          <div style="background: #32374A; border-radius: 6px; padding: 8px 12px; display: flex; align-items: center; gap: 8px; color: #FAF9F7; border-left: 3px solid #663399;">
+            <span style="font-size: 14px;">&#9634;</span> Projects <span style="margin-left: auto; background: #663399; border-radius: 10px; padding: 1px 7px; font-size: 10px;">4</span>
+          </div>
+          <div style="padding: 8px 12px; display: flex; align-items: center; gap: 8px; color: #A1A1AA; border-radius: 6px;">
+            <span style="font-size: 14px;">&#9993;</span> Inbox <span style="margin-left: auto; background: #F77E2D; border-radius: 10px; padding: 1px 7px; font-size: 10px; color: white;">2</span>
+          </div>
+          <div style="padding: 8px 12px; display: flex; align-items: center; gap: 8px; color: #A1A1AA; border-radius: 6px;">
+            <span style="font-size: 14px;">&#9881;</span> Agents <span style="margin-left: auto; background: #27272A; border-radius: 10px; padding: 1px 7px; font-size: 10px; color: #71717A;">3</span>
+          </div>
+          <div style="padding: 8px 12px; display: flex; align-items: center; gap: 8px; color: #A1A1AA; border-radius: 6px;">
+            <span style="font-size: 14px;">&#128172;</span> Chat
+          </div>
+          <div style="flex: 1;"></div>
+          <!-- Bottom -->
+          <div style="border-top: 1px solid #3F3F46; padding-top: 8px;">
+            <div style="padding: 8px 12px; display: flex; align-items: center; gap: 8px; color: #A1A1AA; font-size: 11px;">
+              <span>&#9788;/&#9790;</span> Dark mode
+            </div>
+            <div style="padding: 8px 12px; display: flex; align-items: center; gap: 8px; color: #A1A1AA; font-size: 11px;">
+              <span>&#9881;</span> Settings
+            </div>
+          </div>
+        </div>
+        <!-- Main Content -->
+        <div style="flex: 1; background: #FAF9F7; padding: 24px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <div>
+              <div style="font-size: 18px; font-weight: 700; color: #32374A;">Projects</div>
+              <div style="font-size: 11px; color: #71717A;">4 active projects</div>
+            </div>
+            <div style="background: #663399; color: white; padding: 6px 14px; border-radius: 6px; font-size: 11px; font-weight: 500;">+ New Project</div>
+          </div>
+          <!-- Project Cards -->
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div style="background: white; border-radius: 8px; padding: 14px; border: 1px solid #E4E4E7; display: flex; align-items: center; gap: 12px;">
+              <div style="width: 8px; height: 8px; background: #22c55e; border-radius: 50%;"></div>
+              <div style="flex: 1;">
+                <div style="font-weight: 600; color: #32374A; font-size: 13px;">Cardiology CME 2026</div>
+                <div style="font-size: 10px; color: #71717A;">Step 7/14 &middot; Marketing Plan &middot; Running</div>
+              </div>
+              <div style="font-size: 10px; background: #F0FDF4; color: #16a34a; padding: 2px 8px; border-radius: 4px;">On track</div>
+            </div>
+            <div style="background: white; border-radius: 8px; padding: 14px; border: 1px solid #E4E4E7; display: flex; align-items: center; gap: 12px;">
+              <div style="width: 8px; height: 8px; background: #F77E2D; border-radius: 50%;"></div>
+              <div style="flex: 1;">
+                <div style="font-weight: 600; color: #32374A; font-size: 13px;">Oncology Needs Assessment</div>
+                <div style="font-size: 10px; color: #71717A;">Step 4/14 &middot; Learning Objectives &middot; Awaiting Review</div>
+              </div>
+              <div style="font-size: 10px; background: #FFF7ED; color: #ea580c; padding: 2px 8px; border-radius: 4px;">Review needed</div>
+            </div>
+            <div style="background: white; border-radius: 8px; padding: 14px; border: 1px solid #E4E4E7; display: flex; align-items: center; gap: 12px;">
+              <div style="width: 8px; height: 8px; background: #22c55e; border-radius: 50%;"></div>
+              <div style="flex: 1;">
+                <div style="font-weight: 600; color: #32374A; font-size: 13px;">Diabetes Education Grant</div>
+                <div style="font-size: 10px; color: #71717A;">Step 12/14 &middot; Compliance Review &middot; Running</div>
+              </div>
+              <div style="font-size: 10px; background: #F0FDF4; color: #16a34a; padding: 2px 8px; border-radius: 4px;">On track</div>
+            </div>
+            <div style="background: white; border-radius: 8px; padding: 14px; border: 1px solid #E4E4E7; display: flex; align-items: center; gap: 12px;">
+              <div style="width: 8px; height: 8px; background: #3b82f6; border-radius: 50%;"></div>
+              <div style="flex: 1;">
+                <div style="font-weight: 600; color: #32374A; font-size: 13px;">Neurology Consumer Health</div>
+                <div style="font-size: 10px; color: #71717A;">Step 1/14 &middot; Research &middot; Queued</div>
+              </div>
+              <div style="font-size: 10px; background: #EFF6FF; color: #2563eb; padding: 2px 8px; border-radius: 4px;">Queued</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A: Expanded Sidebar</h3>
+      <p>Always-visible labels, badge counts, project list in sidebar. Best for desktop-first workflows. Sidebar takes ~220px.</p>
+    </div>
+  </div>
+
+  <!-- Option B: Compact/Collapsible Sidebar -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 0; overflow: hidden;">
+      <div style="display: flex; height: 320px; font-family: 'Inter', system-ui, sans-serif; font-size: 12px;">
+        <!-- Collapsed Sidebar -->
+        <div style="width: 60px; background: #1A1D24; color: #FAF9F7; padding: 12px 0; display: flex; flex-direction: column; align-items: center; gap: 6px; flex-shrink: 0;">
+          <!-- Logo -->
+          <div style="width: 32px; height: 32px; background: #663399; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 11px; color: white; margin-bottom: 12px;">AI</div>
+          <!-- Nav Icons -->
+          <div style="width: 40px; height: 40px; background: #32374A; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; position: relative; border-left: 3px solid #663399;">
+            &#9634;
+            <span style="position: absolute; top: 2px; right: 2px; background: #663399; border-radius: 50%; width: 14px; height: 14px; font-size: 8px; display: flex; align-items: center; justify-content: center;">4</span>
+          </div>
+          <div style="width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; color: #A1A1AA; position: relative;">
+            &#9993;
+            <span style="position: absolute; top: 2px; right: 2px; background: #F77E2D; border-radius: 50%; width: 14px; height: 14px; font-size: 8px; display: flex; align-items: center; justify-content: center; color: white;">2</span>
+          </div>
+          <div style="width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; color: #A1A1AA;">
+            &#9881;
+          </div>
+          <div style="width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; color: #A1A1AA;">
+            &#128172;
+          </div>
+          <div style="flex: 1;"></div>
+          <div style="width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #A1A1AA;">
+            &#9788;
+          </div>
+        </div>
+        <!-- Main Content (wider) -->
+        <div style="flex: 1; background: #FAF9F7; padding: 24px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <div>
+              <div style="font-size: 18px; font-weight: 700; color: #32374A;">Projects</div>
+              <div style="font-size: 11px; color: #71717A;">4 active projects</div>
+            </div>
+            <div style="background: #663399; color: white; padding: 6px 14px; border-radius: 6px; font-size: 11px; font-weight: 500;">+ New Project</div>
+          </div>
+          <!-- Project Cards Grid -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div style="background: white; border-radius: 8px; padding: 14px; border: 1px solid #E4E4E7;">
+              <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+                <div style="width: 8px; height: 8px; background: #22c55e; border-radius: 50%;"></div>
+                <div style="font-weight: 600; color: #32374A; font-size: 13px;">Cardiology CME 2026</div>
+              </div>
+              <div style="font-size: 10px; color: #71717A; margin-bottom: 8px;">Marketing Plan</div>
+              <div style="background: #E4E4E7; border-radius: 4px; height: 6px;">
+                <div style="background: #663399; border-radius: 4px; height: 6px; width: 50%;"></div>
+              </div>
+              <div style="font-size: 9px; color: #A1A1AA; margin-top: 4px;">Step 7 of 14</div>
+            </div>
+            <div style="background: white; border-radius: 8px; padding: 14px; border: 2px solid #F77E2D;">
+              <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+                <div style="width: 8px; height: 8px; background: #F77E2D; border-radius: 50%;"></div>
+                <div style="font-weight: 600; color: #32374A; font-size: 13px;">Oncology Needs</div>
+              </div>
+              <div style="font-size: 10px; color: #ea580c; margin-bottom: 8px;">Awaiting Review</div>
+              <div style="background: #E4E4E7; border-radius: 4px; height: 6px;">
+                <div style="background: #F77E2D; border-radius: 4px; height: 6px; width: 28%;"></div>
+              </div>
+              <div style="font-size: 9px; color: #A1A1AA; margin-top: 4px;">Step 4 of 14</div>
+            </div>
+            <div style="background: white; border-radius: 8px; padding: 14px; border: 1px solid #E4E4E7;">
+              <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+                <div style="width: 8px; height: 8px; background: #22c55e; border-radius: 50%;"></div>
+                <div style="font-weight: 600; color: #32374A; font-size: 13px;">Diabetes Grant</div>
+              </div>
+              <div style="font-size: 10px; color: #71717A; margin-bottom: 8px;">Compliance Review</div>
+              <div style="background: #E4E4E7; border-radius: 4px; height: 6px;">
+                <div style="background: #663399; border-radius: 4px; height: 6px; width: 85%;"></div>
+              </div>
+              <div style="font-size: 9px; color: #A1A1AA; margin-top: 4px;">Step 12 of 14</div>
+            </div>
+            <div style="background: white; border-radius: 8px; padding: 14px; border: 1px solid #E4E4E7;">
+              <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+                <div style="width: 8px; height: 8px; background: #3b82f6; border-radius: 50%;"></div>
+                <div style="font-weight: 600; color: #32374A; font-size: 13px;">Neurology Health</div>
+              </div>
+              <div style="font-size: 10px; color: #71717A; margin-bottom: 8px;">Queued</div>
+              <div style="background: #E4E4E7; border-radius: 4px; height: 6px;">
+                <div style="background: #3b82f6; border-radius: 4px; height: 6px; width: 7%;"></div>
+              </div>
+              <div style="font-size: 9px; color: #A1A1AA; margin-top: 4px;">Step 1 of 14</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B: Collapsible Sidebar</h3>
+      <p>Icons-only by default (60px), expands on hover or click. More content space. Progress bars on project cards. Grid layout.</p>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 24px;">
+  <h3>Both layouts include:</h3>
+  <ul>
+    <li><strong>Projects</strong> — board with all active projects, pipeline progress, status badges</li>
+    <li><strong>Inbox</strong> — review queue filtered by role (orange badge = items needing attention)</li>
+    <li><strong>Agents</strong> — live monitor for running agents + spawned subagents</li>
+    <li><strong>Chat</strong> — direct agent conversation (existing functionality)</li>
+    <li><strong>Dark/light toggle</strong> + Settings at bottom</li>
+  </ul>
+  <p style="margin-top: 12px; color: #71717A; font-size: 13px;">Click a card to select your preference, then respond in the terminal.</p>
+</div>

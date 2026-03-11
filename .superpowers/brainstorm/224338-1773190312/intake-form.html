@@ -1,0 +1,192 @@
+<h2>Section 5: New Project Intake</h2>
+<p class="subtitle">How should the project creation flow work?</p>
+
+<div class="cards">
+  <!-- Option A: Modal/Drawer Form -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 0; overflow: hidden;">
+      <div style="display: flex; height: 440px; font-family: 'Inter', system-ui, sans-serif; font-size: 12px; position: relative;">
+        <!-- Collapsed Sidebar (dimmed) -->
+        <div style="width: 48px; background: #1A1D24; color: #FAF9F7; padding: 12px 0; display: flex; flex-direction: column; align-items: center; gap: 6px; flex-shrink: 0; opacity: 0.4;">
+          <div style="width: 28px; height: 28px; background: #663399; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 9px; color: white; margin-bottom: 8px;">AI</div>
+          <div style="width: 34px; height: 34px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px;">&#9634;</div>
+        </div>
+        <!-- Dimmed background -->
+        <div style="flex: 1; background: #FAF9F7; opacity: 0.3; padding: 24px;">
+          <div style="font-size: 16px; font-weight: 700; color: #32374A;">Projects</div>
+        </div>
+        <!-- Slide-over drawer -->
+        <div style="position: absolute; right: 0; top: 0; bottom: 0; width: 420px; background: white; box-shadow: -4px 0 24px rgba(0,0,0,0.12); padding: 20px; display: flex; flex-direction: column; overflow: hidden;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <div style="font-size: 16px; font-weight: 700; color: #32374A;">New Project</div>
+            <div style="width: 28px; height: 28px; background: #F4F4F5; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #71717A; font-size: 14px; cursor: pointer;">&#10005;</div>
+          </div>
+
+          <!-- Form Fields -->
+          <div style="display: flex; flex-direction: column; gap: 12px; flex: 1; overflow: hidden;">
+            <div>
+              <div style="font-size: 10px; font-weight: 600; color: #32374A; margin-bottom: 4px;">Project Name *</div>
+              <div style="border: 1px solid #E4E4E7; border-radius: 6px; padding: 8px 10px; font-size: 11px; color: #32374A;">Cardiology CME 2026</div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+              <div>
+                <div style="font-size: 10px; font-weight: 600; color: #32374A; margin-bottom: 4px;">Type *</div>
+                <div style="border: 1px solid #663399; border-radius: 6px; padding: 8px 10px; font-size: 11px; color: #32374A; background: #F5F3FF; display: flex; justify-content: space-between;">
+                  CME Program <span style="color: #A1A1AA;">&#9662;</span>
+                </div>
+              </div>
+              <div>
+                <div style="font-size: 10px; font-weight: 600; color: #32374A; margin-bottom: 4px;">Funder</div>
+                <div style="border: 1px solid #E4E4E7; border-radius: 6px; padding: 8px 10px; font-size: 11px; color: #32374A; display: flex; justify-content: space-between;">
+                  Pfizer <span style="color: #A1A1AA;">&#9662;</span>
+                </div>
+              </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+              <div>
+                <div style="font-size: 10px; font-weight: 600; color: #32374A; margin-bottom: 4px;">Therapeutic Area *</div>
+                <div style="border: 1px solid #E4E4E7; border-radius: 6px; padding: 8px 10px; font-size: 11px; color: #32374A; display: flex; justify-content: space-between;">
+                  Cardiology <span style="color: #A1A1AA;">&#9662;</span>
+                </div>
+              </div>
+              <div>
+                <div style="font-size: 10px; font-weight: 600; color: #32374A; margin-bottom: 4px;">Disease State *</div>
+                <div style="border: 1px solid #E4E4E7; border-radius: 6px; padding: 8px 10px; font-size: 11px; color: #32374A; display: flex; justify-content: space-between;">
+                  Heart Failure <span style="color: #A1A1AA;">&#9662;</span>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div style="font-size: 10px; font-weight: 600; color: #32374A; margin-bottom: 4px;">Target Audience</div>
+              <div style="border: 1px solid #E4E4E7; border-radius: 6px; padding: 8px 10px; font-size: 11px; color: #32374A;">Cardiologists, NPs, PAs</div>
+            </div>
+
+            <div>
+              <div style="font-size: 10px; font-weight: 600; color: #32374A; margin-bottom: 4px;">Description / Initial Brief</div>
+              <div style="border: 1px solid #E4E4E7; border-radius: 6px; padding: 8px 10px; font-size: 11px; color: #71717A; min-height: 48px; line-height: 1.5;">Educational program focused on optimal use of SGLT2 inhibitors in HFrEF with comorbid CKD...</div>
+            </div>
+
+            <div style="border-top: 1px solid #E4E4E7; padding-top: 12px; margin-top: auto;">
+              <div style="font-size: 10px; font-weight: 600; color: #32374A; margin-bottom: 8px;">After creation:</div>
+              <div style="display: flex; gap: 8px;">
+                <div style="flex: 1; border: 2px solid #663399; border-radius: 6px; padding: 8px; text-align: center; background: #F5F3FF;">
+                  <div style="font-size: 11px; font-weight: 600; color: #663399;">Start Pipeline</div>
+                  <div style="font-size: 9px; color: #71717A;">Run all 14 steps</div>
+                </div>
+                <div style="flex: 1; border: 1px solid #E4E4E7; border-radius: 6px; padding: 8px; text-align: center;">
+                  <div style="font-size: 11px; font-weight: 500; color: #32374A;">Save Draft</div>
+                  <div style="font-size: 9px; color: #71717A;">Configure later</div>
+                </div>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 8px; margin-top: 4px;">
+              <div style="flex: 1; background: #F4F4F5; color: #71717A; padding: 8px; border-radius: 6px; font-size: 11px; text-align: center;">Cancel</div>
+              <div style="flex: 2; background: #663399; color: white; padding: 8px; border-radius: 6px; font-size: 11px; text-align: center; font-weight: 600;">Create Project</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A: Slide-Over Drawer</h3>
+      <p>Slides in from the right over the projects board. Single form with all fields. Choose to start pipeline immediately or save as draft. Stays in context — you can see the project board behind it.</p>
+    </div>
+  </div>
+
+  <!-- Option B: Dedicated Page with Steps -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 0; overflow: hidden;">
+      <div style="display: flex; height: 440px; font-family: 'Inter', system-ui, sans-serif; font-size: 12px;">
+        <!-- Collapsed Sidebar -->
+        <div style="width: 48px; background: #1A1D24; color: #FAF9F7; padding: 12px 0; display: flex; flex-direction: column; align-items: center; gap: 6px; flex-shrink: 0;">
+          <div style="width: 28px; height: 28px; background: #663399; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 9px; color: white; margin-bottom: 8px;">AI</div>
+          <div style="width: 34px; height: 34px; background: #32374A; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #FAF9F7; border-left: 3px solid #663399;">&#9634;</div>
+          <div style="width: 34px; height: 34px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #A1A1AA;">&#9993;</div>
+          <div style="width: 34px; height: 34px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #A1A1AA;">&#9881;</div>
+          <div style="width: 34px; height: 34px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #A1A1AA;">&#128172;</div>
+        </div>
+        <!-- Main content -->
+        <div style="flex: 1; background: #FAF9F7; padding: 20px 32px; overflow: hidden;">
+          <!-- Breadcrumb -->
+          <div style="font-size: 10px; color: #A1A1AA; margin-bottom: 4px;">
+            <span style="cursor: pointer;">Projects</span> / <span style="color: #32374A;">New Project</span>
+          </div>
+          <div style="font-size: 18px; font-weight: 700; color: #32374A; margin-bottom: 16px;">Create New Project</div>
+
+          <!-- Step indicator -->
+          <div style="display: flex; align-items: center; gap: 0; margin-bottom: 24px;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <div style="width: 24px; height: 24px; background: #663399; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 10px; font-weight: 600;">1</div>
+              <span style="font-size: 11px; font-weight: 600; color: #663399;">Basics</span>
+            </div>
+            <div style="flex: 1; height: 2px; background: #663399; margin: 0 8px;"></div>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <div style="width: 24px; height: 24px; background: #663399; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 10px; font-weight: 600;">2</div>
+              <span style="font-size: 11px; font-weight: 600; color: #663399;">Clinical</span>
+            </div>
+            <div style="flex: 1; height: 2px; background: #E4E4E7; margin: 0 8px;"></div>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <div style="width: 24px; height: 24px; background: #E4E4E7; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #A1A1AA; font-size: 10px; font-weight: 600;">3</div>
+              <span style="font-size: 11px; color: #A1A1AA;">Pipeline</span>
+            </div>
+            <div style="flex: 1; height: 2px; background: #E4E4E7; margin: 0 8px;"></div>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <div style="width: 24px; height: 24px; background: #E4E4E7; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #A1A1AA; font-size: 10px; font-weight: 600;">4</div>
+              <span style="font-size: 11px; color: #A1A1AA;">Review</span>
+            </div>
+          </div>
+
+          <!-- Step 2: Clinical (current) -->
+          <div style="max-width: 560px;">
+            <div style="font-size: 14px; font-weight: 600; color: #32374A; margin-bottom: 4px;">Step 2: Clinical Details</div>
+            <div style="font-size: 11px; color: #71717A; margin-bottom: 16px;">Define the medical context for this program</div>
+
+            <div style="display: flex; flex-direction: column; gap: 14px;">
+              <div>
+                <div style="font-size: 10px; font-weight: 600; color: #32374A; margin-bottom: 4px;">Therapeutic Area *</div>
+                <div style="border: 1px solid #663399; border-radius: 6px; padding: 10px 12px; font-size: 12px; color: #32374A; background: #F5F3FF; display: flex; justify-content: space-between;">
+                  Cardiology <span style="color: #A1A1AA;">&#9662;</span>
+                </div>
+              </div>
+
+              <div>
+                <div style="font-size: 10px; font-weight: 600; color: #32374A; margin-bottom: 4px;">Disease State *</div>
+                <div style="border: 1px solid #E4E4E7; border-radius: 6px; padding: 10px 12px; font-size: 12px; color: #32374A; display: flex; justify-content: space-between;">
+                  Heart Failure (HFrEF) <span style="color: #A1A1AA;">&#9662;</span>
+                </div>
+              </div>
+
+              <div>
+                <div style="font-size: 10px; font-weight: 600; color: #32374A; margin-bottom: 4px;">Target Audience *</div>
+                <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                  <div style="background: #F5F3FF; border: 1px solid #663399; border-radius: 16px; padding: 4px 10px; font-size: 10px; color: #663399; display: flex; align-items: center; gap: 4px;">Cardiologists <span style="cursor: pointer;">&#10005;</span></div>
+                  <div style="background: #F5F3FF; border: 1px solid #663399; border-radius: 16px; padding: 4px 10px; font-size: 10px; color: #663399; display: flex; align-items: center; gap: 4px;">NPs/PAs <span style="cursor: pointer;">&#10005;</span></div>
+                  <div style="background: white; border: 1px dashed #E4E4E7; border-radius: 16px; padding: 4px 10px; font-size: 10px; color: #A1A1AA;">+ Add audience</div>
+                </div>
+              </div>
+
+              <div>
+                <div style="font-size: 10px; font-weight: 600; color: #32374A; margin-bottom: 4px;">Key Treatment Focus</div>
+                <div style="border: 1px solid #E4E4E7; border-radius: 6px; padding: 10px 12px; font-size: 12px; color: #71717A; min-height: 44px;">SGLT2 inhibitors in HFrEF with comorbid CKD</div>
+              </div>
+            </div>
+
+            <!-- Nav buttons -->
+            <div style="display: flex; justify-content: space-between; margin-top: 20px;">
+              <div style="background: white; border: 1px solid #E4E4E7; color: #32374A; padding: 8px 16px; border-radius: 6px; font-size: 11px;">Back</div>
+              <div style="background: #663399; color: white; padding: 8px 20px; border-radius: 6px; font-size: 11px; font-weight: 600;">Next: Pipeline Config</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B: Multi-Step Wizard</h3>
+      <p>Dedicated page with 4 steps: Basics (name, type, funder) → Clinical (disease, audience) → Pipeline (select steps, assign reviewers) → Review & Launch. More structured, allows pipeline customization per project.</p>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,233 @@
+<h2>Section 3: Review Inbox</h2>
+<p class="subtitle">How should pending reviews be presented to the team?</p>
+
+<div class="cards">
+  <!-- Option A: Focused Review Queue -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 0; overflow: hidden;">
+      <div style="display: flex; height: 400px; font-family: 'Inter', system-ui, sans-serif; font-size: 12px;">
+        <!-- Collapsed Sidebar -->
+        <div style="width: 48px; background: #1A1D24; color: #FAF9F7; padding: 12px 0; display: flex; flex-direction: column; align-items: center; gap: 6px; flex-shrink: 0;">
+          <div style="width: 28px; height: 28px; background: #663399; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 9px; color: white; margin-bottom: 8px;">AI</div>
+          <div style="width: 34px; height: 34px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #A1A1AA;">&#9634;</div>
+          <div style="width: 34px; height: 34px; background: #32374A; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #FAF9F7; position: relative; border-left: 3px solid #F77E2D;">
+            &#9993;
+            <span style="position: absolute; top: 0; right: 0; background: #F77E2D; border-radius: 50%; width: 14px; height: 14px; font-size: 8px; display: flex; align-items: center; justify-content: center; color: white;">3</span>
+          </div>
+          <div style="width: 34px; height: 34px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #A1A1AA;">&#9881;</div>
+          <div style="width: 34px; height: 34px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #A1A1AA;">&#128172;</div>
+        </div>
+        <!-- Review List -->
+        <div style="width: 280px; background: white; border-right: 1px solid #E4E4E7; padding: 16px 0; flex-shrink: 0; overflow: hidden;">
+          <div style="padding: 0 14px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+            <div style="font-size: 15px; font-weight: 700; color: #32374A;">Review Inbox</div>
+            <div style="font-size: 10px; color: #71717A;">3 pending</div>
+          </div>
+          <!-- Filter tabs -->
+          <div style="display: flex; gap: 0; padding: 0 14px; margin-bottom: 10px;">
+            <div style="padding: 4px 10px; font-size: 10px; background: #663399; color: white; border-radius: 4px;">All</div>
+            <div style="padding: 4px 10px; font-size: 10px; color: #71717A;">Mine</div>
+            <div style="padding: 4px 10px; font-size: 10px; color: #71717A;">Clinical</div>
+            <div style="padding: 4px 10px; font-size: 10px; color: #71717A;">Compliance</div>
+          </div>
+          <!-- Review items -->
+          <div style="padding: 10px 14px; background: #F5F3FF; border-left: 3px solid #663399; cursor: pointer;">
+            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+              <div style="font-weight: 600; color: #32374A; font-size: 11px;">Learning Objectives</div>
+            </div>
+            <div style="font-size: 10px; color: #71717A;">Oncology Needs Assessment</div>
+            <div style="display: flex; gap: 6px; margin-top: 4px; align-items: center;">
+              <span style="font-size: 9px; background: #FFF7ED; color: #ea580c; padding: 1px 6px; border-radius: 3px;">Gate 1</span>
+              <span style="font-size: 9px; color: #A1A1AA;">12m ago</span>
+            </div>
+          </div>
+          <div style="padding: 10px 14px; border-bottom: 1px solid #F4F4F5;">
+            <div style="font-weight: 500; color: #32374A; font-size: 11px;">Compliance Review</div>
+            <div style="font-size: 10px; color: #71717A;">Diabetes Education Grant</div>
+            <div style="display: flex; gap: 6px; margin-top: 4px;">
+              <span style="font-size: 9px; background: #FEF2F2; color: #dc2626; padding: 1px 6px; border-radius: 3px;">Gate 3</span>
+              <span style="font-size: 9px; color: #A1A1AA;">45m ago</span>
+            </div>
+          </div>
+          <div style="padding: 10px 14px;">
+            <div style="font-weight: 500; color: #32374A; font-size: 11px;">Final Prose Quality</div>
+            <div style="font-size: 10px; color: #71717A;">Cardiology CME 2026</div>
+            <div style="display: flex; gap: 6px; margin-top: 4px;">
+              <span style="font-size: 9px; background: #F0FDF4; color: #16a34a; padding: 1px 6px; border-radius: 3px;">Gate 4</span>
+              <span style="font-size: 9px; color: #A1A1AA;">2h ago</span>
+            </div>
+          </div>
+        </div>
+        <!-- Review Detail -->
+        <div style="flex: 1; background: #FAF9F7; padding: 16px 20px; overflow: hidden;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+            <div>
+              <div style="font-size: 14px; font-weight: 700; color: #32374A;">Learning Objectives</div>
+              <div style="font-size: 10px; color: #71717A;">Oncology Needs Assessment &middot; Gate 1 of 4</div>
+            </div>
+            <div style="display: flex; gap: 6px;">
+              <div style="background: white; border: 1px solid #dc2626; color: #dc2626; padding: 5px 12px; border-radius: 6px; font-size: 10px;">Reject</div>
+              <div style="background: white; border: 1px solid #E4E4E7; color: #32374A; padding: 5px 12px; border-radius: 6px; font-size: 10px;">Request Revision</div>
+              <div style="background: #22c55e; color: white; padding: 5px 12px; border-radius: 6px; font-size: 10px; font-weight: 500;">Approve</div>
+            </div>
+          </div>
+
+          <!-- Quality Metrics -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; margin-bottom: 12px;">
+            <div style="background: white; border-radius: 6px; padding: 8px; border: 1px solid #E4E4E7; text-align: center;">
+              <div style="font-size: 14px; font-weight: 700; color: #663399;">8.2</div>
+              <div style="font-size: 8px; color: #71717A;">Prose Score</div>
+            </div>
+            <div style="background: white; border-radius: 6px; padding: 8px; border: 1px solid #E4E4E7; text-align: center;">
+              <div style="font-size: 14px; font-weight: 700; color: #32374A;">2,847</div>
+              <div style="font-size: 8px; color: #71717A;">Words</div>
+            </div>
+            <div style="background: white; border-radius: 6px; padding: 8px; border: 1px solid #E4E4E7; text-align: center;">
+              <div style="font-size: 14px; font-weight: 700; color: #22c55e;">0</div>
+              <div style="font-size: 8px; color: #71717A;">Banned Patterns</div>
+            </div>
+            <div style="background: white; border-radius: 6px; padding: 8px; border: 1px solid #E4E4E7; text-align: center;">
+              <div style="font-size: 14px; font-weight: 700; color: #32374A;">v2</div>
+              <div style="font-size: 8px; color: #71717A;">Version</div>
+            </div>
+          </div>
+
+          <!-- Document Preview -->
+          <div style="background: white; border-radius: 8px; border: 1px solid #E4E4E7; padding: 14px; flex: 1;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <div style="font-size: 10px; font-weight: 600; color: #32374A;">Document Preview</div>
+              <div style="display: flex; gap: 8px; font-size: 9px;">
+                <span style="color: #663399; font-weight: 500; border-bottom: 1px solid #663399;">Current (v2)</span>
+                <span style="color: #A1A1AA;">Compare v1</span>
+                <span style="color: #A1A1AA;">Full screen</span>
+              </div>
+            </div>
+            <div style="font-size: 11px; color: #32374A; line-height: 1.7; font-family: Georgia, serif;">
+              <p style="margin: 0 0 8px 0;"><strong>Learning Objective 1 (Moore's Level 5):</strong> After completing this activity, participants will be able to identify and implement evidence-based treatment protocols for HFrEF patients with comorbid CKD, as measured by pre/post knowledge assessment...</p>
+              <p style="margin: 0 0 8px 0;"><strong>Learning Objective 2 (Moore's Level 4):</strong> Participants will demonstrate improved competence in selecting appropriate SGLT2 inhibitor therapy based on patient-specific factors including renal function, cardiac biomarkers...</p>
+              <p style="margin: 0; color: #A1A1AA; font-style: italic; font-size: 10px;">3 more objectives below...</p>
+            </div>
+          </div>
+
+          <!-- Feedback -->
+          <div style="margin-top: 8px; background: white; border-radius: 6px; border: 1px solid #E4E4E7; padding: 8px 12px;">
+            <input type="text" style="border: none; outline: none; width: 100%; font-size: 11px; color: #A1A1AA; font-family: Inter, system-ui;" value="Add feedback or revision notes..." readonly>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A: List + Detail Split</h3>
+      <p>Left panel lists all pending reviews with gate labels and time. Right panel shows the selected review: quality metrics, document preview with version comparison, and approve/revise/reject actions. Role-based filters at top.</p>
+    </div>
+  </div>
+
+  <!-- Option B: Stacked Full-Width Reviews -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 0; overflow: hidden;">
+      <div style="display: flex; height: 400px; font-family: 'Inter', system-ui, sans-serif; font-size: 12px;">
+        <!-- Collapsed Sidebar -->
+        <div style="width: 48px; background: #1A1D24; color: #FAF9F7; padding: 12px 0; display: flex; flex-direction: column; align-items: center; gap: 6px; flex-shrink: 0;">
+          <div style="width: 28px; height: 28px; background: #663399; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 9px; color: white; margin-bottom: 8px;">AI</div>
+          <div style="width: 34px; height: 34px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #A1A1AA;">&#9634;</div>
+          <div style="width: 34px; height: 34px; background: #32374A; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #FAF9F7; position: relative; border-left: 3px solid #F77E2D;">
+            &#9993;
+            <span style="position: absolute; top: 0; right: 0; background: #F77E2D; border-radius: 50%; width: 14px; height: 14px; font-size: 8px; display: flex; align-items: center; justify-content: center; color: white;">3</span>
+          </div>
+          <div style="width: 34px; height: 34px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #A1A1AA;">&#9881;</div>
+          <div style="width: 34px; height: 34px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #A1A1AA;">&#128172;</div>
+        </div>
+        <!-- Full width content -->
+        <div style="flex: 1; background: #FAF9F7; padding: 16px 24px; overflow: hidden;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+            <div>
+              <div style="font-size: 16px; font-weight: 700; color: #32374A;">Review Inbox</div>
+              <div style="font-size: 10px; color: #71717A;">3 items need your attention</div>
+            </div>
+            <div style="display: flex; gap: 6px;">
+              <div style="padding: 4px 10px; font-size: 10px; background: #663399; color: white; border-radius: 4px;">All (3)</div>
+              <div style="padding: 4px 10px; font-size: 10px; color: #71717A; background: white; border: 1px solid #E4E4E7; border-radius: 4px;">Mine (2)</div>
+              <div style="padding: 4px 10px; font-size: 10px; color: #71717A; background: white; border: 1px solid #E4E4E7; border-radius: 4px;">Compliance</div>
+            </div>
+          </div>
+
+          <!-- Review Card 1 (expanded) -->
+          <div style="background: white; border-radius: 8px; border: 2px solid #F77E2D; padding: 14px; margin-bottom: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="width: 36px; height: 36px; background: #FFF7ED; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px;">&#128196;</div>
+                <div>
+                  <div style="font-weight: 600; color: #32374A; font-size: 13px;">Learning Objectives</div>
+                  <div style="font-size: 10px; color: #71717A;">Oncology Needs Assessment &middot; Gate 1 &middot; 12m ago</div>
+                </div>
+              </div>
+              <div style="display: flex; gap: 6px;">
+                <div style="background: white; border: 1px solid #dc2626; color: #dc2626; padding: 4px 10px; border-radius: 6px; font-size: 10px;">Reject</div>
+                <div style="background: white; border: 1px solid #E4E4E7; color: #32374A; padding: 4px 10px; border-radius: 6px; font-size: 10px;">Revise</div>
+                <div style="background: #22c55e; color: white; padding: 4px 10px; border-radius: 6px; font-size: 10px; font-weight: 500;">Approve</div>
+              </div>
+            </div>
+            <!-- Inline metrics + preview -->
+            <div style="display: flex; gap: 12px;">
+              <div style="display: flex; gap: 8px;">
+                <div style="background: #FAF9F7; border-radius: 4px; padding: 4px 8px; text-align: center;">
+                  <div style="font-size: 12px; font-weight: 700; color: #663399;">8.2</div>
+                  <div style="font-size: 7px; color: #71717A;">Prose</div>
+                </div>
+                <div style="background: #FAF9F7; border-radius: 4px; padding: 4px 8px; text-align: center;">
+                  <div style="font-size: 12px; font-weight: 700; color: #32374A;">2.8k</div>
+                  <div style="font-size: 7px; color: #71717A;">Words</div>
+                </div>
+                <div style="background: #FAF9F7; border-radius: 4px; padding: 4px 8px; text-align: center;">
+                  <div style="font-size: 12px; font-weight: 700; color: #22c55e;">0</div>
+                  <div style="font-size: 7px; color: #71717A;">Banned</div>
+                </div>
+              </div>
+              <div style="flex: 1; font-size: 10px; color: #71717A; line-height: 1.5; border-left: 1px solid #E4E4E7; padding-left: 12px;">
+                <strong style="color: #32374A;">LO 1 (Moore's Level 5):</strong> Identify and implement evidence-based treatment protocols for HFrEF patients with comorbid CKD... <span style="color: #663399;">Read more</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Review Card 2 (collapsed) -->
+          <div style="background: white; border-radius: 8px; border: 1px solid #E4E4E7; padding: 14px; margin-bottom: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="width: 36px; height: 36px; background: #FEF2F2; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px;">&#9888;</div>
+                <div>
+                  <div style="font-weight: 600; color: #32374A; font-size: 13px;">Compliance Review</div>
+                  <div style="font-size: 10px; color: #71717A;">Diabetes Education Grant &middot; Gate 3 &middot; 45m ago</div>
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 9px; background: #FEF2F2; color: #dc2626; padding: 2px 6px; border-radius: 3px;">2 issues found</span>
+                <span style="font-size: 18px; color: #A1A1AA;">&#9662;</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Review Card 3 (collapsed) -->
+          <div style="background: white; border-radius: 8px; border: 1px solid #E4E4E7; padding: 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="width: 36px; height: 36px; background: #F0FDF4; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px;">&#10003;</div>
+                <div>
+                  <div style="font-weight: 600; color: #32374A; font-size: 13px;">Final Prose Quality</div>
+                  <div style="font-size: 10px; color: #71717A;">Cardiology CME 2026 &middot; Gate 4 &middot; 2h ago</div>
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 9px; background: #F0FDF4; color: #16a34a; padding: 2px 6px; border-radius: 3px;">Ready for approval</span>
+                <span style="font-size: 18px; color: #A1A1AA;">&#9662;</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B: Stacked Expandable Cards</h3>
+      <p>Full-width cards, one per review. Top card auto-expanded with metrics, preview, and actions inline. Others collapsed showing summary + status badge. Click to expand. Simpler, no split pane.</p>
+    </div>
+  </div>
+</div>

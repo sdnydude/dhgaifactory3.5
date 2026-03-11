@@ -39,6 +39,11 @@ except ImportError:
 from langsmith import traceable
 import logging
 
+# OpenTelemetry tracing (dual-export with LangSmith)
+from tracing import get_tracer, traced_node
+
+_tracer = get_tracer("orchestrator")
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -362,6 +367,7 @@ async def run_learning_objectives_agent(state: CMEPipelineState) -> dict:
 
 
 @traceable(name="run_needs_assessment_agent", run_type="chain", metadata={"agent": "needs_assessment"})
+@traced_node("orchestrator", "run_needs_assessment_agent")
 async def run_needs_assessment_agent(state: CMEPipelineState) -> dict:
     """Run Needs Assessment Agent."""
     try:
@@ -701,6 +707,7 @@ async def mark_failed(state: CMEPipelineState) -> dict:
 # =============================================================================
 
 @traceable(name="early_research_parallel", run_type="chain")
+@traced_node("orchestrator", "early_research_parallel")
 async def run_early_research_parallel(state: CMEPipelineState) -> dict:
     """
     Run Research and Clinical agents in parallel.
@@ -769,6 +776,7 @@ async def run_early_research_parallel(state: CMEPipelineState) -> dict:
 
 
 @traceable(name="design_phase_parallel", run_type="chain")
+@traced_node("orchestrator", "design_phase_parallel")
 async def run_design_phase_parallel(state: CMEPipelineState) -> dict:
     """
     Run Curriculum, Protocol, and Marketing agents in parallel.
@@ -1346,19 +1354,41 @@ async def run_pipeline(
 ) -> CMEPipelineState:
     """
     Run a pipeline recipe with the given intake data.
-    
+
     Args:
         recipe: One of "needs", "curriculum", "grant", "full"
         project_id: Unique project identifier
         project_name: Human-readable project name
         intake_data: Complete intake form data
         use_checkpointing: Whether to use PostgresSaver (default True)
-    
+
     Returns:
         Final pipeline state
     """
+    with _tracer.start_as_current_span(
+        "run_pipeline",
+        attributes={
+            "agent": "orchestrator",
+            "recipe": recipe,
+            "project_id": project_id,
+            "project_name": project_name,
+        },
+    ):
+        return await _run_pipeline_inner(
+            recipe, project_id, project_name, intake_data, use_checkpointing
+        )
+
+
+async def _run_pipeline_inner(
+    recipe: str,
+    project_id: str,
+    project_name: str,
+    intake_data: Dict[str, Any],
+    use_checkpointing: bool = True,
+) -> CMEPipelineState:
+    """Inner implementation for run_pipeline, wrapped by OTel span."""
     initial_state = create_initial_state(project_id, project_name, intake_data)
-    
+
     if recipe == "needs":
         if use_checkpointing:
             graph = await create_checkpointed_needs_graph()

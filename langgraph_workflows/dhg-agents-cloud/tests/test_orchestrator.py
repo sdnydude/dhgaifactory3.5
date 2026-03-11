@@ -1,0 +1,428 @@
+"""
+Tests for the Recipe-Based Orchestrator (orchestrator.py).
+
+Covers:
+- Recipe graph construction (needs_graph, curriculum_graph, grant_graph, full_graph)
+- Routing functions (route_after_prose_quality_1/2, route_after_compliance, route_after_human_review)
+- Helper functions (create_error_record, create_initial_state, should_retry)
+- PipelineStatus and ErrorCategory enums
+"""
+
+from datetime import datetime
+from unittest.mock import patch
+
+import pytest
+
+import orchestrator as orch
+
+
+# ============================================================================
+# Enum tests
+# ============================================================================
+
+
+class TestPipelineStatus:
+    """Tests for PipelineStatus enum."""
+
+    def test_all_statuses_defined(self):
+        expected = {"pending", "in_progress", "awaiting_review",
+                    "revision_required", "approved", "complete", "failed"}
+        actual = {s.value for s in orch.PipelineStatus}
+        assert expected == actual
+
+    def test_pending_value(self):
+        assert orch.PipelineStatus.PENDING.value == "pending"
+
+    def test_complete_value(self):
+        assert orch.PipelineStatus.COMPLETE.value == "complete"
+
+
+class TestErrorCategory:
+    """Tests for ErrorCategory enum."""
+
+    def test_all_categories_defined(self):
+        expected = {"agent_failure", "validation_failure", "quality_failure",
+                    "timeout", "external_failure"}
+        actual = {c.value for c in orch.ErrorCategory}
+        assert expected == actual
+
+
+# ============================================================================
+# create_error_record tests
+# ============================================================================
+
+
+class TestCreateErrorRecord:
+    """Tests for create_error_record helper."""
+
+    def test_returns_dict_with_required_fields(self):
+        record = orch.create_error_record("agent_failure", "Something broke", "research")
+        assert record["error_type"] == "agent_failure"
+        assert record["message"] == "Something broke"
+        assert record["agent"] == "research"
+        assert "timestamp" in record
+        assert record["context"] == {}
+
+    def test_includes_context_when_provided(self):
+        ctx = {"input_size": 1024, "attempt": 2}
+        record = orch.create_error_record("timeout", "Timed out", "gap_analysis", context=ctx)
+        assert record["context"] == ctx
+
+    def test_truncates_long_messages(self):
+        long_msg = "x" * 1000
+        record = orch.create_error_record("agent_failure", long_msg, "research")
+        assert len(record["message"]) <= 500
+
+    def test_timestamp_is_iso_format(self):
+        record = orch.create_error_record("agent_failure", "err", "research")
+        # Should parse without error
+        datetime.fromisoformat(record["timestamp"])
+
+    def test_converts_non_string_message(self):
+        record = orch.create_error_record("agent_failure", RuntimeError("boom"), "research")
+        assert isinstance(record["message"], str)
+        assert "boom" in record["message"]
+
+
+# ============================================================================
+# should_retry tests
+# ============================================================================
+
+
+class TestShouldRetry:
+    """Tests for should_retry logic."""
+
+    def test_allows_retry_when_no_previous_errors(self, sample_pipeline_state):
+        assert orch.should_retry(sample_pipeline_state, "agent_failure", "research") is True
+
+    def test_allows_retry_when_below_max(self, sample_pipeline_state):
+        sample_pipeline_state["errors"] = [
+            {"agent": "research", "error_type": "agent_failure", "message": "err1", "timestamp": ""},
+            {"agent": "research", "error_type": "agent_failure", "message": "err2", "timestamp": ""},
+        ]
+        # MAX_RETRIES["agent_failure"] is 3, so 2 errors should still allow retry
+        assert orch.should_retry(sample_pipeline_state, "agent_failure", "research") is True
+
+    def test_denies_retry_at_max(self, sample_pipeline_state):
+        sample_pipeline_state["errors"] = [
+            {"agent": "research", "error_type": "agent_failure", "message": f"err{i}", "timestamp": ""}
+            for i in range(3)
+        ]
+        assert orch.should_retry(sample_pipeline_state, "agent_failure", "research") is False
+
+    def test_counts_only_matching_agent_and_type(self, sample_pipeline_state):
+        sample_pipeline_state["errors"] = [
+            {"agent": "research", "error_type": "agent_failure", "message": "err", "timestamp": ""},
+            {"agent": "clinical", "error_type": "agent_failure", "message": "err", "timestamp": ""},
+            {"agent": "research", "error_type": "timeout", "message": "err", "timestamp": ""},
+        ]
+        # Only 1 error matches (research + agent_failure), max is 3
+        assert orch.should_retry(sample_pipeline_state, "agent_failure", "research") is True
+
+    def test_timeout_allows_only_one_retry(self, sample_pipeline_state):
+        sample_pipeline_state["errors"] = [
+            {"agent": "research", "error_type": "timeout", "message": "err", "timestamp": ""},
+        ]
+        assert orch.should_retry(sample_pipeline_state, "timeout", "research") is False
+
+
+# ============================================================================
+# create_initial_state tests
+# ============================================================================
+
+
+class TestCreateInitialState:
+    """Tests for create_initial_state factory function."""
+
+    def test_returns_valid_state(self):
+        intake = {"therapeutic_area": "oncology", "target_audience": "oncologists"}
+        state = orch.create_initial_state("proj-123", "Test Project", intake)
+
+        assert state["project_id"] == "proj-123"
+        assert state["project_name"] == "Test Project"
+        assert state["status"] == "pending"
+        assert state["intake_data"] == intake
+        assert state["intake_validated"] is True
+
+    def test_agent_outputs_start_as_none(self):
+        state = orch.create_initial_state("p1", "P1", {})
+        output_keys = [
+            "research_output", "clinical_output", "gap_analysis_output",
+            "needs_assessment_output", "learning_objectives_output",
+            "curriculum_output", "protocol_output", "marketing_output",
+            "grant_package_output", "prose_quality_pass_1",
+            "prose_quality_pass_2", "compliance_result",
+        ]
+        for key in output_keys:
+            assert state[key] is None, f"{key} should be None initially"
+
+    def test_control_fields_initialized(self):
+        state = orch.create_initial_state("p1", "P1", {})
+        assert state["current_step"] == "started"
+        assert state["retry_count"] == 0
+        assert state["messages"] == []
+        assert state["errors"] == []
+        assert state["checkpoint_agent"] == "init"
+
+    def test_timestamps_are_iso_format(self):
+        state = orch.create_initial_state("p1", "P1", {})
+        datetime.fromisoformat(state["created_at"])
+        datetime.fromisoformat(state["updated_at"])
+        datetime.fromisoformat(state["last_checkpoint"])
+
+    def test_human_review_fields_start_none(self):
+        state = orch.create_initial_state("p1", "P1", {})
+        assert state["human_review_status"] is None
+        assert state["human_review_notes"] is None
+        assert state["human_reviewer"] is None
+
+
+# ============================================================================
+# Routing function tests
+# ============================================================================
+
+
+class TestRouteAfterProseQuality1:
+    """Tests for route_after_prose_quality_1 routing function."""
+
+    def test_continue_when_passed(self, sample_pipeline_state):
+        sample_pipeline_state["prose_quality_pass_1"] = {"overall_passed": True}
+        assert orch.route_after_prose_quality_1(sample_pipeline_state) == "continue"
+
+    def test_retry_needs_when_failed_and_retries_remain(self, sample_pipeline_state):
+        sample_pipeline_state["prose_quality_pass_1"] = {"overall_passed": False}
+        sample_pipeline_state["retry_count"] = 1
+        assert orch.route_after_prose_quality_1(sample_pipeline_state) == "retry_needs"
+
+    def test_human_intervention_when_retries_exhausted(self, sample_pipeline_state):
+        sample_pipeline_state["prose_quality_pass_1"] = {"overall_passed": False}
+        sample_pipeline_state["retry_count"] = 3  # equals MAX_RETRIES["quality_failure"]
+        assert orch.route_after_prose_quality_1(sample_pipeline_state) == "human_intervention"
+
+    def test_retry_needs_when_result_missing(self, sample_pipeline_state):
+        """When prose_quality_pass_1 is None, overall_passed defaults to False."""
+        sample_pipeline_state["prose_quality_pass_1"] = None
+        sample_pipeline_state["retry_count"] = 0
+        assert orch.route_after_prose_quality_1(sample_pipeline_state) == "retry_needs"
+
+
+class TestRouteAfterProseQuality2:
+    """Tests for route_after_prose_quality_2 routing function."""
+
+    def test_continue_when_passed(self, sample_pipeline_state):
+        sample_pipeline_state["prose_quality_pass_2"] = {"overall_passed": True}
+        assert orch.route_after_prose_quality_2(sample_pipeline_state) == "continue"
+
+    def test_retry_grant_when_failed_and_retries_remain(self, sample_pipeline_state):
+        sample_pipeline_state["prose_quality_pass_2"] = {"overall_passed": False}
+        sample_pipeline_state["retry_count"] = 0
+        assert orch.route_after_prose_quality_2(sample_pipeline_state) == "retry_grant"
+
+    def test_human_intervention_when_retries_exhausted(self, sample_pipeline_state):
+        sample_pipeline_state["prose_quality_pass_2"] = {"overall_passed": False}
+        sample_pipeline_state["retry_count"] = 3
+        assert orch.route_after_prose_quality_2(sample_pipeline_state) == "human_intervention"
+
+
+class TestRouteAfterCompliance:
+    """Tests for route_after_compliance routing function."""
+
+    def test_continue_when_passed(self, sample_pipeline_state):
+        sample_pipeline_state["compliance_result"] = {"overall_passed": True}
+        assert orch.route_after_compliance(sample_pipeline_state) == "continue"
+
+    def test_revision_required_when_failed(self, sample_pipeline_state):
+        sample_pipeline_state["compliance_result"] = {"overall_passed": False}
+        assert orch.route_after_compliance(sample_pipeline_state) == "revision_required"
+
+    def test_revision_required_when_result_missing(self, sample_pipeline_state):
+        sample_pipeline_state["compliance_result"] = None
+        assert orch.route_after_compliance(sample_pipeline_state) == "revision_required"
+
+
+class TestRouteAfterHumanReview:
+    """Tests for route_after_human_review routing function."""
+
+    def test_approved(self, sample_pipeline_state):
+        sample_pipeline_state["human_review_status"] = "approved"
+        assert orch.route_after_human_review(sample_pipeline_state) == "approved"
+
+    def test_revision_requested(self, sample_pipeline_state):
+        sample_pipeline_state["human_review_status"] = "revision_requested"
+        assert orch.route_after_human_review(sample_pipeline_state) == "revision_requested"
+
+    def test_rejected_default(self, sample_pipeline_state):
+        """Unknown or pending status defaults to rejected."""
+        sample_pipeline_state["human_review_status"] = "pending"
+        assert orch.route_after_human_review(sample_pipeline_state) == "rejected"
+
+    def test_rejected_when_none(self, sample_pipeline_state):
+        sample_pipeline_state["human_review_status"] = None
+        assert orch.route_after_human_review(sample_pipeline_state) == "rejected"
+
+
+# ============================================================================
+# Recipe graph construction tests
+# ============================================================================
+
+
+class TestNeedsPackageGraph:
+    """Tests for create_needs_package_graph / needs_graph."""
+
+    def test_compiles_without_error(self):
+        graph = orch.create_needs_package_graph()
+        assert graph is not None
+
+    def test_module_level_needs_graph_exists(self):
+        assert orch.needs_graph is not None
+
+    def test_has_expected_nodes(self):
+        nodes = set(orch.needs_graph.get_graph().nodes.keys())
+        expected = {
+            "early_research", "gap_analysis", "learning_objectives",
+            "needs_assessment", "prose_quality", "human_review", "failed",
+            "__start__", "__end__",
+        }
+        assert expected.issubset(nodes)
+
+    def test_entry_point_is_early_research(self):
+        graph_repr = orch.needs_graph.get_graph()
+        start_edges = [e for e in graph_repr.edges if e[0] == "__start__"]
+        assert any(e[1] == "early_research" for e in start_edges)
+
+
+class TestCurriculumPackageGraph:
+    """Tests for create_curriculum_package_graph / curriculum_graph."""
+
+    def test_compiles_without_error(self):
+        graph = orch.create_curriculum_package_graph()
+        assert graph is not None
+
+    def test_module_level_curriculum_graph_exists(self):
+        assert orch.curriculum_graph is not None
+
+    def test_has_design_phase_node(self):
+        nodes = set(orch.curriculum_graph.get_graph().nodes.keys())
+        assert "design_phase" in nodes
+
+    def test_has_expected_nodes(self):
+        nodes = set(orch.curriculum_graph.get_graph().nodes.keys())
+        expected = {
+            "early_research", "gap_analysis", "learning_objectives",
+            "needs_assessment", "prose_quality_1", "design_phase",
+            "human_review", "failed",
+            "__start__", "__end__",
+        }
+        assert expected.issubset(nodes)
+
+
+class TestGrantPackageGraph:
+    """Tests for create_grant_package_graph / grant_graph."""
+
+    def test_compiles_without_error(self):
+        graph = orch.create_grant_package_graph()
+        assert graph is not None
+
+    def test_module_level_grant_graph_exists(self):
+        assert orch.grant_graph is not None
+
+    def test_has_all_phase_nodes(self):
+        nodes = set(orch.grant_graph.get_graph().nodes.keys())
+        expected = {
+            "early_research", "gap_analysis", "learning_objectives",
+            "needs_assessment", "prose_quality_1", "design_phase",
+            "grant_writer", "prose_quality_2", "compliance",
+            "human_review", "complete", "failed",
+            "__start__", "__end__",
+        }
+        assert expected.issubset(nodes)
+
+    def test_grant_graph_node_count(self):
+        nodes = set(orch.grant_graph.get_graph().nodes.keys())
+        agent_nodes = nodes - {"__start__", "__end__"}
+        assert len(agent_nodes) == 12
+
+
+class TestFullPipelineGraph:
+    """Tests for create_full_pipeline_graph / full_graph."""
+
+    def test_compiles_without_error(self):
+        graph = orch.create_full_pipeline_graph()
+        assert graph is not None
+
+    def test_module_level_full_graph_exists(self):
+        assert orch.full_graph is not None
+
+    def test_has_same_nodes_as_grant_graph(self):
+        """Full pipeline has the same nodes as grant pipeline."""
+        full_nodes = set(orch.full_graph.get_graph().nodes.keys())
+        grant_nodes = set(orch.grant_graph.get_graph().nodes.keys())
+        assert full_nodes == grant_nodes
+
+    def test_full_graph_has_human_review_routing(self):
+        """Full graph should have conditional edges from human_review node."""
+        graph_repr = orch.full_graph.get_graph()
+        human_review_targets = [e[1] for e in graph_repr.edges if e[0] == "human_review"]
+        # In the full pipeline, human_review routes to complete, grant_writer (revision), or failed
+        assert len(human_review_targets) >= 2
+
+
+# ============================================================================
+# Configuration constants tests
+# ============================================================================
+
+
+class TestConfiguration:
+    """Tests for orchestrator configuration values."""
+
+    def test_max_retries_defined(self):
+        assert "agent_failure" in orch.MAX_RETRIES
+        assert "quality_failure" in orch.MAX_RETRIES
+        assert "timeout" in orch.MAX_RETRIES
+
+    def test_agent_timeout_is_reasonable(self):
+        assert orch.AGENT_TIMEOUT == 300  # 5 minutes
+
+    def test_timeout_retry_is_minimal(self):
+        assert orch.MAX_RETRIES["timeout"] == 1
+
+    def test_quality_failure_allows_three_retries(self):
+        assert orch.MAX_RETRIES["quality_failure"] == 3
+
+
+# ============================================================================
+# Async gate node tests
+# ============================================================================
+
+
+class TestGateNodes:
+    """Tests for human_review_gate, mark_complete, mark_failed nodes."""
+
+    @pytest.mark.asyncio
+    async def test_human_review_gate_sets_awaiting_review(self, sample_pipeline_state):
+        result = await orch.human_review_gate(sample_pipeline_state)
+        assert result["status"] == "awaiting_review"
+        assert result["current_step"] == "human_review_pending"
+
+    @pytest.mark.asyncio
+    async def test_mark_complete_sets_status(self, sample_pipeline_state):
+        result = await orch.mark_complete(sample_pipeline_state)
+        assert result["status"] == "complete"
+        assert result["current_step"] == "complete"
+
+    @pytest.mark.asyncio
+    async def test_mark_failed_sets_status(self, sample_pipeline_state):
+        result = await orch.mark_failed(sample_pipeline_state)
+        assert result["status"] == "failed"
+        assert result["current_step"] == "failed_human_intervention_required"
+
+    @pytest.mark.asyncio
+    async def test_gate_nodes_include_timestamp(self, sample_pipeline_state):
+        result = await orch.human_review_gate(sample_pipeline_state)
+        datetime.fromisoformat(result["updated_at"])
+
+        result = await orch.mark_complete(sample_pipeline_state)
+        datetime.fromisoformat(result["updated_at"])
+
+        result = await orch.mark_failed(sample_pipeline_state)
+        datetime.fromisoformat(result["updated_at"])

@@ -1,0 +1,274 @@
+<h2>Section 5: New Project Intake (Revised)</h2>
+<p class="subtitle">Your existing 10-section form (A-J, 47 fields) — how should it appear in the new frontend?</p>
+
+<div class="cards">
+  <!-- Option A: Section Nav + Form -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 0; overflow: hidden;">
+      <div style="display: flex; height: 480px; font-family: 'Inter', system-ui, sans-serif; font-size: 12px;">
+        <!-- Collapsed Sidebar -->
+        <div style="width: 48px; background: #1A1D24; color: #FAF9F7; padding: 12px 0; display: flex; flex-direction: column; align-items: center; gap: 6px; flex-shrink: 0;">
+          <div style="width: 28px; height: 28px; background: #663399; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 9px; color: white; margin-bottom: 8px;">AI</div>
+          <div style="width: 34px; height: 34px; background: #32374A; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #FAF9F7; border-left: 3px solid #663399;">&#9634;</div>
+          <div style="width: 34px; height: 34px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #A1A1AA;">&#9993;</div>
+        </div>
+        <!-- Section Navigator -->
+        <div style="width: 180px; background: white; border-right: 1px solid #E4E4E7; padding: 16px 0; flex-shrink: 0; overflow: hidden;">
+          <div style="padding: 0 12px; margin-bottom: 12px;">
+            <div style="font-size: 10px; color: #A1A1AA;">Projects /</div>
+            <div style="font-size: 14px; font-weight: 700; color: #32374A;">New Project</div>
+          </div>
+          <div style="display: flex; flex-direction: column; font-size: 10px;">
+            <div style="padding: 7px 12px; color: #663399; display: flex; align-items: center; gap: 6px;">
+              <div style="width: 16px; height: 16px; background: #663399; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 7px;">&#10003;</div>
+              A. Project Basics
+            </div>
+            <div style="padding: 7px 12px; color: #663399; display: flex; align-items: center; gap: 6px;">
+              <div style="width: 16px; height: 16px; background: #663399; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 7px;">&#10003;</div>
+              B. Supporter Info
+            </div>
+            <div style="padding: 7px 12px; color: #32374A; display: flex; align-items: center; gap: 6px; background: #F5F3FF; border-left: 3px solid #663399; font-weight: 600;">
+              <div style="width: 16px; height: 16px; background: #663399; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 8px; font-weight: 700;">C</div>
+              Educational Design
+            </div>
+            <div style="padding: 7px 12px; color: #A1A1AA; display: flex; align-items: center; gap: 6px;">
+              <div style="width: 16px; height: 16px; background: #E4E4E7; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #A1A1AA; font-size: 8px;">D</div>
+              Clinical Focus
+            </div>
+            <div style="padding: 7px 12px; color: #A1A1AA; display: flex; align-items: center; gap: 6px;">
+              <div style="width: 16px; height: 16px; background: #E4E4E7; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #A1A1AA; font-size: 8px;">E</div>
+              Educational Gaps
+            </div>
+            <div style="padding: 7px 12px; color: #A1A1AA; display: flex; align-items: center; gap: 6px;">
+              <div style="width: 16px; height: 16px; background: #E4E4E7; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #A1A1AA; font-size: 8px;">F</div>
+              Outcomes
+            </div>
+            <div style="padding: 7px 12px; color: #A1A1AA; display: flex; align-items: center; gap: 6px;">
+              <div style="width: 16px; height: 16px; background: #E4E4E7; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #A1A1AA; font-size: 8px;">G</div>
+              Content Reqs
+            </div>
+            <div style="padding: 7px 12px; color: #A1A1AA; display: flex; align-items: center; gap: 6px;">
+              <div style="width: 16px; height: 16px; background: #E4E4E7; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #A1A1AA; font-size: 8px;">H</div>
+              Logistics
+            </div>
+            <div style="padding: 7px 12px; color: #A1A1AA; display: flex; align-items: center; gap: 6px;">
+              <div style="width: 16px; height: 16px; background: #E4E4E7; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #A1A1AA; font-size: 8px;">I</div>
+              Compliance
+            </div>
+            <div style="padding: 7px 12px; color: #A1A1AA; display: flex; align-items: center; gap: 6px;">
+              <div style="width: 16px; height: 16px; background: #E4E4E7; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #A1A1AA; font-size: 8px;">J</div>
+              Additional
+            </div>
+          </div>
+
+          <!-- Bottom action -->
+          <div style="padding: 12px; margin-top: 8px; border-top: 1px solid #E4E4E7;">
+            <div style="font-size: 9px; color: #71717A; margin-bottom: 4px;">2 of 10 sections complete</div>
+            <div style="background: #E4E4E7; border-radius: 4px; height: 4px; margin-bottom: 8px;">
+              <div style="background: #663399; border-radius: 4px; height: 4px; width: 20%;"></div>
+            </div>
+            <div style="font-size: 9px; color: #A1A1AA;">Only Section A is required to save</div>
+          </div>
+        </div>
+        <!-- Form Content -->
+        <div style="flex: 1; background: #FAF9F7; padding: 20px 24px; overflow: hidden;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <div>
+              <div style="font-size: 15px; font-weight: 700; color: #32374A;">C. Educational Design</div>
+              <div style="font-size: 10px; color: #71717A;">Define the delivery model for this program</div>
+            </div>
+            <div style="display: flex; gap: 6px;">
+              <div style="background: white; border: 1px solid #E4E4E7; padding: 5px 12px; border-radius: 6px; font-size: 10px; color: #32374A;">Save Draft</div>
+              <div style="background: #663399; color: white; padding: 5px 12px; border-radius: 6px; font-size: 10px; font-weight: 500;">Next: Clinical Focus</div>
+            </div>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 14px; max-width: 520px;">
+            <div>
+              <div style="font-size: 10px; font-weight: 600; color: #32374A; margin-bottom: 4px;">Learning Format *</div>
+              <div style="display: flex; gap: 8px;">
+                <div style="flex: 1; border: 2px solid #663399; border-radius: 8px; padding: 10px; text-align: center; background: #F5F3FF;">
+                  <div style="font-size: 18px; margin-bottom: 2px;">&#127891;</div>
+                  <div style="font-size: 10px; font-weight: 600; color: #663399;">Live</div>
+                </div>
+                <div style="flex: 1; border: 1px solid #E4E4E7; border-radius: 8px; padding: 10px; text-align: center;">
+                  <div style="font-size: 18px; margin-bottom: 2px;">&#128187;</div>
+                  <div style="font-size: 10px; color: #71717A;">Enduring</div>
+                </div>
+                <div style="flex: 1; border: 1px solid #E4E4E7; border-radius: 8px; padding: 10px; text-align: center;">
+                  <div style="font-size: 18px; margin-bottom: 2px;">&#128260;</div>
+                  <div style="font-size: 10px; color: #71717A;">Blended</div>
+                </div>
+              </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <div>
+                <div style="font-size: 10px; font-weight: 600; color: #32374A; margin-bottom: 4px;">Duration (minutes)</div>
+                <div style="border: 1px solid #E4E4E7; border-radius: 6px; padding: 9px 10px; font-size: 11px; color: #32374A; background: white;">60</div>
+              </div>
+              <div>
+                <div style="font-size: 10px; font-weight: 600; color: #32374A; margin-bottom: 4px;">Faculty Count</div>
+                <div style="border: 1px solid #E4E4E7; border-radius: 6px; padding: 9px 10px; font-size: 11px; color: #32374A; background: white;">3</div>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 16px;">
+              <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                <div style="width: 18px; height: 18px; border: 2px solid #663399; border-radius: 4px; background: #663399; display: flex; align-items: center; justify-content: center; color: white; font-size: 10px;">&#10003;</div>
+                <span style="font-size: 11px; color: #32374A;">Include pre-test</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                <div style="width: 18px; height: 18px; border: 2px solid #663399; border-radius: 4px; background: #663399; display: flex; align-items: center; justify-content: center; color: white; font-size: 10px;">&#10003;</div>
+                <span style="font-size: 11px; color: #32374A;">Include post-test</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Back/Next at bottom -->
+          <div style="display: flex; justify-content: space-between; margin-top: 24px; max-width: 520px;">
+            <div style="background: white; border: 1px solid #E4E4E7; padding: 7px 14px; border-radius: 6px; font-size: 10px; color: #71717A;">&#8592; B. Supporter Info</div>
+            <div style="background: #663399; color: white; padding: 7px 14px; border-radius: 6px; font-size: 10px; font-weight: 500;">D. Clinical Focus &#8594;</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A: Section Nav on Left</h3>
+      <p>Same left-panel pattern as the rest of the app. All 10 sections (A-J) visible as a vertical nav, showing completion status. One section at a time in the main area. Progress bar at bottom. Can jump to any section. Only Section A required to save draft.</p>
+    </div>
+  </div>
+
+  <!-- Option B: Scrollable Single Page with Section Anchors -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 0; overflow: hidden;">
+      <div style="display: flex; height: 480px; font-family: 'Inter', system-ui, sans-serif; font-size: 12px;">
+        <!-- Collapsed Sidebar -->
+        <div style="width: 48px; background: #1A1D24; color: #FAF9F7; padding: 12px 0; display: flex; flex-direction: column; align-items: center; gap: 6px; flex-shrink: 0;">
+          <div style="width: 28px; height: 28px; background: #663399; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 9px; color: white; margin-bottom: 8px;">AI</div>
+          <div style="width: 34px; height: 34px; background: #32374A; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #FAF9F7; border-left: 3px solid #663399;">&#9634;</div>
+          <div style="width: 34px; height: 34px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #A1A1AA;">&#9993;</div>
+        </div>
+        <!-- Main content - scrollable form -->
+        <div style="flex: 1; background: #FAF9F7; padding: 20px 32px; overflow: hidden;">
+          <!-- Sticky header -->
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <div>
+              <div style="font-size: 10px; color: #A1A1AA;">Projects /</div>
+              <div style="font-size: 16px; font-weight: 700; color: #32374A;">New Project</div>
+            </div>
+            <div style="display: flex; gap: 6px; align-items: center;">
+              <div style="font-size: 9px; color: #71717A;">2/10 sections complete</div>
+              <div style="background: white; border: 1px solid #E4E4E7; padding: 5px 12px; border-radius: 6px; font-size: 10px; color: #32374A;">Save Draft</div>
+              <div style="background: #663399; color: white; padding: 5px 12px; border-radius: 6px; font-size: 10px; font-weight: 500;">Create & Start Pipeline</div>
+            </div>
+          </div>
+
+          <!-- Section anchors (horizontal) -->
+          <div style="display: flex; gap: 2px; margin-bottom: 16px; overflow: hidden; border-bottom: 1px solid #E4E4E7; padding-bottom: 8px;">
+            <div style="padding: 3px 6px; font-size: 9px; background: #663399; color: white; border-radius: 3px; white-space: nowrap;">A</div>
+            <div style="padding: 3px 6px; font-size: 9px; background: #663399; color: white; border-radius: 3px; white-space: nowrap;">B</div>
+            <div style="padding: 3px 6px; font-size: 9px; background: #F5F3FF; color: #663399; border: 1px solid #663399; border-radius: 3px; white-space: nowrap; font-weight: 600;">C</div>
+            <div style="padding: 3px 6px; font-size: 9px; color: #A1A1AA; border: 1px solid #E4E4E7; border-radius: 3px; white-space: nowrap;">D</div>
+            <div style="padding: 3px 6px; font-size: 9px; color: #A1A1AA; border: 1px solid #E4E4E7; border-radius: 3px; white-space: nowrap;">E</div>
+            <div style="padding: 3px 6px; font-size: 9px; color: #A1A1AA; border: 1px solid #E4E4E7; border-radius: 3px; white-space: nowrap;">F</div>
+            <div style="padding: 3px 6px; font-size: 9px; color: #A1A1AA; border: 1px solid #E4E4E7; border-radius: 3px; white-space: nowrap;">G</div>
+            <div style="padding: 3px 6px; font-size: 9px; color: #A1A1AA; border: 1px solid #E4E4E7; border-radius: 3px; white-space: nowrap;">H</div>
+            <div style="padding: 3px 6px; font-size: 9px; color: #A1A1AA; border: 1px solid #E4E4E7; border-radius: 3px; white-space: nowrap;">I</div>
+            <div style="padding: 3px 6px; font-size: 9px; color: #A1A1AA; border: 1px solid #E4E4E7; border-radius: 3px; white-space: nowrap;">J</div>
+          </div>
+
+          <!-- Section A (collapsed/complete) -->
+          <div style="background: white; border-radius: 8px; border: 1px solid #E4E4E7; padding: 10px 14px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div style="width: 18px; height: 18px; background: #663399; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 9px;">&#10003;</div>
+              <div>
+                <span style="font-weight: 600; color: #32374A; font-size: 11px;">A. Project Basics</span>
+                <span style="font-size: 10px; color: #71717A; margin-left: 8px;">Cardiology CME 2026 &middot; Heart Failure &middot; Pfizer</span>
+              </div>
+            </div>
+            <span style="font-size: 14px; color: #A1A1AA;">&#9662;</span>
+          </div>
+
+          <!-- Section B (collapsed/complete) -->
+          <div style="background: white; border-radius: 8px; border: 1px solid #E4E4E7; padding: 10px 14px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div style="width: 18px; height: 18px; background: #663399; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 9px;">&#10003;</div>
+              <div>
+                <span style="font-weight: 600; color: #32374A; font-size: 11px;">B. Supporter Information</span>
+                <span style="font-size: 10px; color: #71717A; margin-left: 8px;">Pfizer &middot; $250K &middot; Due Apr 15</span>
+              </div>
+            </div>
+            <span style="font-size: 14px; color: #A1A1AA;">&#9662;</span>
+          </div>
+
+          <!-- Section C (expanded/active) -->
+          <div style="background: white; border-radius: 8px; border: 2px solid #663399; padding: 14px; margin-bottom: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+              <div style="width: 18px; height: 18px; background: #F5F3FF; border: 2px solid #663399; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #663399; font-size: 8px; font-weight: 700;">C</div>
+              <span style="font-weight: 600; color: #32374A; font-size: 12px;">Educational Design</span>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+              <div>
+                <div style="font-size: 10px; font-weight: 600; color: #32374A; margin-bottom: 4px;">Learning Format</div>
+                <div style="display: flex; gap: 6px;">
+                  <div style="flex: 1; border: 2px solid #663399; border-radius: 6px; padding: 6px; text-align: center; background: #F5F3FF; font-size: 10px; font-weight: 600; color: #663399;">Live</div>
+                  <div style="flex: 1; border: 1px solid #E4E4E7; border-radius: 6px; padding: 6px; text-align: center; font-size: 10px; color: #71717A;">Enduring</div>
+                  <div style="flex: 1; border: 1px solid #E4E4E7; border-radius: 6px; padding: 6px; text-align: center; font-size: 10px; color: #71717A;">Blended</div>
+                </div>
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                <div>
+                  <div style="font-size: 10px; font-weight: 600; color: #32374A; margin-bottom: 3px;">Duration (min)</div>
+                  <div style="border: 1px solid #E4E4E7; border-radius: 6px; padding: 7px 10px; font-size: 11px; background: white;">60</div>
+                </div>
+                <div>
+                  <div style="font-size: 10px; font-weight: 600; color: #32374A; margin-bottom: 3px;">Faculty</div>
+                  <div style="border: 1px solid #E4E4E7; border-radius: 6px; padding: 7px 10px; font-size: 11px; background: white;">3</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section D (collapsed/empty) -->
+          <div style="background: white; border-radius: 8px; border: 1px solid #E4E4E7; padding: 10px 14px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div style="width: 18px; height: 18px; background: #E4E4E7; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #A1A1AA; font-size: 8px;">D</div>
+              <span style="font-weight: 500; color: #A1A1AA; font-size: 11px;">D. Clinical Focus</span>
+            </div>
+            <span style="font-size: 14px; color: #A1A1AA;">&#9656;</span>
+          </div>
+
+          <!-- More collapsed sections indicated -->
+          <div style="text-align: center; font-size: 10px; color: #A1A1AA; padding: 4px;">E through J below &#8595;</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B: Accordion (Single Scrollable Page)</h3>
+      <p>All 10 sections as collapsible accordion cards on one page. Completed sections collapse to show summary. Active section expanded with fields. Horizontal section anchors at top for quick jumps. Everything on one scrollable page.</p>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 20px;">
+  <h3>Both options preserve your form structure:</h3>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 13px;">
+    <div>
+      <strong>A. Project Basics</strong> (5 fields)<br>
+      <strong>B. Supporter Info</strong> (5 fields)<br>
+      <strong>C. Educational Design</strong> (5 fields)<br>
+      <strong>D. Clinical Focus</strong> (5 fields)<br>
+      <strong>E. Educational Gaps</strong> (5 fields)
+    </div>
+    <div>
+      <strong>F. Outcomes & Measurement</strong> (5 fields)<br>
+      <strong>G. Content Requirements</strong> (5 fields)<br>
+      <strong>H. Logistics</strong> (5 fields)<br>
+      <strong>I. Compliance & Disclosure</strong> (4 fields)<br>
+      <strong>J. Additional Info</strong> (3 fields)
+    </div>
+  </div>
+  <p style="margin-top: 8px; color: #71717A; font-size: 12px;">47 fields total. Only Section A required to save. Order follows natural idea development.</p>
+</div>

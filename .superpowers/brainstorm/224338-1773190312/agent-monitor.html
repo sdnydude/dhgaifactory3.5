@@ -1,0 +1,256 @@
+<h2>Section 4: Agent Monitor</h2>
+<p class="subtitle">How should running agents and spawned subagents be displayed?</p>
+
+<div class="cards">
+  <!-- Option A: Tree View -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 0; overflow: hidden;">
+      <div style="display: flex; height: 420px; font-family: 'Inter', system-ui, sans-serif; font-size: 12px;">
+        <!-- Collapsed Sidebar -->
+        <div style="width: 48px; background: #1A1D24; color: #FAF9F7; padding: 12px 0; display: flex; flex-direction: column; align-items: center; gap: 6px; flex-shrink: 0;">
+          <div style="width: 28px; height: 28px; background: #663399; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 9px; color: white; margin-bottom: 8px;">AI</div>
+          <div style="width: 34px; height: 34px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #A1A1AA;">&#9634;</div>
+          <div style="width: 34px; height: 34px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #A1A1AA;">&#9993;</div>
+          <div style="width: 34px; height: 34px; background: #32374A; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #FAF9F7; border-left: 3px solid #663399;">&#9881;</div>
+          <div style="width: 34px; height: 34px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #A1A1AA;">&#128172;</div>
+        </div>
+        <!-- Agent List -->
+        <div style="width: 240px; background: white; border-right: 1px solid #E4E4E7; padding: 16px 0; flex-shrink: 0; overflow: hidden;">
+          <div style="padding: 0 14px; margin-bottom: 12px;">
+            <div style="font-size: 15px; font-weight: 700; color: #32374A;">Agents</div>
+            <div style="font-size: 10px; color: #71717A;">3 running &middot; 24 completed today</div>
+          </div>
+          <!-- Filter -->
+          <div style="display: flex; gap: 0; padding: 0 14px; margin-bottom: 10px;">
+            <div style="padding: 4px 8px; font-size: 10px; background: #663399; color: white; border-radius: 4px;">Running</div>
+            <div style="padding: 4px 8px; font-size: 10px; color: #71717A;">All</div>
+            <div style="padding: 4px 8px; font-size: 10px; color: #71717A;">Errors</div>
+          </div>
+
+          <!-- Agent Tree -->
+          <div style="padding: 0 14px; font-size: 11px;">
+            <!-- Parent Agent 1 -->
+            <div style="padding: 8px 0; border-bottom: 1px solid #F4F4F5;">
+              <div style="display: flex; align-items: center; gap: 6px; cursor: pointer; background: #F5F3FF; margin: -4px -8px; padding: 4px 8px; border-radius: 4px; border-left: 3px solid #663399;">
+                <div style="width: 8px; height: 8px; background: #F77E2D; border-radius: 50%; animation: pulse 1.5s infinite;"></div>
+                <span style="font-weight: 600; color: #32374A;">Marketing Plan</span>
+              </div>
+              <div style="font-size: 9px; color: #71717A; margin-top: 2px; padding-left: 14px;">Cardiology CME &middot; 4m</div>
+              <!-- Subagents -->
+              <div style="margin-left: 16px; margin-top: 6px; border-left: 2px solid #E4E4E7; padding-left: 10px;">
+                <div style="display: flex; align-items: center; gap: 5px; padding: 3px 0;">
+                  <div style="width: 6px; height: 6px; background: #F77E2D; border-radius: 50%; animation: pulse 1.5s infinite;"></div>
+                  <span style="color: #32374A; font-size: 10px;">Audience Researcher</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 5px; padding: 3px 0;">
+                  <div style="width: 6px; height: 6px; background: #22c55e; border-radius: 50%;"></div>
+                  <span style="color: #71717A; font-size: 10px;">Channel Strategist</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Parent Agent 2 -->
+            <div style="padding: 8px 0; border-bottom: 1px solid #F4F4F5;">
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <div style="width: 8px; height: 8px; background: #F77E2D; border-radius: 50%; animation: pulse 1.5s infinite;"></div>
+                <span style="font-weight: 500; color: #32374A;">Research</span>
+              </div>
+              <div style="font-size: 9px; color: #71717A; margin-top: 2px; padding-left: 14px;">Neurology Health &middot; 1m</div>
+              <div style="margin-left: 16px; margin-top: 6px; border-left: 2px solid #E4E4E7; padding-left: 10px;">
+                <div style="display: flex; align-items: center; gap: 5px; padding: 3px 0;">
+                  <div style="width: 6px; height: 6px; background: #F77E2D; border-radius: 50%; animation: pulse 1.5s infinite;"></div>
+                  <span style="color: #32374A; font-size: 10px;">PubMed Scanner</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 5px; padding: 3px 0;">
+                  <div style="width: 6px; height: 6px; background: #F77E2D; border-radius: 50%; animation: pulse 1.5s infinite;"></div>
+                  <span style="color: #32374A; font-size: 10px;">Literature Reviewer</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 5px; padding: 3px 0;">
+                  <div style="width: 6px; height: 6px; background: #F77E2D; border-radius: 50%; animation: pulse 1.5s infinite;"></div>
+                  <span style="color: #32374A; font-size: 10px;">Source Validator</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Parent Agent 3 -->
+            <div style="padding: 8px 0;">
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <div style="width: 8px; height: 8px; background: #F77E2D; border-radius: 50%; animation: pulse 1.5s infinite;"></div>
+                <span style="font-weight: 500; color: #32374A;">Compliance Review</span>
+              </div>
+              <div style="font-size: 9px; color: #71717A; margin-top: 2px; padding-left: 14px;">Diabetes Grant &middot; 2m</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Agent Detail -->
+        <div style="flex: 1; background: #FAF9F7; padding: 16px 20px; overflow: hidden;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div>
+              <div style="font-size: 14px; font-weight: 700; color: #32374A;">Marketing Plan Agent</div>
+              <div style="font-size: 10px; color: #71717A;">Cardiology CME 2026 &middot; Running 4m12s</div>
+            </div>
+            <div style="display: flex; gap: 6px;">
+              <div style="background: white; border: 1px solid #E4E4E7; padding: 5px 10px; border-radius: 6px; font-size: 10px;">Pause</div>
+              <div style="background: white; border: 1px solid #E4E4E7; padding: 5px 10px; border-radius: 6px; font-size: 10px;">Logs</div>
+            </div>
+          </div>
+
+          <!-- Subagent Cards -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+            <div style="background: white; border-radius: 8px; border: 1px solid #E4E4E7; padding: 10px;">
+              <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+                <div style="width: 8px; height: 8px; background: #F77E2D; border-radius: 50%; animation: pulse 1.5s infinite;"></div>
+                <span style="font-weight: 600; color: #32374A; font-size: 11px;">Audience Researcher</span>
+              </div>
+              <div style="font-size: 10px; color: #71717A; margin-bottom: 6px;">Analyzing target demographics...</div>
+              <div style="background: #E4E4E7; border-radius: 4px; height: 4px;">
+                <div style="background: #F77E2D; border-radius: 4px; height: 4px; width: 65%;"></div>
+              </div>
+              <div style="font-size: 9px; color: #A1A1AA; margin-top: 3px;">847 tokens &middot; 2m elapsed</div>
+            </div>
+            <div style="background: white; border-radius: 8px; border: 1px solid #22c55e; padding: 10px;">
+              <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+                <div style="width: 8px; height: 8px; background: #22c55e; border-radius: 50%;"></div>
+                <span style="font-weight: 600; color: #32374A; font-size: 11px;">Channel Strategist</span>
+              </div>
+              <div style="font-size: 10px; color: #22c55e; margin-bottom: 6px;">Complete</div>
+              <div style="background: #E4E4E7; border-radius: 4px; height: 4px;">
+                <div style="background: #22c55e; border-radius: 4px; height: 4px; width: 100%;"></div>
+              </div>
+              <div style="font-size: 9px; color: #A1A1AA; margin-top: 3px;">1,204 tokens &middot; 1m32s</div>
+            </div>
+          </div>
+
+          <!-- Live Log Stream -->
+          <div style="background: #1A1D24; border-radius: 8px; padding: 12px; flex: 1;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <div style="font-size: 10px; font-weight: 600; color: #A1A1AA;">Live Output</div>
+              <div style="display: flex; gap: 8px; font-size: 9px;">
+                <span style="color: #663399;">Parent</span>
+                <span style="color: #A1A1AA;">Audience Researcher</span>
+                <span style="color: #A1A1AA;">Channel Strategist</span>
+              </div>
+            </div>
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 10px; line-height: 1.8; color: #A1A1AA;">
+              <div><span style="color: #663399;">[parent]</span> Spawning subagent: Audience Researcher</div>
+              <div><span style="color: #663399;">[parent]</span> Spawning subagent: Channel Strategist</div>
+              <div><span style="color: #22c55e;">[channel]</span> Analyzing 4 channels: email, social, conference, journal</div>
+              <div><span style="color: #22c55e;">[channel]</span> Complete: 3 channels recommended, budget allocated</div>
+              <div><span style="color: #F77E2D;">[audience]</span> Querying registry for specialization data...</div>
+              <div><span style="color: #F77E2D;">[audience]</span> <span style="color: #FAF9F7;">Found 847 potential participants across 12 institutions_</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A: Tree + Detail + Log Stream</h3>
+      <p>Left panel shows agent tree with parent/child hierarchy. Right side shows selected agent's subagent cards with progress, plus a live terminal-style log with color-coded sources. Filter logs by agent.</p>
+    </div>
+  </div>
+
+  <!-- Option B: Timeline / Activity Feed -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 0; overflow: hidden;">
+      <div style="display: flex; height: 420px; font-family: 'Inter', system-ui, sans-serif; font-size: 12px;">
+        <!-- Collapsed Sidebar -->
+        <div style="width: 48px; background: #1A1D24; color: #FAF9F7; padding: 12px 0; display: flex; flex-direction: column; align-items: center; gap: 6px; flex-shrink: 0;">
+          <div style="width: 28px; height: 28px; background: #663399; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 9px; color: white; margin-bottom: 8px;">AI</div>
+          <div style="width: 34px; height: 34px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #A1A1AA;">&#9634;</div>
+          <div style="width: 34px; height: 34px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #A1A1AA;">&#9993;</div>
+          <div style="width: 34px; height: 34px; background: #32374A; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #FAF9F7; border-left: 3px solid #663399;">&#9881;</div>
+          <div style="width: 34px; height: 34px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #A1A1AA;">&#128172;</div>
+        </div>
+        <!-- Full width -->
+        <div style="flex: 1; background: #FAF9F7; padding: 16px 24px; overflow: hidden;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+            <div>
+              <div style="font-size: 16px; font-weight: 700; color: #32374A;">Agent Activity</div>
+              <div style="font-size: 10px; color: #71717A;">3 running &middot; 24 completed today</div>
+            </div>
+            <div style="display: flex; gap: 6px;">
+              <div style="padding: 4px 8px; font-size: 10px; background: #663399; color: white; border-radius: 4px;">Live</div>
+              <div style="padding: 4px 8px; font-size: 10px; color: #71717A; background: white; border: 1px solid #E4E4E7; border-radius: 4px;">History</div>
+            </div>
+          </div>
+
+          <!-- Timeline -->
+          <div style="display: flex; flex-direction: column; gap: 0; border-left: 2px solid #E4E4E7; margin-left: 12px; padding-left: 16px;">
+            <!-- Event 1 -->
+            <div style="position: relative; padding-bottom: 14px;">
+              <div style="position: absolute; left: -21px; top: 2px; width: 10px; height: 10px; background: #F77E2D; border-radius: 50%; border: 2px solid #FAF9F7; animation: pulse 1.5s infinite;"></div>
+              <div style="font-size: 9px; color: #A1A1AA;">Just now</div>
+              <div style="background: white; border-radius: 8px; border: 1px solid #E4E4E7; padding: 10px; margin-top: 4px;">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span style="font-weight: 600; color: #32374A; font-size: 11px;">Research Agent</span>
+                  <span style="font-size: 9px; background: #FFF7ED; color: #ea580c; padding: 1px 6px; border-radius: 3px;">spawned subagent</span>
+                </div>
+                <div style="font-size: 10px; color: #71717A; margin-top: 2px;">Source Validator started for Neurology Health project</div>
+              </div>
+            </div>
+            <!-- Event 2 -->
+            <div style="position: relative; padding-bottom: 14px;">
+              <div style="position: absolute; left: -21px; top: 2px; width: 10px; height: 10px; background: #22c55e; border-radius: 50%; border: 2px solid #FAF9F7;"></div>
+              <div style="font-size: 9px; color: #A1A1AA;">2m ago</div>
+              <div style="background: white; border-radius: 8px; border: 1px solid #E4E4E7; padding: 10px; margin-top: 4px;">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span style="font-weight: 600; color: #32374A; font-size: 11px;">Channel Strategist</span>
+                  <span style="font-size: 9px; background: #F0FDF4; color: #16a34a; padding: 1px 6px; border-radius: 3px;">completed</span>
+                </div>
+                <div style="font-size: 10px; color: #71717A; margin-top: 2px;">3 channels recommended, $45K budget allocated &middot; Cardiology CME</div>
+              </div>
+            </div>
+            <!-- Event 3 -->
+            <div style="position: relative; padding-bottom: 14px;">
+              <div style="position: absolute; left: -21px; top: 2px; width: 10px; height: 10px; background: #F77E2D; border-radius: 50%; border: 2px solid #FAF9F7;"></div>
+              <div style="font-size: 9px; color: #A1A1AA;">4m ago</div>
+              <div style="background: white; border-radius: 8px; border: 1px solid #E4E4E7; padding: 10px; margin-top: 4px;">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span style="font-weight: 600; color: #32374A; font-size: 11px;">Marketing Plan Agent</span>
+                  <span style="font-size: 9px; background: #EFF6FF; color: #2563eb; padding: 1px 6px; border-radius: 3px;">started</span>
+                </div>
+                <div style="font-size: 10px; color: #71717A; margin-top: 2px;">Spawned 2 subagents: Audience Researcher, Channel Strategist &middot; Cardiology CME</div>
+              </div>
+            </div>
+            <!-- Event 4 -->
+            <div style="position: relative; padding-bottom: 14px;">
+              <div style="position: absolute; left: -21px; top: 2px; width: 10px; height: 10px; background: #F77E2D; border-radius: 50%; border: 2px solid #FAF9F7;"></div>
+              <div style="font-size: 9px; color: #A1A1AA;">5m ago</div>
+              <div style="background: white; border-radius: 8px; border: 1px solid #E4E4E7; padding: 10px; margin-top: 4px;">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span style="font-weight: 600; color: #32374A; font-size: 11px;">Compliance Review</span>
+                  <span style="font-size: 9px; background: #FEF2F2; color: #dc2626; padding: 1px 6px; border-radius: 3px;">interrupted</span>
+                </div>
+                <div style="font-size: 10px; color: #71717A; margin-top: 2px;">2 ACCME issues detected, sent to review inbox &middot; Diabetes Grant</div>
+              </div>
+            </div>
+            <!-- Event 5 -->
+            <div style="position: relative;">
+              <div style="position: absolute; left: -21px; top: 2px; width: 10px; height: 10px; background: #22c55e; border-radius: 50%; border: 2px solid #FAF9F7;"></div>
+              <div style="font-size: 9px; color: #A1A1AA;">8m ago</div>
+              <div style="background: white; border-radius: 8px; border: 1px solid #E4E4E7; padding: 10px; margin-top: 4px;">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span style="font-weight: 600; color: #32374A; font-size: 11px;">Curriculum Design</span>
+                  <span style="font-size: 9px; background: #F0FDF4; color: #16a34a; padding: 1px 6px; border-radius: 3px;">completed</span>
+                </div>
+                <div style="font-size: 10px; color: #71717A; margin-top: 2px;">2,890 words, innovation section added &middot; Cardiology CME</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B: Activity Timeline</h3>
+      <p>Chronological feed of all agent events — starts, completions, spawns, errors, interrupts. Each event is a card with status badge. Simple, scannable, no drill-down needed. Filter by Live/History.</p>
+    </div>
+  </div>
+</div>
+
+<style>
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+</style>
