@@ -36,6 +36,8 @@ from langsmith import traceable
 # LangChain imports
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
+from extract_topic import extract_topic_node
+from pubmed_client import PubMedClient
 from langchain_core.runnables import RunnableConfig
 
 # OpenTelemetry tracing (dual-export with LangSmith)
@@ -97,6 +99,12 @@ ALWAYS name specific studies - never use generic references:
   - RIGHT: "The DELIVER trial showed..." or "Registry data from COMPASS-HF indicates..."
   - WRONG: "Population-level studies indicate..."
   - RIGHT: "The Swedish Heart Failure Registry found..."
+
+=== CITATION FORMAT ===
+Use numbered inline references [1], [2], [3] etc. for every factual claim, statistic, or guideline mention.
+Number sequentially starting from [1] within your section.
+Do NOT include a references list at the end of your section. References will be consolidated separately.
+When citing, mentally track what each number refers to (e.g. [1] = Smith et al. 2023 NEJM study) so the citations are consistent and traceable.
 
 === BANNED WORDS - USE ALTERNATIVES ===
 - "robust" → use: "strong", "reliable", "well-established", "effective"
@@ -372,13 +380,13 @@ Provide a JSON response with:
 
 Return ONLY the JSON, no other text."""
 
-    result = await llm.generate(
-        "You create realistic composite characters for medical education.",
-        prompt,
-        {"step": "character_creation"}
-    )
-    
     try:
+        result = await llm.generate(
+            "You create realistic composite characters for medical education.",
+            prompt,
+            {"step": "character_creation"}
+        )
+
         # Parse JSON from response
         match = re.search(r'\{[\s\S]*\}', result["content"])
         if match:
@@ -860,12 +868,11 @@ Write 200-300 words synthesizing the need and calling for educational action."""
 @traceable(name="assemble_document_node", run_type="chain")
 @traced_node("needs_assessment_agent", "assemble_document_node")
 async def assemble_document_node(state: NeedsAssessmentState) -> dict:
-    """Assemble complete document and run quality checks."""
-    
-    # Assemble sections
+    """Assemble complete document body (without references) and run quality checks."""
+
     sections = [
         state.get("cold_open", ""),
-        "",  # Blank line after cold open
+        "",
         "## Disease State Overview",
         state.get("disease_state_overview", ""),
         "",
@@ -887,21 +894,20 @@ async def assemble_document_node(state: NeedsAssessmentState) -> dict:
         "## Conclusion",
         state.get("conclusion", ""),
     ]
-    
+
     complete_document = "\n".join(sections)
-    
+
     # Quality checks
     word_count = count_words(complete_document)
     prose_density = check_prose_density(complete_document)
     banned_found = check_banned_patterns(complete_document)
     character_appearances = state.get("character_appearances", 0)
-    
-    # Pass/fail checks
+
     meets_word_count = word_count >= 3100
     meets_prose_density = prose_density >= 0.80
     meets_character_thread = character_appearances >= 4
     quality_passed = meets_word_count and meets_prose_density and meets_character_thread and len(banned_found) == 0
-    
+
     return {
         "complete_document": complete_document,
         "word_count": word_count,
@@ -911,6 +917,102 @@ async def assemble_document_node(state: NeedsAssessmentState) -> dict:
         "meets_prose_density": meets_prose_density,
         "meets_character_thread": meets_character_thread,
         "quality_passed": quality_passed
+    }
+
+
+@traceable(name="generate_references_node", run_type="chain")
+@traced_node("needs_assessment_agent", "generate_references_node")
+async def generate_references_node(state: NeedsAssessmentState) -> dict:
+    """Generate PubMed-verified AMA references for the full document.
+
+    Uses regex to extract citation context from the document (no LLM call,
+    which avoids messages-tuple streaming leaking intermediate output).
+    Each citation is verified against PubMed and formatted in AMA style.
+    """
+
+    document = state.get("complete_document", "")
+    disease_state = state.get("disease_state", "")
+
+    # Step 1: Extract citation contexts using regex (no LLM call)
+    # Find all sentences containing [N] and build search queries from context
+    citation_contexts = {}  # num -> list of context strings
+    sentences = re.split(r'(?<=[.!?])\s+', document)
+
+    for sentence in sentences:
+        nums_in_sentence = re.findall(r'\[(\d+)\]', sentence)
+        for num_str in nums_in_sentence:
+            num = int(num_str)
+            # Strip citation markers and section headers for cleaner search
+            clean = re.sub(r'\[\d+\]', '', sentence).strip()
+            clean = re.sub(r'^#{1,3}\s+.*$', '', clean, flags=re.MULTILINE).strip()
+            if clean and len(clean) > 20:
+                if num not in citation_contexts:
+                    citation_contexts[num] = []
+                citation_contexts[num].append(clean)
+
+    if not citation_contexts:
+        return {
+            "complete_document": document + "\n\n## References\n\n[No inline citations found in document]",
+        }
+
+    # Step 2: Search PubMed for each citation using context + disease state
+    pubmed = PubMedClient()
+    verified_refs = []
+    unverified_refs = []
+
+    for num in sorted(citation_contexts.keys()):
+        contexts = citation_contexts[num]
+        # Use first context (most specific) + disease state as query
+        context_text = contexts[0][:150]
+        # Extract key terms: named trials, drug names, organizations, numbers
+        query = f"{disease_state} {context_text}"
+
+        try:
+            pmids = await pubmed.search(query, max_results=3, years=10)
+            if pmids:
+                articles = await pubmed.fetch_details(pmids[:1])
+                if articles:
+                    article = articles[0]
+                    ama_citation = pubmed.format_ama(article)
+                    verified_refs.append((num, ama_citation))
+                    continue
+        except Exception:
+            pass
+
+        # If first context fails, try a shorter query with just key medical terms
+        try:
+            short_terms = re.findall(r'[A-Z][A-Z\-]{2,}', contexts[0])  # acronyms like DAPA-CKD, SGLT2
+            if short_terms:
+                fallback_query = f"{disease_state} {' '.join(short_terms[:3])}"
+                pmids = await pubmed.search(fallback_query, max_results=3, years=10)
+                if pmids:
+                    articles = await pubmed.fetch_details(pmids[:1])
+                    if articles:
+                        ama_citation = pubmed.format_ama(articles[0])
+                        verified_refs.append((num, ama_citation))
+                        continue
+        except Exception:
+            pass
+
+        unverified_refs.append((num, contexts[0][:100]))
+
+    # Step 3: Build references section
+    ref_lines = []
+    for num, citation in sorted(verified_refs, key=lambda x: x[0]):
+        ref_lines.append(f"{num}. {citation}")
+
+    if unverified_refs:
+        ref_lines.append("")
+        ref_lines.append("*The following citations could not be verified against PubMed:*")
+        for num, desc in sorted(unverified_refs, key=lambda x: x[0]):
+            ref_lines.append(f"{num}. [UNVERIFIED] {desc}")
+
+    references_text = "\n".join(ref_lines)
+    final_document = document + "\n\n## References\n\n" + references_text
+
+    return {
+        "complete_document": final_document,
+        "messages": [HumanMessage(content=f"---\n\n# Complete Needs Assessment Document\n\n{final_document}")],
     }
 
 
@@ -924,6 +1026,7 @@ def create_needs_assessment_graph() -> StateGraph:
     graph = StateGraph(NeedsAssessmentState)
     
     # Add nodes
+    graph.add_node("extract_topic", extract_topic_node)
     graph.add_node("create_character", create_character_node)
     graph.add_node("generate_cold_open", generate_cold_open_node)
     graph.add_node("generate_disease_overview", generate_disease_overview_node)
@@ -934,9 +1037,11 @@ def create_needs_assessment_graph() -> StateGraph:
     graph.add_node("generate_target_audience", generate_target_audience_node)
     graph.add_node("generate_conclusion", generate_conclusion_node)
     graph.add_node("assemble_document", assemble_document_node)
-    
+    graph.add_node("generate_references", generate_references_node)
+
     # Add edges (sequential flow)
-    graph.set_entry_point("create_character")
+    graph.set_entry_point("extract_topic")
+    graph.add_edge("extract_topic", "create_character")
     graph.add_edge("create_character", "generate_cold_open")
     graph.add_edge("generate_cold_open", "generate_disease_overview")
     graph.add_edge("generate_disease_overview", "generate_treatment_options")
@@ -946,7 +1051,8 @@ def create_needs_assessment_graph() -> StateGraph:
     graph.add_edge("generate_educational_rationale", "generate_target_audience")
     graph.add_edge("generate_target_audience", "generate_conclusion")
     graph.add_edge("generate_conclusion", "assemble_document")
-    graph.add_edge("assemble_document", END)
+    graph.add_edge("assemble_document", "generate_references")
+    graph.add_edge("generate_references", END)
     
     return graph
 

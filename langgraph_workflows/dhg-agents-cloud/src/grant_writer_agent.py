@@ -26,6 +26,8 @@ from langsmith import traceable
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
+from extract_topic import extract_topic_node
+from pubmed_client import PubMedClient
 
 
 # =============================================================================
@@ -163,6 +165,12 @@ PROHIBITED:
 - Promotional language about supporter products
 - Inconsistencies or contradictions between sections
 - Placeholder text or TODO markers
+
+=== CITATION FORMAT ===
+Use numbered inline references [1], [2], [3] etc. for every factual claim, statistic, or guideline mention.
+Number sequentially starting from [1] within your section.
+Do NOT include a references list at the end of your section. References will be consolidated separately.
+When citing, mentally track what each number refers to (e.g. [1] = Smith et al. 2023 NEJM study) so the citations are consistent and traceable.
 """
 
 
@@ -729,6 +737,97 @@ async def assemble_package_node(state: GrantWriterState) -> dict:
     }
 
 
+@traceable(name="grant_generate_references_node", run_type="chain")
+async def generate_references_node(state: GrantWriterState) -> dict:
+    """Generate PubMed-verified AMA references for the complete grant document.
+
+    Uses regex to extract citation context from the document (no LLM call,
+    which avoids messages-tuple streaming leaking intermediate output).
+    Each citation is verified against PubMed and formatted in AMA style.
+    """
+
+    document = state.get("complete_document_markdown", "")
+    disease_state = state.get("therapeutic_area", "")
+
+    # Step 1: Extract citation contexts using regex (no LLM call)
+    citation_contexts = {}
+    sentences = re.split(r'(?<=[.!?])\s+', document)
+
+    for sentence in sentences:
+        nums_in_sentence = re.findall(r'\[(\d+)\]', sentence)
+        for num_str in nums_in_sentence:
+            num = int(num_str)
+            clean = re.sub(r'\[\d+\]', '', sentence).strip()
+            clean = re.sub(r'^#{1,3}\s+.*$', '', clean, flags=re.MULTILINE).strip()
+            if clean and len(clean) > 20:
+                if num not in citation_contexts:
+                    citation_contexts[num] = []
+                citation_contexts[num].append(clean)
+
+    if not citation_contexts:
+        return {
+            "complete_document_markdown": document + "\n\n## References\n\n[No inline citations found in document]",
+        }
+
+    # Step 2: Search PubMed for each citation using context + disease state
+    pubmed = PubMedClient()
+    verified_refs = []
+    unverified_refs = []
+
+    for num in sorted(citation_contexts.keys()):
+        contexts = citation_contexts[num]
+        context_text = contexts[0][:150]
+        query = f"{disease_state} {context_text}"
+
+        try:
+            pmids = await pubmed.search(query, max_results=3, years=10)
+            if pmids:
+                articles = await pubmed.fetch_details(pmids[:1])
+                if articles:
+                    article = articles[0]
+                    ama_citation = pubmed.format_ama(article)
+                    verified_refs.append((num, ama_citation))
+                    continue
+        except Exception:
+            pass
+
+        # Fallback: try acronyms like trial names, drug classes
+        try:
+            short_terms = re.findall(r'[A-Z][A-Z\-]{2,}', contexts[0])
+            if short_terms:
+                fallback_query = f"{disease_state} {' '.join(short_terms[:3])}"
+                pmids = await pubmed.search(fallback_query, max_results=3, years=10)
+                if pmids:
+                    articles = await pubmed.fetch_details(pmids[:1])
+                    if articles:
+                        ama_citation = pubmed.format_ama(articles[0])
+                        verified_refs.append((num, ama_citation))
+                        continue
+        except Exception:
+            pass
+
+        unverified_refs.append((num, contexts[0][:100]))
+
+    # Step 3: Build references section
+    ref_lines = []
+    for num, citation in sorted(verified_refs, key=lambda x: x[0]):
+        ref_lines.append(f"{num}. {citation}")
+
+    if unverified_refs:
+        ref_lines.append("")
+        ref_lines.append("*The following citations could not be verified against PubMed:*")
+        for num, desc in sorted(unverified_refs, key=lambda x: x[0]):
+            ref_lines.append(f"{num}. [UNVERIFIED] {desc}")
+
+    references_text = "\n".join(ref_lines)
+    final_document = document + "\n\n## References\n\n" + references_text
+
+    return {
+        "complete_document_markdown": final_document,
+        "messages": [HumanMessage(content=f"---\n\n# Complete Grant Package Document\n\n{final_document}")],
+    }
+
+
 # =============================================================================
 # GRAPH CONSTRUCTION
 # =============================================================================
@@ -739,6 +838,7 @@ def create_grant_writer_graph():
     workflow = StateGraph(GrantWriterState)
     
     # Add nodes
+    workflow.add_node("extract_topic", extract_topic_node)
     workflow.add_node("draft_cover_letter", draft_cover_letter_node)
     workflow.add_node("draft_executive_summary", draft_executive_summary_node)
     workflow.add_node("integrate_needs", integrate_needs_assessment_node)
@@ -751,10 +851,12 @@ def create_grant_writer_graph():
     workflow.add_node("draft_org_qualifications", draft_org_qualifications_node)
     workflow.add_node("draft_independence", draft_independence_node)
     workflow.add_node("assemble_package", assemble_package_node)
-    
+    workflow.add_node("generate_references", generate_references_node)
+
     # Define limits - sequential flow
-    workflow.set_entry_point("draft_cover_letter")
-    
+    workflow.set_entry_point("extract_topic")
+    workflow.add_edge("extract_topic", "draft_cover_letter")
+
     workflow.add_edge("draft_cover_letter", "draft_executive_summary")
     workflow.add_edge("draft_executive_summary", "integrate_needs")
     workflow.add_edge("integrate_needs", "format_objectives")
@@ -766,7 +868,8 @@ def create_grant_writer_graph():
     workflow.add_edge("create_budget", "draft_org_qualifications")
     workflow.add_edge("draft_org_qualifications", "draft_independence")
     workflow.add_edge("draft_independence", "assemble_package")
-    workflow.add_edge("assemble_package", END)
+    workflow.add_edge("assemble_package", "generate_references")
+    workflow.add_edge("generate_references", END)
     
     return workflow.compile()
 

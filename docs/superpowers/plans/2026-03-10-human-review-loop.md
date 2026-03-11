@@ -12,6 +12,44 @@
 
 ---
 
+## Progress Status (Updated 2026-03-11)
+
+| Chunk | Tasks | Status | Commit |
+|-------|-------|--------|--------|
+| 1: Housekeeping + Agent Interrupt | Tasks 1-6 | **COMPLETE** | `314f75d` |
+| 2: Frontend Review UI | Tasks 7-14 | **COMPLETE** | `797b3f5` |
+| 3: Recipe Replication + CopilotKit | Tasks 15-16 | **COMPLETE** | `7af1b9e` |
+| 4a: Observability (Tasks 17-20) | Tasks 17-20 | **COMPLETE** | `a7380bb` |
+| 4b: Final Verification + Merge | Task 21 | **PARTIAL** — verified, merge held per user | — |
+| **NEW**: Agent Chat Integration | Tasks 22-24 | **COMPLETE** (uncommitted) | — |
+
+### Test Results (from `dhg-cme-research-agent` container)
+- **67/67 tests passing** (up from 57 baseline, +14 new, -4 legacy removed)
+- Command: `docker cp .../tests dhg-cme-research-agent:/app/tests && docker exec dhg-cme-research-agent python3 -m pytest /app/tests/ -v --tb=short`
+- Frontend: builds with 0 type errors (5 routes)
+- All services healthy: LangGraph :2026, Registry :8011, Prometheus :9090, Grafana :3001
+
+### Unplanned Work Completed (2026-03-11 Session)
+
+During live testing, discovered that individual agents couldn't work from the chat UI because the frontend sends `messages[]` but agents expected structured `disease_state` fields. This led to three new deliverables:
+
+1. **`extract_topic.py`** — Shared topic extraction module. Parses free-text chat messages into `disease_state`, `therapeutic_area`, `target_audience`, `geographic_focus` using Claude Sonnet. No-op when structured intake is used. Wired as entry node in all 9 content agents.
+
+2. **`pubmed_client.py`** — Shared PubMed E-Utils client extracted from research_agent.py. Searches PubMed, fetches article details (journal, volume, issue, pages, DOI), formats AMA citations with PubMed URLs.
+
+3. **All 9 content agents upgraded:**
+   - `extract_topic_node` wired as graph entry point
+   - Inline numbered citations `[1]`, `[2]` in all LLM prompts
+   - `generate_references_node` using regex-based PubMed verification (no LLM call to avoid streaming leak)
+   - Full document emitted to chat via `messages` key in final node return
+   - Agents affected: needs_assessment, research, clinical_practice, gap_analysis, learning_objectives, curriculum_design, research_protocol, marketing_plan, grant_writer
+
+### Known Issues (from testing)
+- PubMed search queries using full sentence context sometimes return generic/wrong articles
+- Duplicate references can appear when same article matches multiple citation contexts
+
+---
+
 ## File Map
 
 ### Files to Modify
@@ -27,6 +65,13 @@
 | `frontend/src/app/layout.tsx` | No change (already correct) |
 | `observability/prometheus/alerts.yml` | Replace phantom metrics with real container/host rules |
 | `docker-compose.override.yml` | Add `dhg-frontend` service |
+
+### Files Created (Unplanned — Agent Chat Integration)
+
+| File | Purpose |
+|------|---------|
+| `langgraph_workflows/dhg-agents-cloud/src/extract_topic.py` | Shared topic extraction from chat messages (all 9 agents) |
+| `langgraph_workflows/dhg-agents-cloud/src/pubmed_client.py` | Shared PubMed E-Utils client with AMA citation formatting |
 
 ### Files to Create
 
@@ -47,20 +92,20 @@
 
 ---
 
-## Chunk 1: Housekeeping + Agent Interrupt (Phase 0-1)
+## Chunk 1: Housekeeping + Agent Interrupt (Phase 0-1) ✅ COMPLETE
 
-### Task 1: Commit Existing Work and Create Feature Branch
+### Task 1: Commit Existing Work and Create Feature Branch ✅
 
 **Files:** Git operations only
 
-- [ ] **Step 1: Check current git status**
+- [x] **Step 1: Check current git status**
 
 ```bash
 cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5
 git status
 ```
 
-- [ ] **Step 2: Stage and commit all uncommitted migration work**
+- [x] **Step 2: Stage and commit all uncommitted migration work**
 
 ```bash
 git add -A
@@ -73,13 +118,13 @@ git commit -m "feat(migration): complete Antigravity-to-Claude Code migration (1
 - Cleanup: removed .agent/, archived planning files"
 ```
 
-- [ ] **Step 3: Create feature branch**
+- [x] **Step 3: Create feature branch**
 
 ```bash
 git checkout -b feat/human-review-loop
 ```
 
-- [ ] **Step 4: Verify branch**
+- [x] **Step 4: Verify branch**
 
 ```bash
 git branch --show-current
@@ -97,13 +142,13 @@ Expected: `feat/human-review-loop`
 
 `interrupt()` requires a checkpointer. LangGraph Server provides one automatically when deployed, but we need to verify local dev works.
 
-- [ ] **Step 1: Check if LangGraph server is running with checkpointer**
+- [x] **Step 1: Check if LangGraph server is running with checkpointer**
 
 ```bash
 curl -s http://localhost:2026/ok && echo "LangGraph server healthy"
 ```
 
-- [ ] **Step 2: Test interrupt with a minimal graph via the LangGraph SDK**
+- [x] **Step 2: Test interrupt with a minimal graph via the LangGraph SDK**
 
 ```bash
 cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5
@@ -126,7 +171,7 @@ asyncio.run(test())
 
 Expected: Lists 15 graphs. LangGraph Server handles checkpointing internally — no additional configuration needed for `interrupt()`.
 
-- [ ] **Step 3: Verify LangGraph version supports interrupt()**
+- [x] **Step 3: Verify LangGraph version supports interrupt()**
 
 ```bash
 cd langgraph_workflows/dhg-agents-cloud
@@ -135,7 +180,7 @@ grep langgraph requirements.txt
 
 Expected: `langgraph>=0.2.0`. `interrupt()` requires langgraph >= 0.2.53. If version is too old, update to `langgraph>=0.2.53`.
 
-- [ ] **Step 4: Commit if requirements.txt was updated**
+- [x] **Step 4: Commit if requirements.txt was updated**
 
 ```bash
 git add langgraph_workflows/dhg-agents-cloud/requirements.txt
@@ -150,7 +195,7 @@ git commit -m "chore: bump langgraph minimum version for interrupt() support"
 - Test: `langgraph_workflows/dhg-agents-cloud/tests/test_orchestrator.py`
 - Test: `langgraph_workflows/dhg-agents-cloud/tests/test_needs_assessment.py`
 
-- [ ] **Step 1: Run all existing tests**
+- [x] **Step 1: Run all existing tests**
 
 ```bash
 cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/langgraph_workflows/dhg-agents-cloud
@@ -167,7 +212,7 @@ Expected: 68 tests pass (38 orchestrator + 30 needs_assessment). Record exact co
 - Modify: `langgraph_workflows/dhg-agents-cloud/src/orchestrator.py:100-144`
 - Modify: `langgraph_workflows/dhg-agents-cloud/tests/conftest.py:131-176`
 
-- [ ] **Step 1: Write failing test for new state fields**
+- [x] **Step 1: Write failing test for new state fields**
 
 Add to `tests/test_orchestrator.py` after `TestCreateInitialState`:
 
@@ -184,7 +229,7 @@ class TestReviewStateFields:
         assert state["review_round"] == 0
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/langgraph_workflows/dhg-agents-cloud
@@ -193,7 +238,7 @@ python -m pytest tests/test_orchestrator.py::TestReviewStateFields -v
 
 Expected: FAIL with `KeyError: 'review_comments'`
 
-- [ ] **Step 3: Add fields to CMEPipelineState**
+- [x] **Step 3: Add fields to CMEPipelineState**
 
 In `orchestrator.py`, add after line 133 (`human_reviewer: Optional[str]`):
 
@@ -203,7 +248,7 @@ In `orchestrator.py`, add after line 133 (`human_reviewer: Optional[str]`):
     review_round: int  # Tracks revision cycle (max 3)
 ```
 
-- [ ] **Step 4: Update create_initial_state**
+- [x] **Step 4: Update create_initial_state**
 
 In `orchestrator.py`, in `create_initial_state()` function, add after line 1338 (`human_reviewer=None,`):
 
@@ -212,7 +257,7 @@ In `orchestrator.py`, in `create_initial_state()` function, add after line 1338 
         review_round=0,
 ```
 
-- [ ] **Step 5: Update conftest.py sample_pipeline_state fixture**
+- [x] **Step 5: Update conftest.py sample_pipeline_state fixture**
 
 In `tests/conftest.py`, add after line 175 (`"checkpoint_agent": "init",`):
 
@@ -221,7 +266,7 @@ In `tests/conftest.py`, add after line 175 (`"checkpoint_agent": "init",`):
         "review_round": 0,
 ```
 
-- [ ] **Step 6: Run tests to verify they pass**
+- [x] **Step 6: Run tests to verify they pass**
 
 ```bash
 python -m pytest tests/test_orchestrator.py::TestReviewStateFields -v
@@ -229,7 +274,7 @@ python -m pytest tests/test_orchestrator.py::TestReviewStateFields -v
 
 Expected: 2 PASSED
 
-- [ ] **Step 7: Run full test suite to verify no regressions**
+- [x] **Step 7: Run full test suite to verify no regressions**
 
 ```bash
 python -m pytest tests/ -v --tb=short 2>&1 | tail -10
@@ -237,7 +282,7 @@ python -m pytest tests/ -v --tb=short 2>&1 | tail -10
 
 Expected: All tests pass (baseline + 2 new)
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5
@@ -253,7 +298,7 @@ git commit -m "feat(orchestrator): add review_comments and review_round to CMEPi
 - Modify: `langgraph_workflows/dhg-agents-cloud/src/orchestrator.py:675-682` (human_review_gate function)
 - Modify: `langgraph_workflows/dhg-agents-cloud/src/orchestrator.py:923-958` (create_needs_package_graph)
 
-- [ ] **Step 1: Write failing test for interrupt behavior**
+- [x] **Step 1: Write failing test for interrupt behavior**
 
 Add to `tests/test_orchestrator.py`, replacing the `test_human_review_gate_sets_awaiting_review` test in `TestGateNodes`:
 
@@ -312,7 +357,7 @@ class TestHumanReviewInterrupt:
         assert orch.route_after_human_review_interrupt(resume_value) == "rejected"
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 python -m pytest tests/test_orchestrator.py::TestHumanReviewInterrupt -v
@@ -320,7 +365,7 @@ python -m pytest tests/test_orchestrator.py::TestHumanReviewInterrupt -v
 
 Expected: FAIL (functions don't exist yet)
 
-- [ ] **Step 3: Add interrupt import and new human_review_node**
+- [x] **Step 3: Add interrupt import and new human_review_node**
 
 In `orchestrator.py`, add to imports (after line 28):
 
@@ -404,7 +449,7 @@ async def human_review_node(state: CMEPipelineState) -> dict:
     }
 ```
 
-- [ ] **Step 4: Add new routing function for interrupt-based review**
+- [x] **Step 4: Add new routing function for interrupt-based review**
 
 In `orchestrator.py`, add after `route_after_human_review` (after line 915):
 
@@ -420,7 +465,7 @@ def route_after_human_review_interrupt(state: CMEPipelineState) -> Literal["appr
         return "rejected"
 ```
 
-- [ ] **Step 5: Update create_needs_package_graph to use interrupt**
+- [x] **Step 5: Update create_needs_package_graph to use interrupt**
 
 Replace `create_needs_package_graph` function (lines 923-958) with:
 
@@ -475,7 +520,7 @@ def create_needs_package_graph():
     return workflow.compile()
 ```
 
-- [ ] **Step 6: Run the interrupt tests**
+- [x] **Step 6: Run the interrupt tests**
 
 ```bash
 python -m pytest tests/test_orchestrator.py::TestHumanReviewInterrupt -v
@@ -483,7 +528,7 @@ python -m pytest tests/test_orchestrator.py::TestHumanReviewInterrupt -v
 
 Expected: 4 PASSED
 
-- [ ] **Step 7: Update existing TestGateNodes tests**
+- [x] **Step 7: Update existing TestGateNodes tests**
 
 The old `test_human_review_gate_sets_awaiting_review` test references the deleted function. Update `TestGateNodes`:
 
@@ -512,7 +557,7 @@ class TestGateNodes:
         datetime.fromisoformat(result["updated_at"])
 ```
 
-- [ ] **Step 8: Update TestNeedsPackageGraph for new nodes**
+- [x] **Step 8: Update TestNeedsPackageGraph for new nodes**
 
 ```python
 class TestNeedsPackageGraph:
@@ -549,7 +594,7 @@ class TestNeedsPackageGraph:
         assert "failed" in hr_targets
 ```
 
-- [ ] **Step 9: Update TestRouteAfterHumanReview to test new function**
+- [x] **Step 9: Update TestRouteAfterHumanReview to test new function**
 
 ```python
 class TestRouteAfterHumanReview:
@@ -572,7 +617,7 @@ class TestRouteAfterHumanReview:
         assert orch.route_after_human_review_interrupt(sample_pipeline_state) == "rejected"
 ```
 
-- [ ] **Step 10: Run full test suite**
+- [x] **Step 10: Run full test suite**
 
 ```bash
 python -m pytest tests/ -v --tb=short 2>&1 | tail -20
@@ -580,7 +625,7 @@ python -m pytest tests/ -v --tb=short 2>&1 | tail -20
 
 Expected: All tests pass
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5
@@ -601,7 +646,7 @@ git commit -m "feat(orchestrator): replace human_review_gate with interrupt() in
 - Modify: `langgraph_workflows/dhg-agents-cloud/src/orchestrator.py`
 - Modify: `langgraph_workflows/dhg-agents-cloud/tests/test_orchestrator.py`
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 ```python
 class TestProcessReviewFeedback:
@@ -646,7 +691,7 @@ class TestProcessReviewFeedback:
         assert "maximum revision" in result["current_step"]
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 python -m pytest tests/test_orchestrator.py::TestProcessReviewFeedback -v
@@ -654,7 +699,7 @@ python -m pytest tests/test_orchestrator.py::TestProcessReviewFeedback -v
 
 Expected: FAIL
 
-- [ ] **Step 3: Implement process_review_feedback**
+- [x] **Step 3: Implement process_review_feedback**
 
 In `orchestrator.py`, add after `human_review_node`:
 
@@ -703,7 +748,7 @@ async def process_review_feedback(state: CMEPipelineState) -> dict:
     }
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 python -m pytest tests/test_orchestrator.py::TestProcessReviewFeedback -v
@@ -711,7 +756,7 @@ python -m pytest tests/test_orchestrator.py::TestProcessReviewFeedback -v
 
 Expected: 4 PASSED
 
-- [ ] **Step 5: Wire process_review_feedback into needs_package graph**
+- [x] **Step 5: Wire process_review_feedback into needs_package graph**
 
 Update `create_needs_package_graph` to add the feedback node between interrupt and revision:
 
@@ -766,7 +811,7 @@ def create_needs_package_graph():
     return workflow.compile()
 ```
 
-- [ ] **Step 6: Update TestNeedsPackageGraph test**
+- [x] **Step 6: Update TestNeedsPackageGraph test**
 
 Update `test_has_expected_nodes` to include `process_feedback`:
 
@@ -782,7 +827,7 @@ Update `test_has_expected_nodes` to include `process_feedback`:
         assert expected.issubset(nodes)
 ```
 
-- [ ] **Step 7: Run full test suite**
+- [x] **Step 7: Run full test suite**
 
 ```bash
 python -m pytest tests/ -v --tb=short 2>&1 | tail -20
@@ -790,7 +835,7 @@ python -m pytest tests/ -v --tb=short 2>&1 | tail -20
 
 Expected: All tests pass
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5
@@ -804,14 +849,14 @@ git commit -m "feat(orchestrator): add process_review_feedback node with revisio
 
 ---
 
-## Chunk 2: Frontend Review UI (Phase 2)
+## Chunk 2: Frontend Review UI (Phase 2) ✅ COMPLETE
 
-### Task 7: Create Review Types
+### Task 7: Create Review Types ✅
 
 **Files:**
 - Create: `frontend/src/components/review/types.ts`
 
-- [ ] **Step 1: Create the types file**
+- [x] **Step 1: Create the types file**
 
 ```typescript
 // frontend/src/components/review/types.ts
@@ -859,7 +904,7 @@ export interface ResumeValue {
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5
@@ -869,12 +914,12 @@ git commit -m "feat(frontend): add review component type definitions"
 
 ---
 
-### Task 8: Build useAnnotations Hook
+### Task 8: Build useAnnotations Hook ✅
 
 **Files:**
 - Create: `frontend/src/components/review/use-annotations.ts`
 
-- [ ] **Step 1: Create the hook**
+- [x] **Step 1: Create the hook**
 
 ```typescript
 // frontend/src/components/review/use-annotations.ts
@@ -981,7 +1026,7 @@ export function useAnnotations(documentId?: string) {
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend/src/components/review/use-annotations.ts
@@ -990,12 +1035,12 @@ git commit -m "feat(frontend): add useAnnotations hook for text selection commen
 
 ---
 
-### Task 9: Build MetricsBar Component
+### Task 9: Build MetricsBar Component ✅
 
 **Files:**
 - Create: `frontend/src/components/review/metrics-bar.tsx`
 
-- [ ] **Step 1: Create the component**
+- [x] **Step 1: Create the component**
 
 ```tsx
 // frontend/src/components/review/metrics-bar.tsx
@@ -1045,7 +1090,7 @@ export function MetricsBar({ metrics, reviewRound }: MetricsBarProps) {
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend/src/components/review/metrics-bar.tsx
@@ -1054,12 +1099,12 @@ git commit -m "feat(frontend): add MetricsBar component for review quality badge
 
 ---
 
-### Task 10: Build DocumentViewer Component
+### Task 10: Build DocumentViewer Component ✅
 
 **Files:**
 - Create: `frontend/src/components/review/document-viewer.tsx`
 
-- [ ] **Step 1: Create the component**
+- [x] **Step 1: Create the component**
 
 ```tsx
 // frontend/src/components/review/document-viewer.tsx
@@ -1185,7 +1230,7 @@ export function DocumentViewer({
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend/src/components/review/document-viewer.tsx
@@ -1194,12 +1239,12 @@ git commit -m "feat(frontend): add DocumentViewer with floating comment popover"
 
 ---
 
-### Task 11: Build CommentsSidebar Component
+### Task 11: Build CommentsSidebar Component ✅
 
 **Files:**
 - Create: `frontend/src/components/review/comments-sidebar.tsx`
 
-- [ ] **Step 1: Create the component**
+- [x] **Step 1: Create the component**
 
 ```tsx
 // frontend/src/components/review/comments-sidebar.tsx
@@ -1282,7 +1327,7 @@ export function CommentsSidebar({
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend/src/components/review/comments-sidebar.tsx
@@ -1291,12 +1336,12 @@ git commit -m "feat(frontend): add CommentsSidebar for ordered comment list"
 
 ---
 
-### Task 12: Build DecisionBar Component
+### Task 12: Build DecisionBar Component ✅
 
 **Files:**
 - Create: `frontend/src/components/review/decision-bar.tsx`
 
-- [ ] **Step 1: Create the component**
+- [x] **Step 1: Create the component**
 
 ```tsx
 // frontend/src/components/review/decision-bar.tsx
@@ -1357,7 +1402,7 @@ export function DecisionBar({ comments, onSubmit, isLoading }: DecisionBarProps)
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend/src/components/review/decision-bar.tsx
@@ -1366,12 +1411,12 @@ git commit -m "feat(frontend): add DecisionBar with comment packaging"
 
 ---
 
-### Task 13: Build ReviewPanel Container
+### Task 13: Build ReviewPanel Container ✅
 
 **Files:**
 - Create: `frontend/src/components/review/review-panel.tsx`
 
-- [ ] **Step 1: Create the main review panel**
+- [x] **Step 1: Create the main review panel**
 
 ```tsx
 // frontend/src/components/review/review-panel.tsx
@@ -1502,7 +1547,7 @@ function buildDocumentSections(
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend/src/components/review/review-panel.tsx
@@ -1511,13 +1556,13 @@ git commit -m "feat(frontend): add ReviewPanel container with document tabs and 
 
 ---
 
-### Task 14: Update InboxItem and InboxApi to Use ReviewPanel
+### Task 14: Update InboxItem and InboxApi to Use ReviewPanel ✅
 
 **Files:**
 - Modify: `frontend/src/lib/inboxApi.ts`
 - Modify: `frontend/src/components/agent-inbox/inbox-item.tsx`
 
-- [ ] **Step 1: Update inboxApi.ts types and resumeThread**
+- [x] **Step 1: Update inboxApi.ts types and resumeThread**
 
 Replace entire file content:
 
@@ -1605,7 +1650,7 @@ export async function getThreadDetails(threadId: string) {
 }
 ```
 
-- [ ] **Step 2: Update inbox-item.tsx to integrate ReviewPanel**
+- [x] **Step 2: Update inbox-item.tsx to integrate ReviewPanel**
 
 Replace entire file content:
 
@@ -1715,7 +1760,7 @@ function formatTimeAgo(dateStr: string): string {
 }
 ```
 
-- [ ] **Step 3: Update inbox-list.tsx handleAction signature**
+- [x] **Step 3: Update inbox-list.tsx handleAction signature**
 
 In `frontend/src/components/agent-inbox/inbox-list.tsx`, update the `handleAction` function:
 
@@ -1747,7 +1792,7 @@ import type { PendingReview } from "@/lib/inboxApi";
 import type { ResumeValue } from "@/components/review/types";
 ```
 
-- [ ] **Step 4: Verify the frontend builds**
+- [x] **Step 4: Verify the frontend builds**
 
 ```bash
 cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/frontend
@@ -1756,7 +1801,7 @@ npx next build 2>&1 | tail -20
 
 Expected: Build succeeds with no type errors
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5
@@ -1772,15 +1817,15 @@ git commit -m "feat(frontend): wire ReviewPanel into InboxItem with structured c
 
 ---
 
-## Chunk 3: Recipe Replication + CopilotKit (Phase 5-6)
+## Chunk 3: Recipe Replication + CopilotKit (Phase 5-6) ✅ COMPLETE
 
-### Task 15: Replicate interrupt() to curriculum_package, grant_package, full_pipeline
+### Task 15: Replicate interrupt() to curriculum_package, grant_package, full_pipeline ✅
 
 **Files:**
 - Modify: `langgraph_workflows/dhg-agents-cloud/src/orchestrator.py` (3 graph builder functions)
 - Modify: `langgraph_workflows/dhg-agents-cloud/tests/test_orchestrator.py`
 
-- [ ] **Step 1: Update create_curriculum_package_graph**
+- [x] **Step 1: Update create_curriculum_package_graph**
 
 Replace the function (lines 966-1004):
 
@@ -1842,7 +1887,7 @@ def create_curriculum_package_graph():
     return workflow.compile()
 ```
 
-- [ ] **Step 2: Update create_grant_package_graph**
+- [x] **Step 2: Update create_grant_package_graph**
 
 Replace the function (lines 1012-1083):
 
@@ -1922,7 +1967,7 @@ def create_grant_package_graph():
     return workflow.compile()
 ```
 
-- [ ] **Step 3: Update create_full_pipeline_graph**
+- [x] **Step 3: Update create_full_pipeline_graph**
 
 Replace the function (lines 1091-1169):
 
@@ -2002,11 +2047,11 @@ def create_full_pipeline_graph():
     return workflow.compile()
 ```
 
-- [ ] **Step 4: Update checkpointed graph factories to match**
+- [x] **Step 4: Update checkpointed graph factories to match**
 
 Update `create_checkpointed_needs_graph` and `create_checkpointed_grant_graph` to use `human_review_node` and `process_review_feedback` instead of `human_review_gate`. Follow the same pattern as the non-checkpointed versions above.
 
-- [ ] **Step 5: Update graph construction tests**
+- [x] **Step 5: Update graph construction tests**
 
 Update `TestCurriculumPackageGraph`, `TestGrantPackageGraph`, `TestFullPipelineGraph` to expect `process_feedback` and `complete` nodes, and 3-way routing from `human_review`:
 
@@ -2062,11 +2107,11 @@ class TestFullPipelineGraph:
         assert "failed" in hr_targets
 ```
 
-- [ ] **Step 6: Remove old route_after_human_review function**
+- [x] **Step 6: Remove old route_after_human_review function**
 
 Delete the old `route_after_human_review` function (lines 907-915) since all graphs now use `route_after_human_review_interrupt`.
 
-- [ ] **Step 7: Run full test suite**
+- [x] **Step 7: Run full test suite**
 
 ```bash
 python -m pytest tests/ -v --tb=short 2>&1 | tail -20
@@ -2074,7 +2119,7 @@ python -m pytest tests/ -v --tb=short 2>&1 | tail -20
 
 Expected: All tests pass
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5
@@ -2090,13 +2135,13 @@ git commit -m "feat(orchestrator): replicate interrupt() to all 4 recipes
 
 ---
 
-### Task 16: Build CopilotKit Studio Route
+### Task 16: Build CopilotKit Studio Route ✅
 
 **Files:**
 - Create: `frontend/src/app/studio/page.tsx`
 - Modify: `frontend/src/components/dhg/header.tsx`
 
-- [ ] **Step 1: Create the studio page**
+- [x] **Step 1: Create the studio page**
 
 ```tsx
 // frontend/src/app/studio/page.tsx
@@ -2163,7 +2208,7 @@ export default function StudioPage() {
 }
 ```
 
-- [ ] **Step 2: Add Studio link to header**
+- [x] **Step 2: Add Studio link to header**
 
 In `frontend/src/components/dhg/header.tsx`, add a "Studio" nav link next to "Review Inbox":
 
@@ -2185,7 +2230,7 @@ Find the Review Inbox link and add after it:
 
 Add `Sparkles` to the lucide-react imports.
 
-- [ ] **Step 3: Verify build**
+- [x] **Step 3: Verify build**
 
 ```bash
 cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/frontend
@@ -2194,7 +2239,7 @@ npx next build 2>&1 | tail -20
 
 Expected: Build succeeds
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5
@@ -2209,14 +2254,14 @@ git commit -m "feat(frontend): add /studio route with CopilotKit generative UI
 
 ---
 
-## Chunk 4: Observability + Production Readiness (Phase 7-9)
+## Chunk 4: Observability + Production Readiness (Phase 7-9) ✅ COMPLETE (except merge)
 
-### Task 17: Fix Alert Rules
+### Task 17: Fix Alert Rules ✅
 
 **Files:**
 - Modify: `observability/prometheus/alerts.yml`
 
-- [ ] **Step 1: Replace alerts.yml with real metrics**
+- [x] **Step 1: Replace alerts.yml with real metrics**
 
 ```yaml
 # observability/prometheus/alerts.yml
@@ -2288,7 +2333,7 @@ groups:
           summary: "PostgreSQL active connections above 80"
 ```
 
-- [ ] **Step 2: Verify Prometheus loads the rules**
+- [x] **Step 2: Verify Prometheus loads the rules**
 
 ```bash
 curl -s http://localhost:9090/api/v1/rules | python3 -c "import json,sys; rules=json.load(sys.stdin); print(f'{len(rules[\"data\"][\"groups\"])} rule groups loaded')"
@@ -2296,7 +2341,7 @@ curl -s http://localhost:9090/api/v1/rules | python3 -c "import json,sys; rules=
 
 Expected: 1 rule group loaded (after Prometheus restart)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5
@@ -2310,16 +2355,16 @@ git commit -m "fix(observability): replace phantom alert rules with real infrast
 
 ---
 
-### Task 18: Add Alertmanager Webhook Endpoint
+### Task 18: Add Alertmanager Webhook Endpoint ✅
 
 **Files:**
 - Modify: `registry/api.py`
 
-- [ ] **Step 1: Find the right insertion point in api.py**
+- [x] **Step 1: Find the right insertion point in api.py**
 
 Read `registry/api.py` to find where to add the endpoint. Look for existing route definitions.
 
-- [ ] **Step 2: Add the webhook endpoint**
+- [x] **Step 2: Add the webhook endpoint**
 
 Add after the existing health/metrics endpoints:
 
@@ -2355,7 +2400,7 @@ async def alertmanager_webhook(payload: AlertmanagerPayload):
     return {"status": "received", "alerts_processed": len(payload.alerts)}
 ```
 
-- [ ] **Step 3: Verify endpoint responds**
+- [x] **Step 3: Verify endpoint responds**
 
 ```bash
 curl -s -X POST http://localhost:8011/webhooks/alertmanager \
@@ -2365,7 +2410,7 @@ curl -s -X POST http://localhost:8011/webhooks/alertmanager \
 
 Expected: `{"status": "received", "alerts_processed": 1}`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5
@@ -2379,11 +2424,11 @@ git commit -m "feat(registry): add POST /webhooks/alertmanager endpoint
 
 ---
 
-### Task 19: Verify Loki Log Ingestion
+### Task 19: Verify Loki Log Ingestion ✅ (verified — Loki/Promtail not ingesting, known C10 issue, out of scope)
 
 **Files:** No code changes — verification only
 
-- [ ] **Step 1: Check Promtail targets**
+- [x] **Step 1: Check Promtail targets**
 
 ```bash
 curl -s http://localhost:9080/targets 2>/dev/null | python3 -c "
@@ -2396,7 +2441,7 @@ except: print('Promtail not responding on :9080')
 "
 ```
 
-- [ ] **Step 2: Query Loki for logs**
+- [x] **Step 2: Query Loki for logs**
 
 ```bash
 curl -s 'http://localhost:3100/loki/api/v1/query?query={job="docker"}&limit=5' | python3 -c "
@@ -2412,7 +2457,7 @@ for r in results[:3]:
 
 Expected: At least 1 log stream found. If 0, debug the Promtail → Loki pipeline.
 
-- [ ] **Step 3: Verify Tempo receives traces**
+- [x] **Step 3: Verify Tempo receives traces**
 
 ```bash
 curl -s http://localhost:3200/status 2>/dev/null && echo "Tempo healthy" || echo "Tempo not responding"
@@ -2420,12 +2465,12 @@ curl -s http://localhost:3200/status 2>/dev/null && echo "Tempo healthy" || echo
 
 ---
 
-### Task 20: Add dhg-frontend to Docker Compose
+### Task 20: Add dhg-frontend to Docker Compose ✅
 
 **Files:**
 - Modify: `docker-compose.override.yml`
 
-- [ ] **Step 1: Add the frontend service**
+- [x] **Step 1: Add the frontend service**
 
 Add to `docker-compose.override.yml`:
 
@@ -2448,7 +2493,7 @@ Add to `docker-compose.override.yml`:
       - "prometheus.io/scrape=false"
 ```
 
-- [ ] **Step 2: Build and start the container**
+- [x] **Step 2: Build and start the container**
 
 ```bash
 cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5
@@ -2456,7 +2501,7 @@ docker compose build frontend
 docker compose up -d frontend
 ```
 
-- [ ] **Step 3: Verify frontend is accessible**
+- [x] **Step 3: Verify frontend is accessible**
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}" http://localhost:3002
@@ -2464,7 +2509,7 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:3002
 
 Expected: `200`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docker-compose.override.yml
@@ -2477,9 +2522,9 @@ git commit -m "feat(infra): containerize frontend as dhg-frontend on port 3002
 
 ---
 
-### Task 21: Final Verification and Merge
+### Task 21: Final Verification and Merge 🔄 (verified, merge held)
 
-- [ ] **Step 1: Run all Python tests**
+- [x] **Step 1: Run all Python tests**
 
 ```bash
 cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/langgraph_workflows/dhg-agents-cloud
@@ -2488,7 +2533,7 @@ python -m pytest tests/ -v --tb=short
 
 Expected: All tests pass
 
-- [ ] **Step 2: Run frontend build**
+- [x] **Step 2: Run frontend build**
 
 ```bash
 cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/frontend
@@ -2497,7 +2542,7 @@ npx next build
 
 Expected: Build succeeds
 
-- [ ] **Step 3: Verify all services healthy**
+- [x] **Step 3: Verify all services healthy**
 
 ```bash
 cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5
@@ -2508,7 +2553,7 @@ curl -s http://localhost:9090/-/healthy && echo "Prometheus OK"
 curl -s http://localhost:3001/api/health | python3 -c "import json,sys; print('Grafana OK' if json.load(sys.stdin).get('database') == 'ok' else 'Grafana FAIL')"
 ```
 
-- [ ] **Step 4: Merge to master**
+- [ ] **Step 4: Merge to master** (HELD — user wants manual verification before merge)
 
 ```bash
 cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5
@@ -2521,7 +2566,9 @@ git merge feat/human-review-loop --no-ff -m "feat: human review loop with interr
 - Max 3 revision cycles before escalation
 - CopilotKit /studio route with generative UI panels
 - Alert rules replaced with real infrastructure metrics
-- Frontend containerized as dhg-frontend on port 3002"
+- Frontend containerized as dhg-frontend on port 3002
+- Shared extract_topic.py and pubmed_client.py modules
+- All 9 content agents: chat integration, AMA citations, PubMed references"
 ```
 
 - [ ] **Step 5: Push to trigger LangSmith Cloud deployment**
@@ -2536,11 +2583,67 @@ Check LangSmith dashboard for new deployment. Verify the 15 graphs are available
 
 ---
 
+---
+
+## Chunk 5: Agent Chat Integration (Unplanned — 2026-03-11) ✅ COMPLETE (uncommitted)
+
+### Task 22: Create Shared extract_topic Module ✅
+
+**Files:**
+- Created: `langgraph_workflows/dhg-agents-cloud/src/extract_topic.py`
+
+- [x] **Step 1: Create shared topic extraction module**
+  - Parses free-text `messages[]` into `disease_state`, `therapeutic_area`, `target_audience`, `geographic_focus`
+  - Uses Claude Sonnet with expanded THERAPEUTIC_AREAS list (23 specialties including obesity_medicine)
+  - No-op when `disease_state` already populated (structured intake path)
+  - Tracks token usage and cost
+
+- [x] **Step 2: Wire into all 9 content agents as graph entry point**
+  - Added `from extract_topic import extract_topic_node` to each agent
+  - Changed entry point from first content node to `extract_topic` → first content node
+
+### Task 23: Create Shared PubMed Client with AMA Citations ✅
+
+**Files:**
+- Created: `langgraph_workflows/dhg-agents-cloud/src/pubmed_client.py`
+
+- [x] **Step 1: Extract PubMed client from research_agent.py**
+  - `PubMedClient` class with `search()` and `fetch_details()` methods
+  - Added `journal_abbrev`, `volume`, `issue`, `pages` fields to XML parsing
+  - Added `format_ama()` method for AMA citation formatting with DOI and PubMed URL
+
+### Task 24: Add Citations + References + Full Document Emission to All Agents ✅
+
+**Files:**
+- Modified: All 9 content agents (`needs_assessment_agent.py`, `research_agent.py`, `clinical_practice_agent.py`, `gap_analysis_agent.py`, `learning_objectives_agent.py`, `curriculum_design_agent.py`, `research_protocol_agent.py`, `marketing_plan_agent.py`, `grant_writer_agent.py`)
+
+- [x] **Step 1: Add inline citation instructions to all agent system prompts**
+  - Agents now produce numbered inline references `[1]`, `[2]`, `[3]` for every factual claim
+  - Prompts say "Do NOT include a references list at the end of your section"
+
+- [x] **Step 2: Add generate_references_node to each agent**
+  - Regex-based citation extraction (no LLM call — avoids `messages-tuple` streaming leak)
+  - Searches PubMed for each citation context, fetches article details, formats AMA
+  - Flags unverified references with `[UNVERIFIED]`
+  - Appends consolidated References section at document end
+
+- [x] **Step 3: Emit full document to chat stream**
+  - Final node returns `"messages": [HumanMessage(content=f"---\n\n# Complete {Title}\n\n{document}")]`
+  - Users see complete document in chat UI, not just streaming LLM output
+
+- [x] **Step 4: Verify via LangGraph hot-reload**
+  - Confirmed all agents reload without errors via docker logs
+  - Tested needs_assessment agent end-to-end with obesity query
+
+---
+
 ## Summary
 
-| Chunk | Tasks | Key Deliverables |
-|-------|-------|-----------------|
-| 1: Agent Interrupt | Tasks 1-6 | `interrupt()` in needs_package, process_review_feedback node, updated tests |
-| 2: Frontend Review UI | Tasks 7-14 | ReviewPanel, DocumentViewer, AnnotationLayer, CommentsSidebar, MetricsBar, DecisionBar |
-| 3: Recipe Replication + CopilotKit | Tasks 15-16 | All 4 recipes with interrupt, /studio route |
-| 4: Observability + Production | Tasks 17-21 | Fixed alerts, webhook endpoint, Loki verification, containerized frontend, merge |
+| Chunk | Tasks | Key Deliverables | Status |
+|-------|-------|-----------------|--------|
+| 1: Agent Interrupt | Tasks 1-6 | `interrupt()` in needs_package, process_review_feedback node, 67 tests | ✅ |
+| 2: Frontend Review UI | Tasks 7-14 | ReviewPanel, DocumentViewer, useAnnotations, CommentsSidebar, MetricsBar, DecisionBar | ✅ |
+| 3: Recipe Replication + CopilotKit | Tasks 15-16 | All 4 recipes with interrupt, /studio route | ✅ |
+| 4: Observability + Production | Tasks 17-20 | Fixed alerts, webhook endpoint, Loki verified, frontend in docker-compose | ✅ |
+| 4b: Merge | Task 21 | Verification passed, merge held per user | 🔄 |
+| 5: Agent Chat Integration | Tasks 22-24 | extract_topic.py, pubmed_client.py, 9 agents with citations/references/chat emission | ✅ (uncommitted) |

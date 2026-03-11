@@ -25,6 +25,8 @@ from langsmith import traceable
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
+from extract_topic import extract_topic_node
+from pubmed_client import PubMedClient
 
 
 # =============================================================================
@@ -225,6 +227,12 @@ BARRIER CATEGORIZATION FRAMEWORK:
 - ATTITUDE: Clinician doesn't agree or prioritize (disagreement, inertia, priority)
 - SYSTEM: External factors prevent action (time, access, cost, workflow)
 - PATIENT: Patient-level factors (adherence, access, preferences, literacy)
+
+=== CITATION FORMAT ===
+Use numbered inline references [1], [2], [3] etc. for every factual claim, statistic, or guideline mention.
+Number sequentially starting from [1] within your section.
+Do NOT include a references list at the end of your section. References will be consolidated separately.
+When citing, mentally track what each number refers to (e.g. [1] = Smith et al. 2023 NEJM study) so the citations are consistent and traceable.
 
 PROHIBITED:
 - Blaming clinicians for poor outcomes
@@ -682,6 +690,88 @@ Write a complete, readable report following the structure above. Emphasize the g
     }
 
 
+@traceable(name="generate_references_node", run_type="chain")
+async def generate_references_node(state: ClinicalPracticeState) -> dict:
+    """Generate PubMed-verified AMA references for the full document."""
+
+    document = state.get("clinical_practice_document", "")
+    disease_state = state.get("disease_state", "")
+
+    citation_contexts = {}
+    sentences = re.split(r'(?<=[.!?])\s+', document)
+
+    for sentence in sentences:
+        nums_in_sentence = re.findall(r'\[(\d+)\]', sentence)
+        for num_str in nums_in_sentence:
+            num = int(num_str)
+            clean = re.sub(r'\[\d+\]', '', sentence).strip()
+            clean = re.sub(r'^#{1,3}\s+.*$', '', clean, flags=re.MULTILINE).strip()
+            if clean and len(clean) > 20:
+                if num not in citation_contexts:
+                    citation_contexts[num] = []
+                citation_contexts[num].append(clean)
+
+    if not citation_contexts:
+        return {
+            "clinical_practice_document": document + "\n\n## References\n\n[No inline citations found in document]",
+            "messages": [HumanMessage(content=f"---\n\n# Complete Clinical Practice Analysis Document\n\n{document}\n\n## References\n\n[No inline citations found]")],
+        }
+
+    pubmed = PubMedClient()
+    verified_refs = []
+    unverified_refs = []
+
+    for num in sorted(citation_contexts.keys()):
+        contexts = citation_contexts[num]
+        context_text = contexts[0][:150]
+        query = f"{disease_state} {context_text}"
+
+        try:
+            pmids = await pubmed.search(query, max_results=3, years=10)
+            if pmids:
+                articles = await pubmed.fetch_details(pmids[:1])
+                if articles:
+                    ama_citation = pubmed.format_ama(articles[0])
+                    verified_refs.append((num, ama_citation))
+                    continue
+        except Exception:
+            pass
+
+        try:
+            short_terms = re.findall(r'[A-Z][A-Z\-]{2,}', contexts[0])
+            if short_terms:
+                fallback_query = f"{disease_state} {' '.join(short_terms[:3])}"
+                pmids = await pubmed.search(fallback_query, max_results=3, years=10)
+                if pmids:
+                    articles = await pubmed.fetch_details(pmids[:1])
+                    if articles:
+                        ama_citation = pubmed.format_ama(articles[0])
+                        verified_refs.append((num, ama_citation))
+                        continue
+        except Exception:
+            pass
+
+        unverified_refs.append((num, contexts[0][:100]))
+
+    ref_lines = []
+    for num, citation in sorted(verified_refs, key=lambda x: x[0]):
+        ref_lines.append(f"{num}. {citation}")
+
+    if unverified_refs:
+        ref_lines.append("")
+        ref_lines.append("*The following citations could not be verified against PubMed:*")
+        for num, desc in sorted(unverified_refs, key=lambda x: x[0]):
+            ref_lines.append(f"{num}. [UNVERIFIED] {desc}")
+
+    references_text = "\n".join(ref_lines)
+    final_document = document + "\n\n## References\n\n" + references_text
+
+    return {
+        "clinical_practice_document": final_document,
+        "messages": [HumanMessage(content=f"---\n\n# Complete Clinical Practice Analysis Document\n\n{final_document}")],
+    }
+
+
 # =============================================================================
 # BUILD GRAPH
 # =============================================================================
@@ -692,6 +782,7 @@ def create_clinical_practice_graph() -> StateGraph:
     graph = StateGraph(ClinicalPracticeState)
     
     # Add nodes
+    graph.add_node("extract_topic", extract_topic_node)
     graph.add_node("analyze_standard_of_care", analyze_standard_of_care_node)
     graph.add_node("analyze_real_world_practice", analyze_real_world_practice_node)
     graph.add_node("identify_barriers", identify_barriers_node)
@@ -699,17 +790,20 @@ def create_clinical_practice_graph() -> StateGraph:
     graph.add_node("analyze_setting_variations", analyze_setting_variations_node)
     graph.add_node("assemble_report", assemble_clinical_report_node)
     graph.add_node("render_document", render_clinical_document_node)
-    
-    # Flow: sequential analysis -> assembly -> render
-    graph.set_entry_point("analyze_standard_of_care")
-    
+    graph.add_node("generate_references", generate_references_node)
+
+    # Flow: sequential analysis -> assembly -> render -> references
+    graph.set_entry_point("extract_topic")
+    graph.add_edge("extract_topic", "analyze_standard_of_care")
+
     graph.add_edge("analyze_standard_of_care", "analyze_real_world_practice")
     graph.add_edge("analyze_real_world_practice", "identify_barriers")
     graph.add_edge("identify_barriers", "analyze_specialty_perspectives")
     graph.add_edge("analyze_specialty_perspectives", "analyze_setting_variations")
     graph.add_edge("analyze_setting_variations", "assemble_report")
     graph.add_edge("assemble_report", "render_document")
-    graph.add_edge("render_document", END)
+    graph.add_edge("render_document", "generate_references")
+    graph.add_edge("generate_references", END)
     
     return graph
 

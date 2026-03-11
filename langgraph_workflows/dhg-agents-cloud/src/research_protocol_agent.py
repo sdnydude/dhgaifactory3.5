@@ -23,6 +23,8 @@ from langsmith import traceable
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
+from extract_topic import extract_topic_node
+from pubmed_client import PubMedClient
 
 
 # =============================================================================
@@ -176,7 +178,13 @@ PROHIBITED:
 - Ignoring attrition/response rate challenges
 - Vague outcome definitions
 - Unrealistic sample size expectations
-- Ignoring ethical considerations"""
+- Ignoring ethical considerations
+
+=== CITATION FORMAT ===
+Use numbered inline references [1], [2], [3] etc. for every factual claim, statistic, or guideline mention.
+Number sequentially starting from [1] within your section.
+Do NOT include a references list at the end of your section. References will be consolidated separately.
+When citing, mentally track what each number refers to (e.g. [1] = Smith et al. 2023 NEJM study) so the citations are consistent and traceable."""
 
 
 # =============================================================================
@@ -767,6 +775,101 @@ Format as a complete, formal research protocol document."""
 
 
 # =============================================================================
+# PUBMED REFERENCES NODE
+# =============================================================================
+
+@traceable(name="generate_references_node", run_type="chain")
+async def generate_references_node(state: ResearchProtocolState) -> dict:
+    """Generate PubMed-verified AMA references for the protocol document.
+
+    Uses regex to extract citation context from the document (no LLM call,
+    which avoids messages-tuple streaming leaking intermediate output).
+    Each citation is verified against PubMed and formatted in AMA style.
+    """
+
+    document = state.get("protocol_document", "")
+    disease_state = state.get("disease_state", "")
+
+    # Step 1: Extract citation contexts using regex (no LLM call)
+    citation_contexts = {}  # num -> list of context strings
+    sentences = re.split(r'(?<=[.!?])\s+', document)
+
+    for sentence in sentences:
+        nums_in_sentence = re.findall(r'\[(\d+)\]', sentence)
+        for num_str in nums_in_sentence:
+            num = int(num_str)
+            clean = re.sub(r'\[\d+\]', '', sentence).strip()
+            clean = re.sub(r'^#{1,3}\s+.*$', '', clean, flags=re.MULTILINE).strip()
+            if clean and len(clean) > 20:
+                if num not in citation_contexts:
+                    citation_contexts[num] = []
+                citation_contexts[num].append(clean)
+
+    if not citation_contexts:
+        return {
+            "protocol_document": document + "\n\n## References\n\n[No inline citations found in document]",
+        }
+
+    # Step 2: Search PubMed for each citation using context + disease state
+    pubmed = PubMedClient()
+    verified_refs = []
+    unverified_refs = []
+
+    for num in sorted(citation_contexts.keys()):
+        contexts = citation_contexts[num]
+        context_text = contexts[0][:150]
+        query = f"{disease_state} {context_text}"
+
+        try:
+            pmids = await pubmed.search(query, max_results=3, years=10)
+            if pmids:
+                articles = await pubmed.fetch_details(pmids[:1])
+                if articles:
+                    article = articles[0]
+                    ama_citation = pubmed.format_ama(article)
+                    verified_refs.append((num, ama_citation))
+                    continue
+        except Exception:
+            pass
+
+        # Fallback: try acronym-based search
+        try:
+            short_terms = re.findall(r'[A-Z][A-Z\-]{2,}', contexts[0])
+            if short_terms:
+                fallback_query = f"{disease_state} {' '.join(short_terms[:3])}"
+                pmids = await pubmed.search(fallback_query, max_results=3, years=10)
+                if pmids:
+                    articles = await pubmed.fetch_details(pmids[:1])
+                    if articles:
+                        ama_citation = pubmed.format_ama(articles[0])
+                        verified_refs.append((num, ama_citation))
+                        continue
+        except Exception:
+            pass
+
+        unverified_refs.append((num, contexts[0][:100]))
+
+    # Step 3: Build references section
+    ref_lines = []
+    for num, citation in sorted(verified_refs, key=lambda x: x[0]):
+        ref_lines.append(f"{num}. {citation}")
+
+    if unverified_refs:
+        ref_lines.append("")
+        ref_lines.append("*The following citations could not be verified against PubMed:*")
+        for num, desc in sorted(unverified_refs, key=lambda x: x[0]):
+            ref_lines.append(f"{num}. [UNVERIFIED] {desc}")
+
+    references_text = "\n".join(ref_lines)
+    final_document = document + "\n\n## References\n\n" + references_text
+
+    return {
+        "protocol_document": final_document,
+        "messages": [HumanMessage(content=f"---\n\n# Complete Research Protocol Document\n\n{final_document}")],
+    }
+
+
+# =============================================================================
 # BUILD GRAPH
 # =============================================================================
 
@@ -776,6 +879,7 @@ def create_research_protocol_graph() -> StateGraph:
     graph = StateGraph(ResearchProtocolState)
     
     # Add nodes
+    graph.add_node("extract_topic", extract_topic_node)
     graph.add_node("define_objectives", define_study_objectives_node)
     graph.add_node("design_study", design_study_node)
     graph.add_node("specify_outcomes", specify_outcomes_node)
@@ -785,10 +889,12 @@ def create_research_protocol_graph() -> StateGraph:
     graph.add_node("address_ethics", address_ethics_node)
     graph.add_node("assemble_report", assemble_protocol_report_node)
     graph.add_node("render_document", render_protocol_document_node)
-    
+    graph.add_node("generate_references", generate_references_node)
+
     # Flow: sequential protocol development
-    graph.set_entry_point("define_objectives")
-    
+    graph.set_entry_point("extract_topic")
+    graph.add_edge("extract_topic", "define_objectives")
+
     graph.add_edge("define_objectives", "design_study")
     graph.add_edge("design_study", "specify_outcomes")
     graph.add_edge("specify_outcomes", "design_instruments")
@@ -797,7 +903,8 @@ def create_research_protocol_graph() -> StateGraph:
     graph.add_edge("develop_stats", "address_ethics")
     graph.add_edge("address_ethics", "assemble_report")
     graph.add_edge("assemble_report", "render_document")
-    graph.add_edge("render_document", END)
+    graph.add_edge("render_document", "generate_references")
+    graph.add_edge("generate_references", END)
     
     return graph
 

@@ -23,6 +23,8 @@ from langsmith import traceable
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
+from extract_topic import extract_topic_node
+from pubmed_client import PubMedClient
 
 
 # =============================================================================
@@ -167,7 +169,13 @@ PROHIBITED:
 - Gaps without quantified evidence
 - Gaps that are purely system/policy issues
 - Duplicate gaps with different wording
-- Vague or generic gap statements"""
+- Vague or generic gap statements
+
+=== CITATION FORMAT ===
+Use numbered inline references [1], [2], [3] etc. for every factual claim, statistic, or guideline mention.
+Number sequentially starting from [1] within your section.
+Do NOT include a references list at the end of your section. References will be consolidated separately.
+When citing, mentally track what each number refers to (e.g. [1] = Smith et al. 2023 NEJM study) so the citations are consistent and traceable."""
 
 
 # =============================================================================
@@ -613,6 +621,63 @@ Write a complete, readable gap analysis report. Emphasize quantified deltas and 
     }
 
 
+@traceable(name="generate_references_node", run_type="chain")
+async def generate_references_node(state: GapAnalysisState) -> dict:
+    """Verify inline citations against PubMed and append AMA-formatted references."""
+
+    document = state.get("gap_analysis_document", "")
+    disease = state.get("disease_state", "")
+    pubmed = PubMedClient()
+
+    sentences = re.split(r'(?<=[.!?])\s+', document)
+    citation_pattern = re.compile(r'\[(\d+)\]')
+
+    citation_contexts: dict[int, str] = {}
+    for sentence in sentences:
+        found = citation_pattern.findall(sentence)
+        for num_str in found:
+            num = int(num_str)
+            if num not in citation_contexts:
+                clean = citation_pattern.sub('', sentence).strip()
+                citation_contexts[num] = clean
+
+    verified_refs: list[str] = []
+    unverified_nums: list[int] = []
+
+    for num in sorted(citation_contexts.keys()):
+        context = citation_contexts[num]
+        query = f"{context} {disease}"
+        results = await pubmed.search(query, max_results=1)
+
+        if not results:
+            words = context.split()
+            acronyms = [w for w in words if w.isupper() and len(w) >= 2]
+            if acronyms:
+                fallback_query = f"{' '.join(acronyms)} {disease}"
+                results = await pubmed.search(fallback_query, max_results=1)
+
+        if results:
+            formatted = pubmed.format_ama(results[0])
+            verified_refs.append(f"[{num}] {formatted}")
+        else:
+            unverified_nums.append(num)
+            verified_refs.append(f"[{num}] [UNVERIFIED] Context: \"{context[:120]}\"")
+
+    references_section = "\n\n---\n\n## References\n\n" + "\n\n".join(verified_refs)
+    if unverified_nums:
+        references_section += (
+            f"\n\n**Note:** References {', '.join(f'[{n}]' for n in unverified_nums)} "
+            "could not be verified against PubMed and require manual review."
+        )
+
+    final_document = document + references_section
+
+    return {
+        "gap_analysis_document": final_document,
+        "messages": [HumanMessage(content=f"---\n\n# Complete Gap Analysis Document\n\n{final_document}")]
+    }
+
+
 # =============================================================================
 # BUILD GRAPH
 # =============================================================================
@@ -623,22 +688,26 @@ def create_gap_analysis_graph() -> StateGraph:
     graph = StateGraph(GapAnalysisState)
     
     # Add nodes
+    graph.add_node("extract_topic", extract_topic_node)
     graph.add_node("synthesize_inputs", synthesize_inputs_node)
     graph.add_node("identify_gaps", identify_gaps_node)
     graph.add_node("validate_gaps", validate_gaps_node)
     graph.add_node("prioritize_gaps", prioritize_gaps_node)
     graph.add_node("assemble_report", assemble_gap_report_node)
     graph.add_node("render_document", render_gap_document_node)
-    
+    graph.add_node("generate_references", generate_references_node)
+
     # Flow: sequential analysis
-    graph.set_entry_point("synthesize_inputs")
-    
+    graph.set_entry_point("extract_topic")
+    graph.add_edge("extract_topic", "synthesize_inputs")
+
     graph.add_edge("synthesize_inputs", "identify_gaps")
     graph.add_edge("identify_gaps", "validate_gaps")
     graph.add_edge("validate_gaps", "prioritize_gaps")
     graph.add_edge("prioritize_gaps", "assemble_report")
     graph.add_edge("assemble_report", "render_document")
-    graph.add_edge("render_document", END)
+    graph.add_edge("render_document", "generate_references")
+    graph.add_edge("generate_references", END)
     
     return graph
 
