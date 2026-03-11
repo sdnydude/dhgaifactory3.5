@@ -5,10 +5,13 @@ All data stored in PostgreSQL DHG Registry
 """
 import os
 import time
+import logging
 from contextlib import asynccontextmanager
 from typing import List, Optional, Union
 from datetime import datetime
 import uuid
+
+logger = logging.getLogger("dhg.registry")
 
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -292,6 +295,38 @@ async def health():
 async def metrics():
     """Prometheus metrics endpoint"""
     return generate_latest()
+
+
+# ============================================================================
+# Alertmanager Webhook
+# ============================================================================
+class AlertmanagerAlert(BaseModel):
+    status: str
+    labels: dict
+    annotations: dict
+    startsAt: str
+    endsAt: Optional[str] = None
+    generatorURL: Optional[str] = None
+
+
+class AlertmanagerPayload(BaseModel):
+    version: str
+    groupKey: str
+    status: str
+    receiver: str
+    alerts: List[AlertmanagerAlert]
+
+
+@app.post("/webhooks/alertmanager")
+async def alertmanager_webhook(payload: AlertmanagerPayload):
+    """Receive and log Alertmanager webhook notifications."""
+    logger.info(f"Alertmanager webhook: status={payload.status}, alerts={len(payload.alerts)}")
+    for alert in payload.alerts:
+        logger.info(
+            f"  Alert: {alert.labels.get('alertname', 'unknown')} "
+            f"status={alert.status} severity={alert.labels.get('severity', 'unknown')}"
+        )
+    return {"status": "received", "alerts_processed": len(payload.alerts)}
 
 
 # ============================================================================

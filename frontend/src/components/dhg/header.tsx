@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Inbox } from "lucide-react";
+import { Inbox, Sparkles } from "lucide-react";
 import { GraphSelector } from "./graph-selector";
 
 interface HeaderProps {
-  graphId: string;
-  onGraphChange: (graphId: string) => void;
+  graphId?: string;
+  onGraphChange?: (graphId: string) => void;
 }
 
 export function Header({ graphId, onGraphChange }: HeaderProps) {
@@ -29,8 +29,12 @@ export function Header({ graphId, onGraphChange }: HeaderProps) {
             </p>
           </div>
         </Link>
-        <div className="h-6 w-px bg-border mx-2" />
-        <GraphSelector value={graphId} onChange={onGraphChange} />
+        {graphId && onGraphChange && (
+          <>
+            <div className="h-6 w-px bg-border mx-2" />
+            <GraphSelector value={graphId} onChange={onGraphChange} />
+          </>
+        )}
       </div>
       <div className="flex items-center gap-3">
         <Link
@@ -43,6 +47,17 @@ export function Header({ graphId, onGraphChange }: HeaderProps) {
         >
           <Inbox className="h-3.5 w-3.5" />
           Review Inbox
+        </Link>
+        <Link
+          href="/studio"
+          className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md transition-colors ${
+            pathname === "/studio"
+              ? "bg-dhg-purple text-white"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted"
+          }`}
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          Studio
         </Link>
         <div className="h-4 w-px bg-border" />
         <div className="flex items-center gap-2">

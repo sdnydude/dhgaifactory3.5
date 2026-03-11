@@ -1,76 +1,66 @@
 groups:
-  - name: dhg_slo_alerts
-    interval: 30s
+  - name: dhg-infrastructure
     rules:
-      # ASR Service SLO: p95 latency < 2 seconds
-      - alert: ASRLatencyHigh
-        expr: histogram_quantile(0.95, rate(asr_latency_seconds_bucket[5m])) > 2
-        for: 2m
-        labels:
-          severity: critical
-          slo: asr_latency
-        annotations:
-          summary: "ASR p95 latency exceeds 2s SLO"
-          description: "ASR service p95 latency is {{ $value }}s, exceeding the 2s SLO threshold"
-
-      # Database Write SLO: < 50ms
-      - alert: DatabaseWriteLatencyHigh
-        expr: histogram_quantile(0.95, rate(registry_write_latency_ms_bucket[5m])) > 50
-        for: 2m
-        labels:
-          severity: critical
-          slo: db_write_latency
-        annotations:
-          summary: "Database write latency exceeds 50ms SLO"
-          description: "Database p95 write latency is {{ $value }}ms, exceeding the 50ms SLO threshold"
-
-      # Service Uptime SLO: > 99.5%
-      - alert: ServiceUptimeLow
-        expr: (up{job=~"registry-api|asr-service"} == 0)
-        for: 1m
-        labels:
-          severity: critical
-          slo: uptime
-        annotations:
-          summary: "Service {{ $labels.job }} is down"
-          description: "Service {{ $labels.job }} has been down for more than 1 minute, violating 99.5% uptime SLO"
-
-      # Prometheus target missing
-      - alert: PrometheusTargetMissing
-        expr: up == 0
-        for: 1m
-        labels:
-          severity: warning
-        annotations:
-          summary: "Prometheus target {{ $labels.job }} is down"
-          description: "Prometheus cannot scrape {{ $labels.job }} - target down for >1m"
-
-      # GPU unavailability (if GPU metrics are available)
-      - alert: GPUUnavailable
-        expr: gpu_utilization == -1
+      - alert: ContainerRestarting
+        expr: increase(container_last_seen{name=~"dhg-.*"}[15m]) == 0 and container_last_seen{name=~"dhg-.*"} > 0
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "GPU is unavailable for ASR service"
-          description: "ASR service has fallen back to CPU mode due to GPU unavailability"
+          summary: "Container {{ $labels.name }} may be restarting"
 
-      # High error rate
-      - alert: HighErrorRate
-        expr: rate(asr_errors_total[5m]) > 0.1 or rate(registry_errors_total[5m]) > 0.1
-        for: 2m
-        labels:
-          severity: warning
-        annotations:
-          summary: "High error rate detected"
-          description: "Service {{ $labels.job }} has error rate of {{ $value }}/s"
-
-      # Database connection issues
-      - alert: DatabaseConnectionFailure
-        expr: rate(registry_db_errors_total[5m]) > 0
+      - alert: RegistryApiDown
+        expr: up{job="registry-api"} == 0
         for: 1m
         labels:
           severity: critical
         annotations:
-          summary: "Database connection errors detected"
-          description: "Registry API is experiencing database connection failures"
+          summary: "Registry API is down"
+
+      - alert: DiskUsageHigh
+        expr: (1 - node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk usage above 80% ({{ $value | humanizePercentage }})"
+
+      - alert: MemoryUsageHigh
+        expr: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 0.9
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Memory usage above 90% ({{ $value | humanizePercentage }})"
+
+      - alert: PrometheusTargetDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prometheus target {{ $labels.job }} is down"
+
+      - alert: ContainerHighCPU
+        expr: rate(container_cpu_usage_seconds_total{name=~"dhg-.*"}[5m]) > 0.9
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} CPU > 90% for 10m"
+
+      - alert: ContainerHighMemory
+        expr: container_memory_usage_bytes{name=~"dhg-.*"} / container_spec_memory_limit_bytes{name=~"dhg-.*"} > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} memory > 90% of limit"
+
+      - alert: PostgresConnectionsHigh
+        expr: pg_stat_activity_count > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL active connections above 80"

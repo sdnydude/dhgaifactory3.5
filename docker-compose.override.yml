@@ -214,10 +214,10 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        - NEXT_PUBLIC_LANGGRAPH_API_URL=http://localhost:2026
+        NEXT_PUBLIC_LANGGRAPH_API_URL: ${NEXT_PUBLIC_LANGGRAPH_API_URL:-http://localhost:2026}
     container_name: dhg-frontend
     ports:
-      - "3000:3000"
+      - "3002:3000"
     environment:
       - NODE_ENV=production
     healthcheck:
@@ -228,6 +228,8 @@ services:
     networks:
       - dhg-network
     restart: unless-stopped
+    labels:
+      - "prometheus.io/scrape=false"
 
   tempo:
     image: grafana/tempo:2.3.1
