@@ -14,6 +14,9 @@ from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Enum as SQLEn
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from pydantic import BaseModel, Field
 import httpx
+import logging
+
+logger = logging.getLogger(__name__)
 
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -46,26 +49,10 @@ class CMEProjectStatus(str, Enum):
     INTAKE = "intake"
     PROCESSING = "processing"
     REVIEW = "review"
+    AWAITING_REVIEW = "awaiting_review"
     COMPLETE = "complete"
     FAILED = "failed"
     CANCELLED = "cancelled"
-
-
-class TherapeuticArea(str, Enum):
-    CARDIOLOGY = "Cardiology"
-    ONCOLOGY = "Oncology"
-    NEUROLOGY = "Neurology"
-    ENDOCRINOLOGY = "Endocrinology"
-    IMMUNOLOGY = "Immunology"
-    INFECTIOUS_DISEASE = "Infectious Disease"
-    PULMONOLOGY = "Pulmonology"
-    GASTROENTEROLOGY = "Gastroenterology"
-    NEPHROLOGY = "Nephrology"
-    HEMATOLOGY = "Hematology"
-    DERMATOLOGY = "Dermatology"
-    RHEUMATOLOGY = "Rheumatology"
-    PSYCHIATRY = "Psychiatry"
-    OTHER = "Other"
 
 
 # =============================================================================
@@ -73,12 +60,13 @@ class TherapeuticArea(str, Enum):
 # =============================================================================
 
 class SectionA_ProjectBasics(BaseModel):
-    """Section A: Project Basics (5 fields)"""
+    """Section A: Project Basics (6 fields)"""
     project_name: str = Field(..., min_length=5, max_length=200)
-    therapeutic_area: TherapeuticArea
-    disease_state: str = Field(..., min_length=3, max_length=200)
+    therapeutic_area: str = Field(..., min_length=1, max_length=200)
+    disease_state: str = Field(..., min_length=1, max_length=200)
     target_audience_primary: List[str] = Field(..., min_length=1, max_length=5)
     target_audience_secondary: Optional[List[str]] = Field(None, max_length=3)
+    target_hcp_types: Optional[List[str]] = Field(None, description="HCP credential types (MD/DO, NP, PA-C)")
 
 
 class SectionB_Supporter(BaseModel):
@@ -255,37 +243,212 @@ class AgentOutput(BaseModel):
 # HELPER FUNCTIONS
 # =============================================================================
 
+LANGGRAPH_CLOUD_URL = "https://dhg-agents-526554f2bb905517adab9bd53427c745.us.langgraph.app"
+
+
 async def trigger_langgraph_pipeline(project_id: str, intake_data: dict) -> str:
     """
-    Trigger the 12-agent LangGraph pipeline.
+    Trigger the LangGraph CME pipeline via the LangGraph Cloud REST API.
+    Creates a thread, then starts a run with the needs_package assistant.
     Returns the thread_id for tracking.
     """
-    # LangGraph Cloud endpoint (configure via env)
-    langgraph_url = os.getenv("LANGGRAPH_API_URL", "http://localhost:8011/langgraph/run")
-    
+    langgraph_url = os.getenv("LANGGRAPH_API_URL", LANGGRAPH_CLOUD_URL)
+    langchain_api_key = os.getenv("LANGCHAIN_API_KEY", "")
+    headers = {"x-api-key": langchain_api_key}
+
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                langgraph_url,
-                json={
-                    "project_id": project_id,
-                    "intake": intake_data,
-                    "task_type": "cme_grant_pipeline"
-                }
+            # 1. Create a thread with project metadata
+            thread_resp = await client.post(
+                f"{langgraph_url}/threads",
+                json={"metadata": {"graph_id": "needs_package", "project_id": project_id}},
+                headers=headers,
             )
-            response.raise_for_status()
-            result = response.json()
-            return result.get("thread_id", project_id)
+            thread_resp.raise_for_status()
+            thread_id = thread_resp.json()["thread_id"]
+
+            # 2. Start a background run on the thread
+            run_resp = await client.post(
+                f"{langgraph_url}/threads/{thread_id}/runs",
+                json={
+                    "assistant_id": "needs_package",
+                    "input": {
+                        "intake_data": intake_data,
+                        "project_id": project_id,
+                    },
+                },
+                headers=headers,
+            )
+            run_resp.raise_for_status()
+            logger.info(f"LangGraph pipeline started: thread={thread_id}, project={project_id}")
+            return thread_id
     except Exception as e:
-        # Log error but don't fail - pipeline may be started manually
-        print(f"Warning: Could not auto-start LangGraph pipeline: {e}")
-        return project_id
+        logger.error(f"Failed to start LangGraph pipeline for project {project_id}: {e}")
+        raise
 
 
 def calculate_progress(agents_completed: List[str]) -> int:
     """Calculate progress percentage based on completed agents"""
     total_agents = 12
     return int((len(agents_completed) / total_agents) * 100)
+
+
+# =============================================================================
+# LANGGRAPH CLOUD SYNC (replaces unreachable webhook callbacks)
+# =============================================================================
+
+AGENT_OUTPUT_KEYS = [
+    "research_output", "clinical_output", "gap_analysis_output",
+    "needs_assessment_output", "learning_objectives_output",
+    "curriculum_output", "protocol_output", "marketing_output",
+    "grant_package_output",
+]
+
+THREAD_STATUS_MAP = {
+    "busy": "processing",
+    "interrupted": "review",
+    "error": "failed",
+}
+
+
+async def _fetch_thread_from_cloud(thread_id: str) -> Optional[Dict[str, Any]]:
+    """Fetch thread info and state from LangGraph Cloud."""
+    langgraph_url = os.getenv("LANGGRAPH_API_URL", LANGGRAPH_CLOUD_URL)
+    langchain_api_key = os.getenv("LANGCHAIN_API_KEY", "")
+    headers = {"x-api-key": langchain_api_key}
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            thread_resp = await client.get(
+                f"{langgraph_url}/threads/{thread_id}",
+                headers=headers,
+            )
+            thread_resp.raise_for_status()
+            thread_info = thread_resp.json()
+
+            state_resp = await client.get(
+                f"{langgraph_url}/threads/{thread_id}/state",
+                headers=headers,
+            )
+            state_resp.raise_for_status()
+            thread_state = state_resp.json()
+
+            return {"thread": thread_info, "state": thread_state}
+    except Exception as e:
+        logger.error(f"Failed to fetch thread {thread_id} from Cloud: {e}")
+        return None
+
+
+def _sync_project_from_thread(project: "CMEProject", thread_data: Dict[str, Any], db: Session) -> Dict[str, Any]:
+    """Update a CMEProject from LangGraph Cloud thread data. Returns a summary dict."""
+    thread_info = thread_data["thread"]
+    thread_state = thread_data["state"]
+    values = thread_state.get("values") or {}
+    thread_status = thread_info.get("status", "idle")
+
+    # Map thread status to project status
+    if thread_status == "idle":
+        pipeline_status = values.get("status", "complete")
+        if pipeline_status in ("complete", "approved"):
+            new_status = "complete"
+        elif pipeline_status == "failed":
+            new_status = "failed"
+        else:
+            new_status = project.status
+    else:
+        new_status = THREAD_STATUS_MAP.get(thread_status, project.status)
+
+    old_status = project.status
+    project.status = new_status
+    project.current_agent = values.get("current_step", project.current_agent)
+    project.human_review_status = values.get("human_review_status", project.human_review_status)
+    project.human_review_notes = values.get("human_review_notes", project.human_review_notes)
+
+    # Extract agent outputs and store in cme_agent_outputs
+    agents_completed = []
+    for key in AGENT_OUTPUT_KEYS:
+        output = values.get(key)
+        if output:
+            agent_name = key.replace("_output", "")
+            agents_completed.append(agent_name)
+
+            existing = db.query(CMEAgentOutput).filter(
+                CMEAgentOutput.project_id == project.id,
+                CMEAgentOutput.agent_name == agent_name,
+            ).first()
+
+            if not existing:
+                db.add(CMEAgentOutput(
+                    project_id=project.id,
+                    agent_name=agent_name,
+                    output_type="document",
+                    content=output,
+                    quality_score=output.get("quality_score") if isinstance(output, dict) else None,
+                ))
+
+    if agents_completed:
+        project.agents_completed = agents_completed
+        remaining = [a for a in (project.agents_pending or []) if a not in agents_completed]
+        project.agents_pending = remaining
+        project.progress_percent = calculate_progress(agents_completed)
+
+    if new_status == "complete" and not project.completed_at:
+        project.completed_at = datetime.utcnow()
+
+    # Sync errors
+    cloud_errors = values.get("errors")
+    if cloud_errors:
+        project.errors = cloud_errors
+
+    db.commit()
+    db.refresh(project)
+
+    return {
+        "project_id": str(project.id),
+        "old_status": old_status,
+        "new_status": new_status,
+        "thread_status": thread_status,
+        "agents_completed": agents_completed,
+        "progress_percent": project.progress_percent,
+    }
+
+
+@router.post("/projects/{project_id}/sync")
+async def sync_project_from_cloud(project_id: str, db: Session = Depends(get_db)):
+    """Poll LangGraph Cloud for thread state and sync to registry database."""
+    project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="CME project not found")
+
+    if not project.pipeline_thread_id:
+        raise HTTPException(status_code=400, detail="No pipeline thread ID — pipeline not started")
+
+    thread_data = await _fetch_thread_from_cloud(project.pipeline_thread_id)
+    if not thread_data:
+        raise HTTPException(status_code=502, detail="Failed to fetch thread from LangGraph Cloud")
+
+    result = _sync_project_from_thread(project, thread_data, db)
+    return result
+
+
+@router.post("/sync-active")
+async def sync_all_active_projects(db: Session = Depends(get_db)):
+    """Sync all processing/review projects from LangGraph Cloud. Call on interval or on-demand."""
+    projects = db.query(CMEProject).filter(
+        CMEProject.status.in_(["processing", "review", "awaiting_review"]),
+        CMEProject.pipeline_thread_id.isnot(None),
+    ).all()
+
+    results = []
+    for project in projects:
+        thread_data = await _fetch_thread_from_cloud(project.pipeline_thread_id)
+        if thread_data:
+            result = _sync_project_from_thread(project, thread_data, db)
+            results.append(result)
+        else:
+            results.append({"project_id": str(project.id), "error": "cloud_unreachable"})
+
+    return {"synced": len(results), "results": results}
 
 
 # =============================================================================
@@ -670,6 +833,51 @@ async def agent_complete_webhook(
         "project_id": str(project.id),
         "agent": agent_name,
         "progress": project.progress_percent
+    }
+
+
+@router.post("/webhook/pipeline-status")
+async def pipeline_status_webhook(
+    project_id: str,
+    pipeline_status: str,
+    current_step: str = "",
+    error_summary: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Webhook called by LangGraph orchestrator when a pipeline reaches a terminal state
+    (complete or failed). Updates the project status in the registry database.
+    """
+    project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="CME project not found")
+
+    now = datetime.utcnow()
+
+    if pipeline_status == "complete":
+        project.status = "complete"
+        project.completed_at = now
+        project.current_agent = None
+        project.progress_percent = 100
+    elif pipeline_status == "failed":
+        project.status = "failed"
+        project.current_agent = None
+        if error_summary:
+            existing_errors = list(project.errors or [])
+            existing_errors.append({"source": "pipeline", "message": error_summary, "timestamp": now.isoformat()})
+            project.errors = existing_errors
+    elif pipeline_status == "awaiting_review":
+        project.status = "awaiting_review"
+        project.current_agent = "human_review"
+    else:
+        project.status = pipeline_status
+    db.commit()
+
+    return {
+        "status": "updated",
+        "project_id": str(project.id),
+        "pipeline_status": pipeline_status,
+        "current_step": current_step
     }
 
 

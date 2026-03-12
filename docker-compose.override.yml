@@ -58,6 +58,8 @@ services:
       - POSTGRES_HOST=registry-db
       - POSTGRES_PORT=5432
       - DATABASE_URL=postgresql://dhg:weenie64@registry-db:5432/dhg_registry
+      - LANGGRAPH_API_URL=${LANGGRAPH_API_URL:-https://dhg-agents-526554f2bb905517adab9bd53427c745.us.langgraph.app}
+      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
     depends_on:
       registry-db:
         condition: service_healthy
@@ -214,7 +216,9 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_LANGGRAPH_API_URL: ${NEXT_PUBLIC_LANGGRAPH_API_URL:-http://localhost:2026}
+        NEXT_PUBLIC_LANGGRAPH_API_URL: ${NEXT_PUBLIC_LANGGRAPH_API_URL:-/api/langgraph}
+        LANGGRAPH_API_URL: ${LANGGRAPH_API_URL:-https://dhg-agents-526554f2bb905517adab9bd53427c745.us.langgraph.app}
+        LANGCHAIN_API_KEY: ${LANGCHAIN_API_KEY}
     container_name: dhg-frontend
     ports:
       - "3002:3000"

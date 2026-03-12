@@ -3,8 +3,7 @@ import type { ReviewPayload, ResumeValue } from "@/components/review/types";
 
 const createClient = () => {
   return new Client({
-    apiUrl:
-      process.env.NEXT_PUBLIC_LANGGRAPH_API_URL || "http://localhost:2026",
+    apiUrl: process.env.NEXT_PUBLIC_LANGGRAPH_API_URL || "/api/langgraph",
   });
 };
 

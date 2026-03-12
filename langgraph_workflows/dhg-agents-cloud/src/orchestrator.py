@@ -19,11 +19,18 @@ Decision #10: Recipe-Based Orchestrator (confirmed 2026-02-04)
 """
 
 import os
+import sys
 import operator
 import asyncio
 from datetime import datetime
 from typing import TypedDict, List, Dict, Any, Optional, Annotated, Literal
 from enum import Enum
+import httpx
+
+# Ensure src/ directory is on Python path for dynamic agent imports
+_src_dir = os.path.dirname(os.path.abspath(__file__))
+if _src_dir not in sys.path:
+    sys.path.insert(0, _src_dir)
 
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
@@ -223,6 +230,153 @@ def get_agent_graph(agent_name: str):
     except ImportError as e:
         logger.error(f"Failed to import agent {agent_name}: {e}")
         raise
+
+
+# =============================================================================
+# INTAKE FLATTENING — Transform sectioned form data to flat agent keys
+# =============================================================================
+
+def flatten_intake(intake: Dict[str, Any]) -> Dict[str, Any]:
+    """Flatten sectioned intake data into a flat dict for agent consumption.
+
+    The frontend/registry stores intake as nested sections:
+        {"section_a": {"project_name": ..., "therapeutic_area": ...}, "section_b": {...}, ...}
+
+    Agents expect flat keys:
+        {"therapeutic_area": ..., "target_audience": ..., "supporter_company": ...}
+
+    This function handles the section unwrapping plus key renames where the form
+    field name differs from what agents expect. If intake is already flat (no
+    section_a key), it is returned as-is for backward compatibility.
+    """
+    # Already flat — nothing to do
+    if "section_a" not in intake:
+        return intake
+
+    flat: Dict[str, Any] = {}
+
+    # --- Section A: Project Basics ---
+    a = intake.get("section_a", {})
+    flat["project_name"] = a.get("project_name", "")
+    flat["project_title"] = a.get("project_name", "")  # grant_writer uses project_title
+    flat["activity_title"] = a.get("project_name", "")  # needs_assessment uses activity_title
+    flat["therapeutic_area"] = a.get("therapeutic_area", "")
+    flat["disease_state"] = a.get("disease_state", "")
+    # Agents expect target_audience as a single string
+    primary = a.get("target_audience_primary", [])
+    flat["target_audience"] = ", ".join(primary) if isinstance(primary, list) else str(primary)
+    flat["target_audience_primary"] = primary
+    flat["target_audience_secondary"] = a.get("target_audience_secondary", [])
+    flat["target_hcp_types"] = a.get("target_hcp_types", [])
+
+    # --- Section B: Supporter Information ---
+    b = intake.get("section_b", {})
+    flat["supporter_company"] = b.get("supporter_name", "")  # agents use supporter_company
+    flat["supporter_contact"] = b.get("supporter_contact_name", "")
+    flat["supporter_contact_email"] = b.get("supporter_contact_email", "")
+    amount = b.get("grant_amount_requested")
+    flat["requested_amount"] = str(amount) if amount is not None else ""
+    flat["grant_submission_deadline"] = b.get("grant_submission_deadline", "")
+
+    # --- Section C: Educational Design ---
+    c = intake.get("section_c", {})
+    flat["learning_format"] = c.get("learning_format", "")
+    flat["duration_minutes"] = c.get("duration_minutes")
+    flat["include_post_test"] = c.get("include_post_test", False)
+    flat["include_pre_test"] = c.get("include_pre_test", False)
+    flat["faculty_count"] = c.get("faculty_count")
+
+    # --- Section D: Clinical Focus ---
+    d = intake.get("section_d", {})
+    clinical_topics = d.get("clinical_topics", [])
+    flat["clinical_topics"] = clinical_topics
+    flat["research_questions"] = clinical_topics  # research agent reads research_questions
+    flat["treatment_modalities"] = d.get("treatment_modalities", [])
+    flat["patient_population"] = d.get("patient_population", "")
+    flat["stage_of_disease"] = d.get("stage_of_disease", "")
+    flat["comorbidities"] = d.get("comorbidities", [])
+
+    # --- Section E: Practice Gaps ---
+    e = intake.get("section_e", {})
+    flat["knowledge_gaps"] = e.get("knowledge_gaps", [])
+    flat["competence_gaps"] = e.get("competence_gaps", [])
+    flat["performance_gaps"] = e.get("performance_gaps", [])
+    flat["gap_evidence_sources"] = e.get("gap_evidence_sources", [])
+    flat["gap_priority"] = e.get("gap_priority", "")
+
+    # --- Section F: Outcomes ---
+    f = intake.get("section_f", {})
+    flat["primary_outcomes"] = f.get("primary_outcomes", [])
+    flat["secondary_outcomes"] = f.get("secondary_outcomes", [])
+    flat["measurement_approach"] = f.get("measurement_approach", "")
+    flat["moore_levels_target"] = f.get("moore_levels_target", [])
+    flat["follow_up_timeline"] = f.get("follow_up_timeline", "")
+
+    # --- Section G: Content Requirements ---
+    g = intake.get("section_g", {})
+    flat["key_messages"] = g.get("key_messages", [])
+    flat["required_references"] = g.get("required_references", [])
+    flat["excluded_topics"] = g.get("excluded_topics", [])
+    flat["competitor_products_to_mention"] = g.get("competitor_products_to_mention", [])
+    flat["supporter_products"] = g.get("competitor_products_to_mention", [])  # research agent alias
+    flat["regulatory_considerations"] = g.get("regulatory_considerations", "")
+
+    # --- Section H: Logistics ---
+    h = intake.get("section_h", {})
+    flat["target_launch_date"] = h.get("target_launch_date", "")
+    flat["expiration_date"] = h.get("expiration_date", "")
+    flat["distribution_channels"] = h.get("distribution_channels", [])
+    geo = h.get("geo_restrictions", [])
+    flat["geo_restrictions"] = geo
+    flat["geographic_focus"] = ", ".join(geo) if isinstance(geo, list) else str(geo)
+    flat["language_requirements"] = h.get("language_requirements", [])
+
+    # --- Section I: Compliance ---
+    i = intake.get("section_i", {})
+    flat["accme_compliant"] = i.get("accme_compliant", False)
+    flat["financial_disclosure_required"] = i.get("financial_disclosure_required", False)
+    flat["off_label_discussion"] = i.get("off_label_discussion", False)
+    flat["commercial_support_acknowledgment"] = i.get("commercial_support_acknowledgment", False)
+    # Build accreditation info from compliance flags
+    accreditation = []
+    if flat["accme_compliant"]:
+        accreditation.append("ACCME")
+    flat["accreditation_types"] = accreditation
+    flat["accreditation_statement"] = "ACCME-accredited" if flat["accme_compliant"] else ""
+
+    # --- Section J: Additional ---
+    j = intake.get("section_j", {})
+    flat["special_instructions"] = j.get("special_instructions", "")
+    flat["reference_materials"] = j.get("reference_materials", [])
+    flat["internal_notes"] = j.get("internal_notes", "")
+
+    return flat
+
+
+@traceable(name="initialize_pipeline", run_type="chain")
+async def initialize_pipeline(state: CMEPipelineState) -> dict:
+    """Flatten sectioned intake data into agent-compatible flat keys.
+
+    This is the first node in every recipe graph. It transforms the nested
+    section format from the registry into the flat key format that all
+    downstream agent wrapper nodes expect.
+    """
+    raw_intake = state.get("intake_data", {})
+    flat = flatten_intake(raw_intake)
+
+    logger.info(
+        f"Pipeline initialized: project={flat.get('project_name', 'unknown')}, "
+        f"area={flat.get('therapeutic_area', 'unknown')}, "
+        f"audience={flat.get('target_audience', 'unknown')}, "
+        f"fields_flattened={len(flat)}"
+    )
+
+    return {
+        "intake_data": flat,
+        "status": PipelineStatus.IN_PROGRESS.value,
+        "current_step": "initialized",
+        "updated_at": datetime.now().isoformat(),
+    }
 
 
 # =============================================================================
@@ -730,6 +884,13 @@ async def human_review_node(state: CMEPipelineState) -> dict:
         "current_step": state.get("current_step", ""),
     }
 
+    # Notify registry that pipeline is paused for human review
+    await _notify_registry_status(
+        project_id=state.get("project_id", ""),
+        pipeline_status="awaiting_review",
+        current_step="human_review_pending",
+    )
+
     resume_value = interrupt(review_payload)
 
     decision = resume_value.get("decision", "rejected")
@@ -745,7 +906,7 @@ async def human_review_node(state: CMEPipelineState) -> dict:
     }
 
 
-MAX_REVIEW_ROUNDS = 3
+MAX_REVIEW_ROUNDS = 10
 
 
 @traceable(name="process_review_feedback", run_type="chain")
@@ -788,9 +949,39 @@ async def process_review_feedback(state: CMEPipelineState) -> dict:
     }
 
 
+REGISTRY_URL = os.getenv("AI_FACTORY_REGISTRY_URL", "http://dhg-registry-api:8000")
+
+
+async def _notify_registry_status(project_id: str, pipeline_status: str, current_step: str, error_summary: str = "") -> None:
+    """Fire-and-forget notification to registry API about pipeline terminal state."""
+    if not project_id:
+        logger.warning("Cannot notify registry: no project_id in state")
+        return
+    url = f"{REGISTRY_URL}/api/cme/webhook/pipeline-status"
+    params = {
+        "project_id": project_id,
+        "pipeline_status": pipeline_status,
+        "current_step": current_step,
+    }
+    if error_summary:
+        params["error_summary"] = error_summary
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(url, params=params)
+            resp.raise_for_status()
+            logger.info(f"Registry notified: project={project_id}, status={pipeline_status}")
+    except Exception as e:
+        logger.error(f"Failed to notify registry: {e}")
+
+
 @traceable(name="mark_complete", run_type="chain")
 async def mark_complete(state: CMEPipelineState) -> dict:
-    """Mark pipeline as complete."""
+    """Mark pipeline as complete and notify registry."""
+    await _notify_registry_status(
+        project_id=state.get("project_id", ""),
+        pipeline_status="complete",
+        current_step="complete",
+    )
     return {
         "status": PipelineStatus.COMPLETE.value,
         "current_step": "complete",
@@ -800,7 +991,15 @@ async def mark_complete(state: CMEPipelineState) -> dict:
 
 @traceable(name="mark_failed", run_type="chain")
 async def mark_failed(state: CMEPipelineState) -> dict:
-    """Mark pipeline as failed and escalate to human intervention."""
+    """Mark pipeline as failed, notify registry, and escalate to human intervention."""
+    errors = state.get("errors", [])
+    error_summary = "; ".join(e.get("message", "unknown") for e in errors[-3:]) if errors else "Pipeline failed"
+    await _notify_registry_status(
+        project_id=state.get("project_id", ""),
+        pipeline_status="failed",
+        current_step="failed_human_intervention_required",
+        error_summary=error_summary,
+    )
     return {
         "status": PipelineStatus.FAILED.value,
         "current_step": "failed_human_intervention_required",
@@ -1010,6 +1209,13 @@ def route_after_compliance(state: CMEPipelineState) -> Literal["continue", "revi
         return "revision_required"
 
 
+def route_after_review_feedback(state: CMEPipelineState) -> Literal["continue", "max_rounds_exceeded"]:
+    """Route after process_review_feedback — fail if max review rounds exceeded."""
+    if state.get("status") == PipelineStatus.FAILED.value:
+        return "max_rounds_exceeded"
+    return "continue"
+
+
 def route_after_human_review_interrupt(state: CMEPipelineState) -> Literal["approved", "revision", "rejected"]:
     """Route after human review interrupt based on human_review_status set by human_review_node."""
     status = state.get("human_review_status", "rejected")
@@ -1031,6 +1237,7 @@ def create_needs_package_graph():
 
     workflow = StateGraph(CMEPipelineState)
 
+    workflow.add_node("initialize", initialize_pipeline)
     workflow.add_node("early_research", run_early_research_parallel)
     workflow.add_node("gap_analysis", run_gap_analysis_agent)
     workflow.add_node("learning_objectives", run_learning_objectives_agent)
@@ -1041,7 +1248,8 @@ def create_needs_package_graph():
     workflow.add_node("complete", mark_complete)
     workflow.add_node("failed", mark_failed)
 
-    workflow.set_entry_point("early_research")
+    workflow.set_entry_point("initialize")
+    workflow.add_edge("initialize", "early_research")
     workflow.add_edge("early_research", "gap_analysis")
     workflow.add_edge("gap_analysis", "learning_objectives")
     workflow.add_edge("learning_objectives", "needs_assessment")
@@ -1067,7 +1275,14 @@ def create_needs_package_graph():
         }
     )
 
-    workflow.add_edge("process_feedback", "needs_assessment")
+    workflow.add_conditional_edges(
+        "process_feedback",
+        route_after_review_feedback,
+        {
+            "continue": "needs_assessment",
+            "max_rounds_exceeded": "failed",
+        }
+    )
 
     workflow.add_edge("complete", END)
     workflow.add_edge("failed", END)
@@ -1085,6 +1300,7 @@ def create_curriculum_package_graph():
 
     workflow = StateGraph(CMEPipelineState)
 
+    workflow.add_node("initialize", initialize_pipeline)
     workflow.add_node("early_research", run_early_research_parallel)
     workflow.add_node("gap_analysis", run_gap_analysis_agent)
     workflow.add_node("learning_objectives", run_learning_objectives_agent)
@@ -1096,7 +1312,8 @@ def create_curriculum_package_graph():
     workflow.add_node("complete", mark_complete)
     workflow.add_node("failed", mark_failed)
 
-    workflow.set_entry_point("early_research")
+    workflow.set_entry_point("initialize")
+    workflow.add_edge("initialize", "early_research")
     workflow.add_edge("early_research", "gap_analysis")
     workflow.add_edge("gap_analysis", "learning_objectives")
     workflow.add_edge("learning_objectives", "needs_assessment")
@@ -1124,7 +1341,14 @@ def create_curriculum_package_graph():
         }
     )
 
-    workflow.add_edge("process_feedback", "design_phase")
+    workflow.add_conditional_edges(
+        "process_feedback",
+        route_after_review_feedback,
+        {
+            "continue": "design_phase",
+            "max_rounds_exceeded": "failed",
+        }
+    )
 
     workflow.add_edge("complete", END)
     workflow.add_edge("failed", END)
@@ -1142,6 +1366,7 @@ def create_grant_package_graph():
 
     workflow = StateGraph(CMEPipelineState)
 
+    workflow.add_node("initialize", initialize_pipeline)
     workflow.add_node("early_research", run_early_research_parallel)
     workflow.add_node("gap_analysis", run_gap_analysis_agent)
     workflow.add_node("learning_objectives", run_learning_objectives_agent)
@@ -1156,7 +1381,8 @@ def create_grant_package_graph():
     workflow.add_node("complete", mark_complete)
     workflow.add_node("failed", mark_failed)
 
-    workflow.set_entry_point("early_research")
+    workflow.set_entry_point("initialize")
+    workflow.add_edge("initialize", "early_research")
     workflow.add_edge("early_research", "gap_analysis")
     workflow.add_edge("gap_analysis", "learning_objectives")
     workflow.add_edge("learning_objectives", "needs_assessment")
@@ -1204,7 +1430,14 @@ def create_grant_package_graph():
         }
     )
 
-    workflow.add_edge("process_feedback", "grant_writer")
+    workflow.add_conditional_edges(
+        "process_feedback",
+        route_after_review_feedback,
+        {
+            "continue": "grant_writer",
+            "max_rounds_exceeded": "failed",
+        }
+    )
 
     workflow.add_edge("complete", END)
     workflow.add_edge("failed", END)
@@ -1222,6 +1455,7 @@ def create_full_pipeline_graph():
 
     workflow = StateGraph(CMEPipelineState)
 
+    workflow.add_node("initialize", initialize_pipeline)
     workflow.add_node("early_research", run_early_research_parallel)
     workflow.add_node("gap_analysis", run_gap_analysis_agent)
     workflow.add_node("learning_objectives", run_learning_objectives_agent)
@@ -1236,7 +1470,8 @@ def create_full_pipeline_graph():
     workflow.add_node("complete", mark_complete)
     workflow.add_node("failed", mark_failed)
 
-    workflow.set_entry_point("early_research")
+    workflow.set_entry_point("initialize")
+    workflow.add_edge("initialize", "early_research")
     workflow.add_edge("early_research", "gap_analysis")
     workflow.add_edge("gap_analysis", "learning_objectives")
     workflow.add_edge("learning_objectives", "needs_assessment")
@@ -1284,7 +1519,14 @@ def create_full_pipeline_graph():
         }
     )
 
-    workflow.add_edge("process_feedback", "grant_writer")
+    workflow.add_conditional_edges(
+        "process_feedback",
+        route_after_review_feedback,
+        {
+            "continue": "grant_writer",
+            "max_rounds_exceeded": "failed",
+        }
+    )
 
     workflow.add_edge("complete", END)
     workflow.add_edge("failed", END)
@@ -1330,6 +1572,7 @@ async def create_checkpointed_needs_graph():
     checkpointer = await get_checkpointer()
     workflow = StateGraph(CMEPipelineState)
 
+    workflow.add_node("initialize", initialize_pipeline)
     workflow.add_node("early_research", run_early_research_parallel)
     workflow.add_node("gap_analysis", run_gap_analysis_agent)
     workflow.add_node("learning_objectives", run_learning_objectives_agent)
@@ -1340,7 +1583,8 @@ async def create_checkpointed_needs_graph():
     workflow.add_node("complete", mark_complete)
     workflow.add_node("failed", mark_failed)
 
-    workflow.set_entry_point("early_research")
+    workflow.set_entry_point("initialize")
+    workflow.add_edge("initialize", "early_research")
     workflow.add_edge("early_research", "gap_analysis")
     workflow.add_edge("gap_analysis", "learning_objectives")
     workflow.add_edge("learning_objectives", "needs_assessment")
@@ -1366,7 +1610,14 @@ async def create_checkpointed_needs_graph():
         }
     )
 
-    workflow.add_edge("process_feedback", "needs_assessment")
+    workflow.add_conditional_edges(
+        "process_feedback",
+        route_after_review_feedback,
+        {
+            "continue": "needs_assessment",
+            "max_rounds_exceeded": "failed",
+        }
+    )
 
     workflow.add_edge("complete", END)
     workflow.add_edge("failed", END)
@@ -1379,6 +1630,7 @@ async def create_checkpointed_grant_graph():
     checkpointer = await get_checkpointer()
     workflow = StateGraph(CMEPipelineState)
 
+    workflow.add_node("initialize", initialize_pipeline)
     workflow.add_node("early_research", run_early_research_parallel)
     workflow.add_node("gap_analysis", run_gap_analysis_agent)
     workflow.add_node("learning_objectives", run_learning_objectives_agent)
@@ -1393,7 +1645,8 @@ async def create_checkpointed_grant_graph():
     workflow.add_node("complete", mark_complete)
     workflow.add_node("failed", mark_failed)
 
-    workflow.set_entry_point("early_research")
+    workflow.set_entry_point("initialize")
+    workflow.add_edge("initialize", "early_research")
     workflow.add_edge("early_research", "gap_analysis")
     workflow.add_edge("gap_analysis", "learning_objectives")
     workflow.add_edge("learning_objectives", "needs_assessment")
@@ -1441,7 +1694,14 @@ async def create_checkpointed_grant_graph():
         }
     )
 
-    workflow.add_edge("process_feedback", "grant_writer")
+    workflow.add_conditional_edges(
+        "process_feedback",
+        route_after_review_feedback,
+        {
+            "continue": "grant_writer",
+            "max_rounds_exceeded": "failed",
+        }
+    )
 
     workflow.add_edge("complete", END)
     workflow.add_edge("failed", END)
