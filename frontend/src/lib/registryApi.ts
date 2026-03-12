@@ -5,6 +5,8 @@ import type {
   ExecutionStatus,
   AgentOutput,
   CMEProjectStatus,
+  SearchResponse,
+  HybridSearchRequest,
 } from "@/types/cme";
 
 const BASE_URL =
@@ -178,4 +180,28 @@ export async function submitReview(
 
 export async function getMyReviews(): Promise<Record<string, unknown>[]> {
   return apiFetch<Record<string, unknown>[]>("/api/cme/my-reviews");
+}
+
+// =============================================================================
+// SEARCH & RAG
+// =============================================================================
+
+export async function fulltextSearch(
+  query: string,
+  opts?: { projectId?: string; sourceType?: string; limit?: number },
+): Promise<SearchResponse> {
+  const params = new URLSearchParams({ q: query });
+  if (opts?.projectId) params.set("project_id", opts.projectId);
+  if (opts?.sourceType) params.set("source_type", opts.sourceType);
+  if (opts?.limit) params.set("limit", String(opts.limit));
+  return apiFetch<SearchResponse>(`/api/cme/search?${params}`);
+}
+
+export async function hybridSearch(
+  req: HybridSearchRequest,
+): Promise<SearchResponse> {
+  return apiFetch<SearchResponse>("/api/cme/search/hybrid", {
+    method: "POST",
+    body: JSON.stringify(req),
+  });
 }

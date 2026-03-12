@@ -162,6 +162,35 @@ export interface PipelineStep {
   order: number;
 }
 
+// =============================================================================
+// SEARCH — mirrors registry search endpoints
+// =============================================================================
+
+export interface SearchResultItem {
+  id: string;
+  source_table: "cme_documents" | "cme_intake_fields" | "cme_source_references";
+  project_id: string;
+  title: string;
+  snippet: string;
+  score: number;
+  metadata: Record<string, unknown>;
+}
+
+export interface SearchResponse {
+  query: string;
+  results: SearchResultItem[];
+  total: number;
+}
+
+export interface HybridSearchRequest {
+  query: string;
+  project_id?: string;
+  source_tables?: string[];
+  limit?: number;
+  fulltext_weight?: number;
+  vector_weight?: number;
+}
+
 export const PIPELINE_STEPS: PipelineStep[] = [
   { id: "research", label: "Research & Literature", agent: "research_agent", order: 1 },
   { id: "clinical", label: "Clinical Practice", agent: "clinical_practice_agent", order: 2 },

@@ -9,6 +9,7 @@ import {
   MessageSquare,
   Activity,
   Sparkles,
+  Search,
   PanelLeftClose,
   PanelLeft,
   Moon,
@@ -28,6 +29,7 @@ import { cn } from "@/lib/utils";
 const NAV_ITEMS = [
   { href: "/projects", icon: FolderKanban, label: "Projects", badgeKey: "processing" as const },
   { href: "/inbox", icon: Inbox, label: "Inbox", badgeKey: "inbox" as const },
+  { href: "/search", icon: Search, label: "Search", badgeKey: null },
   { href: "/chat", icon: MessageSquare, label: "Chat", badgeKey: null },
   { href: "/agents", icon: Activity, label: "Agents", badgeKey: null },
   { href: "/studio", icon: Sparkles, label: "Studio", badgeKey: null },

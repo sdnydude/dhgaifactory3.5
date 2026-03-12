@@ -1,9 +1,9 @@
 import { Client } from "@langchain/langgraph-sdk";
 
 const createClient = () => {
-  return new Client({
-    apiUrl: process.env.NEXT_PUBLIC_LANGGRAPH_API_URL || "/api/langgraph",
-  });
+  const baseUrl = process.env.NEXT_PUBLIC_LANGGRAPH_API_URL ||
+    (typeof window !== "undefined" ? `${window.location.origin}/api/langgraph` : "http://localhost:3000/api/langgraph");
+  return new Client({ apiUrl: baseUrl });
 };
 
 export interface RunningAgent {
