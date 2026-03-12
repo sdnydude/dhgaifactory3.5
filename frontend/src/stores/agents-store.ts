@@ -31,7 +31,7 @@ export const useAgentsStore = create<AgentsState>((set) => ({
   selectedState: null,
   loading: false,
   error: null,
-  filter: "running",
+  filter: "all",
 
   fetchRunning: async () => {
     set({ loading: true, error: null });

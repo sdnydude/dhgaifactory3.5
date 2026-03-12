@@ -10,7 +10,7 @@ export function AgentTree() {
   const filtered = filter === "errors"
     ? agents.filter((a) => a.status === "error")
     : filter === "running"
-      ? agents.filter((a) => a.status === "running")
+      ? agents.filter((a) => ["running", "busy", "pending"].includes(a.status))
       : agents;
 
   return (

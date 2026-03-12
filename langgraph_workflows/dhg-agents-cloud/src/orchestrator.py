@@ -189,47 +189,50 @@ def should_retry(state: CMEPipelineState, error_type: str, agent_name: str) -> b
 # AGENT IMPORTS (lazy loaded to avoid circular imports)
 # =============================================================================
 
+_AGENT_MODULE_MAP = {
+    "research": "research_agent",
+    "clinical": "clinical_practice_agent",
+    "gap_analysis": "gap_analysis_agent",
+    "needs_assessment": "needs_assessment_agent",
+    "learning_objectives": "learning_objectives_agent",
+    "curriculum": "curriculum_design_agent",
+    "protocol": "research_protocol_agent",
+    "marketing": "marketing_plan_agent",
+    "grant_writer": "grant_writer_agent",
+    "prose_quality": "prose_quality_agent",
+    "compliance": "compliance_review_agent",
+}
+
+
 def get_agent_graph(agent_name: str):
-    """Dynamically import agent graph to avoid circular imports."""
+    """Dynamically import agent graph. Uses importlib with explicit file path
+    to work reliably in LangGraph Cloud where sys.path may differ at runtime."""
+    import importlib
+    import importlib.util
+
+    module_name = _AGENT_MODULE_MAP.get(agent_name)
+    if not module_name:
+        raise ValueError(f"Unknown agent: {agent_name}")
+
+    # Try standard import first (works if sys.path includes src/)
     try:
-        if agent_name == "research":
-            from research_agent import graph
-            return graph
-        elif agent_name == "clinical":
-            from clinical_practice_agent import graph
-            return graph
-        elif agent_name == "gap_analysis":
-            from gap_analysis_agent import graph
-            return graph
-        elif agent_name == "needs_assessment":
-            from needs_assessment_agent import graph
-            return graph
-        elif agent_name == "learning_objectives":
-            from learning_objectives_agent import graph
-            return graph
-        elif agent_name == "curriculum":
-            from curriculum_design_agent import graph
-            return graph
-        elif agent_name == "protocol":
-            from research_protocol_agent import graph
-            return graph
-        elif agent_name == "marketing":
-            from marketing_plan_agent import graph
-            return graph
-        elif agent_name == "grant_writer":
-            from grant_writer_agent import graph
-            return graph
-        elif agent_name == "prose_quality":
-            from prose_quality_agent import graph
-            return graph
-        elif agent_name == "compliance":
-            from compliance_review_agent import graph
-            return graph
-        else:
-            raise ValueError(f"Unknown agent: {agent_name}")
-    except ImportError as e:
-        logger.error(f"Failed to import agent {agent_name}: {e}")
-        raise
+        mod = importlib.import_module(module_name)
+        return mod.graph
+    except ModuleNotFoundError:
+        pass
+
+    # Fallback: load from explicit file path
+    src_dir = os.path.dirname(os.path.abspath(__file__))
+    module_path = os.path.join(src_dir, f"{module_name}.py")
+    if not os.path.exists(module_path):
+        raise ImportError(f"Agent module not found: {module_path}")
+
+    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = mod
+    spec.loader.exec_module(mod)
+    logger.info(f"Loaded agent {agent_name} from {module_path}")
+    return mod.graph
 
 
 # =============================================================================
