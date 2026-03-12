@@ -10,7 +10,7 @@ from datetime import datetime
 from enum import Enum
 from fastapi import APIRouter, HTTPException, Depends, status, BackgroundTasks
 from sqlalchemy.orm import Session
-from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Enum as SQLEnum
+from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Enum as SQLEnum, func, text, literal_column, union_all, cast, Float as SAFloat
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from pydantic import BaseModel, Field
 import httpx
@@ -1687,3 +1687,575 @@ async def get_my_reviews(
         })
     
     return {"reviews": result, "count": len(result)}
+
+
+# =============================================================================
+# SEARCH & RAG ENDPOINTS (Phase 4)
+# =============================================================================
+
+class SearchResultItem(BaseModel):
+    id: str
+    source_table: str  # cme_documents, cme_intake_fields, cme_source_references
+    project_id: str
+    title: str
+    snippet: str
+    score: float
+    metadata: Dict[str, Any] = {}
+
+
+class SearchResponse(BaseModel):
+    query: str
+    results: List[SearchResultItem]
+    total: int
+
+
+class SimilarSearchRequest(BaseModel):
+    query: str = Field(..., min_length=3, description="Text to find similar content for")
+    project_id: Optional[str] = Field(None, description="Scope to a specific project")
+    source_tables: List[str] = Field(
+        default=["cme_documents", "cme_source_references"],
+        description="Tables to search (cme_documents, cme_source_references)"
+    )
+    limit: int = Field(default=20, ge=1, le=100)
+
+
+class HybridSearchRequest(BaseModel):
+    query: str = Field(..., min_length=3)
+    project_id: Optional[str] = None
+    source_tables: List[str] = Field(
+        default=["cme_documents", "cme_intake_fields", "cme_source_references"]
+    )
+    limit: int = Field(default=20, ge=1, le=100)
+    fulltext_weight: float = Field(default=0.4, ge=0.0, le=1.0)
+    vector_weight: float = Field(default=0.6, ge=0.0, le=1.0)
+
+
+class RAGContextRequest(BaseModel):
+    query: str = Field(..., min_length=3, description="Query for context retrieval")
+    project_id: Optional[str] = Field(None, description="Scope to a specific project")
+    max_chunks: int = Field(default=10, ge=1, le=50)
+    max_tokens: int = Field(default=8000, ge=100, le=32000, description="Approx max token budget for returned context")
+    include_citations: bool = Field(default=True)
+
+
+class RAGChunk(BaseModel):
+    source_table: str
+    document_id: str
+    title: str
+    content: str
+    score: float
+    metadata: Dict[str, Any] = {}
+
+
+class RAGContextResponse(BaseModel):
+    query: str
+    chunks: List[RAGChunk]
+    total_chunks: int
+    estimated_tokens: int
+    project_scope: Optional[str] = None
+
+
+def _snippet_from_text(text_val: str, max_len: int = 300) -> str:
+    """Extract a snippet from text content."""
+    if not text_val:
+        return ""
+    cleaned = " ".join(text_val.split())
+    if len(cleaned) <= max_len:
+        return cleaned
+    return cleaned[:max_len].rsplit(" ", 1)[0] + "..."
+
+
+@router.get("/search", response_model=SearchResponse)
+async def fulltext_search(
+    q: str,
+    project_id: Optional[str] = None,
+    source_type: Optional[str] = None,
+    limit: int = 20,
+    db: Session = Depends(get_db),
+):
+    """Full-text search across CME documents, intake fields, and source references.
+
+    Uses PostgreSQL ts_query with ts_rank scoring. Supports filtering by
+    project_id and source table type.
+
+    Args:
+        q: Search query (supports PostgreSQL websearch syntax)
+        project_id: Optional project UUID to scope the search
+        source_type: Optional filter — 'documents', 'intake_fields', 'references'
+        limit: Max results (1-100, default 20)
+    """
+    start = time.time()
+    if limit < 1 or limit > 100:
+        limit = 20
+
+    results: List[SearchResultItem] = []
+    ts_query = func.websearch_to_tsquery("english", q)
+
+    # --- Search cme_documents ---
+    if source_type in (None, "documents"):
+        doc_query = db.query(
+            CMEDocument.id,
+            CMEDocument.project_id,
+            CMEDocument.title,
+            CMEDocument.content_text,
+            CMEDocument.document_type,
+            CMEDocument.version,
+            CMEDocument.quality_score,
+            CMEDocument.word_count,
+            func.ts_rank(CMEDocument.search_vector, ts_query).label("rank"),
+        ).filter(
+            CMEDocument.search_vector.op("@@")(ts_query),
+            CMEDocument.is_current.is_(True),
+        )
+        if project_id:
+            doc_query = doc_query.filter(CMEDocument.project_id == project_id)
+        doc_query = doc_query.order_by(text("rank DESC")).limit(limit)
+
+        for row in doc_query.all():
+            results.append(SearchResultItem(
+                id=str(row.id),
+                source_table="cme_documents",
+                project_id=str(row.project_id),
+                title=row.title,
+                snippet=_snippet_from_text(row.content_text),
+                score=float(row.rank),
+                metadata={
+                    "document_type": row.document_type,
+                    "version": row.version,
+                    "quality_score": row.quality_score,
+                    "word_count": row.word_count,
+                },
+            ))
+
+    # --- Search cme_intake_fields ---
+    if source_type in (None, "intake_fields"):
+        field_query = db.query(
+            CMEIntakeField.id,
+            CMEIntakeField.project_id,
+            CMEIntakeField.section,
+            CMEIntakeField.field_label,
+            CMEIntakeField.value_text,
+            func.ts_rank(CMEIntakeField.search_vector, ts_query).label("rank"),
+        ).filter(
+            CMEIntakeField.search_vector.op("@@")(ts_query),
+        )
+        if project_id:
+            field_query = field_query.filter(CMEIntakeField.project_id == project_id)
+        field_query = field_query.order_by(text("rank DESC")).limit(limit)
+
+        for row in field_query.all():
+            results.append(SearchResultItem(
+                id=str(row.id),
+                source_table="cme_intake_fields",
+                project_id=str(row.project_id),
+                title=f"{row.section}: {row.field_label}",
+                snippet=_snippet_from_text(row.value_text or ""),
+                score=float(row.rank),
+                metadata={"section": row.section, "field_label": row.field_label},
+            ))
+
+    # --- Search cme_source_references ---
+    if source_type in (None, "references"):
+        ref_query = db.query(
+            CMESourceReference.id,
+            CMESourceReference.project_id,
+            CMESourceReference.title,
+            CMESourceReference.abstract,
+            CMESourceReference.ref_type,
+            CMESourceReference.ref_id,
+            CMESourceReference.journal,
+            CMESourceReference.authors,
+            func.ts_rank(CMESourceReference.search_vector, ts_query).label("rank"),
+        ).filter(
+            CMESourceReference.search_vector.op("@@")(ts_query),
+        )
+        if project_id:
+            ref_query = ref_query.filter(CMESourceReference.project_id == project_id)
+        ref_query = ref_query.order_by(text("rank DESC")).limit(limit)
+
+        for row in ref_query.all():
+            results.append(SearchResultItem(
+                id=str(row.id),
+                source_table="cme_source_references",
+                project_id=str(row.project_id),
+                title=row.title or "Untitled Reference",
+                snippet=_snippet_from_text(row.abstract or ""),
+                score=float(row.rank),
+                metadata={
+                    "ref_type": row.ref_type,
+                    "ref_id": row.ref_id,
+                    "journal": row.journal,
+                    "authors": row.authors,
+                },
+            ))
+
+    # Sort all results by score descending, then trim to limit
+    results.sort(key=lambda r: r.score, reverse=True)
+    results = results[:limit]
+
+    elapsed = (time.time() - start) * 1000
+    registry_read_latency.observe(elapsed)
+    registry_read_operations.labels(operation="cme_fulltext_search").inc()
+
+    return SearchResponse(query=q, results=results, total=len(results))
+
+
+@router.post("/search/similar", response_model=SearchResponse)
+async def vector_similarity_search(
+    req: SimilarSearchRequest,
+    db: Session = Depends(get_db),
+):
+    """Vector similarity search using pgvector cosine distance.
+
+    Embeds the query via Ollama nomic-embed-text, then finds the closest
+    vectors in cme_documents and cme_source_references.
+    """
+    start = time.time()
+
+    query_embedding = await _generate_embedding(req.query)
+    if query_embedding is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Embedding service unavailable — could not embed query",
+        )
+
+    embedding_literal = f"[{','.join(str(v) for v in query_embedding)}]"
+    results: List[SearchResultItem] = []
+
+    # --- Documents ---
+    if "cme_documents" in req.source_tables:
+        sql = text("""
+            SELECT id, project_id, title, content_text, document_type, version,
+                   quality_score, word_count,
+                   1 - (embedding <=> CAST(:emb AS vector)) AS similarity
+            FROM cme_documents
+            WHERE embedding IS NOT NULL AND is_current = true
+              AND (CAST(:pid AS uuid) IS NULL OR project_id = CAST(:pid AS uuid))
+            ORDER BY embedding <=> CAST(:emb AS vector)
+            LIMIT :lim
+        """)
+        rows = db.execute(sql, {
+            "emb": embedding_literal,
+            "pid": req.project_id,
+            "lim": req.limit,
+        }).fetchall()
+
+        for row in rows:
+            results.append(SearchResultItem(
+                id=str(row.id),
+                source_table="cme_documents",
+                project_id=str(row.project_id),
+                title=row.title,
+                snippet=_snippet_from_text(row.content_text),
+                score=float(row.similarity),
+                metadata={
+                    "document_type": row.document_type,
+                    "version": row.version,
+                    "quality_score": row.quality_score,
+                    "word_count": row.word_count,
+                },
+            ))
+
+    # --- Source References ---
+    if "cme_source_references" in req.source_tables:
+        sql = text("""
+            SELECT id, project_id, title, abstract, ref_type, ref_id,
+                   journal, authors,
+                   1 - (embedding <=> CAST(:emb AS vector)) AS similarity
+            FROM cme_source_references
+            WHERE embedding IS NOT NULL
+              AND (CAST(:pid AS uuid) IS NULL OR project_id = CAST(:pid AS uuid))
+            ORDER BY embedding <=> CAST(:emb AS vector)
+            LIMIT :lim
+        """)
+        rows = db.execute(sql, {
+            "emb": embedding_literal,
+            "pid": req.project_id,
+            "lim": req.limit,
+        }).fetchall()
+
+        for row in rows:
+            results.append(SearchResultItem(
+                id=str(row.id),
+                source_table="cme_source_references",
+                project_id=str(row.project_id),
+                title=row.title or "Untitled Reference",
+                snippet=_snippet_from_text(row.abstract or ""),
+                score=float(row.similarity),
+                metadata={
+                    "ref_type": row.ref_type,
+                    "ref_id": row.ref_id,
+                    "journal": row.journal,
+                    "authors": row.authors,
+                },
+            ))
+
+    results.sort(key=lambda r: r.score, reverse=True)
+    results = results[:req.limit]
+
+    elapsed = (time.time() - start) * 1000
+    registry_read_latency.observe(elapsed)
+    registry_read_operations.labels(operation="cme_vector_search").inc()
+
+    return SearchResponse(query=req.query, results=results, total=len(results))
+
+
+@router.post("/search/hybrid", response_model=SearchResponse)
+async def hybrid_search(
+    req: HybridSearchRequest,
+    db: Session = Depends(get_db),
+):
+    """Hybrid search combining full-text and vector similarity with reciprocal rank fusion.
+
+    Runs both full-text (ts_query) and vector (cosine similarity) searches in parallel,
+    then fuses results using RRF: score = sum(1 / (k + rank)) across both methods.
+    """
+    start = time.time()
+    RRF_K = 60  # Standard RRF constant
+
+    query_embedding = await _generate_embedding(req.query)
+    ts_query = func.websearch_to_tsquery("english", req.query)
+
+    # Track results by (source_table, id) -> {data, ranks}
+    fused: Dict[str, Dict[str, Any]] = {}
+
+    def _add_to_fused(key: str, item_data: Dict[str, Any], rank: int, method: str):
+        if key not in fused:
+            fused[key] = {"data": item_data, "rrf_score": 0.0}
+        fused[key]["rrf_score"] += 1.0 / (RRF_K + rank)
+
+    # --- Full-text search ---
+    if "cme_documents" in req.source_tables:
+        q = db.query(
+            CMEDocument.id, CMEDocument.project_id, CMEDocument.title,
+            CMEDocument.content_text, CMEDocument.document_type, CMEDocument.version,
+            CMEDocument.quality_score, CMEDocument.word_count,
+            func.ts_rank(CMEDocument.search_vector, ts_query).label("rank"),
+        ).filter(
+            CMEDocument.search_vector.op("@@")(ts_query),
+            CMEDocument.is_current.is_(True),
+        )
+        if req.project_id:
+            q = q.filter(CMEDocument.project_id == req.project_id)
+        for rank_idx, row in enumerate(q.order_by(text("rank DESC")).limit(req.limit).all()):
+            key = f"cme_documents:{row.id}"
+            _add_to_fused(key, {
+                "id": str(row.id), "source_table": "cme_documents",
+                "project_id": str(row.project_id), "title": row.title,
+                "snippet": _snippet_from_text(row.content_text),
+                "metadata": {"document_type": row.document_type, "version": row.version,
+                             "quality_score": row.quality_score, "word_count": row.word_count},
+            }, rank_idx + 1, "fulltext")
+
+    if "cme_intake_fields" in req.source_tables:
+        q = db.query(
+            CMEIntakeField.id, CMEIntakeField.project_id, CMEIntakeField.section,
+            CMEIntakeField.field_label, CMEIntakeField.value_text,
+            func.ts_rank(CMEIntakeField.search_vector, ts_query).label("rank"),
+        ).filter(CMEIntakeField.search_vector.op("@@")(ts_query))
+        if req.project_id:
+            q = q.filter(CMEIntakeField.project_id == req.project_id)
+        for rank_idx, row in enumerate(q.order_by(text("rank DESC")).limit(req.limit).all()):
+            key = f"cme_intake_fields:{row.id}"
+            _add_to_fused(key, {
+                "id": str(row.id), "source_table": "cme_intake_fields",
+                "project_id": str(row.project_id),
+                "title": f"{row.section}: {row.field_label}",
+                "snippet": _snippet_from_text(row.value_text or ""),
+                "metadata": {"section": row.section, "field_label": row.field_label},
+            }, rank_idx + 1, "fulltext")
+
+    if "cme_source_references" in req.source_tables:
+        q = db.query(
+            CMESourceReference.id, CMESourceReference.project_id, CMESourceReference.title,
+            CMESourceReference.abstract, CMESourceReference.ref_type, CMESourceReference.ref_id,
+            CMESourceReference.journal, CMESourceReference.authors,
+            func.ts_rank(CMESourceReference.search_vector, ts_query).label("rank"),
+        ).filter(CMESourceReference.search_vector.op("@@")(ts_query))
+        if req.project_id:
+            q = q.filter(CMESourceReference.project_id == req.project_id)
+        for rank_idx, row in enumerate(q.order_by(text("rank DESC")).limit(req.limit).all()):
+            key = f"cme_source_references:{row.id}"
+            _add_to_fused(key, {
+                "id": str(row.id), "source_table": "cme_source_references",
+                "project_id": str(row.project_id),
+                "title": row.title or "Untitled Reference",
+                "snippet": _snippet_from_text(row.abstract or ""),
+                "metadata": {"ref_type": row.ref_type, "ref_id": row.ref_id,
+                             "journal": row.journal, "authors": row.authors},
+            }, rank_idx + 1, "fulltext")
+
+    # --- Vector search (documents + references only) ---
+    if query_embedding is not None:
+        embedding_literal = f"[{','.join(str(v) for v in query_embedding)}]"
+
+        if "cme_documents" in req.source_tables:
+            sql = text("""
+                SELECT id, project_id, title, content_text, document_type, version,
+                       quality_score, word_count
+                FROM cme_documents
+                WHERE embedding IS NOT NULL AND is_current = true
+                  AND (CAST(:pid AS uuid) IS NULL OR project_id = CAST(:pid AS uuid))
+                ORDER BY embedding <=> CAST(:emb AS vector)
+                LIMIT :lim
+            """)
+            rows = db.execute(sql, {"emb": embedding_literal, "pid": req.project_id, "lim": req.limit}).fetchall()
+            for rank_idx, row in enumerate(rows):
+                key = f"cme_documents:{row.id}"
+                _add_to_fused(key, {
+                    "id": str(row.id), "source_table": "cme_documents",
+                    "project_id": str(row.project_id), "title": row.title,
+                    "snippet": _snippet_from_text(row.content_text),
+                    "metadata": {"document_type": row.document_type, "version": row.version,
+                                 "quality_score": row.quality_score, "word_count": row.word_count},
+                }, rank_idx + 1, "vector")
+
+        if "cme_source_references" in req.source_tables:
+            sql = text("""
+                SELECT id, project_id, title, abstract, ref_type, ref_id, journal, authors
+                FROM cme_source_references
+                WHERE embedding IS NOT NULL
+                  AND (CAST(:pid AS uuid) IS NULL OR project_id = CAST(:pid AS uuid))
+                ORDER BY embedding <=> CAST(:emb AS vector)
+                LIMIT :lim
+            """)
+            rows = db.execute(sql, {"emb": embedding_literal, "pid": req.project_id, "lim": req.limit}).fetchall()
+            for rank_idx, row in enumerate(rows):
+                key = f"cme_source_references:{row.id}"
+                _add_to_fused(key, {
+                    "id": str(row.id), "source_table": "cme_source_references",
+                    "project_id": str(row.project_id),
+                    "title": row.title or "Untitled Reference",
+                    "snippet": _snippet_from_text(row.abstract or ""),
+                    "metadata": {"ref_type": row.ref_type, "ref_id": row.ref_id,
+                                 "journal": row.journal, "authors": row.authors},
+                }, rank_idx + 1, "vector")
+
+    # Build final results sorted by RRF score
+    results = []
+    for entry in sorted(fused.values(), key=lambda e: e["rrf_score"], reverse=True)[:req.limit]:
+        d = entry["data"]
+        results.append(SearchResultItem(
+            id=d["id"], source_table=d["source_table"], project_id=d["project_id"],
+            title=d["title"], snippet=d["snippet"], score=entry["rrf_score"],
+            metadata=d.get("metadata", {}),
+        ))
+
+    elapsed = (time.time() - start) * 1000
+    registry_read_latency.observe(elapsed)
+    registry_read_operations.labels(operation="cme_hybrid_search").inc()
+
+    return SearchResponse(query=req.query, results=results, total=len(results))
+
+
+@router.post("/rag/context", response_model=RAGContextResponse)
+async def get_rag_context(
+    req: RAGContextRequest,
+    db: Session = Depends(get_db),
+):
+    """Retrieve relevant context chunks for LLM RAG augmentation.
+
+    Uses hybrid search (vector + full-text) to find the most relevant content,
+    then returns formatted chunks within the specified token budget. Each chunk
+    includes source attribution for citation.
+    """
+    start = time.time()
+
+    # Use hybrid search internally
+    hybrid_req = HybridSearchRequest(
+        query=req.query,
+        project_id=req.project_id,
+        source_tables=["cme_documents", "cme_source_references"],
+        limit=req.max_chunks * 2,  # Over-fetch to account for token budget trimming
+    )
+    search_results = await hybrid_search(hybrid_req, db)
+
+    chunks: List[RAGChunk] = []
+    estimated_tokens = 0
+    chars_per_token = 4  # Conservative estimate
+
+    for result in search_results.results:
+        if len(chunks) >= req.max_chunks:
+            break
+
+        # Fetch full content for the chunk
+        content = ""
+        if result.source_table == "cme_documents":
+            doc = db.query(CMEDocument).filter(CMEDocument.id == result.id).first()
+            if doc:
+                content = doc.content_text or ""
+        elif result.source_table == "cme_source_references":
+            ref = db.query(CMESourceReference).filter(CMESourceReference.id == result.id).first()
+            if ref:
+                parts = []
+                if ref.title:
+                    parts.append(f"Title: {ref.title}")
+                if ref.authors:
+                    parts.append(f"Authors: {ref.authors}")
+                if ref.journal:
+                    parts.append(f"Journal: {ref.journal}")
+                if ref.abstract:
+                    parts.append(f"Abstract: {ref.abstract}")
+                content = "\n".join(parts)
+
+        if not content:
+            continue
+
+        # Check token budget
+        chunk_tokens = len(content) // chars_per_token
+        if estimated_tokens + chunk_tokens > req.max_tokens:
+            # Truncate to fit remaining budget
+            remaining_chars = (req.max_tokens - estimated_tokens) * chars_per_token
+            if remaining_chars < 200:
+                break
+            content = content[:remaining_chars].rsplit(" ", 1)[0] + "..."
+            chunk_tokens = len(content) // chars_per_token
+
+        estimated_tokens += chunk_tokens
+
+        chunk_meta = dict(result.metadata)
+        chunk_meta["search_score"] = result.score
+
+        chunks.append(RAGChunk(
+            source_table=result.source_table,
+            document_id=result.id,
+            title=result.title,
+            content=content,
+            score=result.score,
+            metadata=chunk_meta,
+        ))
+
+    # Optionally append citation block
+    if req.include_citations and chunks:
+        citation_refs = []
+        for i, chunk in enumerate(chunks, 1):
+            if chunk.source_table == "cme_source_references":
+                ref = db.query(CMESourceReference).filter(
+                    CMESourceReference.id == chunk.document_id
+                ).first()
+                if ref:
+                    cite = f"[{i}] {ref.title}"
+                    if ref.authors:
+                        cite += f" — {ref.authors}"
+                    if ref.journal:
+                        cite += f", {ref.journal}"
+                    if ref.ref_id:
+                        cite += f" (PMID: {ref.ref_id})"
+                    citation_refs.append(cite)
+
+        if citation_refs:
+            citation_block = "\n\n---\nCitations:\n" + "\n".join(citation_refs)
+            citation_tokens = len(citation_block) // chars_per_token
+            estimated_tokens += citation_tokens
+
+    elapsed = (time.time() - start) * 1000
+    registry_read_latency.observe(elapsed)
+    registry_read_operations.labels(operation="cme_rag_context").inc()
+
+    return RAGContextResponse(
+        query=req.query,
+        chunks=chunks,
+        total_chunks=len(chunks),
+        estimated_tokens=estimated_tokens,
+        project_scope=req.project_id,
+    )
