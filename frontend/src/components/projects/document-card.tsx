@@ -5,16 +5,27 @@ import { Badge } from "@/components/ui/badge";
 import type { AgentOutput } from "@/types/cme";
 
 const AGENT_LABELS: Record<string, string> = {
+  research: "Research & Literature",
   research_agent: "Research & Literature",
+  clinical: "Clinical Practice",
   clinical_practice_agent: "Clinical Practice",
+  gap_analysis: "Gap Analysis",
   gap_analysis_agent: "Gap Analysis",
+  learning_objectives: "Learning Objectives",
   learning_objectives_agent: "Learning Objectives",
+  needs_assessment: "Needs Assessment",
   needs_assessment_agent: "Needs Assessment",
+  curriculum: "Curriculum Design",
   curriculum_design_agent: "Curriculum Design",
+  protocol: "Research Protocol",
   research_protocol_agent: "Research Protocol",
+  marketing: "Marketing Plan",
   marketing_plan_agent: "Marketing Plan",
+  grant_package: "Grant Writing",
   grant_writer_agent: "Grant Writing",
+  prose_quality: "Prose Quality",
   prose_quality_agent: "Prose Quality",
+  compliance: "Compliance Review",
   compliance_review_agent: "Compliance Review",
 };
 

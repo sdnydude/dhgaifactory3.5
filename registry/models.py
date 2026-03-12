@@ -4,11 +4,12 @@ import uuid
 DHG Registry - SQLAlchemy Models
 Media, Transcripts, Segments, Events tables
 """
-from sqlalchemy import Column, String, Integer, BigInteger, Float, Boolean, Text, DateTime, ForeignKey, Index
-from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
+from sqlalchemy import Column, String, Integer, BigInteger, Float, Boolean, Text, DateTime, Date, ForeignKey, Index, UniqueConstraint
+from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY, TSVECTOR
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+from pgvector.sqlalchemy import Vector
 import uuid
 
 Base = declarative_base()
@@ -368,27 +369,38 @@ class CMEProject(Base):
     # Relationships
     agent_outputs = relationship("CMEAgentOutput", back_populates="project", cascade="all, delete-orphan")
     review_assignments = relationship("CMEReviewAssignment", back_populates="project", cascade="all, delete-orphan")
+    documents = relationship("CMEDocument", back_populates="project")
+    intake_fields = relationship("CMEIntakeField", back_populates="project")
+    source_references = relationship("CMESourceReference", back_populates="project")
 
 
 class CMEAgentOutput(Base):
     """Individual outputs from each agent in the 12-agent pipeline"""
     __tablename__ = "cme_agent_outputs"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey("cme_projects.id", ondelete="CASCADE"), nullable=False, index=True)
-    
+
     agent_name = Column(String(100), nullable=False, index=True)
     output_type = Column(String(100), nullable=False)
     content = Column(JSONB, nullable=False)
     quality_score = Column(Float, nullable=True)
-    
+
+    # Extracted text for full-text search
+    document_text = Column(Text, nullable=True)
+
+    # Vector embedding and search
+    embedding = Column(Vector(768), nullable=True)
+    search_vector = Column(TSVECTOR, nullable=True)
+
     # LangSmith trace reference
     langsmith_trace_id = Column(String(100), nullable=True)
-    
+
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    
+
     # Relationship
     project = relationship("CMEProject", back_populates="agent_outputs")
+    documents = relationship("CMEDocument", back_populates="agent_output")
 
 
 # =============================================================================
@@ -462,4 +474,134 @@ class CMEReviewAssignment(Base):
     # Relationships
     project = relationship("CMEProject", back_populates="review_assignments")
     reviewer = relationship("CMEReviewerConfig", back_populates="assignments")
+
+
+# =============================================================================
+# CME DOCUMENT STORAGE (Compliance — 7-year ACCME retention)
+# =============================================================================
+
+class CMEDocument(Base):
+    """Immutable, versioned CME documents for compliance retention.
+
+    Each agent output generates a document row. Revisions create new rows
+    (incremented version) rather than updating existing ones. No row is ever
+    deleted — ON DELETE RESTRICT on project_id enforces this at the DB level.
+    """
+    __tablename__ = "cme_documents"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("cme_projects.id", ondelete="RESTRICT"), nullable=False, index=True)
+    agent_output_id = Column(UUID(as_uuid=True), ForeignKey("cme_agent_outputs.id"), nullable=True)
+
+    # Document identity
+    document_type = Column(String(100), nullable=False, index=True)
+    version = Column(Integer, nullable=False, default=1)
+    is_current = Column(Boolean, nullable=False, default=True)
+
+    # Content
+    title = Column(String(500), nullable=False)
+    content_text = Column(Text, nullable=False)
+    content_html = Column(Text, nullable=True)
+    content_json = Column(JSONB, nullable=True)
+    word_count = Column(Integer, nullable=True)
+
+    # Quality metrics
+    quality_score = Column(Float, nullable=True)
+    quality_passed = Column(Boolean, nullable=True)
+    quality_details = Column(JSONB, nullable=True)
+
+    # Vector embedding and search
+    embedding = Column(Vector(768), nullable=True)
+    search_vector = Column(TSVECTOR, nullable=True)
+
+    # Source tracking
+    source_references = Column(JSONB, default=[])
+
+    # Compliance
+    created_by = Column(String(255), nullable=False, default="system")
+    retention_until = Column(DateTime(timezone=True), nullable=False)
+    is_archived = Column(Boolean, nullable=False, default=False)
+
+    # Immutable — no updated_at
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    # Relationships
+    project = relationship("CMEProject", back_populates="documents")
+    agent_output = relationship("CMEAgentOutput", back_populates="documents")
+    references = relationship("CMESourceReference", back_populates="document")
+
+
+class CMEIntakeField(Base):
+    """Structured extraction of intake form fields for search and reporting.
+
+    Explodes the JSONB intake blob from cme_projects into individual
+    searchable rows — one per field per section.
+    """
+    __tablename__ = "cme_intake_fields"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("cme_projects.id", ondelete="RESTRICT"), nullable=False, index=True)
+
+    # Section/field identity
+    section = Column(String(50), nullable=False, index=True)
+    field_name = Column(String(100), nullable=False)
+    field_label = Column(String(255), nullable=False)
+
+    # Value (text for scalar, JSONB for arrays/objects)
+    value_text = Column(Text, nullable=True)
+    value_json = Column(JSONB, nullable=True)
+
+    # Search
+    search_vector = Column(TSVECTOR, nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    # Relationship
+    project = relationship("CMEProject", back_populates="intake_fields")
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "section", "field_name", name="uq_intake_project_section_field"),
+    )
+
+
+class CMESourceReference(Base):
+    """Literature citations and references used by CME agents.
+
+    Stores PubMed citations, guideline references, and URLs with cached
+    content for 7-year compliance. Each reference is linked to the project
+    and optionally to a specific document version.
+    """
+    __tablename__ = "cme_source_references"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("cme_projects.id", ondelete="RESTRICT"), nullable=False, index=True)
+    document_id = Column(UUID(as_uuid=True), ForeignKey("cme_documents.id"), nullable=True)
+
+    # Reference identity
+    ref_type = Column(String(50), nullable=False, index=True)  # pubmed, url, journal, guideline
+    ref_id = Column(String(255), nullable=True, index=True)  # PubMed ID, DOI
+
+    # Content
+    title = Column(Text, nullable=False)
+    authors = Column(Text, nullable=True)
+    journal = Column(String(500), nullable=True)
+    publication_date = Column(Date, nullable=True)
+    url = Column(Text, nullable=True)
+    abstract = Column(Text, nullable=True)
+
+    # Vector embedding and search
+    embedding = Column(Vector(768), nullable=True)
+    search_vector = Column(TSVECTOR, nullable=True)
+
+    # Compliance — cache full reference data (URLs die, papers get retracted)
+    accessed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    cached_content = Column(JSONB, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    # Relationships
+    project = relationship("CMEProject", back_populates="source_references")
+    document = relationship("CMEDocument", back_populates="references")
 

@@ -15,7 +15,7 @@ export function useBadgePolling(intervalMs = 30_000) {
           fetch("/api/langgraph/threads/search", {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ status: "interrupted", limit: 0 }),
+            body: JSON.stringify({ status: "interrupted", limit: 100 }),
           }),
           fetch(
             `${process.env.NEXT_PUBLIC_REGISTRY_API_URL || "http://localhost:8011"}/api/cme/projects?status=processing`,

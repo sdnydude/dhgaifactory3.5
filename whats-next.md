@@ -1,178 +1,289 @@
-# Session Handoff — 2026-03-11 (Session 2)
+# Session Handoff — 2026-03-12 (Session 5: Database Schema & Compliance Storage)
+
+**Date:** 2026-03-12 ~14:00 UTC
+**Branch:** `feature/langgraph-migration`
+**Last Commit:** `5aeb0aa` (no new commit yet — all changes are uncommitted)
+
+---
 
 <original_task>
-Continue work on the `feat/human-review-loop` branch. This session covered:
-1. Live-testing agents from the frontend chat UI
-2. Diagnosing/fixing the "agents ignore user topic" bug (researched measles instead of obesity)
-3. Creating shared modules (extract_topic.py, pubmed_client.py) and upgrading all 9 content agents
-4. Updating the superpowers implementation plan to reflect all completed work
+Continue from Session 4 handoff: monitor running pipeline, fix P1 UI bugs, then proceed with
+audit/review/debug/refactor cycle. User pivoted mid-session to building a comprehensive database
+schema for storing all CME pipeline outputs, intake fields, source references, and compliance
+materials — with 7-year ACCME retention, full-text search, vector embeddings for RAG, and
+structured extraction from JSONB blobs.
 </original_task>
 
 <work_completed>
-## Agent Chat Integration (bulk of session)
 
-### Bug: Agents Ignored User Topic
-- User asked research agent about obesity, it researched measles instead
-- Root cause: Frontend sends `messages[]` but agents read `disease_state` (empty string). PubMed query became generic "epidemiology prevalence incidence"
-- Fix: Created shared `extract_topic_node` as entry point for all agents
+## 1. Pipeline Monitoring & Quick Fixes
 
-### Created: `langgraph_workflows/dhg-agents-cloud/src/extract_topic.py`
-- Shared topic extraction module using Claude Sonnet
-- Parses free-text chat messages into: disease_state, therapeutic_area, target_audience, geographic_focus
-- 23 therapeutic areas including obesity_medicine, orthopedics, pediatrics, geriatrics
-- Explicit specialty mapping rules (obesity → obesity_medicine/endocrinology, NOT rheumatology)
-- No-op when disease_state already populated (structured intake path)
-- Tracks token usage and cost
+### Pipeline Status
+- Thread `146808b7-0359-4971-ad5d-4b7b76361254` completed 6 agents: research, clinical, gap_analysis, learning_objectives, needs_assessment, prose_quality_pass_1
+- **Failed at prose quality gate** — score 85/100, needs_assessment word count 1696 (below 3100 threshold). Retried 3 times then escalated to `failed_human_intervention_required`. This is correct behavior — quality gate is working.
 
-### Created: `langgraph_workflows/dhg-agents-cloud/src/pubmed_client.py`
-- Shared PubMed E-Utils client extracted from research_agent.py
-- `search()` — searches PubMed, returns PMIDs
-- `fetch_details()` — fetches full article metadata (journal_abbrev, volume, issue, pages, DOI, authors, pub_types)
-- `format_ama()` — AMA citation formatting with DOI and PubMed URL
+### Badge Polling 422 Fix
+- **File:** `frontend/src/hooks/use-badge-polling.ts` line 18
+- **Change:** `limit: 0` → `limit: 100` (Cloud API rejects limit:0)
 
-### Modified: All 9 Content Agents
-Each agent received 4 changes:
-1. **extract_topic_node wired as graph entry point** — `from extract_topic import extract_topic_node`
-2. **Inline citation instructions in system prompts** — "Use numbered inline references [1], [2], [3] etc. Do NOT include a references list at the end of your section."
-3. **generate_references_node added** — Regex-based citation extraction, PubMed search/verify, AMA formatting, [UNVERIFIED] flags. NO LLM call (avoids messages-tuple streaming leak)
-4. **Full document emitted to chat** — Final node returns `"messages": [HumanMessage(content=f"---\n\n# Complete {Title}\n\n{document}")]`
+### Agent Name Mismatch Fix
+- **File:** `frontend/src/app/projects/[id]/page.tsx` line 76-78
+- **Change:** Output matching now checks both `o.agent_name === selectedStep` (short name) and `o.agent_name === selectedStepDef?.agent` (full name)
+- **File:** `frontend/src/components/projects/document-card.tsx` lines 7-30
+- **Change:** `AGENT_LABELS` map now includes both short names (`research`) and full names (`research_agent`) as keys
 
-Agents modified:
-- `needs_assessment_agent.py` — doc field: `complete_document`, title: "Needs Assessment Document"
-- `research_agent.py` — doc field: `research_document`, title: "Research Report"
-- `clinical_practice_agent.py` — doc field: `clinical_practice_document`, title: "Clinical Practice Analysis"
-- `gap_analysis_agent.py` — doc field: `gap_analysis_document`, title: "Gap Analysis"
-- `learning_objectives_agent.py` — doc field: `learning_objectives_document`, title: "Learning Objectives"
-- `curriculum_design_agent.py` — doc field: `curriculum_document`, title: "Curriculum Design"
-- `research_protocol_agent.py` — doc field: `protocol_document`, title: "Research Protocol"
-- `marketing_plan_agent.py` — doc field: `marketing_document`, title: "Marketing Plan"
-- `grant_writer_agent.py` — doc field: `complete_document_markdown`, title: "Grant Package" (uses therapeutic_area for PubMed queries)
+### Auto-Sync in Pipeline Status Endpoint
+- **File:** `registry/cme_endpoints.py` — `get_cme_pipeline_status()` endpoint
+- **Change:** When project is processing/review and has a pipeline_thread_id, auto-syncs from Cloud on each poll. Frontend polls every 10s, so registry stays current automatically.
 
-### Plan Update: `docs/superpowers/plans/2026-03-10-human-review-loop.md`
-- Added Progress Status table with commit hashes and status
-- Added Test Results section (67/67 passing, docker exec command)
-- Marked all checkboxes [x] for Tasks 1-20
-- Task 21 Steps 1-3 done, Steps 4-6 (merge/push/verify) left [ ]
-- All Task and Chunk headers marked with ✅ or 🔄
-- Added Chunk 5 (Tasks 22-24) for agent chat integration
-- Updated File Map with new shared modules
-- Updated Summary table with all 6 chunks
+## 2. Database Schema (Phase 1 — COMPLETE)
+
+### New Tables Created in PostgreSQL
+
+**`cme_documents`** (21 columns, 8 indexes)
+- Immutable, versioned compliance documents with 7-year retention
+- `ON DELETE RESTRICT` on project_id (prevents accidental deletion)
+- Columns: id, project_id, agent_output_id, document_type, version, is_current, title, content_text, content_html, content_json, word_count, quality_score, quality_passed, quality_details, embedding vector(768), search_vector tsvector, source_references, created_by, retention_until, is_archived, created_at
+- Indexes: project, type, current (partial), search (GIN), embedding (HNSW), retention (partial), content_json (GIN)
+- Auto-update trigger on search_vector
+
+**`cme_intake_fields`** (10 columns, 6 indexes)
+- Structured extraction of 47 intake fields across 10 sections
+- Columns: id, project_id, section, field_name, field_label, value_text, value_json, search_vector, created_at, updated_at
+- Unique constraint: (project_id, section, field_name)
+- Auto-update trigger on search_vector
+
+**`cme_source_references`** (16 columns, 6 indexes)
+- PubMed citations with cached content for compliance
+- Columns: id, project_id, document_id, ref_type, ref_id, title, authors, journal, publication_date, url, abstract, embedding vector(768), search_vector tsvector, accessed_at, cached_content JSONB, created_at
+- Auto-update trigger on search_vector
+
+### Existing Table Updates
+
+**`cme_agent_outputs`** — 3 new columns added:
+- `document_text TEXT` — extracted prose from agent output JSONB
+- `embedding vector(768)` — nomic-embed-text via Ollama
+- `search_vector tsvector` — auto-updated by trigger
+- New indexes: GIN on search_vector, HNSW on embedding, trigram on document_text, unique on (project_id, agent_name)
+
+### Extensions Enabled
+- `pg_trgm` — fuzzy text search (was already: `vector` 0.8.1)
+
+## 3. SQLAlchemy Models (Phase 1 — COMPLETE)
+
+**File:** `registry/models.py`
+- Added `from pgvector.sqlalchemy import Vector` and `TSVECTOR` imports
+- Added `pgvector==0.3.6` to `registry/requirements.txt`
+- New model: `CMEDocument` — full column mapping including Vector(768), TSVECTOR
+- New model: `CMEIntakeField` — with UniqueConstraint
+- New model: `CMESourceReference` — full column mapping including Vector(768)
+- Updated `CMEAgentOutput` — added `document_text`, `embedding`, `search_vector` columns
+- Updated `CMEProject` — added relationships to `documents`, `intake_fields`, `source_references`
+
+## 4. Sync & Extraction Logic (Phase 2 — COMPLETE)
+
+**File:** `registry/cme_endpoints.py` — major rewrite of sync section (~543 lines added)
+
+### New Constants
+- `AGENT_OUTPUT_KEYS` expanded: added `prose_quality_pass_1`, `prose_quality_pass_2`, `compliance_result`
+- `AGENT_OUTPUT_META` — maps state key → (short name, document title)
+- `DOCUMENT_TEXT_PATHS` — maps agent name → JSONB path to prose document
+- `REPORT_PATHS` — maps agent name → JSONB path to structured report
+- `CITATION_PATHS` — maps agent name → JSONB path to citations list
+
+### New Functions
+- `_extract_document_text(agent_name, content)` — pulls prose from each agent's specific JSONB path
+- `_extract_quality_score(agent_name, content)` — normalizes to 0-1 scale per agent type
+- `_extract_quality_details(agent_name, content)` — structured quality metrics
+- `_extract_word_count(agent_name, content)` — from metadata or counted from text
+- `_extract_citations(agent_name, content)` — PubMed citations from research/clinical agents
+- `_extract_intake_fields(project_id, intake_jsonb, db)` — explodes 10-section JSONB into 47 individual rows with proper labels
+- `_generate_embedding(text)` — calls Ollama nomic-embed-text via `http://dhg-ollama:11434/api/embeddings`
+
+### Rewritten `_sync_project_from_thread()` (now async)
+Now populates ALL tables on each sync:
+1. `cme_agent_outputs` — with document_text and quality_score
+2. `cme_documents` — versioned, immutable, with word_count and quality_details
+3. `cme_source_references` — PubMed citations with cached_content
+4. `cme_intake_fields` — extracted once per project
+5. Generates embeddings for all three vector-enabled tables
+All callers updated to `await` the now-async function.
+
+## 5. Backfill Verification (Phase 2 — COMPLETE)
+
+Test project `861ce1b2-a88c-4cfa-9d05-4d4591c39724` ("Advances in Immunotherapy for NSCLC"):
+
+| Table | Rows | Embeddings | Text Extracted |
+|-------|------|------------|----------------|
+| cme_agent_outputs | 6 | 6/6 | 6/6 |
+| cme_documents | 6 | 6/6 | 6/6 |
+| cme_intake_fields | 48 | N/A | 45/48 |
+| cme_source_references | 89 | 89/89 | 89/89 |
+
+Documents stored with 7-year retention (retention_until = 2033-03-12).
+
+## 6. Planning Files Created
+- `task_plan.md` — 6-phase plan with decision log
+- `findings.md` — intake field structure (47 fields), agent output schemas (11 agents), extraction paths
+- `progress.md` — session log with completed/in-progress/blocked items
+
 </work_completed>
 
 <work_remaining>
-## Immediate: Commit Uncommitted Work
-```bash
-git add langgraph_workflows/dhg-agents-cloud/src/extract_topic.py \
-        langgraph_workflows/dhg-agents-cloud/src/pubmed_client.py \
-        langgraph_workflows/dhg-agents-cloud/src/needs_assessment_agent.py \
-        langgraph_workflows/dhg-agents-cloud/src/research_agent.py \
-        langgraph_workflows/dhg-agents-cloud/src/clinical_practice_agent.py \
-        langgraph_workflows/dhg-agents-cloud/src/gap_analysis_agent.py \
-        langgraph_workflows/dhg-agents-cloud/src/learning_objectives_agent.py \
-        langgraph_workflows/dhg-agents-cloud/src/curriculum_design_agent.py \
-        langgraph_workflows/dhg-agents-cloud/src/research_protocol_agent.py \
-        langgraph_workflows/dhg-agents-cloud/src/marketing_plan_agent.py \
-        langgraph_workflows/dhg-agents-cloud/src/grant_writer_agent.py \
-        docs/superpowers/plans/2026-03-10-human-review-loop.md
-```
 
-## Task 21: Merge (held per Stephen)
-- Step 4: Merge feat/human-review-loop to master
-- Step 5: Push to origin
-- Step 6: Verify LangSmith Cloud
+## Immediate: Commit This Work
+1. **Git commit** all changes (7 files, ~920 lines added)
+2. **Push to `feature/langgraph-migration`** for Cloud deployment
 
-## Known Issues
-1. **PubMed search quality** — Full sentence context queries return generic/wrong articles (e.g., vegetarian nutrition for CKD). Need to extract key medical terms only.
-2. **Duplicate references** — Same PMID matched to multiple citation contexts appears multiple times. Need deduplication by PMID.
-3. **No tests for new functionality** — 67 orchestrator tests pass, but no tests for extract_topic, pubmed_client, or generate_references_node.
-4. **Pytest only runs inside container** — `docker exec dhg-cme-research-agent python3 -m pytest`
+## Phase 4: Search & RAG Endpoints (NOT STARTED)
+3. **Full-text search endpoint** — `GET /api/cme/search?q=...&type=...` using PostgreSQL ts_query across cme_documents, cme_intake_fields, cme_source_references
+4. **Vector similarity endpoint** — `POST /api/cme/search/similar` — embed query → cosine similarity on pgvector columns
+5. **Hybrid search endpoint** — `POST /api/cme/search/hybrid` — combines full-text + vector + metadata filters with reciprocal rank fusion
+6. **RAG context endpoint** — `POST /api/cme/rag/context` — returns relevant chunks for LLM context, supports project scoping
+
+## Phase 5: Frontend Integration (NOT STARTED)
+7. **Update project detail page** — show documents from cme_documents (versioned), source references, quality metrics
+8. **Add search page** — global search across all CME data with filters and preview snippets
+9. **Wire review functions** — `submitForReview()` and `submitReview()` exist in registryApi.ts but no UI components call them yet
+
+## Phase 6: Verification & Compliance (NOT STARTED)
+10. **Retention verification** — confirm ON DELETE RESTRICT works, retention_until is correct
+11. **Data completeness** — verify all 47 intake fields, all agent outputs, all citations
+12. **Search quality** — test full-text and vector search accuracy
+
+## From Session 4 (Still Outstanding)
+13. **Fix `submitForReview()` UI wiring** — needs component to call it
+14. **Fix `submitReview()` UI wiring** — needs reviewer_email param
+15. **Error feedback for pipeline failures** — frontend should show failure reason, not just "processing"
+16. **Verify app.digitalharmonyai.com** — proxy through Cloudflare tunnel
+17. **Audit cycle** — /code-health → /debt-analysis → /review → /audit → /deploy-validate
+
 </work_remaining>
 
 <attempted_approaches>
-## Bug Diagnosis: Measles Instead of Obesity
-1. Read container logs → saw PubMed queries without topic terms
-2. Traced data flow: frontend chatApi.ts → messages-tuple → agent state → `state.get("disease_state", "")` returning empty
-3. Hypothesis 1 (approved by user): Add extraction node to parse messages into structured fields
-4. First extraction returned wrong specialty (rheumatology for obesity). Fixed by expanding THERAPEUTIC_AREAS and adding explicit mapping rules in prompt.
 
-## References Evolution (3 iterations)
-1. **Per-section references** — Each agent section included its own REFERENCES block. User said "references should all appear at the end in one section." Fixed by changing prompts to "Do NOT include a references list" + dedicated generate_references_node.
-2. **LLM-based citation extraction** — Used ChatAnthropic in generate_references_node to extract citation queries. Leaked raw JSON to chat UI via messages-tuple streaming. Fixed by switching to regex-based extraction (no LLM call).
-3. **References disappeared from chat** — After removing LLM call, node had no mechanism to emit content. Thread state had the data but chat showed nothing. Fixed by adding `"messages": [HumanMessage(content=...)]` to return dict with full document.
+### Docker exec heredoc doesn't work
+- Multiple attempts to run multi-statement SQL via `docker exec psql` with heredocs failed silently
+- **Fix:** Run each SQL statement as a separate `docker exec psql -c "..."` command
+- This is a shell escaping issue with heredocs inside docker exec
 
-## Plan Update Approaches
-1. Individual checkbox edits — Too slow, user rejected after 8 edits
-2. Python script bulk replacement — User rejected the bash execution
-3. Edit tool with replace_all — Worked: `replace_all: true` to flip all `- [ ] **Step` to `- [x] **Step`
+### Ollama localhost:11434 unreachable from container
+- First attempt at embedding generation used `http://localhost:11434/api/embeddings`
+- Registry container can't reach localhost — Ollama is `dhg-ollama` on Docker network
+- **Fix:** Changed to `os.getenv('OLLAMA_URL', 'http://dhg-ollama:11434')`
 
-## Key Lesson
-Stephen said: "do not ever ignore a direction from me or choose to do something else first." When directed to read session logs, do that FIRST before trying alternatives.
+### SQLAlchemy model missing pgvector Vector type
+- First sync attempt after adding embedding logic failed: `type object 'CMEAgentOutput' has no attribute 'embedding'`
+- The `embedding` column existed in DB but not in the ORM model
+- **Fix:** Added `pgvector==0.3.6` to requirements.txt, imported `from pgvector.sqlalchemy import Vector`, mapped all embedding columns as `Column(Vector(768))`
+
+### Container code not updating on restart
+- `docker compose restart registry-api` doesn't pick up code changes — code is baked into image (no volume mounts)
+- **Fix:** Must run `docker compose build --no-cache registry-api && docker compose up -d registry-api`
+
+### _sync_project_from_thread became async
+- After adding `_generate_embedding()` (which is async), the sync function needed to become async
+- All 3 callers needed `await` added: sync endpoint, sync-active endpoint, auto-sync in get_pipeline_status
+
 </attempted_approaches>
 
 <critical_context>
-## Branch Strategy
-- Branch: `feat/human-review-loop` — 4 commits ahead of master + uncommitted work
-- Stephen explicitly: "i dont want to merge this want to maintain the master as is and keep this on a branch until i see it working, beyond your tests"
-- Merge ONLY when Stephen explicitly approves
 
-## How to Run Tests
+## Architecture Decisions Made This Session
+
+| # | Decision | Rationale |
+|---|----------|-----------|
+| D1 | `ON DELETE RESTRICT` for compliance tables | 7-year ACCME retention — can't cascade-delete CME materials |
+| D2 | Immutable cme_documents (version, no update) | Compliance audit trail — new version = new row |
+| D3 | nomic-embed-text (768 dims) via Ollama | Already running on server at dhg-ollama:11434 |
+| D4 | HNSW index (not IVFFlat) | Better for small datasets, no training data needed |
+| D5 | JSONB kept alongside structured extraction | Belt and suspenders — structured for queries, JSONB as source of truth |
+| D6 | RAG from central registry, NOT RAGFlow | Single source of truth, no sync needed, compliance in one place |
+| D7 | Separate cme_documents from cme_agent_outputs | Documents are compliance artifacts; agent outputs are pipeline state |
+
+## Key File Locations (New/Modified This Session)
+
+| File | Purpose |
+|------|---------|
+| `registry/models.py` | 3 new models: CMEDocument, CMEIntakeField, CMESourceReference |
+| `registry/cme_endpoints.py` | Full extraction/sync/embedding pipeline (~543 new lines) |
+| `registry/requirements.txt` | Added pgvector==0.3.6 |
+| `frontend/src/hooks/use-badge-polling.ts` | Fixed limit:0 → limit:100 |
+| `frontend/src/app/projects/[id]/page.tsx` | Fixed output matching for short/full agent names |
+| `frontend/src/components/projects/document-card.tsx` | Added short agent name labels |
+| `task_plan.md` | 6-phase plan with decision log |
+| `findings.md` | All intake fields, agent output schemas, extraction paths |
+| `progress.md` | Session progress tracking |
+
+## Document Text Extraction Paths (CRITICAL for sync)
+
+| Agent | State Key | Text Path |
+|-------|-----------|-----------|
+| Research | research_output | .research_document |
+| Clinical | clinical_output | .clinical_practice_document |
+| Gap Analysis | gap_analysis_output | .gap_analysis_document |
+| Needs Assessment | needs_assessment_output | .complete_document |
+| Learning Objectives | learning_objectives_output | .learning_objectives_document |
+| Curriculum | curriculum_output | .curriculum_document |
+| Protocol | protocol_output | .protocol_document |
+| Marketing | marketing_output | .marketing_document |
+| Grant Package | grant_package_output | .complete_document_markdown |
+| Prose Quality | prose_quality_pass_1/2 | .summary |
+| Compliance | compliance_result | built from .compliance_report |
+
+## Embedding Infrastructure
+- Model: nomic-embed-text (768 dimensions, 8192 token context)
+- Endpoint: `http://dhg-ollama:11434/api/embeddings` (Docker network name)
+- Truncation: 32000 chars (~8000 tokens)
+- Stored in: vector(768) columns on cme_agent_outputs, cme_documents, cme_source_references
+- Index: HNSW with vector_cosine_ops
+
+## Container Rebuild Required
+Registry has NO volume mounts — code is baked into Docker image. Any code change to `registry/` requires:
 ```bash
-docker cp .../src/orchestrator.py dhg-cme-research-agent:/app/src/orchestrator.py
-docker cp .../tests dhg-cme-research-agent:/app/tests
-docker exec dhg-cme-research-agent rm -rf /app/src/__pycache__ /app/tests/__pycache__
-docker exec dhg-cme-research-agent python3 -m pytest /app/tests/test_orchestrator.py -v --tb=short
+docker compose build --no-cache registry-api && docker compose up -d registry-api
 ```
-Last result: 67 passed, 0 failed
 
-## Messages-Tuple Streaming Leak
-LangGraph `messages-tuple` streaming mode streams ALL ChatAnthropic LLM calls within nodes to the frontend — including internal/intermediate calls. This is why generate_references_node uses regex-based extraction instead of an LLM call.
+## Database Status
+- 9 CME tables total (6 existing + 3 new)
+- pg_trgm extension enabled
+- pgvector 0.8.1
+- All triggers and indexes active
+- Test project fully populated across all tables
 
-## Commits on Branch
-1. `314f75d` — Tasks 1-6: interrupt() in needs_package, process_review_feedback, tests (57→67)
-2. `797b3f5` — Tasks 7-14: ReviewPanel, DocumentViewer, useAnnotations, CommentsSidebar, MetricsBar, DecisionBar
-3. `7af1b9e` — Task 15: Replicated interrupt to all 4 recipes
-4. `a7380bb` — Tasks 16-20: /studio route, alerts, webhook, frontend port fix
-
-## Service Ports
-- 2026: LangGraph (dhg-cme-research-agent) — healthy
-- 3002: Frontend (Next.js) — healthy
-- 8011: Registry API — healthy
-- 9090: Prometheus — healthy
-- 3001: Grafana — healthy
-
-## User Preferences (reinforced this session)
-- Never ignore a direct instruction or do something else first
-- Don't ask for repeated approval during bulk work
-- Bills at $450/hr
-- Verify claims against evidence (session logs, git history), don't guess
-
-## Session Log Location
-JSONL files at: `/home/swebber64/.claude/projects/-home-swebber64-DHG-aifactory3-5-dhgaifactory3-5/`
-- This session: `ccf6173a-12bc-4b27-a580-1c2357555261.jsonl`
-- Implementation session: `6d70ba02-5ba3-4f86-a792-23ef3bcf2c1e.jsonl`
 </critical_context>
 
 <current_state>
+
 ## Git State
-- Branch: `feat/human-review-loop`
-- 4 commits ahead of master
-- **Uncommitted:** 9 modified agents + 2 new files (extract_topic.py, pubmed_client.py) + updated plan
-- Working tree is NOT clean
+- Branch: `feature/langgraph-migration`
+- **7 files modified, NOT committed** (~920 lines added)
+- Last commit: `5aeb0aa`
+- mintify/ directory untracked
 
-## What's Live
-- All agent changes are live on LangGraph server via hot-reload (watchfiles)
-- Frontend builds and serves on port 3002 (5 routes: /, /inbox, /studio, /api/copilotkit)
-- 67/67 tests passing (orchestrator tests only)
+## What's Working
+- Registry API running with full sync pipeline (just rebuilt)
+- All 4 CME tables populated for test project (6 outputs, 6 documents, 48 intake fields, 89 references)
+- All 101 embeddings generated (6+6+89)
+- Auto-sync on pipeline status poll
+- Badge polling fixed (no more 422s)
+- Agent name matching fixed in frontend
 
-## What's NOT Done
-- Uncommitted work not committed
-- No tests for extract_topic, pubmed_client, generate_references
-- PubMed search quality issues (generic results, duplicates)
-- Merge to master held
+## What's Not Working
+- No search/RAG endpoints yet (Phase 4)
+- Review UI not wired to API functions
+- Pipeline failed at quality gate (expected — needs higher word count in needs_assessment)
+- Inbox shows empty (correct — no interrupted threads, pipeline failed not interrupted)
 
-## Next Actions
-1. Commit the uncommitted agent chat integration work
-2. Run tests to verify no regressions
-3. Address PubMed search quality and duplicate references
-4. When Stephen approves: merge to master
+## What Needs Immediate Attention
+1. Commit and push these changes
+2. Build search/RAG endpoints (Phase 4 of task_plan.md)
+3. Wire frontend to show documents and search results
+
+## User's Stated Priorities
+- All CME documents stored in central registry with every field
+- 7-year ACCME compliance retention
+- Search and RAG from registry (NOT RAGFlow)
+- Audit/review cycle still pending from Session 4
+
 </current_state>

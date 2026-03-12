@@ -74,7 +74,9 @@ export default function ProjectDetailPage() {
   }
 
   const selectedStepDef = selectedStep ? PIPELINE_STEPS.find((s) => s.id === selectedStep) : null;
-  const selectedOutput = selectedStep ? outputs.find((o) => o.agent_name === selectedStepDef?.agent) ?? null : null;
+  const selectedOutput = selectedStep
+    ? outputs.find((o) => o.agent_name === selectedStep || o.agent_name === selectedStepDef?.agent) ?? null
+    : null;
 
   return (
     <div className="flex flex-col h-full">
