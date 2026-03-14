@@ -5,10 +5,12 @@ import hashlib
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 import psycopg2
+import psycopg2.pool
 from psycopg2.extras import Json
 import uuid
 import httpx
@@ -20,14 +22,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger("session-logger")
 
-app = FastAPI(title="DHG Session Logger", version="2.0.0")
-
 # Database connection
 DB_HOST = os.getenv("POSTGRES_HOST", "registry-db")
 DB_PORT = os.getenv("POSTGRES_PORT", "5432")
 DB_USER = os.getenv("POSTGRES_USER", "dhg")
 DB_PASS = os.getenv("POSTGRES_PASSWORD", "dhg_secure_password")
 DB_NAME = os.getenv("POSTGRES_DB", "dhg_registry")
+DB_POOL_MIN = int(os.getenv("DB_POOL_MIN", "2"))
+DB_POOL_MAX = int(os.getenv("DB_POOL_MAX", "10"))
 
 # Ollama for embeddings and summarization
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://host.docker.internal:11434")
@@ -39,18 +41,39 @@ SUMMARIZE_MODEL = os.getenv("SUMMARIZE_MODEL", "qwen3:14b")
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "2000"))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "200"))
 
+# Connection pool (initialized at module level, cleaned up via lifespan)
+db_pool = psycopg2.pool.ThreadedConnectionPool(
+    DB_POOL_MIN, DB_POOL_MAX,
+    host=DB_HOST, port=DB_PORT, user=DB_USER,
+    password=DB_PASS, dbname=DB_NAME,
+)
+logger.info(f"Database connection pool initialized (min={DB_POOL_MIN}, max={DB_POOL_MAX})")
+
+
+@asynccontextmanager
+async def lifespan(app):
+    yield
+    if db_pool and not db_pool.closed:
+        db_pool.closeall()
+        logger.info("Database connection pool closed")
+
+
+app = FastAPI(title="DHG Session Logger", version="2.0.0", lifespan=lifespan)
 
 
 def get_db_connection():
     try:
-        conn = psycopg2.connect(
-            host=DB_HOST, port=DB_PORT, user=DB_USER,
-            password=DB_PASS, dbname=DB_NAME
-        )
-        return conn
+        return db_pool.getconn()
     except Exception as e:
         logger.error(f"Database connection failed: {e}")
         raise
+
+
+def return_db_connection(conn):
+    try:
+        db_pool.putconn(conn)
+    except Exception as e:
+        logger.error(f"Failed to return connection to pool: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -272,7 +295,7 @@ def health_check():
     ollama_status = "unknown"
     try:
         conn = get_db_connection()
-        conn.close()
+        return_db_connection(conn)
         db_status = "connected"
     except Exception as e:
         db_status = f"error: {str(e)}"
@@ -322,7 +345,7 @@ def start_session(data: SessionStart):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if conn:
-            conn.close()
+            return_db_connection(conn)
 
 
 @app.post("/sessions/end")
@@ -355,7 +378,7 @@ def end_session(data: SessionEnd):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if conn:
-            conn.close()
+            return_db_connection(conn)
 
 
 @app.post("/logs/debug")
@@ -386,7 +409,7 @@ def log_debug(data: DebugLog):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if conn:
-            conn.close()
+            return_db_connection(conn)
 
 
 @app.post("/knowledge/add")
@@ -413,7 +436,7 @@ def add_knowledge(data: KnowledgeItem):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if conn:
-            conn.close()
+            return_db_connection(conn)
 
 
 @app.post("/files/add")
@@ -441,7 +464,7 @@ def add_session_file(data: SessionFile):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if conn:
-            conn.close()
+            return_db_connection(conn)
 
 
 @app.post("/search")
@@ -470,7 +493,7 @@ def search_knowledge(query: str, limit: int = 10):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if conn:
-            conn.close()
+            return_db_connection(conn)
 
 
 # ===========================================================================
@@ -545,7 +568,7 @@ def ingest_terminal_log(data: TerminalLogIngest):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if conn:
-            conn.close()
+            return_db_connection(conn)
 
 
 @app.post("/sessions/{session_id}/summarize")
@@ -581,7 +604,7 @@ def summarize_session(session_id: str):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if conn:
-            conn.close()
+            return_db_connection(conn)
 
 
 @app.get("/sessions/{session_id}/pdf")
@@ -645,7 +668,7 @@ pre {{ background: #1A1D24; color: #FAF9F7; padding: 16px; border-radius: 4px; w
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if conn:
-            conn.close()
+            return_db_connection(conn)
 
 
 # ===========================================================================
@@ -679,7 +702,7 @@ def get_concepts(node_type: Optional[str] = None, limit: int = 100):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if conn:
-            conn.close()
+            return_db_connection(conn)
 
 
 @app.get("/graph/edges")
@@ -718,7 +741,7 @@ def get_edges(node_id: Optional[str] = None, limit: int = 200):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if conn:
-            conn.close()
+            return_db_connection(conn)
 
 
 @app.post("/graph/link")
@@ -758,7 +781,7 @@ def link_concepts(data: ConceptLink):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if conn:
-            conn.close()
+            return_db_connection(conn)
 
 
 # ===========================================================================
@@ -799,7 +822,7 @@ def search_sessions(query: str, limit: int = 10):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if conn:
-            conn.close()
+            return_db_connection(conn)
 
 
 # ===========================================================================
@@ -829,7 +852,7 @@ def list_session_logs(limit: int = 50):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if conn:
-            conn.close()
+            return_db_connection(conn)
 
 
 # ===========================================================================
@@ -877,7 +900,7 @@ def stats_overview():
         raise HTTPException(status_code=500, detail="Failed to fetch stats overview")
     finally:
         if conn:
-            conn.close()
+            return_db_connection(conn)
 
 
 @app.get("/sessions/stats/daily")
@@ -921,7 +944,7 @@ def stats_daily():
         raise HTTPException(status_code=500, detail="Failed to fetch daily stats")
     finally:
         if conn:
-            conn.close()
+            return_db_connection(conn)
 
 
 @app.get("/sessions/stats/concepts")
@@ -977,7 +1000,7 @@ def stats_concepts(limit: int = 10):
         raise HTTPException(status_code=500, detail="Failed to fetch concept stats")
     finally:
         if conn:
-            conn.close()
+            return_db_connection(conn)
 
 
 # ===========================================================================
@@ -1049,7 +1072,7 @@ def backfill_embeddings():
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if conn:
-            conn.close()
+            return_db_connection(conn)
 
 
 if __name__ == "__main__":
