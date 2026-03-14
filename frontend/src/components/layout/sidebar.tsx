@@ -10,6 +10,7 @@ import {
   Activity,
   Sparkles,
   Search,
+  Monitor,
   PanelLeftClose,
   PanelLeft,
   Moon,
@@ -32,6 +33,7 @@ const NAV_ITEMS = [
   { href: "/search", icon: Search, label: "Search", badgeKey: null },
   { href: "/chat", icon: MessageSquare, label: "Chat", badgeKey: null },
   { href: "/agents", icon: Activity, label: "Agents", badgeKey: null },
+  { href: "/monitoring", icon: Monitor, label: "Monitoring", badgeKey: null },
   { href: "/studio", icon: Sparkles, label: "Studio", badgeKey: null },
 ];
 
