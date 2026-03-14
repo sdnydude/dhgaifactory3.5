@@ -5,15 +5,17 @@ import hashlib
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
+import time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse
 from pydantic import BaseModel, Field
 import psycopg2
 import psycopg2.pool
 from psycopg2.extras import Json
 import uuid
 import httpx
+from prometheus_client import Counter, Histogram, generate_latest
 
 # Configure logging
 logging.basicConfig(
@@ -48,6 +50,28 @@ db_pool = psycopg2.pool.ThreadedConnectionPool(
     password=DB_PASS, dbname=DB_NAME,
 )
 logger.info(f"Database connection pool initialized (min={DB_POOL_MIN}, max={DB_POOL_MAX})")
+
+# ---------------------------------------------------------------------------
+# Prometheus Metrics
+# ---------------------------------------------------------------------------
+session_logger_read_latency = Histogram(
+    'session_logger_read_latency',
+    'Database read latency in milliseconds',
+    ['operation'],
+    buckets=[1, 5, 10, 25, 50, 100, 250, 500, 1000],
+)
+
+session_logger_read_operations = Counter(
+    'session_logger_read_operations',
+    'Total number of read operations',
+    ['operation'],
+)
+
+session_logger_errors = Counter(
+    'session_logger_errors',
+    'Total number of errors',
+    ['error_type'],
+)
 
 
 @asynccontextmanager
@@ -288,6 +312,12 @@ class ConceptStats(BaseModel):
 # ---------------------------------------------------------------------------
 # Health Check
 # ---------------------------------------------------------------------------
+
+@app.get("/metrics", response_class=PlainTextResponse)
+def metrics():
+    """Prometheus metrics endpoint."""
+    return generate_latest()
+
 
 @app.get("/health")
 def health_check():
@@ -863,6 +893,7 @@ def list_session_logs(limit: int = 50):
 def stats_overview():
     """Aggregated overview: totals, averages, date range, embedding coverage."""
     conn = None
+    start_time = time.time()
     try:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -885,6 +916,10 @@ def stats_overview():
         avg_chunks = total_chunks / total_sessions if total_sessions > 0 else 0.0
         embedding_pct = (embedded_chunks * 100.0 / total_chunks) if total_chunks > 0 else 0.0
 
+        session_logger_read_operations.labels(operation='stats_overview').inc()
+        session_logger_read_latency.labels(operation='stats_overview').observe(
+            (time.time() - start_time) * 1000)
+
         return StatsOverview(
             total_sessions=total_sessions,
             total_chunks=total_chunks,
@@ -896,6 +931,7 @@ def stats_overview():
             latest_session=latest.isoformat() if latest else None,
         )
     except Exception as e:
+        session_logger_errors.labels(error_type='stats_overview_failed').inc()
         logger.error(f"Error fetching stats overview: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch stats overview")
     finally:
@@ -907,6 +943,7 @@ def stats_overview():
 def stats_daily():
     """Session count per day for the last 7 days, including zero-count days."""
     conn = None
+    start_time = time.time()
     try:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -934,12 +971,17 @@ def stats_daily():
             for row in rows
         ]
 
+        session_logger_read_operations.labels(operation='stats_daily').inc()
+        session_logger_read_latency.labels(operation='stats_daily').observe(
+            (time.time() - start_time) * 1000)
+
         return DailyStats(
             days=days,
             period_start=(rows[0][0].isoformat() if rows else ""),
             period_end=(rows[-1][0].isoformat() if rows else ""),
         )
     except Exception as e:
+        session_logger_errors.labels(error_type='stats_daily_failed').inc()
         logger.error(f"Error fetching daily stats: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch daily stats")
     finally:
@@ -951,6 +993,7 @@ def stats_daily():
 def stats_concepts(limit: int = 10):
     """Top concepts by edge count, node type breakdown, and totals."""
     conn = None
+    start_time = time.time()
     try:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -989,6 +1032,10 @@ def stats_concepts(limit: int = 10):
         cur.execute("SELECT count(*) FROM concept_edges")
         total_edges = cur.fetchone()[0]
 
+        session_logger_read_operations.labels(operation='stats_concepts').inc()
+        session_logger_read_latency.labels(operation='stats_concepts').observe(
+            (time.time() - start_time) * 1000)
+
         return ConceptStats(
             top_concepts=top_concepts,
             node_type_breakdown=type_breakdown,
@@ -996,6 +1043,7 @@ def stats_concepts(limit: int = 10):
             total_edges=total_edges,
         )
     except Exception as e:
+        session_logger_errors.labels(error_type='stats_concepts_failed').inc()
         logger.error(f"Error fetching concept stats: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch concept stats")
     finally:

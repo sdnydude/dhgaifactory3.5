@@ -10,6 +10,8 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-dhg_registry}
       - POSTGRES_HOST=registry-db
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OLLAMA_URL=http://172.17.0.1:11434
+      - SUMMARIZE_MODEL=${SUMMARIZE_MODEL:-qwen3:14b}
     ports:
       - "8009:8009"
     depends_on:
@@ -20,6 +22,10 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    labels:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "8009"
+      prometheus.io/path: "/metrics"
     networks:
       - dhg-network
     restart: unless-stopped
