@@ -47,7 +47,7 @@ export function DailyChart({ daily, loading }: DailyChartProps) {
   }));
 
   return (
-    <div className="mb-6 rounded-xl border bg-card p-6 shadow-sm">
+    <div className="rounded-xl border bg-card p-6 shadow-sm">
       <h3 className="mb-5 text-sm font-semibold">
         Sessions Per Day
         <span className="ml-2 text-xs font-normal text-muted-foreground">

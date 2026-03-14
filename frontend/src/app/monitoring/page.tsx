@@ -34,6 +34,7 @@ export default function MonitoringPage() {
     alerts,
     metrics,
     loading,
+    error,
     lastUpdated,
     fetchAll,
   } = useMonitoringStore();
@@ -61,13 +62,18 @@ export default function MonitoringPage() {
           </div>
         </div>
         <span className="text-xs text-muted-foreground">
-          {lastUpdated
-            ? `Updated ${elapsed}s ago`
-            : loading
-              ? "Loading..."
-              : "Not connected"}
+          {lastUpdated && `Updated ${elapsed}s ago`}
+          {!lastUpdated && loading && "Loading..."}
+          {!lastUpdated && !loading && "Not connected"}
         </span>
       </div>
+
+      {/* Error Banner */}
+      {error && (
+        <div className="mx-6 mt-3 flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-2.5">
+          <span className="text-sm text-destructive">{error}</span>
+        </div>
+      )}
 
       {/* Tab Navigation */}
       <Tabs defaultValue="overview" className="flex flex-col flex-1 overflow-hidden">

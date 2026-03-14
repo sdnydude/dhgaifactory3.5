@@ -29,52 +29,6 @@ interface MonitoringState {
   fetchMetrics: () => Promise<void>;
 }
 
-function parsePrometheusMetrics(text: string): ParsedMetrics {
-  const operations: ParsedMetrics["operations"] = [];
-  const opRegex =
-    /session_logger_read_operations_total\{operation="([^"]+)"\}\s+([\d.]+)/g;
-  let match;
-  while ((match = opRegex.exec(text)) !== null) {
-    operations.push({ operation: match[1], count: parseFloat(match[2]) });
-  }
-
-  // Approximate percentiles from histogram buckets
-  const bucketRegex =
-    /session_logger_read_latency_bucket\{le="([^"]+)",operation="stats_overview"\}\s+([\d.]+)/g;
-  const buckets: { le: number; count: number }[] = [];
-  while ((match = bucketRegex.exec(text)) !== null) {
-    if (match[1] !== "+Inf") {
-      buckets.push({ le: parseFloat(match[1]), count: parseFloat(match[2]) });
-    }
-  }
-
-  const countMatch = text.match(
-    /session_logger_read_latency_count\{operation="stats_overview"\}\s+([\d.]+)/,
-  );
-  const totalCount = countMatch ? parseFloat(countMatch[1]) : 0;
-
-  function percentile(p: number): number {
-    if (totalCount === 0 || buckets.length === 0) return 0;
-    const target = totalCount * p;
-    for (const b of buckets) {
-      if (b.count >= target) return b.le;
-    }
-    return buckets[buckets.length - 1]?.le ?? 0;
-  }
-
-  const errorRegex = /session_logger_errors_total\{[^}]*\}\s+([\d.]+)/g;
-  let totalErrors = 0;
-  while ((match = errorRegex.exec(text)) !== null) {
-    totalErrors += parseFloat(match[1]);
-  }
-
-  return {
-    operations,
-    latency: { p50: percentile(0.5), p95: percentile(0.95), p99: percentile(0.99) },
-    totalErrors,
-  };
-}
-
 const SERVICE_CHECKS = [
   { name: "Session Logger", port: 8009, url: "/api/monitoring/health", description: "Session tracking & stats" },
   { name: "Registry API", port: 8011, url: "/healthz", description: "FastAPI data registry", useRegistry: true },
@@ -119,7 +73,9 @@ export const useMonitoringStore = create<MonitoringState>((set) => ({
       ]);
       set({ overview, daily, concepts });
     } catch (e) {
-      console.error("Failed to fetch overview:", e);
+      const msg = (e as Error).message;
+      console.error("Failed to fetch overview:", msg);
+      set({ error: `Session Logger unavailable: ${msg}` });
     }
   },
 
@@ -127,14 +83,9 @@ export const useMonitoringStore = create<MonitoringState>((set) => ({
     try {
       const results = await Promise.all(
         SERVICE_CHECKS.map(async (svc) => {
-          let url = svc.url;
-          if (svc.useRegistry) {
-            const registryBase =
-              process.env.NEXT_PUBLIC_REGISTRY_API_URL || "http://localhost:8011";
-            url = `${registryBase}${svc.url}`;
-          } else if (!svc.direct) {
-            url = svc.url;
-          }
+          const url = svc.useRegistry
+            ? `${monitoringApi.REGISTRY_BASE}${svc.url}`
+            : svc.url;
 
           const { healthy, responseMs } = await monitoringApi.fetchHealthTimed(url);
 
@@ -149,7 +100,9 @@ export const useMonitoringStore = create<MonitoringState>((set) => ({
       );
       set({ services: results });
     } catch (e) {
-      console.error("Failed to fetch services:", e);
+      const msg = (e as Error).message;
+      console.error("Failed to fetch services:", msg);
+      set({ error: `Service health check failed: ${msg}` });
     }
   },
 
@@ -158,18 +111,21 @@ export const useMonitoringStore = create<MonitoringState>((set) => ({
       const alerts = await monitoringApi.fetchAlerts();
       set({ alerts });
     } catch (e) {
-      console.error("Failed to fetch alerts:", e);
-      set({ alerts: [] });
+      const msg = (e as Error).message;
+      console.error("Failed to fetch alerts:", msg);
+      set({ alerts: [], error: `Alertmanager unavailable: ${msg}` });
     }
   },
 
   fetchMetrics: async () => {
     try {
       const raw = await monitoringApi.fetchMetricsRaw();
-      const metrics = parsePrometheusMetrics(raw);
+      const metrics = monitoringApi.parsePrometheusMetrics(raw);
       set({ metrics });
     } catch (e) {
-      console.error("Failed to fetch metrics:", e);
+      const msg = (e as Error).message;
+      console.error("Failed to fetch metrics:", msg);
+      set({ error: `Metrics unavailable: ${msg}` });
     }
   },
 }));
