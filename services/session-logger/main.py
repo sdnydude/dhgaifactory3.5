@@ -7,7 +7,7 @@ from datetime import datetime
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import psycopg2
 from psycopg2.extras import Json
 import uuid
@@ -223,43 +223,43 @@ class ConceptLink(BaseModel):
 # ---------------------------------------------------------------------------
 
 class StatsOverview(BaseModel):
-    total_sessions: int
-    total_chunks: int
-    total_concepts: int
-    total_edges: int
-    avg_chunks_per_session: float
-    embedding_coverage_pct: float
+    total_sessions: int = Field(ge=0)
+    total_chunks: int = Field(ge=0)
+    total_concepts: int = Field(ge=0)
+    total_edges: int = Field(ge=0)
+    avg_chunks_per_session: float = Field(ge=0.0)
+    embedding_coverage_pct: float = Field(ge=0.0, le=100.0)
     earliest_session: Optional[str] = None
     latest_session: Optional[str] = None
 
 
 class DailySessionCount(BaseModel):
     date: str
-    session_count: int
+    session_count: int = Field(ge=0)
 
 
 class DailyStats(BaseModel):
     days: List[DailySessionCount]
-    period_start: str
-    period_end: str
+    period_start: Optional[str] = None
+    period_end: Optional[str] = None
 
 
 class ConceptRanking(BaseModel):
-    name: str
+    name: str = Field(min_length=1)
     node_type: str
-    edge_count: int
+    edge_count: int = Field(gt=0)
 
 
 class NodeTypeBreakdown(BaseModel):
     node_type: str
-    count: int
+    count: int = Field(gt=0)
 
 
 class ConceptStats(BaseModel):
     top_concepts: List[ConceptRanking]
     node_type_breakdown: List[NodeTypeBreakdown]
-    total_nodes: int
-    total_edges: int
+    total_nodes: int = Field(ge=0)
+    total_edges: int = Field(ge=0)
 
 
 # ---------------------------------------------------------------------------
@@ -844,32 +844,23 @@ def stats_overview():
         conn = get_db_connection()
         cur = conn.cursor()
 
-        cur.execute("SELECT count(*) FROM session_logs")
-        total_sessions = cur.fetchone()[0]
-
-        cur.execute("SELECT count(*) FROM session_chunks")
-        total_chunks = cur.fetchone()[0]
-
-        cur.execute("SELECT count(*) FROM concept_nodes")
-        total_concepts = cur.fetchone()[0]
-
-        cur.execute("SELECT count(*) FROM concept_edges")
-        total_edges = cur.fetchone()[0]
-
-        avg_chunks = total_chunks / total_sessions if total_sessions > 0 else 0.0
-
         cur.execute("""
-            SELECT count(*) FILTER (WHERE embedding IS NOT NULL),
-                   count(*)
-            FROM session_chunks
+            SELECT
+                (SELECT count(*) FROM session_logs)   AS total_sessions,
+                (SELECT count(*) FROM session_chunks)  AS total_chunks,
+                (SELECT count(*) FROM concept_nodes)   AS total_concepts,
+                (SELECT count(*) FROM concept_edges)   AS total_edges,
+                (SELECT count(*) FILTER (WHERE embedding IS NOT NULL)
+                    FROM session_chunks)               AS embedded_chunks,
+                (SELECT min(created_at) FROM session_logs) AS earliest,
+                (SELECT max(created_at) FROM session_logs) AS latest
         """)
         row = cur.fetchone()
-        embedding_pct = (row[0] * 100.0 / row[1]) if row[1] > 0 else 0.0
+        total_sessions, total_chunks, total_concepts, total_edges, \
+            embedded_chunks, earliest, latest = row
 
-        cur.execute("SELECT min(created_at), max(created_at) FROM session_logs")
-        date_row = cur.fetchone()
-        earliest = date_row[0].isoformat() if date_row[0] else None
-        latest = date_row[1].isoformat() if date_row[1] else None
+        avg_chunks = total_chunks / total_sessions if total_sessions > 0 else 0.0
+        embedding_pct = (embedded_chunks * 100.0 / total_chunks) if total_chunks > 0 else 0.0
 
         return StatsOverview(
             total_sessions=total_sessions,
@@ -878,16 +869,12 @@ def stats_overview():
             total_edges=total_edges,
             avg_chunks_per_session=round(avg_chunks, 2),
             embedding_coverage_pct=round(embedding_pct, 2),
-            earliest_session=earliest,
-            latest_session=latest,
+            earliest_session=earliest.isoformat() if earliest else None,
+            latest_session=latest.isoformat() if latest else None,
         )
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error(f"Error fetching stats overview: {e}")
-        if conn:
-            conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error fetching stats overview: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch stats overview")
     finally:
         if conn:
             conn.close()
@@ -929,13 +916,9 @@ def stats_daily():
             period_start=(rows[0][0].isoformat() if rows else ""),
             period_end=(rows[-1][0].isoformat() if rows else ""),
         )
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error(f"Error fetching daily stats: {e}")
-        if conn:
-            conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error fetching daily stats: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch daily stats")
     finally:
         if conn:
             conn.close()
@@ -989,13 +972,9 @@ def stats_concepts(limit: int = 10):
             total_nodes=total_nodes,
             total_edges=total_edges,
         )
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error(f"Error fetching concept stats: {e}")
-        if conn:
-            conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error fetching concept stats: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch concept stats")
     finally:
         if conn:
             conn.close()
