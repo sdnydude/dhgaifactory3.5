@@ -227,7 +227,7 @@ services:
         LANGCHAIN_API_KEY: ${LANGCHAIN_API_KEY}
     container_name: dhg-frontend
     ports:
-      - "3002:3000"
+      - "3000:3000"
     environment:
       - NODE_ENV=production
     healthcheck:
