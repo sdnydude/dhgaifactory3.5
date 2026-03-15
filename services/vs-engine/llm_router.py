@@ -54,7 +54,8 @@ async def generate_with_anthropic(
     except ImportError:
         raise RuntimeError("anthropic package not installed")
 
-    api_key = os.getenv("ANTHROPIC_API_KEY")
+    from config import get_anthropic_api_key
+    api_key = get_anthropic_api_key()
     if not api_key:
         raise RuntimeError("ANTHROPIC_API_KEY environment variable not set")
 
@@ -65,6 +66,31 @@ async def generate_with_anthropic(
         system=system_prompt or "", messages=messages,
     )
     return response.content[0].text
+
+
+async def generate_with_openai(
+    prompt: str, model: str, system_prompt: Optional[str] = None,
+    temperature: float = 1.0, timeout: float = 120.0,
+) -> str:
+    base_url = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
+    api_key = os.getenv("OPENAI_API_KEY", "")
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY environment variable not set")
+
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": prompt})
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            f"{base_url}/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}"},
+            json={"model": model, "messages": messages, "temperature": temperature},
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        return response.json()["choices"][0]["message"]["content"]
 
 
 async def generate(
@@ -80,7 +106,7 @@ async def generate(
         return await generate_with_ollama(full_prompt, model, ollama_url, temperature, timeout)
     if provider == "anthropic":
         return await generate_with_anthropic(prompt, model, system_prompt, temperature, timeout)
-    raise NotImplementedError(f"OpenAI-compatible provider not yet implemented for model: {model}")
+    return await generate_with_openai(prompt, model, system_prompt, temperature, timeout)
 
 
 async def check_ollama_health(ollama_url: str) -> str:

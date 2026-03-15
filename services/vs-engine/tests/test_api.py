@@ -67,6 +67,17 @@ class TestGenerateEndpoint:
         assert "distribution_id" in data
         assert "items" in data
         assert len(data["items"]) >= 1
+        # Verify spec-compliant response fields (C2 fix)
+        assert "k" in data
+        assert "tau" in data
+        assert "sum_probability" in data
+        assert "num_filtered" in data
+        assert "created_at" in data
+        # Verify item metadata structure (C1 fix)
+        item = data["items"][0]
+        assert "metadata" in item
+        assert "label" in item["metadata"]
+        assert item["metadata"]["label"] in ("conventional", "novel", "exploratory")
 
     def test_generate_uses_phase_defaults(self, client):
         c, mock_gen = client
@@ -75,6 +86,10 @@ class TestGenerateEndpoint:
             "phase": "gap_analysis",
         })
         assert response.status_code == 200
+        data = response.json()
+        # gap_analysis phase defaults: k=4, tau=0.10
+        assert data["k"] == 4
+        assert data["tau"] == 0.10
 
     def test_generate_validates_prompt_required(self, client):
         c, _ = client

@@ -50,6 +50,11 @@ def get_log_level() -> str:
     return os.getenv("LOG_LEVEL", "INFO")
 
 
+def get_anthropic_api_key() -> str:
+    """Return the Anthropic API key from environment, or empty string if not set."""
+    return os.getenv("ANTHROPIC_API_KEY", "")
+
+
 CONFIDENCE_FRAMINGS: Dict[str, str] = {
     "confidence": "confidence",
     "likelihood": "likelihood",

@@ -64,6 +64,7 @@ GENERATION_DURATION = Histogram(
 REPAIR_WEIGHT_TOTAL = Counter(
     "vs_repair_weight_total",
     "Total weight repair operations applied",
+    ["model"],
 )
 SELECTIONS_TOTAL = Counter(
     "vs_selections_total",
@@ -73,10 +74,12 @@ SELECTIONS_TOTAL = Counter(
 TAU_RELAXED_TOTAL = Counter(
     "vs_tau_relaxed_total",
     "Number of times tau relaxation was applied",
+    ["phase"],
 )
 ITEMS_FILTERED_TOTAL = Counter(
     "vs_items_filtered_total",
     "Total number of items filtered by min_probability",
+    ["phase"],
 )
 DISTRIBUTIONS_CACHED = Gauge(
     "vs_distributions_cached",
@@ -159,8 +162,8 @@ def _cache_get(dist_id: str) -> Optional[Dict[str, Any]]:
 
 class GenerateRequest(BaseModel):
     prompt: str  # Required — no default
-    k: int = Field(default=5, ge=1, le=20, description="Number of candidate responses")
-    tau: float = Field(default=0.08, gt=0.0, lt=1.0, description="Uniform target per response")
+    k: Optional[int] = Field(default=None, ge=1, le=20, description="Number of candidate responses (default: phase default or 5)")
+    tau: Optional[float] = Field(default=None, gt=0.0, lt=1.0, description="Uniform target per response (default: phase default or 0.08)")
     phase: Optional[str] = Field(default=None, description="Phase name to load defaults from")
     model: Optional[str] = Field(default=None, description="Override model name")
     variant: str = Field(default="standard", description="Generation variant")
@@ -180,10 +183,17 @@ class SelectRequest(BaseModel):
     human_selection_index: Optional[int] = Field(default=None, ge=0)
 
 
+class ItemMetadata(BaseModel):
+    label: Optional[str] = None  # "conventional", "novel", or "exploratory"
+    quality_score: Optional[float] = None
+    p_raw: Optional[float] = None
+    repairs: Optional[List[str]] = None
+
+
 class ItemResponse(BaseModel):
     content: str
     probability: float
-    label: str  # "conventional", "novel", or "exploratory"
+    metadata: ItemMetadata
 
 
 class GenerateResponse(BaseModel):
@@ -191,7 +201,12 @@ class GenerateResponse(BaseModel):
     items: List[ItemResponse]
     phase: Optional[str]
     model: str
+    k: int
+    tau: float
+    sum_probability: float
     tau_relaxed: bool
+    num_filtered: int
+    created_at: str
     repairs_applied: int
 
 
@@ -337,16 +352,8 @@ async def generate_distribution(request: GenerateRequest) -> GenerateResponse:
     else:
         defaults = get_phase_defaults("custom")
 
-    effective_k = request.k if request.k != 5 else defaults.get("k", request.k)
-    # If k was explicitly provided (not default), use it; otherwise fall through to phase default.
-    # Pydantic default for k is 5, so distinguish phase-driven k from explicit.
-    # Simplest correct approach: always prefer explicit fields that differ from pydantic default.
-    # But since we can't tell 5 from "not provided", use phase default only for fields not set.
-    # The spec says phase defaults; explicit fields override. Use explicit if provided.
-    # We re-read from the raw request body — since Pydantic filled defaults, just use them.
-    # Strategy: phase defaults fill in blanks; explicit request fields always win.
-    effective_k = request.k  # request.k always has a value (defaulted by Pydantic)
-    effective_tau = request.tau
+    effective_k = request.k if request.k is not None else defaults.get("k", 5)
+    effective_tau = request.tau if request.tau is not None else defaults.get("tau", 0.08)
     effective_model = request.model or defaults.get("model", "qwen3:14b")
     effective_min_probability = request.min_probability
     if effective_min_probability is None:
@@ -447,12 +454,12 @@ async def generate_distribution(request: GenerateRequest) -> GenerateResponse:
     # Track metrics
     repairs_count = sum(len(r.get("tags", [])) for r in trace.get("repairs", []))
     if repairs_count:
-        REPAIR_WEIGHT_TOTAL.inc(repairs_count)
+        REPAIR_WEIGHT_TOTAL.labels(model=effective_model).inc(repairs_count)
     if trace.get("tau_relaxed"):
-        TAU_RELAXED_TOTAL.inc()
+        TAU_RELAXED_TOTAL.labels(phase=effective_phase).inc()
     n_filtered = trace.get("n_zero_filtered", 0)
     if n_filtered:
-        ITEMS_FILTERED_TOTAL.inc(n_filtered)
+        ITEMS_FILTERED_TOTAL.labels(phase=effective_phase).inc(n_filtered)
 
     # Build DiscreteDist (items are already sorted + normalized by postprocess_responses)
     dist = DiscreteDist(items=items, trace=trace)
@@ -464,12 +471,17 @@ async def generate_distribution(request: GenerateRequest) -> GenerateResponse:
         phase=effective_phase, model=effective_model, status="200"
     ).inc()
 
-    # Build response items
+    # Build response items with full metadata
     item_responses = [
         ItemResponse(
             content=item.text,
             probability=item.p,
-            label=_assign_label(item.p),
+            metadata=ItemMetadata(
+                label=_assign_label(item.p),
+                quality_score=item.meta.get("quality_score"),
+                p_raw=item.meta.get("p_raw"),
+                repairs=item.meta.get("repairs"),
+            ),
         )
         for item in dist
     ]
@@ -479,7 +491,12 @@ async def generate_distribution(request: GenerateRequest) -> GenerateResponse:
         items=item_responses,
         phase=request.phase,
         model=effective_model,
+        k=effective_k,
+        tau=effective_tau,
+        sum_probability=sum(item.p for item in dist),
         tau_relaxed=bool(trace.get("tau_relaxed", False)),
+        num_filtered=n_filtered,
+        created_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         repairs_applied=repairs_count,
     )
 
@@ -534,7 +551,12 @@ async def select_item(request: SelectRequest) -> SelectResponse:
         selected=ItemResponse(
             content=selected_item.text,
             probability=selected_item.p,
-            label=_assign_label(selected_item.p),
+            metadata=ItemMetadata(
+                label=_assign_label(selected_item.p),
+                quality_score=selected_item.meta.get("quality_score"),
+                p_raw=selected_item.meta.get("p_raw"),
+                repairs=selected_item.meta.get("repairs"),
+            ),
         ),
     )
 
