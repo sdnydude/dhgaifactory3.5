@@ -877,6 +877,14 @@ async def human_review_node(state: CMEPipelineState) -> dict:
     elif state.get("curriculum_output"):
         recipe = "curriculum_package"
 
+    # Include VS distributions for alternative rendering in inbox.
+    # Each agent stores vs_distribution in its own output dict (e.g., gap_analysis_output).
+    # We extract them here so the frontend can render alternatives per agent.
+    vs_distributions = {}
+    gap_out = state.get("gap_analysis_output") or {}
+    if isinstance(gap_out, dict) and gap_out.get("vs_distribution"):
+        vs_distributions["gap_analysis"] = gap_out["vs_distribution"]
+
     review_payload = {
         "document": documents,
         "metrics": metrics,
@@ -885,6 +893,7 @@ async def human_review_node(state: CMEPipelineState) -> dict:
         "project_name": state.get("project_name", ""),
         "review_round": state.get("review_round", 0),
         "current_step": state.get("current_step", ""),
+        "vs_distributions": vs_distributions,
     }
 
     # Notify registry that pipeline is paused for human review
