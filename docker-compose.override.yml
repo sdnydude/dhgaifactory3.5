@@ -256,6 +256,33 @@ services:
       - dhg-network
     restart: unless-stopped
 
+  vs-engine:
+    build:
+      context: ./services/vs-engine
+      dockerfile: Dockerfile
+    container_name: dhg-vs-engine
+    environment:
+      - OLLAMA_BASE_URL=http://dhg-ollama:11434
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    ports:
+      - "8013:8000"
+    labels:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "8000"
+      prometheus.io/path: "/metrics"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - dhg-network
+    restart: unless-stopped
+    depends_on:
+      ollama:
+        condition: service_started
+
 volumes:
   prometheus_data:
   loki_data:

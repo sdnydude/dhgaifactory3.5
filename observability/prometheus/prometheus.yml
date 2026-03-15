@@ -57,6 +57,15 @@ scrape_configs:
           service: 'cadvisor'
     scrape_interval: 15s
 
+  # VS Engine (Verbalized Sampling)
+  - job_name: 'vs-engine'
+    static_configs:
+      - targets: ['dhg-vs-engine:8000']
+        labels:
+          service: 'vs-engine'
+    metrics_path: /metrics
+    scrape_interval: 15s
+
   # Docker Service Discovery — auto-discovers containers with
   # prometheus.io/scrape=true label. Add these Docker labels to any
   # service to opt in:
