@@ -878,12 +878,25 @@ async def human_review_node(state: CMEPipelineState) -> dict:
         recipe = "curriculum_package"
 
     # Include VS distributions for alternative rendering in inbox.
-    # Each agent stores vs_distribution in its own output dict (e.g., gap_analysis_output).
-    # We extract them here so the frontend can render alternatives per agent.
+    # Each agent stores vs_distributions (dict keyed by step name) in its output.
+    # We merge them all here so the frontend can render alternatives per agent/node.
     vs_distributions = {}
-    gap_out = state.get("gap_analysis_output") or {}
-    if isinstance(gap_out, dict) and gap_out.get("vs_distribution"):
-        vs_distributions["gap_analysis"] = gap_out["vs_distribution"]
+    agent_output_keys = [
+        ("gap_analysis_output", "gap_analysis"),
+        ("needs_assessment_output", "needs_assessment"),
+        ("research_output", "research"),
+        ("clinical_practice_output", "clinical_practice"),
+        ("learning_objectives_output", "learning_objectives"),
+        ("curriculum_design_output", "curriculum_design"),
+        ("research_protocol_output", "research_protocol"),
+        ("marketing_plan_output", "marketing_plan"),
+        ("grant_writer_output", "grant_writer"),
+    ]
+    for output_key, agent_name in agent_output_keys:
+        agent_out = state.get(output_key) or {}
+        if isinstance(agent_out, dict) and agent_out.get("vs_distributions"):
+            for step_name, dist in agent_out["vs_distributions"].items():
+                vs_distributions[f"{agent_name}.{step_name}"] = dist
 
     review_payload = {
         "document": documents,
