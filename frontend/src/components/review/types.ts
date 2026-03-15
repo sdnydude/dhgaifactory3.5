@@ -34,6 +34,35 @@ export interface ReviewPayload {
   current_step: string;
 }
 
+export interface VSItem {
+  content: string;
+  probability: number;
+  metadata: {
+    label?: "conventional" | "novel" | "exploratory";
+    quality_score?: number | null;
+    p_raw?: number;
+    repairs?: string[];
+    [key: string]: unknown;
+  };
+}
+
+export interface VSDistribution {
+  distribution_id: string;
+  items: VSItem[];
+  model: string;
+  phase: string;
+  k: number;
+  tau: number;
+  sum_probability: number;
+  tau_relaxed: boolean;
+  num_filtered: number;
+  created_at: string;
+}
+
+export interface ReviewPayloadWithVS extends ReviewPayload {
+  vs_distributions?: Record<string, VSDistribution>;
+}
+
 export interface ResumeValue {
   decision: "approved" | "revision" | "rejected";
   comments: ReviewComment[];
