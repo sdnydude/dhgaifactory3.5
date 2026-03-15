@@ -39,6 +39,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from extract_topic import extract_topic_node
 from pubmed_client import PubMedClient, build_references_section
 from langchain_core.runnables import RunnableConfig
+from vs_client import vs_generate, vs_select, vs_is_available
 
 # OpenTelemetry tracing (dual-export with LangSmith)
 from tracing import traced_node
@@ -282,6 +283,10 @@ class NeedsAssessmentState(TypedDict):
     total_tokens: int
     total_cost: float
 
+    # === VS (Verbalized Sampling) ===
+    vs_distributions: Dict[str, Dict[str, Any]]  # keyed by step name
+    vs_used: bool
+
 
 # =============================================================================
 # LLM CLIENT
@@ -381,11 +386,22 @@ Provide a JSON response with:
 Return ONLY the JSON, no other text."""
 
     try:
-        result = await llm.generate(
-            "You create realistic composite characters for medical education.",
-            prompt,
-            {"step": "character_creation"}
-        )
+        system = "You create realistic composite characters for medical education."
+        vs_result = None
+        if await vs_is_available():
+            vs_result = await vs_generate(
+                prompt=prompt, phase="needs_assessment", k=5, system_prompt=system,
+            )
+        if vs_result and vs_result.get("items"):
+            selected = await vs_select(vs_result["distribution_id"], strategy="argmax")
+            content = (selected["selected"]["content"] if selected and selected.get("selected")
+                       else vs_result["items"][0]["content"])
+            result = {"content": content, "model": "vs-engine", "total_tokens": 0, "cost": 0.0}
+        else:
+            result = await llm.generate(system, prompt, {"step": "character_creation"})
+            vs_result = None
+
+        prev_dists = state.get("vs_distributions", {})
 
         # Parse JSON from response
         match = re.search(r'\{[\s\S]*\}', result["content"])
@@ -400,6 +416,8 @@ Return ONLY the JSON, no other text."""
                 "model_used": result["model"],
                 "total_tokens": result["total_tokens"],
                 "total_cost": result["cost"],
+                "vs_distributions": {**prev_dists, "character_creation": vs_result} if vs_result else prev_dists,
+                "vs_used": state.get("vs_used", False) or (vs_result is not None),
                 "errors": []
             }
     except Exception as e:
@@ -449,25 +467,36 @@ Write a 50-100 word cold open following the structure:
 
 Return ONLY the narrative text. No headers. No quotes."""
 
-    result = await llm.generate(
-        COLD_OPEN_SYSTEM_PROMPT,
-        prompt,
-        {"step": "cold_open"}
-    )
-    
+    vs_result = None
+    if await vs_is_available():
+        vs_result = await vs_generate(
+            prompt=prompt, phase="needs_assessment", k=5, system_prompt=COLD_OPEN_SYSTEM_PROMPT,
+        )
+    if vs_result and vs_result.get("items"):
+        selected = await vs_select(vs_result["distribution_id"], strategy="argmax")
+        content = (selected["selected"]["content"] if selected and selected.get("selected")
+                   else vs_result["items"][0]["content"])
+        result = {"content": content, "total_tokens": 0, "cost": 0.0}
+    else:
+        result = await llm.generate(COLD_OPEN_SYSTEM_PROMPT, prompt, {"step": "cold_open"})
+        vs_result = None
+
     cold_open = result["content"].strip()
     word_count = count_words(cold_open)
-    
+
     # Track token usage
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
-    
+    prev_dists = state.get("vs_distributions", {})
+
     return {
         "cold_open": cold_open,
         "character_appearances": 1,  # First appearance in cold open
         "section_word_counts": {"cold_open": word_count},
         "total_tokens": prev_tokens + result["total_tokens"],
         "total_cost": prev_cost + result["cost"],
+        "vs_distributions": {**prev_dists, "cold_open": vs_result} if vs_result else prev_dists,
+        "vs_used": state.get("vs_used", False) or (vs_result is not None),
         "errors": []
     }
 
@@ -512,27 +541,42 @@ RESEARCH CONTEXT:
 
 Write 125-300 words of flowing prose. Start by connecting the character to the population."""
 
-    result = await llm.generate(system, prompt, {"step": "disease_overview"})
-    
+    vs_result = None
+    if await vs_is_available():
+        vs_result = await vs_generate(
+            prompt=prompt, phase="needs_assessment", k=5, system_prompt=system,
+        )
+    if vs_result and vs_result.get("items"):
+        selected = await vs_select(vs_result["distribution_id"], strategy="argmax")
+        content_text = (selected["selected"]["content"] if selected and selected.get("selected")
+                        else vs_result["items"][0]["content"])
+        result = {"content": content_text, "total_tokens": 0, "cost": 0.0}
+    else:
+        result = await llm.generate(system, prompt, {"step": "disease_overview"})
+        vs_result = None
+
     content = result["content"].strip()
     word_count = count_words(content)
-    
+
     # Check if character is mentioned
     appearances = state.get("character_appearances", 0)
     if character_name.split()[0] in content or character_name in content:
         appearances += 1
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
+    prev_dists = state.get("vs_distributions", {})
     section_counts = state.get("section_word_counts", {})
     section_counts["disease_state_overview"] = word_count
-    
+
     return {
         "disease_state_overview": content,
         "character_appearances": appearances,
         "section_word_counts": section_counts,
         "total_tokens": prev_tokens + result["total_tokens"],
-        "total_cost": prev_cost + result["cost"]
+        "total_cost": prev_cost + result["cost"],
+        "vs_distributions": {**prev_dists, "disease_overview": vs_result} if vs_result else prev_dists,
+        "vs_used": state.get("vs_used", False) or (vs_result is not None),
     }
 
 
@@ -572,21 +616,36 @@ Research context:
 
 Write 200-300 words of flowing prose."""
 
-    result = await llm.generate(system, prompt, {"step": "treatment_landscape"})
-    
+    vs_result = None
+    if await vs_is_available():
+        vs_result = await vs_generate(
+            prompt=prompt, phase="needs_assessment", k=5, system_prompt=system,
+        )
+    if vs_result and vs_result.get("items"):
+        selected = await vs_select(vs_result["distribution_id"], strategy="argmax")
+        content_text = (selected["selected"]["content"] if selected and selected.get("selected")
+                        else vs_result["items"][0]["content"])
+        result = {"content": content_text, "total_tokens": 0, "cost": 0.0}
+    else:
+        result = await llm.generate(system, prompt, {"step": "treatment_landscape"})
+        vs_result = None
+
     content = result["content"].strip()
     word_count = count_words(content)
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
+    prev_dists = state.get("vs_distributions", {})
     section_counts = state.get("section_word_counts", {})
     section_counts["treatment_landscape"] = word_count
-    
+
     return {
         "treatment_landscape": content,
         "section_word_counts": section_counts,
         "total_tokens": prev_tokens + result["total_tokens"],
-        "total_cost": prev_cost + result["cost"]
+        "total_cost": prev_cost + result["cost"],
+        "vs_distributions": {**prev_dists, "treatment_landscape": vs_result} if vs_result else prev_dists,
+        "vs_used": state.get("vs_used", False) or (vs_result is not None),
     }
 
 
@@ -629,26 +688,41 @@ Example: "In {character_name.split()[0]}'s case, the gap manifested as..."
 
 Write 300-400 words. Each gap should be a narrative paragraph with evidence."""
 
-    result = await llm.generate(system, prompt, {"step": "practice_gaps"})
-    
+    vs_result = None
+    if await vs_is_available():
+        vs_result = await vs_generate(
+            prompt=prompt, phase="needs_assessment", k=5, system_prompt=system,
+        )
+    if vs_result and vs_result.get("items"):
+        selected = await vs_select(vs_result["distribution_id"], strategy="argmax")
+        content_text = (selected["selected"]["content"] if selected and selected.get("selected")
+                        else vs_result["items"][0]["content"])
+        result = {"content": content_text, "total_tokens": 0, "cost": 0.0}
+    else:
+        result = await llm.generate(system, prompt, {"step": "practice_gaps"})
+        vs_result = None
+
     content = result["content"].strip()
     word_count = count_words(content)
-    
+
     appearances = state.get("character_appearances", 0)
     if character_name.split()[0] in content or character_name in content:
         appearances += 1
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
+    prev_dists = state.get("vs_distributions", {})
     section_counts = state.get("section_word_counts", {})
     section_counts["practice_gaps"] = word_count
-    
+
     return {
         "practice_gaps_section": content,
         "character_appearances": appearances,
         "section_word_counts": section_counts,
         "total_tokens": prev_tokens + result["total_tokens"],
-        "total_cost": prev_cost + result["cost"]
+        "total_cost": prev_cost + result["cost"],
+        "vs_distributions": {**prev_dists, "practice_gaps": vs_result} if vs_result else prev_dists,
+        "vs_used": state.get("vs_used", False) or (vs_result is not None),
     }
 
 
