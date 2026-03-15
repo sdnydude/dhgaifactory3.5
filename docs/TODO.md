@@ -1,186 +1,223 @@
 # DHG AI Factory - Master To-Do List
-**Last Updated:** Feb 26, 2026 (18:40 EST)
+**Last Updated:** Mar 14, 2026
 
 ## System Status
-- **DHG Containers:** 30 running (29 healthy, 4 no-healthcheck: ollama, node-exporter, postgres-exporter, transcribe-qdrant)
-- **LangGraph Server:** Running on :2026 (v0.7.16, 15 graphs)
-- **GPU:** RTX 5080 (10% utilization, 4.7GB/16GB VRAM — dhg-transcribe pipeline active)
-- **Disk:** 11% used (186GB / 1.9TB)
-- **LibreChat:** Running on :3010 — **BEING DEPRECATED**
+- **DHG Containers:** 39 running (18 healthy, others no-healthcheck configured)
+- **LangGraph Server:** Cloud production at `dhg-agents-526554f2bb905517adab9bd53427c745.us.langgraph.app` (15 graphs)
+- **GPU:** RTX 5080 (0% utilization, 4.5GB/16GB VRAM — transcribe pipeline idle)
+- **Disk:** 12% used (197GB / 1.9TB)
+- **Frontend:** Next.js on :3002 (shadcn/ui + assistant-ui + CopilotKit)
 - **Ollama Models:** llama3.1:8b, nomic-embed-text, qwen3:14b
-- **Observability:** Prometheus ✓ (:9090), Grafana ✓ (:3001), Loki ✓ (:3100), cAdvisor ✓ (:8080), Node Exporter ✓, Postgres Exporter ✓ (:9187)
+- **Observability:** Prometheus :9090, Grafana :3001, Loki :3100, Tempo :3200, Alertmanager :9093, Promtail, cAdvisor :8080, Node Exporter, Postgres Exporter :9187
 
 ### Container Groups
 | Stack | Count | Status |
 |---|---|---|
-| DHG AI Factory | 25 | 22 healthy |
-| Transcribe Pipeline | 9 | All running |
-| Dify | 8 | All running |
-| Infisical | 6 | 5 healthy, 1 crash-looping (Exit 255) |
-| LibreChat | 3 | Running (being deprecated) |
+| DHG AI Factory | 24 | 18 healthy, 6 no-healthcheck |
+| Transcribe Pipeline | 10 | All running |
+| Infisical | 5 | All stable (2 healthy, 3 no-healthcheck) |
 | RAGFlow | 1 | Running (:8585) |
 | pgAdmin | 1 | Running (:5050) |
+| Dify | 0 | **Removed** (port 3000 freed for Next.js frontend) |
+| LibreChat | 0 | **Removed** (deprecated) |
 
 ---
 
 ## P0: Blockers
 
-- [ ] **`infisical` container crash-looping** (Exit 255) — investigate logs, may affect secret sync
+None.
 
 ---
 
 ## P1: Active Sprint
 
-### Frontend Migration — LibreChat → LangGraph Native
-- [ ] Deploy Open Agent Platform (agent management, intake forms, multi-agent)
-- [ ] Deploy Agent Inbox (CME human review queue)
-- [ ] Deploy Open Canvas (writer document editing)
-- [ ] Wire all three to LangGraph Cloud (prod) and :2026 (dev)
-- [ ] Update agents to emit HumanInterrupt schema for Agent Inbox
-- [ ] Remove LibreChat from active use
+### `/ship` Command — Custom Shipping Workflow
+- [x] Researched all superpowers skills (brainstorming, writing-plans, executing-plans, etc.)
+- [x] Identified 9 custom additions not in any existing skill
+- [x] Designed 7-phase workflow (Brainstorm → Explore → Plan → Build → Verify → Review → Ship)
+- [x] Created task_plan.md with full phase design
+- [ ] Write the `/ship` command file (`.claude/commands/ship.md`)
+- [ ] Write explorer agent prompt template
+- [ ] Write reviewer agent prompt template
+- [ ] Test with a real feature
 
-### CME Workflow
-- [x] PostgreSQL database schema (003_add_cme_projects.sql)
-- [x] CME endpoints integrated with database
-- [x] JSONB datetime serialization fix
-- [ ] Human Review Requirements implementation (via Agent Inbox)
+### Monitoring Dashboard — Frontend
+- [x] Session-logger stats endpoints (overview, daily, concepts)
+- [x] Session-logger Prometheus instrumentation
+- [x] Session-logger connection pooling (ThreadedConnectionPool)
+- [x] 14 tests for stats + metrics endpoints
+- [x] Frontend monitoring API client and Zustand store
+- [x] Frontend stats cards, tab navigation, polling
+- [x] API proxy routes for session-logger and Alertmanager
+- [x] Review findings addressed
+- [ ] Session-logger data visualization — graphs, tables, and copy for the 42 ingested sessions (462 chunks, 642 concepts, 3604 edges) on the monitoring page
+- [ ] Additional dashboard tabs (logs, traces, alerts — wired to Loki/Tempo/Alertmanager)
+- [ ] Grafana dashboard curation
 
-### Observability Stack
-- [x] Deploy Prometheus/Grafana/Loki stack
-- [x] Healthchecks on all monitorable containers (30/31 healthy)
-- [x] Deploy node-exporter, cAdvisor, postgres-exporter
-- [x] Fix cAdvisor Docker API compat (v0.49.1 → v0.51.0)
-- [x] Prometheus scrape config: self, registry-api, postgres, node-exporter, cadvisor
-- [ ] Observability refactoring — reviewing OTel-native plan (Docker SD, Loki 3.x, Tempo tracing)
-- [ ] Set up Grafana dashboards
-- [ ] Configure Alertmanager
-- [ ] Add Loki log collection (no containers shipping logs yet)
+### Observability Stack — Remaining Gaps
+- [x] Prometheus + Docker service discovery
+- [x] Grafana dashboards provisioned (Prometheus, Loki, Tempo datasources)
+- [x] Promtail deployed (Docker log scraping → Loki)
+- [x] Tempo deployed (OTel trace collection)
+- [x] Alertmanager deployed with webhook to registry-api
+- [x] cAdvisor, Node Exporter, Postgres Exporter
+- [ ] Expand Grafana dashboards (LangGraph agent performance, session-logger metrics)
+- [ ] Alert rules for critical services (container down, high error rate, disk usage)
+- [ ] Verify Tempo trace ingestion from LangGraph agents end-to-end
 
 ---
 
 ## P2: Next Up
 
-### Antigravity Session Sync
-- [x] Build sync agent using local API (port 58575)
-- [x] Created generate_embeddings.py script
-- [x] Export via GetCascadeTrajectory endpoint working
-- [x] Deduplication fixed (delete before re-insert)
-- [ ] Run embedding generation (4974 messages, 0 with embeddings)
-- [ ] Automate daily sync
+### Frontend — Feature Completion
+- [x] Chat page (assistant-ui + CopilotKit AG-UI bridge)
+- [x] Agent Inbox / review UI components
+- [x] Studio route
+- [x] Search page + search API client
+- [x] Monitoring page (stats cards, tab navigation)
+- [ ] Generative UI — domain panels (leads, projects, CMS) rendered inline in chat
+- [ ] MCP Integration — connect agents to external tools
+- [ ] Memory — persistent context via LangGraph checkpointing
+- [ ] LLManager — approval workflow with reflection for CME review
 
-### RAGFlow Setup
-- [x] RAGFlow running at ragflow.digitalharmonyai.com
+### CME Workflow
+- [x] PostgreSQL database schema (003_add_cme_projects.sql)
+- [x] Compliance-ready CME database schema with RAG embeddings
+- [x] CME endpoints integrated with database
+- [x] JSONB datetime serialization fix
+- [x] Search & RAG endpoints for CME knowledge base
+- [x] CME intake template (CSV)
+- [ ] Human Review Requirements implementation (interrupt()-based, wired to frontend inbox)
+- [ ] End-to-end CME pipeline test (intake → agents → review → output)
+
+### LangGraph Agents — Hardening
+- [x] Topic extraction, PubMed citations, and references added to all 9 content agents
+- [x] PubMed keyword extraction, PMID dedup, shared build_references_section
+- [x] interrupt()-based human review in needs_package recipe
+- [x] interrupt() replicated to all 4 orchestrator recipes
+- [x] Graceful degradation when OTel not installed
+- [x] importlib file-based loading for Cloud runtime
+- [ ] Agent-level unit tests (currently only session-logger has tests)
+- [ ] Performance benchmarks for full pipeline run
+
+---
+
+## P3: Infrastructure & Security
+
+### Security
+- [ ] Build DHG Security Agent (Cloudflare Access management, GraphQL analytics)
+- [ ] Healthchecks on remaining containers (ollama, promtail, node-exporter, etc.)
+
+### CI/CD
+- [x] GitHub Actions CI pipeline created
+- [ ] Expand CI — test suite, lint, type-check, Docker build validation
+- [ ] CD — automated deployment on merge to master
+
+### RAGFlow
+- [x] Running at ragflow.digitalharmonyai.com
 - [x] Google OAuth configured
 - [ ] Configure LLM connection
 - [ ] Create first knowledge base
 
-### Dify Setup
-- [x] Dify running at dify.digitalharmonyai.com
-- [x] Google OAuth configured (shared with RAGFlow)
-- [ ] Configure as documentation platform
-
 ---
 
-## P3: LangGraph Frontend Features
+## P4: Backlog
 
-- [ ] **Generative UI** - Domain panels (leads, projects, CMS) rendered inline in chat
-- [ ] **MCP Integration** - Connect agents to external tools via Open Agent Platform
-- [ ] **Memory** - Persistent context via LangGraph checkpointing
-- [ ] **LLManager** - Approval workflow with reflection for CME review
-- [ ] **Healthchecks** - Add to dhg-ollama, dhg-transcribe-qdrant, dhg-worker
-
----
-
-## P4: Security & Media
-
-### Security
-- [ ] **Build DHG Security Agent** (2 hrs)
-  - Manage Cloudflare Access
-  - Fetch analytics via GraphQL API
-
-### Video Content Pipeline
-- [ ] Vimeo API Integration
-- [ ] YouTube API Integration
-- [ ] Video Ingestion Pipeline
-- [ ] AI Clip Generation
-
----
-
-## P5: Backlog
-
+- [ ] Video Content Pipeline (Vimeo API, YouTube API, ingestion, AI clip generation)
 - [ ] Code Interpreter
 - [ ] Claude Files API
 - [ ] XMP Metadata (Visuals Agent)
-- [ ] LibreChat to Registry Sync
-- [ ] Upgrade Infisical CLI
 
 ---
 
-## Completed (Feb 26, 2026)
+## Completed (Mar 10–14, 2026)
 
-- [x] Agent check: 30 DHG containers running (29 healthy)
-- [x] Fixed registry-db down (exited 5 days ago) — restarted, registry-api recovered to healthy
-- [x] Unstaged accidentally staged files (venv/, website/)
-- [x] Identified GPU usage: dhg-transcribe pipeline (4GB VRAM, PID 5525)
-- [x] TODO.md updated with current system status
+- [x] Session Capture Pipeline fully built (session-logger v2.0.0, Ollama embeddings 768d, summarization, PDF export, knowledge graph)
+- [x] Switched all embeddings from OpenAI to Ollama (nomic-embed-text 768d)
+- [x] Backfill endpoint added and run (all rows embedded)
+- [x] Session-logger stats endpoints, Prometheus metrics, connection pooling, 14 tests
+- [x] Monitoring dashboard frontend (stats cards, API proxies, tab navigation, Zustand store)
+- [x] `/ship` command 7-phase design completed
+- [x] CME intake template created
+- [x] Market intelligence design spec documented
 
-## Completed (Feb 20, 2026)
+## Completed (Mar 3–9, 2026)
 
-- [x] Agent check: 31 DHG containers running (30 healthy)
-- [x] TODO.md updated with current system status
+- [x] Antigravity-to-Claude Code migration **COMPLETE** (10/10 criteria met)
+- [x] `.agent/` directory removed (all value extracted)
+- [x] Frontend rebuilt on Next.js + shadcn/ui + assistant-ui + CopilotKit
+- [x] Cloud-rewire: server-side proxy, polling sync, full frontend rebuild
+- [x] Search page + search API client + registry search/RAG endpoints
+- [x] Compliance-ready CME database schema with RAG embeddings
+- [x] Studio route, real alerts, webhook endpoint
+- [x] Review UI components wired into Agent Inbox
+- [x] interrupt()-based human review in all 4 orchestrator recipes
+- [x] Topic extraction, PubMed citations, references added to all 9 content agents
+- [x] Fix frontend: pipeline failure feedback, agent document JSONB extraction
+- [x] Graceful OTel degradation, importlib Cloud runtime fix
 
-## Completed (Feb 18, 2026)
+## Completed (Feb 27 – Mar 2, 2026)
+
+- [x] Resolved C1 port conflict (orchestrator vs registry-api on 8011)
+- [x] Resolved C3 LangGraph network isolation + wrong registry URL
+- [x] Resolved C5 hardcoded IPs in web-ui (replaced with Vite env vars)
+- [x] Resolved C6 stale files at project root
+- [x] Security fix: python-multipart 0.0.6 → 0.0.22 (CVE arbitrary file write)
+- [x] Prometheus Docker service discovery
+- [x] GitHub Actions CI pipeline
+- [x] Docs consolidation
+- [x] Promtail log shipping to Loki
+- [x] Tempo tracing deployment + API tests
+- [x] Registry-db healthcheck fix, restart policy, interval increase
+- [x] Infisical orphan container removed (was crash-looping Exit 255)
+- [x] Dify moved off port 3000, set to restart=no, later fully removed
+- [x] LibreChat deprecated and removed
+- [x] Cloudflare tunnel updated (app.digitalharmonyai.com → localhost:3000)
+- [x] LangGraph Cloud deployment configured (local :2026 = dev only)
+
+## Completed (Feb 18–26, 2026)
 
 - [x] Full agent-check: 54 containers inventoried across all stacks
-- [x] LangGraph frontend strategy decided: LibreChat → Open Agent Platform + Agent Inbox + Open Canvas
-- [x] 17-option LangGraph frontend comparative table researched and documented
-- [x] Observability: deployed node-exporter, cAdvisor, postgres-exporter (68c1f72)
-- [x] Observability: fixed cAdvisor v0.49.1 → v0.51.0 for Docker API 1.44+ compat (64675d4)
-- [x] Observability: created Loki datasource for Grafana, fixed dashboard mount
-- [x] Reviewed Claude's OTel-native observability refactoring plan
+- [x] LangGraph frontend strategy decided (LibreChat → Next.js + shadcn/ui + assistant-ui + CopilotKit)
+- [x] 17-option LangGraph frontend comparative table researched
+- [x] Observability: node-exporter, cAdvisor, postgres-exporter deployed
+- [x] cAdvisor v0.49.1 → v0.51.0 for Docker API 1.44+ compat
+- [x] Loki datasource for Grafana, dashboard mount fix
+- [x] Fixed registry-db down (exited 5 days) — restarted, registry-api recovered
+- [x] Migrated to Claude Code — restored CLAUDE.md, added rules and 10 ported skills
 
-## Completed (Feb 3 - Feb 17, 2026)
+## Completed (Feb 3–17, 2026)
 
-- [x] Audio agent added to LangGraph (647b3dd)
-- [x] Recipe-Based Orchestrator implemented (92d0d2f)
+- [x] Audio agent added to LangGraph
+- [x] Recipe-Based Orchestrator implemented
 - [x] Marketing Plan agent created
-- [x] Docker healthchecks added for Grafana, Loki, Prometheus, registry-api
+- [x] Docker healthchecks for Grafana, Loki, Prometheus, registry-api
 - [x] Registry-API Docker image rebuilt (fixed missing Alembic migration 003)
-- [x] LangGraph proxy and docker override (4c45b69)
+- [x] LangGraph proxy and docker override
 - [x] Research protocol + curriculum design: disease_state/therapeutic_area fields
 
-## Completed (Jan 29 - Feb 2, 2026)
+## Completed (Jan 18 – Feb 2, 2026)
 
-- [x] CME intake form PostgreSQL integration (b9b53df)
-- [x] CME JSONB datetime serialization fix (c82233c)
-- [x] Planning-with-files skill research-first requirement (e71559f)
-- [x] Infisical workflow DB role fix (a819922)
-- [x] CME intake form improvements (8f5f91b)
-- [x] Teammate onboarding guide for Antigravity (5d85535)
-- [x] Agent planning and progress tracking files (a769507)
-- [x] Planning-with-files skill installed (0cb0757)
-- [x] Antigravity deduplication fixed (21acaa9)
-- [x] Antigravity export HTTPS/cascadeId fixes (e7f744b)
-- [x] Antigravity session sync scripts and workflow (b1c4e61)
-- [x] All workflows updated for Remote-SSH (d9f04af)
-
-## Completed (Jan 27-28, 2026)
-
-- [x] RAGFlow OAuth configured
-- [x] Redis connected to RAGFlow network
+- [x] CME intake form PostgreSQL integration
+- [x] CME JSONB datetime serialization fix
+- [x] Planning-with-files skill installed
+- [x] Infisical workflow DB role fix
+- [x] CME intake form improvements
+- [x] Antigravity session sync scripts and workflow
+- [x] Antigravity deduplication fixed
+- [x] Antigravity export HTTPS/cascadeId fixes
+- [x] RAGFlow OAuth configured, Redis connected
 - [x] Observability implementation plan created
-- [x] All files committed to git (274c175)
-- [x] .agent folder synced to .251
-- [x] pre-response workflow updated
-- [x] Ingest scripts created (ingest_conversations.py, generate_embeddings.py)
-
-## Completed (Jan 18-26, 2026)
-
 - [x] Tavily Web Search configured
 - [x] LibreChat Google OAuth
 - [x] qwen2.5:14b → qwen3:14b as default Ollama model
 - [x] Infisical CLI working
 - [x] All DHG agents configured in LibreChat
-- [x] Perplexity configured
 - [x] pgAdmin running on :5050
-- [x] 34 Antigravity sessions ingested to CR
+- [x] 34 Antigravity sessions ingested
+
+---
+
+## Version History
+- v1: Feb 26, 2026 — saved as TODO_v1.md
+- v2: Mar 14, 2026 — current (full reconciliation with git history and running state)

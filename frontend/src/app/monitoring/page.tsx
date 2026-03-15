@@ -9,6 +9,7 @@ import { ServiceHealthGrid } from "@/components/monitoring/service-health-grid";
 import { AlertsPanel } from "@/components/monitoring/alerts-panel";
 import { MetricsPanel } from "@/components/monitoring/metrics-panel";
 import { useMonitoringStore } from "@/stores/monitoring-store";
+import { cn } from "@/lib/utils";
 
 const POLL_INTERVAL = 15_000;
 
@@ -42,6 +43,16 @@ export default function MonitoringPage() {
   const intervalRef = useRef<ReturnType<typeof setInterval>>(undefined);
   const elapsed = useElapsedSeconds(lastUpdated);
 
+  const isStale = lastUpdated != null && elapsed > 30;
+  const statusColor = error
+    ? "bg-destructive"
+    : isStale
+      ? "bg-yellow-500"
+      : lastUpdated
+        ? "bg-green-500"
+        : "bg-muted-foreground";
+  const showPing = !error && !isStale && lastUpdated != null;
+
   useEffect(() => {
     fetchAll();
     intervalRef.current = setInterval(fetchAll, POLL_INTERVAL);
@@ -55,8 +66,10 @@ export default function MonitoringPage() {
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <span className="relative flex h-2.5 w-2.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-500" />
+              {showPing && (
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+              )}
+              <span className={cn("relative inline-flex h-2.5 w-2.5 rounded-full", statusColor)} />
             </span>
             <h1 className="text-lg font-semibold">System Monitoring</h1>
           </div>

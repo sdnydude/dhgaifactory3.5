@@ -224,6 +224,8 @@ docker compose up -d <service>
 7. **Written change request required.** Map to phase + acceptance criteria.
 8. **Make assumptions explicit.** Do not invent requirements.
 9. **Definition of done:** Works in real conditions, no data loss on restart/refresh, state is unambiguous, commit history reflects intent.
+10. **Overhead IS the quality.** Standards, processes, rigor, and thorough planning are the product clients pay for. Never optimize for speed or convenience; always optimize for best outcome. Quality and accuracy are first priority. Fortune 500 execution.
+11. **Planning and building are separate phases.** Do not write files, run commands, or generate code until the design/plan is fully worked through AND Stephen explicitly approves moving to implementation. Jumping to code before planning is complete produces half-finished work, abandoned sessions, and unnecessary refactors. When in doubt, keep planning.
 
 ## Principles
 

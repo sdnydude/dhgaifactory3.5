@@ -40,7 +40,7 @@ function StatCard({ label, value, unit, accent }: StatCardProps) {
 export function StatsCards({ overview, loading }: StatsCardsProps) {
   if (loading || !overview) {
     return (
-      <div className="mb-7 grid grid-cols-5 gap-4">
+      <div className="mb-7 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
         {Array.from({ length: 5 }).map((_, i) => (
           <Skeleton key={i} className="h-24 rounded-lg" />
         ))}
