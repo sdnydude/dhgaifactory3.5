@@ -32,6 +32,8 @@ from pydantic import BaseModel, Field, field_validator
 import llm_router
 from config import get_ollama_url, get_phase_defaults, get_log_level
 from distribution import DiscreteDist, Item, postprocess_responses
+from evaluators.diversity import compute_pairwise_diversity, compute_text_metrics
+from evaluators.ttct import build_evaluation_prompt, parse_judge_response
 from prompt_builder import build_vs_prompt
 from selection import select_from_distribution
 
@@ -79,6 +81,16 @@ ITEMS_FILTERED_TOTAL = Counter(
 DISTRIBUTIONS_CACHED = Gauge(
     "vs_distributions_cached",
     "Current number of distributions held in the in-memory cache",
+)
+DIVERSITY_SCORE = Histogram(
+    "vs_diversity_score",
+    "Distribution of avg_diversity scores",
+    ["phase"],
+)
+TTCT_COMPOSITE = Histogram(
+    "vs_ttct_composite",
+    "Distribution of TTCT composite scores",
+    ["phase"],
 )
 
 # ---------------------------------------------------------------------------
@@ -187,6 +199,20 @@ class SelectResponse(BaseModel):
     distribution_id: str
     strategy_used: str
     selected: ItemResponse
+
+
+class EvaluateItemInput(BaseModel):
+    content: str
+    probability: float = 0.0
+
+
+class EvaluateRequest(BaseModel):
+    items: List[EvaluateItemInput]
+    evaluators: List[str] = ["diversity"]
+    judge_model: str = "claude-sonnet-4-20250514"
+    embedding_model: str = "nomic-embed-text"
+    original_prompt: str = ""
+    phase: str = "custom"
 
 # ---------------------------------------------------------------------------
 # JSON parsing helpers
@@ -511,3 +537,101 @@ async def select_item(request: SelectRequest) -> SelectResponse:
             label=_assign_label(selected_item.p),
         ),
     )
+
+
+@app.post("/vs/evaluate")
+async def evaluate_distribution(request: EvaluateRequest) -> Dict[str, Any]:
+    """Evaluate a set of VS items using diversity and/or TTCT evaluators.
+
+    Requires at least 2 items. Evaluators are run independently; partial
+    failure is tolerated when both are requested (200 with error key on
+    the failing evaluator). If the only requested evaluator fails, 503 is
+    returned.
+    """
+    if len(request.items) < 2:
+        raise HTTPException(
+            status_code=422,
+            detail="At least 2 items are required for evaluation.",
+        )
+
+    ollama_url = get_ollama_url()
+    results: Dict[str, Any] = {}
+    errors: Dict[str, str] = {}
+
+    # --- Diversity evaluator ---
+    if "diversity" in request.evaluators:
+        try:
+            embeddings: List[List[float]] = []
+            for item in request.items:
+                vec = await llm_router.embed_with_ollama(
+                    text=item.content,
+                    model=request.embedding_model,
+                    ollama_url=ollama_url,
+                )
+                embeddings.append(vec)
+
+            diversity_metrics = compute_pairwise_diversity(embeddings)
+            text_metrics = compute_text_metrics([i.content for i in request.items])
+            results["diversity"] = {**diversity_metrics, **text_metrics}
+            DIVERSITY_SCORE.labels(phase=request.phase).observe(
+                diversity_metrics["avg_diversity"]
+            )
+        except Exception as exc:
+            logger.warning("Diversity evaluator failed: %s", exc)
+            errors["diversity"] = str(exc)
+
+    # --- TTCT evaluator ---
+    if "ttct" in request.evaluators:
+        try:
+            per_item_scores: List[Dict[str, float]] = []
+            for item in request.items:
+                judge_prompt = build_evaluation_prompt(
+                    original_prompt=request.original_prompt,
+                    response_text=item.content,
+                )
+                raw_response = await llm_router.generate(
+                    prompt=judge_prompt,
+                    model=request.judge_model,
+                    ollama_url=ollama_url,
+                )
+                # Strip markdown fences if present
+                fence_match = _FENCE_RE.search(raw_response.strip())
+                if fence_match:
+                    raw_response = fence_match.group(1).strip()
+
+                parsed = json.loads(raw_response)
+                scores = parse_judge_response(parsed)
+                per_item_scores.append(scores)
+
+            # Aggregate across items
+            dimensions = ["fluency", "flexibility", "originality", "elaboration", "composite"]
+            aggregated: Dict[str, float] = {}
+            for dim in dimensions:
+                values = [s[dim] for s in per_item_scores]
+                aggregated[f"avg_{dim}"] = sum(values) / len(values)
+
+            results["ttct"] = {
+                "per_item": per_item_scores,
+                **aggregated,
+            }
+            TTCT_COMPOSITE.labels(phase=request.phase).observe(
+                aggregated["avg_composite"]
+            )
+        except Exception as exc:
+            logger.warning("TTCT evaluator failed: %s", exc)
+            errors["ttct"] = str(exc)
+
+    # Merge any errors into results
+    for key, msg in errors.items():
+        results[key] = {"error": msg}
+
+    # If the only requested evaluator failed entirely, return 503
+    requested = set(request.evaluators)
+    succeeded = requested - set(errors.keys())
+    if not succeeded:
+        raise HTTPException(
+            status_code=503,
+            detail=f"All requested evaluators failed: {errors}",
+        )
+
+    return results

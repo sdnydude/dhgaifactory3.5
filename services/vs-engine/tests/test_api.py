@@ -158,3 +158,95 @@ class TestErrorPaths:
         response = c.post("/vs/generate", json={"prompt": "test", "k": 2})
         assert response.status_code == 200
         assert mock_gen.call_count == 2
+
+
+class TestEvaluateEndpoint:
+    def test_evaluate_diversity_only(self, client):
+        c, _ = client
+        with patch("evaluators.diversity.compute_pairwise_diversity") as mock_div, \
+             patch("llm_router.embed_with_ollama", new_callable=AsyncMock) as mock_embed:
+            mock_embed.return_value = [0.1] * 768
+            mock_div.return_value = {
+                "avg_diversity": 0.72, "min_diversity": 0.58,
+                "max_diversity": 0.89, "std_diversity": 0.11,
+            }
+            response = c.post("/vs/evaluate", json={
+                "items": [
+                    {"content": "Response A", "probability": 0.5},
+                    {"content": "Response B", "probability": 0.5},
+                ],
+                "evaluators": ["diversity"],
+            })
+            assert response.status_code == 200
+            data = response.json()
+            assert "diversity" in data
+
+    def test_evaluate_requires_min_2_items(self, client):
+        c, _ = client
+        response = c.post("/vs/evaluate", json={
+            "items": [{"content": "Only one", "probability": 1.0}],
+            "evaluators": ["diversity"],
+        })
+        assert response.status_code == 422
+
+    def test_evaluate_both_evaluators(self, client):
+        c, mock_gen = client
+        import json as json_mod
+        mock_gen.return_value = json_mod.dumps({
+            "fluency": {"score": 4, "justification": "Good"},
+            "flexibility": {"score": 3, "justification": "OK"},
+            "originality": {"score": 4, "justification": "Novel"},
+            "elaboration": {"score": 3, "justification": "Adequate"},
+        })
+        with patch("evaluators.diversity.compute_pairwise_diversity") as mock_div, \
+             patch("llm_router.embed_with_ollama", new_callable=AsyncMock) as mock_embed:
+            mock_embed.return_value = [0.1] * 768
+            mock_div.return_value = {
+                "avg_diversity": 0.72, "min_diversity": 0.58,
+                "max_diversity": 0.89, "std_diversity": 0.11,
+            }
+            response = c.post("/vs/evaluate", json={
+                "items": [
+                    {"content": "Response A", "probability": 0.5},
+                    {"content": "Response B", "probability": 0.5},
+                ],
+                "evaluators": ["diversity", "ttct"],
+            })
+            assert response.status_code == 200
+            data = response.json()
+            assert "diversity" in data
+            assert "ttct" in data
+
+    def test_evaluate_ttct_failure_partial_success(self, client):
+        c, mock_gen = client
+        mock_gen.side_effect = RuntimeError("Judge model unavailable")
+        with patch("evaluators.diversity.compute_pairwise_diversity") as mock_div, \
+             patch("llm_router.embed_with_ollama", new_callable=AsyncMock) as mock_embed:
+            mock_embed.return_value = [0.1] * 768
+            mock_div.return_value = {
+                "avg_diversity": 0.72, "min_diversity": 0.58,
+                "max_diversity": 0.89, "std_diversity": 0.11,
+            }
+            response = c.post("/vs/evaluate", json={
+                "items": [
+                    {"content": "A", "probability": 0.5},
+                    {"content": "B", "probability": 0.5},
+                ],
+                "evaluators": ["diversity", "ttct"],
+            })
+            assert response.status_code == 200
+            data = response.json()
+            assert "diversity" in data
+            assert "error" in data.get("ttct", {})
+
+    def test_evaluate_ttct_only_failure_returns_503(self, client):
+        c, mock_gen = client
+        mock_gen.side_effect = RuntimeError("Judge model unavailable")
+        response = c.post("/vs/evaluate", json={
+            "items": [
+                {"content": "A", "probability": 0.5},
+                {"content": "B", "probability": 0.5},
+            ],
+            "evaluators": ["ttct"],
+        })
+        assert response.status_code == 503
