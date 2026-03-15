@@ -50,7 +50,7 @@ groups:
           summary: "Container {{ $labels.name }} CPU > 90% for 10m"
 
       - alert: ContainerHighMemory
-        expr: container_memory_usage_bytes{name=~"dhg-.*"} / container_spec_memory_limit_bytes{name=~"dhg-.*"} > 0.9
+        expr: (container_memory_usage_bytes{name=~"dhg-.*"} / container_spec_memory_limit_bytes{name=~"dhg-.*"}) > 0.9 and container_spec_memory_limit_bytes{name=~"dhg-.*"} > 0
         for: 5m
         labels:
           severity: warning

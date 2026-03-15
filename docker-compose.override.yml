@@ -271,6 +271,7 @@ services:
       prometheus.io/scrape: "true"
       prometheus.io/port: "8000"
       prometheus.io/path: "/metrics"
+    mem_limit: 512m
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s

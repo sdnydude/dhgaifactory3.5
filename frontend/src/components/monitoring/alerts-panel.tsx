@@ -82,12 +82,12 @@ export function AlertsPanel({ alerts, loading }: AlertsPanelProps) {
             >
               {severity}
             </Badge>
-            <div className="flex-1">
-              <div className="text-sm font-semibold">{alertName}</div>
-              <div className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-semibold">{alertName}</div>
+              <div className="mt-1 break-words text-[13px] leading-relaxed text-muted-foreground">
                 {description}
               </div>
-              <div className="mt-2 font-mono text-[11px] text-muted-foreground/70">
+              <div className="mt-2 break-all font-mono text-[11px] text-muted-foreground/70">
                 Fired {timeAgo(alert.startsAt)}
                 {labels && ` · ${labels}`}
               </div>
