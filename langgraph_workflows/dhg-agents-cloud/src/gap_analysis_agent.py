@@ -84,7 +84,7 @@ class GapAnalysisState(TypedDict):
     total_cost: float
 
     # === VS (Verbalized Sampling) ===
-    vs_distribution: Optional[Dict[str, Any]]  # Full VS distribution for human review
+    vs_distributions: Dict[str, Dict[str, Any]]  # keyed by step name
     vs_used: bool  # Whether VS was used for this run
 
 
@@ -364,7 +364,7 @@ Identify 5-8 distinct, quantified gaps. Each must have evidence and barrier cate
         "gaps_identified": len(raw_gaps),
         "total_tokens": prev_tokens + result.get("total_tokens", 0),
         "total_cost": prev_cost + result.get("cost", 0.0),
-        "vs_distribution": vs_result,
+        "vs_distributions": {"identify_gaps": vs_result} if vs_result else {},
         "vs_used": vs_result is not None,
     }
 
