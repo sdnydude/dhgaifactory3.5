@@ -25,6 +25,7 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from extract_topic import extract_topic_node
 from pubmed_client import PubMedClient, build_references_section
+from vs_client import vs_generate, vs_select, vs_is_available
 
 
 # =============================================================================
@@ -81,6 +82,10 @@ class GapAnalysisState(TypedDict):
     model_used: str
     total_tokens: int
     total_cost: float
+
+    # === VS (Verbalized Sampling) ===
+    vs_distribution: Optional[Dict[str, Any]]  # Full VS distribution for human review
+    vs_used: bool  # Whether VS was used for this run
 
 
 # =============================================================================
@@ -310,8 +315,36 @@ BARRIERS IDENTIFIED:
 
 Identify 5-8 distinct, quantified gaps. Each must have evidence and barrier categorization. Return ONLY valid JSON."""
 
-    result = await llm.generate(system, prompt, {"step": "identify_gaps"})
-    
+    # Try VS for diverse gap identification
+    vs_result = None
+    vs_available = await vs_is_available()
+    if vs_available:
+        vs_result = await vs_generate(
+            prompt=prompt,
+            phase="gap_analysis",
+            k=5,
+            system_prompt=system,
+        )
+
+    if vs_result and vs_result.get("items"):
+        # VS succeeded — select best approach via argmax
+        selected = await vs_select(vs_result["distribution_id"], strategy="argmax")
+        if selected and selected.get("selected"):
+            content = selected["selected"]["content"]
+        else:
+            # Fallback: use highest-probability item directly
+            content = vs_result["items"][0]["content"]
+
+        # Token/cost for VS calls tracked separately via Prometheus on the VS engine.
+        # The VS engine manages its own LLM connections; agent-level token tracking
+        # only covers standard (non-VS) generation. This is intentional — VS costs
+        # are visible in the vs-engine Grafana dashboard, not double-counted here.
+        result = {"content": content, "total_tokens": 0, "cost": 0.0}
+    else:
+        # Standard generation (VS unavailable or failed)
+        result = await llm.generate(system, prompt, {"step": "identify_gaps"})
+        vs_result = None
+
     try:
         content = result["content"]
         json_match = re.search(r'\{[\s\S]*\}', content)
@@ -322,15 +355,17 @@ Identify 5-8 distinct, quantified gaps. Each must have evidence and barrier cate
             raw_gaps = []
     except json.JSONDecodeError:
         raw_gaps = []
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
-    
+
     return {
         "raw_gaps": raw_gaps,
         "gaps_identified": len(raw_gaps),
-        "total_tokens": prev_tokens + result["total_tokens"],
-        "total_cost": prev_cost + result["cost"]
+        "total_tokens": prev_tokens + result.get("total_tokens", 0),
+        "total_cost": prev_cost + result.get("cost", 0.0),
+        "vs_distribution": vs_result,
+        "vs_used": vs_result is not None,
     }
 
 
