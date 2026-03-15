@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const SESSION_LOGGER_URL =
-  process.env.SESSION_LOGGER_URL || "http://localhost:8009";
+  process.env.SESSION_LOGGER_URL || "http://dhg-session-logger:8009";
 
 async function proxyRequest(
   req: NextRequest,

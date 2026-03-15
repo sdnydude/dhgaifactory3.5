@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const ALERTMANAGER_URL =
-  process.env.ALERTMANAGER_URL || "http://localhost:9093";
+  process.env.ALERTMANAGER_URL || "http://dhg-alertmanager:9093";
 
 async function proxyRequest(
   req: NextRequest,

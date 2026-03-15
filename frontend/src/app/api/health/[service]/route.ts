@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const SERVICE_URLS: Record<string, string> = {
-  prometheus: process.env.PROMETHEUS_URL || "http://localhost:9090",
-  grafana: process.env.GRAFANA_URL || "http://localhost:3001",
-  ollama: process.env.OLLAMA_URL || "http://localhost:11434",
+  prometheus: process.env.PROMETHEUS_URL || "http://dhg-prometheus:9090",
+  grafana: process.env.GRAFANA_URL || "http://dhg-grafana:3000",
+  ollama: process.env.OLLAMA_URL || "http://dhg-ollama:11434",
 };
 
 const HEALTH_PATHS: Record<string, string> = {

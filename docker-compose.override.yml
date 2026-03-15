@@ -230,6 +230,7 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
+      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
     healthcheck:
       test: ["CMD-SHELL", "wget --spider -q http://0.0.0.0:3000 || exit 1"]
       interval: 30s
