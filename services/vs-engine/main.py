@@ -635,3 +635,9 @@ async def evaluate_distribution(request: EvaluateRequest) -> Dict[str, Any]:
         )
 
     return results
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level=get_log_level().lower())
