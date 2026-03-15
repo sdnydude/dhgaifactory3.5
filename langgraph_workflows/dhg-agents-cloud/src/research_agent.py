@@ -27,6 +27,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from extract_topic import extract_topic_node
 from pubmed_client import PubMedClient as SharedPubMedClient, build_references_section
+from vs_client import vs_generate, vs_select, vs_is_available
 
 
 # =============================================================================
@@ -92,6 +93,10 @@ class ResearchState(TypedDict):
     model_used: str
     total_tokens: int
     total_cost: float
+
+    # === VS (Verbalized Sampling) ===
+    vs_distributions: Dict[str, Dict[str, Any]]  # keyed by step name
+    vs_used: bool
 
 
 
@@ -415,8 +420,20 @@ PERPLEXITY FINDINGS:
 
 Return ONLY valid JSON matching the schema above. Every field must have a citation."""
 
-    result = await llm.generate(system, prompt, {"step": "epidemiology"})
-    
+    vs_result = None
+    if await vs_is_available():
+        vs_result = await vs_generate(
+            prompt=prompt, phase="research", k=5, system_prompt=system,
+        )
+    if vs_result and vs_result.get("items"):
+        selected = await vs_select(vs_result["distribution_id"], strategy="argmax")
+        content_text = (selected["selected"]["content"] if selected and selected.get("selected")
+                        else vs_result["items"][0]["content"])
+        result = {"content": content_text, "total_tokens": 0, "cost": 0.0}
+    else:
+        result = await llm.generate(system, prompt, {"step": "epidemiology"})
+        vs_result = None
+
     try:
         # Extract JSON from response
         content = result["content"]
@@ -427,7 +444,7 @@ Return ONLY valid JSON matching the schema above. Every field must have a citati
             epi_data = {"error": "Failed to parse epidemiology data"}
     except json.JSONDecodeError:
         epi_data = {"error": "Invalid JSON in epidemiology response"}
-    
+
     # Collect citations from articles
     new_citations = [
         {
@@ -443,18 +460,21 @@ Return ONLY valid JSON matching the schema above. Every field must have a citati
         }
         for a in articles if a.get("pmid")
     ]
-    
+
     prev_citations = state.get("citations", [])
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
     prev_queries = state.get("search_queries_executed", 0)
-    
+    prev_dists = state.get("vs_distributions", {})
+
     return {
         "epidemiology_data": epi_data,
         "citations": prev_citations + new_citations,
         "search_queries_executed": prev_queries + 2,
         "total_tokens": prev_tokens + result["total_tokens"],
-        "total_cost": prev_cost + result["cost"]
+        "total_cost": prev_cost + result["cost"],
+        "vs_distributions": {**prev_dists, "epidemiology": vs_result} if vs_result else prev_dists,
+        "vs_used": state.get("vs_used", False) or (vs_result is not None),
     }
 
 
@@ -498,8 +518,20 @@ RESEARCH DATA:
 
 Return ONLY valid JSON. Every dollar amount must have a citation."""
 
-    result = await llm.generate(system, prompt, {"step": "economic_burden"})
-    
+    vs_result = None
+    if await vs_is_available():
+        vs_result = await vs_generate(
+            prompt=prompt, phase="research", k=5, system_prompt=system,
+        )
+    if vs_result and vs_result.get("items"):
+        selected = await vs_select(vs_result["distribution_id"], strategy="argmax")
+        content_text = (selected["selected"]["content"] if selected and selected.get("selected")
+                        else vs_result["items"][0]["content"])
+        result = {"content": content_text, "total_tokens": 0, "cost": 0.0}
+    else:
+        result = await llm.generate(system, prompt, {"step": "economic_burden"})
+        vs_result = None
+
     try:
         content = result["content"]
         json_match = re.search(r'\{[\s\S]*\}', content)
@@ -509,16 +541,19 @@ Return ONLY valid JSON. Every dollar amount must have a citation."""
             econ_data = {"error": "Failed to parse economic data"}
     except json.JSONDecodeError:
         econ_data = {"error": "Invalid JSON in economic response"}
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
     prev_queries = state.get("search_queries_executed", 0)
-    
+    prev_dists = state.get("vs_distributions", {})
+
     return {
         "economic_burden_data": econ_data,
         "search_queries_executed": prev_queries + 1,
         "total_tokens": prev_tokens + result["total_tokens"],
-        "total_cost": prev_cost + result["cost"]
+        "total_cost": prev_cost + result["cost"],
+        "vs_distributions": {**prev_dists, "economic_burden": vs_result} if vs_result else prev_dists,
+        "vs_used": state.get("vs_used", False) or (vs_result is not None),
     }
 
 
@@ -575,8 +610,20 @@ CURRENT DATA:
 
 Return ONLY valid JSON. Name specific guidelines (ACC/AHA, ESC, etc.) and drugs."""
 
-    result = await llm.generate(system, prompt, {"step": "treatment_landscape"})
-    
+    vs_result = None
+    if await vs_is_available():
+        vs_result = await vs_generate(
+            prompt=prompt, phase="research", k=5, system_prompt=system,
+        )
+    if vs_result and vs_result.get("items"):
+        selected = await vs_select(vs_result["distribution_id"], strategy="argmax")
+        content_text = (selected["selected"]["content"] if selected and selected.get("selected")
+                        else vs_result["items"][0]["content"])
+        result = {"content": content_text, "total_tokens": 0, "cost": 0.0}
+    else:
+        result = await llm.generate(system, prompt, {"step": "treatment_landscape"})
+        vs_result = None
+
     try:
         content = result["content"]
         json_match = re.search(r'\{[\s\S]*\}', content)
@@ -586,7 +633,7 @@ Return ONLY valid JSON. Name specific guidelines (ACC/AHA, ESC, etc.) and drugs.
             tx_data = {"error": "Failed to parse treatment data"}
     except json.JSONDecodeError:
         tx_data = {"error": "Invalid JSON in treatment response"}
-    
+
     new_citations = [
         {
             "id": a["pmid"],
@@ -601,18 +648,21 @@ Return ONLY valid JSON. Name specific guidelines (ACC/AHA, ESC, etc.) and drugs.
         }
         for a in articles if a.get("pmid")
     ]
-    
+
     prev_citations = state.get("citations", [])
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
     prev_queries = state.get("search_queries_executed", 0)
-    
+    prev_dists = state.get("vs_distributions", {})
+
     return {
         "treatment_landscape_data": tx_data,
         "citations": prev_citations + new_citations,
         "search_queries_executed": prev_queries + 2,
         "total_tokens": prev_tokens + result["total_tokens"],
-        "total_cost": prev_cost + result["cost"]
+        "total_cost": prev_cost + result["cost"],
+        "vs_distributions": {**prev_dists, "treatment_landscape": vs_result} if vs_result else prev_dists,
+        "vs_used": state.get("vs_used", False) or (vs_result is not None),
     }
 
 
@@ -661,8 +711,20 @@ RESEARCH DATA:
 
 Return ONLY valid JSON. Be specific about society names and years."""
 
-    result = await llm.generate(system, prompt, {"step": "guidelines"})
-    
+    vs_result = None
+    if await vs_is_available():
+        vs_result = await vs_generate(
+            prompt=prompt, phase="research", k=5, system_prompt=system,
+        )
+    if vs_result and vs_result.get("items"):
+        selected = await vs_select(vs_result["distribution_id"], strategy="argmax")
+        content_text = (selected["selected"]["content"] if selected and selected.get("selected")
+                        else vs_result["items"][0]["content"])
+        result = {"content": content_text, "total_tokens": 0, "cost": 0.0}
+    else:
+        result = await llm.generate(system, prompt, {"step": "guidelines"})
+        vs_result = None
+
     try:
         content = result["content"]
         json_match = re.search(r'\{[\s\S]*\}', content)
@@ -672,16 +734,19 @@ Return ONLY valid JSON. Be specific about society names and years."""
             guide_data = {"error": "Failed to parse guidelines data"}
     except json.JSONDecodeError:
         guide_data = {"error": "Invalid JSON in guidelines response"}
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
     prev_queries = state.get("search_queries_executed", 0)
-    
+    prev_dists = state.get("vs_distributions", {})
+
     return {
         "guidelines_data": guide_data,
         "search_queries_executed": prev_queries + 1,
         "total_tokens": prev_tokens + result["total_tokens"],
-        "total_cost": prev_cost + result["cost"]
+        "total_cost": prev_cost + result["cost"],
+        "vs_distributions": {**prev_dists, "guidelines": vs_result} if vs_result else prev_dists,
+        "vs_used": state.get("vs_used", False) or (vs_result is not None),
     }
 
 
@@ -743,8 +808,20 @@ MARKET DATA:
 
 Return ONLY valid JSON. Be balanced and include competitive context."""
 
-    result = await llm.generate(system, prompt, {"step": "market_intelligence"})
-    
+    vs_result = None
+    if await vs_is_available():
+        vs_result = await vs_generate(
+            prompt=prompt, phase="research", k=5, system_prompt=system,
+        )
+    if vs_result and vs_result.get("items"):
+        selected = await vs_select(vs_result["distribution_id"], strategy="argmax")
+        content_text = (selected["selected"]["content"] if selected and selected.get("selected")
+                        else vs_result["items"][0]["content"])
+        result = {"content": content_text, "total_tokens": 0, "cost": 0.0}
+    else:
+        result = await llm.generate(system, prompt, {"step": "market_intelligence"})
+        vs_result = None
+
     try:
         content = result["content"]
         json_match = re.search(r'\{[\s\S]*\}', content)
@@ -754,16 +831,19 @@ Return ONLY valid JSON. Be balanced and include competitive context."""
             market_data = {"error": "Failed to parse market data"}
     except json.JSONDecodeError:
         market_data = {"error": "Invalid JSON in market response"}
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
     prev_queries = state.get("search_queries_executed", 0)
-    
+    prev_dists = state.get("vs_distributions", {})
+
     return {
         "market_intelligence_data": market_data,
         "search_queries_executed": prev_queries + 1,
         "total_tokens": prev_tokens + result["total_tokens"],
-        "total_cost": prev_cost + result["cost"]
+        "total_cost": prev_cost + result["cost"],
+        "vs_distributions": {**prev_dists, "market_intelligence": vs_result} if vs_result else prev_dists,
+        "vs_used": state.get("vs_used", False) or (vs_result is not None),
     }
 
 
@@ -815,8 +895,20 @@ GUIDELINES:
 
 Identify 5-10 key findings and 3-5 evidence gaps. Return ONLY valid JSON."""
 
-    result = await llm.generate(system, prompt, {"step": "synthesis"})
-    
+    vs_result = None
+    if await vs_is_available():
+        vs_result = await vs_generate(
+            prompt=prompt, phase="research", k=5, system_prompt=system,
+        )
+    if vs_result and vs_result.get("items"):
+        selected = await vs_select(vs_result["distribution_id"], strategy="argmax")
+        content_text = (selected["selected"]["content"] if selected and selected.get("selected")
+                        else vs_result["items"][0]["content"])
+        result = {"content": content_text, "total_tokens": 0, "cost": 0.0}
+    else:
+        result = await llm.generate(system, prompt, {"step": "synthesis"})
+        vs_result = None
+
     try:
         content = result["content"]
         json_match = re.search(r'\{[\s\S]*\}', content)
@@ -826,14 +918,17 @@ Identify 5-10 key findings and 3-5 evidence gaps. Return ONLY valid JSON."""
             synth_data = {"key_findings": [], "evidence_gaps": [], "research_priorities": []}
     except json.JSONDecodeError:
         synth_data = {"key_findings": [], "evidence_gaps": [], "research_priorities": []}
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
-    
+    prev_dists = state.get("vs_distributions", {})
+
     return {
         "literature_synthesis_data": synth_data,
         "total_tokens": prev_tokens + result["total_tokens"],
-        "total_cost": prev_cost + result["cost"]
+        "total_cost": prev_cost + result["cost"],
+        "vs_distributions": {**prev_dists, "synthesis": vs_result} if vs_result else prev_dists,
+        "vs_used": state.get("vs_used", False) or (vs_result is not None),
     }
 
 

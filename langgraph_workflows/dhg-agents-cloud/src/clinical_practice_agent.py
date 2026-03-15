@@ -27,6 +27,7 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from extract_topic import extract_topic_node
 from pubmed_client import PubMedClient, build_references_section
+from vs_client import vs_generate, vs_select, vs_is_available
 
 
 # =============================================================================
@@ -91,6 +92,9 @@ class ClinicalPracticeState(TypedDict):
     model_used: str
     total_tokens: int
     total_cost: float
+    # === VS (Verbalized Sampling) ===
+    vs_distributions: Dict[str, Dict[str, Any]]  # keyed by step name
+    vs_used: bool
 
 
 # =============================================================================
@@ -288,8 +292,20 @@ GUIDELINE DATA:
 
 Return ONLY valid JSON. Be specific about guideline sources and years."""
 
-    result = await llm.generate(system, prompt, {"step": "standard_of_care"})
-    
+    vs_result = None
+    if await vs_is_available():
+        vs_result = await vs_generate(
+            prompt=prompt, phase="clinical_practice", k=5, system_prompt=system,
+        )
+    if vs_result and vs_result.get("items"):
+        selected = await vs_select(vs_result["distribution_id"], strategy="argmax")
+        content_text = (selected["selected"]["content"] if selected and selected.get("selected")
+                        else vs_result["items"][0]["content"])
+        result = {"content": content_text, "total_tokens": 0, "cost": 0.0}
+    else:
+        result = await llm.generate(system, prompt, {"step": "standard_of_care"})
+        vs_result = None
+
     try:
         content = result["content"]
         json_match = re.search(r'\{[\s\S]*\}', content)
@@ -299,16 +315,19 @@ Return ONLY valid JSON. Be specific about guideline sources and years."""
             soc_data = {"error": "Failed to parse standard of care data"}
     except json.JSONDecodeError:
         soc_data = {"error": "Invalid JSON in standard of care response"}
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
     prev_sources = state.get("sources_analyzed", 0)
-    
+    prev_dists = state.get("vs_distributions", {})
+
     return {
         "standard_of_care_data": soc_data,
         "sources_analyzed": prev_sources + 1,
         "total_tokens": prev_tokens + result["total_tokens"],
-        "total_cost": prev_cost + result["cost"]
+        "total_cost": prev_cost + result["cost"],
+        "vs_distributions": {**prev_dists, "standard_of_care": vs_result} if vs_result else prev_dists,
+        "vs_used": state.get("vs_used", False) or (vs_result is not None),
     }
 
 
@@ -362,8 +381,20 @@ REAL-WORLD DATA:
 
 Return ONLY valid JSON. Quantify all gaps with specific percentages and sources."""
 
-    result = await llm.generate(system, prompt, {"step": "real_world_practice"})
-    
+    vs_result = None
+    if await vs_is_available():
+        vs_result = await vs_generate(
+            prompt=prompt, phase="clinical_practice", k=5, system_prompt=system,
+        )
+    if vs_result and vs_result.get("items"):
+        selected = await vs_select(vs_result["distribution_id"], strategy="argmax")
+        content_text = (selected["selected"]["content"] if selected and selected.get("selected")
+                        else vs_result["items"][0]["content"])
+        result = {"content": content_text, "total_tokens": 0, "cost": 0.0}
+    else:
+        result = await llm.generate(system, prompt, {"step": "real_world_practice"})
+        vs_result = None
+
     try:
         content = result["content"]
         json_match = re.search(r'\{[\s\S]*\}', content)
@@ -373,16 +404,19 @@ Return ONLY valid JSON. Quantify all gaps with specific percentages and sources.
             rwp_data = {"error": "Failed to parse real-world practice data"}
     except json.JSONDecodeError:
         rwp_data = {"error": "Invalid JSON in practice response"}
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
     prev_sources = state.get("sources_analyzed", 0)
-    
+    prev_dists = state.get("vs_distributions", {})
+
     return {
         "real_world_practice_data": rwp_data,
         "sources_analyzed": prev_sources + 1,
         "total_tokens": prev_tokens + result["total_tokens"],
-        "total_cost": prev_cost + result["cost"]
+        "total_cost": prev_cost + result["cost"],
+        "vs_distributions": {**prev_dists, "real_world_practice": vs_result} if vs_result else prev_dists,
+        "vs_used": state.get("vs_used", False) or (vs_result is not None),
     }
 
 
@@ -456,8 +490,20 @@ BARRIER RESEARCH:
 
 Return ONLY valid JSON. Every barrier must be categorized and have evidence."""
 
-    result = await llm.generate(system, prompt, {"step": "barriers"})
-    
+    vs_result = None
+    if await vs_is_available():
+        vs_result = await vs_generate(
+            prompt=prompt, phase="clinical_practice", k=5, system_prompt=system,
+        )
+    if vs_result and vs_result.get("items"):
+        selected = await vs_select(vs_result["distribution_id"], strategy="argmax")
+        content_text = (selected["selected"]["content"] if selected and selected.get("selected")
+                        else vs_result["items"][0]["content"])
+        result = {"content": content_text, "total_tokens": 0, "cost": 0.0}
+    else:
+        result = await llm.generate(system, prompt, {"step": "barriers"})
+        vs_result = None
+
     try:
         content = result["content"]
         json_match = re.search(r'\{[\s\S]*\}', content)
@@ -467,16 +513,19 @@ Return ONLY valid JSON. Every barrier must be categorized and have evidence."""
             barriers_data = {"error": "Failed to parse barriers data"}
     except json.JSONDecodeError:
         barriers_data = {"error": "Invalid JSON in barriers response"}
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
     prev_sources = state.get("sources_analyzed", 0)
-    
+    prev_dists = state.get("vs_distributions", {})
+
     return {
         "practice_barriers_data": barriers_data,
         "sources_analyzed": prev_sources + 1,
         "total_tokens": prev_tokens + result["total_tokens"],
-        "total_cost": prev_cost + result["cost"]
+        "total_cost": prev_cost + result["cost"],
+        "vs_distributions": {**prev_dists, "barriers": vs_result} if vs_result else prev_dists,
+        "vs_used": state.get("vs_used", False) or (vs_result is not None),
     }
 
 
@@ -522,8 +571,20 @@ SPECIALTY DATA:
 
 Return ONLY valid JSON. Include specific data on referral rates and coordination."""
 
-    result = await llm.generate(system, prompt, {"step": "specialty_perspectives"})
-    
+    vs_result = None
+    if await vs_is_available():
+        vs_result = await vs_generate(
+            prompt=prompt, phase="clinical_practice", k=5, system_prompt=system,
+        )
+    if vs_result and vs_result.get("items"):
+        selected = await vs_select(vs_result["distribution_id"], strategy="argmax")
+        content_text = (selected["selected"]["content"] if selected and selected.get("selected")
+                        else vs_result["items"][0]["content"])
+        result = {"content": content_text, "total_tokens": 0, "cost": 0.0}
+    else:
+        result = await llm.generate(system, prompt, {"step": "specialty_perspectives"})
+        vs_result = None
+
     try:
         content = result["content"]
         json_match = re.search(r'\{[\s\S]*\}', content)
@@ -533,16 +594,19 @@ Return ONLY valid JSON. Include specific data on referral rates and coordination
             specialty_data = {"error": "Failed to parse specialty data"}
     except json.JSONDecodeError:
         specialty_data = {"error": "Invalid JSON in specialty response"}
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
     prev_sources = state.get("sources_analyzed", 0)
-    
+    prev_dists = state.get("vs_distributions", {})
+
     return {
         "specialty_perspectives_data": specialty_data,
         "sources_analyzed": prev_sources + 1,
         "total_tokens": prev_tokens + result["total_tokens"],
-        "total_cost": prev_cost + result["cost"]
+        "total_cost": prev_cost + result["cost"],
+        "vs_distributions": {**prev_dists, "specialty_perspectives": vs_result} if vs_result else prev_dists,
+        "vs_used": state.get("vs_used", False) or (vs_result is not None),
     }
 
 
