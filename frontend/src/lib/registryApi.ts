@@ -9,8 +9,7 @@ import type {
   HybridSearchRequest,
 } from "@/types/cme";
 
-const BASE_URL =
-  process.env.NEXT_PUBLIC_REGISTRY_API_URL || "http://localhost:8011";
+const BASE_URL = "/api/registry";
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {

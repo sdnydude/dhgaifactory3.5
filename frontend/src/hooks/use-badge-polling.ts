@@ -17,9 +17,7 @@ export function useBadgePolling(intervalMs = 30_000) {
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ status: "interrupted", limit: 100 }),
           }),
-          fetch(
-            `${process.env.NEXT_PUBLIC_REGISTRY_API_URL || "http://localhost:8011"}/api/cme/projects?status=processing`,
-          ),
+          fetch("/api/registry/api/cme/projects?status=processing"),
         ]);
 
         if (!active) return;

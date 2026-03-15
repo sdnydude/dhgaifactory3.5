@@ -13,7 +13,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # Build arguments become env vars at build time
-ARG NEXT_PUBLIC_LANGGRAPH_API_URL=/api/langgraph
+ARG NEXT_PUBLIC_LANGGRAPH_API_URL
 ARG NEXT_PUBLIC_LANGGRAPH_ASSISTANT_ID=needs_assessment
 
 ENV NEXT_PUBLIC_LANGGRAPH_API_URL=$NEXT_PUBLIC_LANGGRAPH_API_URL

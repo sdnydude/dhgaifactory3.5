@@ -17,8 +17,7 @@ const ALERTMANAGER_BASE =
     ? `${window.location.origin}/api/alertmanager`
     : "http://localhost:3000/api/alertmanager";
 
-export const REGISTRY_BASE =
-  process.env.NEXT_PUBLIC_REGISTRY_API_URL || "http://localhost:8011";
+export const REGISTRY_BASE = "/api/registry";
 
 async function fetchJson<T>(url: string): Promise<T> {
   const response = await fetch(url);
