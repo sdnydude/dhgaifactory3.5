@@ -95,6 +95,18 @@ TTCT_COMPOSITE = Histogram(
     "Distribution of TTCT composite scores",
     ["phase"],
 )
+DISTRIBUTION_SPREAD = Histogram(
+    "vs_distribution_spread",
+    "Probability spread (max - min) per generation",
+    ["phase"],
+    buckets=[0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 1.0],
+)
+SELECTION_DELTA = Histogram(
+    "vs_selection_delta",
+    "Delta between selected probability and distribution mean",
+    ["phase", "strategy"],
+    buckets=[0.0, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 1.0],
+)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -471,6 +483,13 @@ async def generate_distribution(request: GenerateRequest) -> GenerateResponse:
         phase=effective_phase, model=effective_model, status="200"
     ).inc()
 
+    # Observe distribution spread (max - min probability)
+    probs = [item.p for item in dist]
+    if len(probs) >= 2:
+        DISTRIBUTION_SPREAD.labels(phase=effective_phase).observe(
+            max(probs) - min(probs)
+        )
+
     # Build response items with full metadata
     item_responses = [
         ItemResponse(
@@ -544,6 +563,13 @@ async def select_item(request: SelectRequest) -> SelectResponse:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     SELECTIONS_TOTAL.labels(strategy=request.strategy).inc()
+
+    # Observe selection delta (selected probability vs distribution mean)
+    phase = entry.get("phase", "custom")
+    mean_p = sum(item.p for item in dist) / len(dist) if len(dist) > 0 else 0.0
+    SELECTION_DELTA.labels(phase=phase, strategy=request.strategy).observe(
+        selected_item.p - mean_p
+    )
 
     return SelectResponse(
         distribution_id=request.distribution_id,
