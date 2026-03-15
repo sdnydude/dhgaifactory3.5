@@ -1,0 +1,49 @@
+Section,Field Name,Label,Required,Type,Example Value,Notes
+section_a,project_name,Project Name,Yes,text,Advances in Immunotherapy for NSCLC,5-200 characters
+section_a,therapeutic_area,Therapeutic Area,Yes,text,Oncology,
+section_a,disease_state,Disease State,Yes,text,Non-Small Cell Lung Cancer,
+section_a,target_audience_primary,Primary Target Audience,Yes,list (semicolon-separated),Medical Oncologists; Pulmonologists; Hematologists,1-5 entries
+section_a,target_audience_secondary,Secondary Target Audience,No,list (semicolon-separated),Nurse Practitioners; Physician Assistants,Up to 3 entries
+section_a,target_hcp_types,Target HCP Types,No,list (semicolon-separated),MD/DO; NP; PA-C,Credential types
+section_b,supporter_name,Supporter Name,Yes,text,Merck & Co.,Pharmaceutical company or foundation
+section_b,supporter_contact_name,Supporter Contact Name,No,text,Jane Smith,
+section_b,supporter_contact_email,Supporter Contact Email,No,email,jane.smith@example.com,
+section_b,grant_amount_requested,Grant Amount Requested,No,number,250000,USD amount
+section_b,grant_submission_deadline,Grant Submission Deadline,No,date,2026-06-15,YYYY-MM-DD format
+section_c,learning_format,Learning Format,Yes,text,Live Webinar,"e.g. Live Webinar, Enduring Online, Live In-Person, Podcast"
+section_c,duration_minutes,Duration (minutes),No,number,90,
+section_c,include_pre_test,Include Pre-Test,Yes,boolean,Yes,Yes or No
+section_c,include_post_test,Include Post-Test,Yes,boolean,Yes,Yes or No
+section_c,faculty_count,Faculty Count,No,number,3,
+section_d,clinical_topics,Clinical Topics,Yes,list (semicolon-separated),Immune checkpoint inhibitors; Biomarker testing; irAE management,
+section_d,treatment_modalities,Treatment Modalities,No,list (semicolon-separated),Immunotherapy; Targeted therapy; Chemotherapy,
+section_d,patient_population,Patient Population,No,text,Adults with advanced or metastatic NSCLC,
+section_d,stage_of_disease,Stage of Disease,No,text,Stage IIIB/IV,
+section_d,comorbidities,Comorbidities,No,list (semicolon-separated),Autoimmune disease; Cardiovascular disease,
+section_e,knowledge_gaps,Knowledge Gaps,No,list (semicolon-separated),Biomarker interpretation; Emerging combination regimens,
+section_e,competence_gaps,Competence Gaps,No,list (semicolon-separated),Treatment sequencing decisions; irAE grading accuracy,
+section_e,performance_gaps,Performance Gaps,No,list (semicolon-separated),Comprehensive molecular testing rates; Palliative care referral timing,
+section_e,gap_evidence_sources,Gap Evidence Sources,No,list (semicolon-separated),ASCO survey 2024; NCCN audit data; Published practice gap analyses,
+section_e,gap_priority,Gap Priority,No,text,High,"High, Medium, or Low"
+section_f,primary_outcomes,Primary Outcomes,No,list (semicolon-separated),Increase molecular testing rates by 20%; Improve irAE recognition time,
+section_f,secondary_outcomes,Secondary Outcomes,No,list (semicolon-separated),Increase palliative care referrals; Improve patient satisfaction scores,
+section_f,measurement_approach,Measurement Approach,No,text,Pre/post knowledge assessment with 60-day follow-up,
+section_f,moore_levels_target,Moore Levels Target,No,list (semicolon-separated),4; 5,"Moore framework levels (3A, 3B, 4, 5, 6)"
+section_f,follow_up_timeline,Follow-Up Timeline,No,text,60 days,"e.g. 30 days, 60 days, 6 months"
+section_g,key_messages,Key Messages,No,list (semicolon-separated),Biomarker testing should guide first-line treatment; Combination immunotherapy improves outcomes in specific subtypes,
+section_g,required_references,Required References,No,list (semicolon-separated),NCCN NSCLC Guidelines v4.2025; ASCO/OH CCO Molecular Testing Guideline,
+section_g,excluded_topics,Excluded Topics,No,list (semicolon-separated),Off-label dosing; Unapproved indications,
+section_g,competitor_products_to_mention,Competitor Products,No,list (semicolon-separated),Keytruda; Opdivo; Tecentriq,
+section_g,regulatory_considerations,Regulatory Considerations,No,text,FDA-approved indications only,
+section_h,target_launch_date,Target Launch Date,No,date,2026-09-01,YYYY-MM-DD format
+section_h,expiration_date,Expiration Date,No,date,2028-09-01,YYYY-MM-DD format
+section_h,distribution_channels,Distribution Channels,No,list (semicolon-separated),On24 webinar platform; PeerPoint CME portal; Medical society websites,
+section_h,geo_restrictions,Geographic Restrictions,No,list (semicolon-separated),United States; Canada,Leave blank for no restrictions
+section_h,language_requirements,Language Requirements,No,list (semicolon-separated),English; Spanish,
+section_i,accme_compliant,ACCME Compliant,Yes,boolean,Yes,Yes or No
+section_i,financial_disclosure_required,Financial Disclosure Required,Yes,boolean,Yes,Yes or No
+section_i,off_label_discussion,Off-Label Discussion,Yes,boolean,No,Yes or No
+section_i,commercial_support_acknowledgment,Commercial Support Acknowledgment,Yes,boolean,Yes,Yes or No
+section_j,special_instructions,Special Instructions,No,text,Include interactive case-based learning with audience polling,
+section_j,reference_materials,Reference Materials,No,list (semicolon-separated),Supporter's medical strategy document; Previous grant submission,URLs or document names
+section_j,internal_notes,Internal Notes,No,text,Priority project — deadline driven by Q3 grant cycle,Not included in generated documents
