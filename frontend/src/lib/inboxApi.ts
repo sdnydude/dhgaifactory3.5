@@ -1,5 +1,5 @@
 import { Client } from "@langchain/langgraph-sdk";
-import type { ReviewPayload, ResumeValue } from "@/components/review/types";
+import type { ReviewPayload, ReviewPayloadWithVS, ResumeValue } from "@/components/review/types";
 
 const createClient = () => {
   return new Client({
@@ -11,7 +11,7 @@ export interface PendingReview {
   threadId: string;
   graphId: string;
   createdAt: string;
-  payload: ReviewPayload | null;
+  payload: ReviewPayloadWithVS | null;
   currentStep: string;
   status: string;
 }
@@ -30,11 +30,11 @@ export async function listPendingReviews(): Promise<PendingReview[]> {
     const values = state.values as Record<string, unknown> | null;
     const tasks = state.tasks ?? [];
 
-    let payload: ReviewPayload | null = null;
+    let payload: ReviewPayloadWithVS | null = null;
     for (const task of tasks) {
       if (task.interrupts) {
         for (const interrupt of task.interrupts) {
-          const val = interrupt.value as ReviewPayload;
+          const val = interrupt.value as ReviewPayloadWithVS;
           if (val && val.document) {
             payload = val;
           }

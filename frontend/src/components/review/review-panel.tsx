@@ -6,10 +6,11 @@ import { CommentsSidebar } from "./comments-sidebar";
 import { MetricsBar } from "./metrics-bar";
 import { DecisionBar } from "./decision-bar";
 import { useAnnotations } from "./use-annotations";
-import type { ReviewPayload, ResumeValue, DocumentSection } from "./types";
+import { VSAlternatives } from "./vs-alternatives";
+import type { ReviewPayloadWithVS, ResumeValue, DocumentSection } from "./types";
 
 interface ReviewPanelProps {
-  payload: ReviewPayload;
+  payload: ReviewPayloadWithVS;
   onSubmit: (value: ResumeValue) => void;
   isLoading: boolean;
 }
@@ -81,6 +82,16 @@ export function ReviewPanel({ payload, onSubmit, isLoading }: ReviewPanelProps) 
           />
         </div>
       </div>
+
+      {/* VS Alternatives panel — full-width bar below doc+sidebar, above mobile sidebar */}
+      {payload.vs_distributions && activeDoc && payload.vs_distributions[activeDoc.id] && (
+        <div className="px-4 py-2 border-t border-border">
+          <VSAlternatives
+            distribution={payload.vs_distributions[activeDoc.id]}
+            agentLabel={activeDoc.label}
+          />
+        </div>
+      )}
 
       <div className="md:hidden border-t border-border max-h-48 overflow-auto">
         <CommentsSidebar
