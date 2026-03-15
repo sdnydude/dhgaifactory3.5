@@ -28,6 +28,7 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from extract_topic import extract_topic_node
 from pubmed_client import PubMedClient, build_references_section
+from vs_client import vs_generate, vs_select, vs_is_available
 
 
 # =============================================================================
@@ -97,6 +98,9 @@ class GrantWriterState(TypedDict):
     model_used: str
     total_tokens: int
     total_cost: float
+    # === VS (Verbalized Sampling) ===
+    vs_distributions: Dict[str, Dict[str, Any]]  # keyed by step name
+    vs_used: bool
 
 
 # =============================================================================
@@ -216,23 +220,39 @@ You are drafting the COVER LETTER. Return a JSON object:
     
     Focus on the unmet need and the value of this educational intervention."""
 
-    result = await llm.generate(system, prompt, {"step": "cover_letter"})
-    
+    vs_result = None
+    if await vs_is_available():
+        vs_result = await vs_generate(
+            prompt=prompt, phase="grant_writer", k=5,
+            system_prompt=system, model="claude-opus-4-20250514",
+        )
+    if vs_result and vs_result.get("items"):
+        selected = await vs_select(vs_result["distribution_id"], strategy="argmax")
+        content_text = (selected["selected"]["content"] if selected and selected.get("selected")
+                        else vs_result["items"][0]["content"])
+        result = {"content": content_text, "total_tokens": 0, "cost": 0.0}
+    else:
+        result = await llm.generate(system, prompt, {"step": "cover_letter"})
+        vs_result = None
+
     try:
         match = re.search(r'\{[\s\S]*\}', result["content"])
         data = json.loads(match.group()) if match else {"content": result["content"]}
     except:
         data = {"content": result["content"]}
-        
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
-    
+    prev_dists = state.get("vs_distributions", {})
+
     return {
         "cover_letter": data,
         "sections_completed": state.get("sections_completed", []) + ["cover_letter"],
         "total_tokens": prev_tokens + result["total_tokens"],
         "total_cost": prev_cost + result["cost"],
-        "model_used": "claude-opus-4-20250514"
+        "model_used": "claude-opus-4-20250514",
+        "vs_distributions": {**prev_dists, "cover_letter": vs_result} if vs_result else prev_dists,
+        "vs_used": state.get("vs_used", False) or (vs_result is not None),
     }
 
 
@@ -277,22 +297,38 @@ You are drafting the EXECUTIVE SUMMARY. Return a JSON object:
     
     Make a compelling case for support."""
 
-    result = await llm.generate(system, prompt, {"step": "executive_summary"})
-    
+    vs_result = None
+    if await vs_is_available():
+        vs_result = await vs_generate(
+            prompt=prompt, phase="grant_writer", k=5,
+            system_prompt=system, model="claude-opus-4-20250514",
+        )
+    if vs_result and vs_result.get("items"):
+        selected = await vs_select(vs_result["distribution_id"], strategy="argmax")
+        content_text = (selected["selected"]["content"] if selected and selected.get("selected")
+                        else vs_result["items"][0]["content"])
+        result = {"content": content_text, "total_tokens": 0, "cost": 0.0}
+    else:
+        result = await llm.generate(system, prompt, {"step": "executive_summary"})
+        vs_result = None
+
     try:
         match = re.search(r'\{[\s\S]*\}', result["content"])
         data = json.loads(match.group()) if match else {"content": result["content"]}
     except:
         data = {"content": result["content"]}
-        
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
-    
+    prev_dists = state.get("vs_distributions", {})
+
     return {
         "executive_summary": data,
         "sections_completed": state.get("sections_completed", []) + ["executive_summary"],
         "total_tokens": prev_tokens + result["total_tokens"],
-        "total_cost": prev_cost + result["cost"]
+        "total_cost": prev_cost + result["cost"],
+        "vs_distributions": {**prev_dists, "executive_summary": vs_result} if vs_result else prev_dists,
+        "vs_used": state.get("vs_used", False) or (vs_result is not None),
     }
 
 
@@ -386,22 +422,38 @@ Requirements:
 3. Include statement on conflict of interest identification and resolution
 4. Reference ACCME requirements for independence"""
 
-    result = await llm.generate(system, prompt, {"step": "faculty_section"})
-    
+    vs_result = None
+    if await vs_is_available():
+        vs_result = await vs_generate(
+            prompt=prompt, phase="grant_writer", k=5,
+            system_prompt=system, model="claude-opus-4-20250514",
+        )
+    if vs_result and vs_result.get("items"):
+        selected = await vs_select(vs_result["distribution_id"], strategy="argmax")
+        content_text = (selected["selected"]["content"] if selected and selected.get("selected")
+                        else vs_result["items"][0]["content"])
+        result = {"content": content_text, "total_tokens": 0, "cost": 0.0}
+    else:
+        result = await llm.generate(system, prompt, {"step": "faculty_section"})
+        vs_result = None
+
     try:
         match = re.search(r'\{[\s\S]*\}', result["content"])
         data = json.loads(match.group()) if match else {"content": result["content"]}
     except:
         data = {"content": result["content"]}
-        
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
-    
+    prev_dists = state.get("vs_distributions", {})
+
     return {
         "faculty_section": data,
         "sections_completed": state.get("sections_completed", []) + ["faculty"],
         "total_tokens": prev_tokens + result["total_tokens"],
-        "total_cost": prev_cost + result["cost"]
+        "total_cost": prev_cost + result["cost"],
+        "vs_distributions": {**prev_dists, "faculty_section": vs_result} if vs_result else prev_dists,
+        "vs_used": state.get("vs_used", False) or (vs_result is not None),
     }
 
 
@@ -483,22 +535,38 @@ Requirements:
 3. Demonstrate cost-effectiveness
 4. Align with industry standards for CME activities"""
 
-    result = await llm.generate(system, prompt, {"step": "budget_section"})
-    
+    vs_result = None
+    if await vs_is_available():
+        vs_result = await vs_generate(
+            prompt=prompt, phase="grant_writer", k=5,
+            system_prompt=system, model="claude-opus-4-20250514",
+        )
+    if vs_result and vs_result.get("items"):
+        selected = await vs_select(vs_result["distribution_id"], strategy="argmax")
+        content_text = (selected["selected"]["content"] if selected and selected.get("selected")
+                        else vs_result["items"][0]["content"])
+        result = {"content": content_text, "total_tokens": 0, "cost": 0.0}
+    else:
+        result = await llm.generate(system, prompt, {"step": "budget_section"})
+        vs_result = None
+
     try:
         match = re.search(r'\{[\s\S]*\}', result["content"])
         data = json.loads(match.group()) if match else {"content": result["content"], "total_requested": total, "budget_categories": budget_breakdown}
     except:
         data = {"content": result["content"], "total_requested": total, "budget_categories": budget_breakdown}
-        
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
-    
+    prev_dists = state.get("vs_distributions", {})
+
     return {
         "budget_section": data,
         "sections_completed": state.get("sections_completed", []) + ["budget"],
         "total_tokens": prev_tokens + result["total_tokens"],
-        "total_cost": prev_cost + result["cost"]
+        "total_cost": prev_cost + result["cost"],
+        "vs_distributions": {**prev_dists, "budget_section": vs_result} if vs_result else prev_dists,
+        "vs_used": state.get("vs_used", False) or (vs_result is not None),
     }
 
 
@@ -532,22 +600,38 @@ Emphasize:
 3. Track record of successful educational outcomes
 4. Infrastructure and capabilities"""
 
-    result = await llm.generate(system, prompt, {"step": "org_qualifications"})
+    vs_result = None
+    if await vs_is_available():
+        vs_result = await vs_generate(
+            prompt=prompt, phase="grant_writer", k=5,
+            system_prompt=system, model="claude-opus-4-20250514",
+        )
+    if vs_result and vs_result.get("items"):
+        selected = await vs_select(vs_result["distribution_id"], strategy="argmax")
+        content_text = (selected["selected"]["content"] if selected and selected.get("selected")
+                        else vs_result["items"][0]["content"])
+        result = {"content": content_text, "total_tokens": 0, "cost": 0.0}
+    else:
+        result = await llm.generate(system, prompt, {"step": "org_qualifications"})
+        vs_result = None
 
     try:
         match = re.search(r'\{[\s\S]*\}', result["content"])
         data = json.loads(match.group()) if match else {"content": result["content"]}
     except:
         data = {"content": result["content"]}
-        
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
-    
+    prev_dists = state.get("vs_distributions", {})
+
     return {
         "org_qualifications_section": data,
         "sections_completed": state.get("sections_completed", []) + ["org_qualifications"],
         "total_tokens": prev_tokens + result["total_tokens"],
-        "total_cost": prev_cost + result["cost"]
+        "total_cost": prev_cost + result["cost"],
+        "vs_distributions": {**prev_dists, "org_qualifications": vs_result} if vs_result else prev_dists,
+        "vs_used": state.get("vs_used", False) or (vs_result is not None),
     }
 
 
@@ -585,22 +669,38 @@ Requirements (ACCME Standards for Integrity and Independence):
 4. Promotion separated from education
 5. Disclosure provided to learners"""
 
-    result = await llm.generate(system, prompt, {"step": "independence_section"})
+    vs_result = None
+    if await vs_is_available():
+        vs_result = await vs_generate(
+            prompt=prompt, phase="grant_writer", k=5,
+            system_prompt=system, model="claude-opus-4-20250514",
+        )
+    if vs_result and vs_result.get("items"):
+        selected = await vs_select(vs_result["distribution_id"], strategy="argmax")
+        content_text = (selected["selected"]["content"] if selected and selected.get("selected")
+                        else vs_result["items"][0]["content"])
+        result = {"content": content_text, "total_tokens": 0, "cost": 0.0}
+    else:
+        result = await llm.generate(system, prompt, {"step": "independence_section"})
+        vs_result = None
 
     try:
         match = re.search(r'\{[\s\S]*\}', result["content"])
         data = json.loads(match.group()) if match else {"content": result["content"]}
     except:
         data = {"content": result["content"]}
-        
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
-    
+    prev_dists = state.get("vs_distributions", {})
+
     return {
         "independence_section": data,
         "sections_completed": state.get("sections_completed", []) + ["independence"],
         "total_tokens": prev_tokens + result["total_tokens"],
-        "total_cost": prev_cost + result["cost"]
+        "total_cost": prev_cost + result["cost"],
+        "vs_distributions": {**prev_dists, "independence": vs_result} if vs_result else prev_dists,
+        "vs_used": state.get("vs_used", False) or (vs_result is not None),
     }
 
 

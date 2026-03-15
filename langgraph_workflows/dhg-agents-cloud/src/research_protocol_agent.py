@@ -25,6 +25,7 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from extract_topic import extract_topic_node
 from pubmed_client import PubMedClient, build_references_section
+from vs_client import vs_generate, vs_select, vs_is_available
 
 
 # =============================================================================
@@ -98,6 +99,10 @@ class ResearchProtocolState(TypedDict):
     model_used: str
     total_tokens: int
     total_cost: float
+
+    # === VS (Verbalized Sampling) ===
+    vs_distributions: Dict[str, Dict[str, Any]]  # keyed by step name
+    vs_used: bool
 
 
 # =============================================================================
@@ -248,8 +253,20 @@ Create study objectives that:
 
 Return ONLY valid JSON."""
 
-    result = await llm.generate(system, prompt, {"step": "study_objectives"})
-    
+    vs_result = None
+    if await vs_is_available():
+        vs_result = await vs_generate(
+            prompt=prompt, phase="research_protocol", k=5, system_prompt=system,
+        )
+    if vs_result and vs_result.get("items"):
+        selected = await vs_select(vs_result["distribution_id"], strategy="argmax")
+        content_text = (selected["selected"]["content"] if selected and selected.get("selected")
+                        else vs_result["items"][0]["content"])
+        result = {"content": content_text, "total_tokens": 0, "cost": 0.0}
+    else:
+        result = await llm.generate(system, prompt, {"step": "study_objectives"})
+        vs_result = None
+
     try:
         content = result["content"]
         json_match = re.search(r'\{[\s\S]*\}', content)
@@ -259,14 +276,17 @@ Return ONLY valid JSON."""
             study_objectives = {}
     except json.JSONDecodeError:
         study_objectives = {}
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
-    
+    prev_dists = state.get("vs_distributions", {})
+
     return {
         "study_objectives": study_objectives,
         "total_tokens": prev_tokens + result["total_tokens"],
-        "total_cost": prev_cost + result["cost"]
+        "total_cost": prev_cost + result["cost"],
+        "vs_distributions": {**prev_dists, "study_objectives": vs_result} if vs_result else prev_dists,
+        "vs_used": state.get("vs_used", False) or (vs_result is not None),
     }
 
 
@@ -321,8 +341,20 @@ Consider:
 
 Return ONLY valid JSON."""
 
-    result = await llm.generate(system, prompt, {"step": "study_design"})
-    
+    vs_result = None
+    if await vs_is_available():
+        vs_result = await vs_generate(
+            prompt=prompt, phase="research_protocol", k=5, system_prompt=system,
+        )
+    if vs_result and vs_result.get("items"):
+        selected = await vs_select(vs_result["distribution_id"], strategy="argmax")
+        content_text = (selected["selected"]["content"] if selected and selected.get("selected")
+                        else vs_result["items"][0]["content"])
+        result = {"content": content_text, "total_tokens": 0, "cost": 0.0}
+    else:
+        result = await llm.generate(system, prompt, {"step": "study_design"})
+        vs_result = None
+
     try:
         content = result["content"]
         json_match = re.search(r'\{[\s\S]*\}', content)
@@ -332,18 +364,21 @@ Return ONLY valid JSON."""
             study_design = {}
     except json.JSONDecodeError:
         study_design = {}
-    
+
     target_enrollment = study_design.get("sample_size", {}).get("target_n", target_n)
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
-    
+    prev_dists = state.get("vs_distributions", {})
+
     return {
         "study_design": study_design,
         "target_enrollment": target_enrollment,
         "study_duration_months": 6,
         "total_tokens": prev_tokens + result["total_tokens"],
-        "total_cost": prev_cost + result["cost"]
+        "total_cost": prev_cost + result["cost"],
+        "vs_distributions": {**prev_dists, "study_design": vs_result} if vs_result else prev_dists,
+        "vs_used": state.get("vs_used", False) or (vs_result is not None),
     }
 
 
@@ -400,8 +435,20 @@ Create outcomes that:
 
 Return ONLY valid JSON."""
 
-    result = await llm.generate(system, prompt, {"step": "outcomes"})
-    
+    vs_result = None
+    if await vs_is_available():
+        vs_result = await vs_generate(
+            prompt=prompt, phase="research_protocol", k=5, system_prompt=system,
+        )
+    if vs_result and vs_result.get("items"):
+        selected = await vs_select(vs_result["distribution_id"], strategy="argmax")
+        content_text = (selected["selected"]["content"] if selected and selected.get("selected")
+                        else vs_result["items"][0]["content"])
+        result = {"content": content_text, "total_tokens": 0, "cost": 0.0}
+    else:
+        result = await llm.generate(system, prompt, {"step": "outcomes"})
+        vs_result = None
+
     try:
         content = result["content"]
         json_match = re.search(r'\{[\s\S]*\}', content)
@@ -411,14 +458,17 @@ Return ONLY valid JSON."""
             outcome_measures = {}
     except json.JSONDecodeError:
         outcome_measures = {}
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
-    
+    prev_dists = state.get("vs_distributions", {})
+
     return {
         "outcome_measures": outcome_measures,
         "total_tokens": prev_tokens + result["total_tokens"],
-        "total_cost": prev_cost + result["cost"]
+        "total_cost": prev_cost + result["cost"],
+        "vs_distributions": {**prev_dists, "outcomes": vs_result} if vs_result else prev_dists,
+        "vs_used": state.get("vs_used", False) or (vs_result is not None),
     }
 
 
@@ -617,8 +667,20 @@ Create a statistical plan that:
 
 Return ONLY valid JSON."""
 
-    result = await llm.generate(system, prompt, {"step": "statistical_plan"})
-    
+    vs_result = None
+    if await vs_is_available():
+        vs_result = await vs_generate(
+            prompt=prompt, phase="research_protocol", k=5, system_prompt=system,
+        )
+    if vs_result and vs_result.get("items"):
+        selected = await vs_select(vs_result["distribution_id"], strategy="argmax")
+        content_text = (selected["selected"]["content"] if selected and selected.get("selected")
+                        else vs_result["items"][0]["content"])
+        result = {"content": content_text, "total_tokens": 0, "cost": 0.0}
+    else:
+        result = await llm.generate(system, prompt, {"step": "statistical_plan"})
+        vs_result = None
+
     try:
         content = result["content"]
         json_match = re.search(r'\{[\s\S]*\}', content)
@@ -628,14 +690,17 @@ Return ONLY valid JSON."""
             statistical_plan = {}
     except json.JSONDecodeError:
         statistical_plan = {}
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
-    
+    prev_dists = state.get("vs_distributions", {})
+
     return {
         "statistical_plan": statistical_plan,
         "total_tokens": prev_tokens + result["total_tokens"],
-        "total_cost": prev_cost + result["cost"]
+        "total_cost": prev_cost + result["cost"],
+        "vs_distributions": {**prev_dists, "statistical_plan": vs_result} if vs_result else prev_dists,
+        "vs_used": state.get("vs_used", False) or (vs_result is not None),
     }
 
 

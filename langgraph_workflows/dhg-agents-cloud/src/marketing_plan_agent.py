@@ -25,6 +25,7 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from extract_topic import extract_topic_node
 from pubmed_client import PubMedClient, build_references_section
+from vs_client import vs_generate, vs_select, vs_is_available
 
 
 # =============================================================================
@@ -95,6 +96,9 @@ class MarketingPlanState(TypedDict):
     model_used: str
     total_tokens: int
     total_cost: float
+    # === VS (Verbalized Sampling) ===
+    vs_distributions: Dict[str, Dict[str, Any]]  # keyed by step name
+    vs_used: bool
 
 
 # =============================================================================
@@ -240,8 +244,20 @@ Create a detailed profile that will inform channel selection and messaging.
 
 Return ONLY valid JSON."""
 
-    result = await llm.generate(system, prompt, {"step": "audience_profile"})
-    
+    vs_result = None
+    if await vs_is_available():
+        vs_result = await vs_generate(
+            prompt=prompt, phase="marketing_plan", k=5, system_prompt=system,
+        )
+    if vs_result and vs_result.get("items"):
+        selected = await vs_select(vs_result["distribution_id"], strategy="argmax")
+        content_text = (selected["selected"]["content"] if selected and selected.get("selected")
+                        else vs_result["items"][0]["content"])
+        result = {"content": content_text, "total_tokens": 0, "cost": 0.0}
+    else:
+        result = await llm.generate(system, prompt, {"step": "audience_profile"})
+        vs_result = None
+
     try:
         content = result["content"]
         json_match = re.search(r'\{[\s\S]*\}', content)
@@ -251,14 +267,17 @@ Return ONLY valid JSON."""
             audience_profile = {}
     except json.JSONDecodeError:
         audience_profile = {}
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
-    
+    prev_dists = state.get("vs_distributions", {})
+
     return {
         "audience_profile": audience_profile,
         "total_tokens": prev_tokens + result["total_tokens"],
-        "total_cost": prev_cost + result["cost"]
+        "total_cost": prev_cost + result["cost"],
+        "vs_distributions": {**prev_dists, "audience_profile": vs_result} if vs_result else prev_dists,
+        "vs_used": state.get("vs_used", False) or (vs_result is not None),
     }
 
 
@@ -310,8 +329,20 @@ Create compelling, compliant messages that:
 
 Return ONLY valid JSON."""
 
-    result = await llm.generate(system, prompt, {"step": "key_messages"})
-    
+    vs_result = None
+    if await vs_is_available():
+        vs_result = await vs_generate(
+            prompt=prompt, phase="marketing_plan", k=5, system_prompt=system,
+        )
+    if vs_result and vs_result.get("items"):
+        selected = await vs_select(vs_result["distribution_id"], strategy="argmax")
+        content_text = (selected["selected"]["content"] if selected and selected.get("selected")
+                        else vs_result["items"][0]["content"])
+        result = {"content": content_text, "total_tokens": 0, "cost": 0.0}
+    else:
+        result = await llm.generate(system, prompt, {"step": "key_messages"})
+        vs_result = None
+
     try:
         content = result["content"]
         json_match = re.search(r'\{[\s\S]*\}', content)
@@ -321,14 +352,17 @@ Return ONLY valid JSON."""
             key_messages = {}
     except json.JSONDecodeError:
         key_messages = {}
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
-    
+    prev_dists = state.get("vs_distributions", {})
+
     return {
         "key_messages": key_messages,
         "total_tokens": prev_tokens + result["total_tokens"],
-        "total_cost": prev_cost + result["cost"]
+        "total_cost": prev_cost + result["cost"],
+        "vs_distributions": {**prev_dists, "key_messages": vs_result} if vs_result else prev_dists,
+        "vs_used": state.get("vs_used", False) or (vs_result is not None),
     }
 
 
@@ -403,8 +437,20 @@ Select 3-5 channels that will achieve the reach target within budget. Be specifi
 
 Return ONLY valid JSON."""
 
-    result = await llm.generate(system, prompt, {"step": "channel_strategy"})
-    
+    vs_result = None
+    if await vs_is_available():
+        vs_result = await vs_generate(
+            prompt=prompt, phase="marketing_plan", k=5, system_prompt=system,
+        )
+    if vs_result and vs_result.get("items"):
+        selected = await vs_select(vs_result["distribution_id"], strategy="argmax")
+        content_text = (selected["selected"]["content"] if selected and selected.get("selected")
+                        else vs_result["items"][0]["content"])
+        result = {"content": content_text, "total_tokens": 0, "cost": 0.0}
+    else:
+        result = await llm.generate(system, prompt, {"step": "channel_strategy"})
+        vs_result = None
+
     try:
         content = result["content"]
         json_match = re.search(r'\{[\s\S]*\}', content)
@@ -414,21 +460,24 @@ Return ONLY valid JSON."""
             channel_strategy = {"channels": []}
     except json.JSONDecodeError:
         channel_strategy = {"channels": []}
-    
+
     # Calculate total projected registrations
     total_projected = sum(
         c.get("projected_registrations", 0)
         for c in channel_strategy.get("channels", [])
     )
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
-    
+    prev_dists = state.get("vs_distributions", {})
+
     return {
         "channel_strategy": channel_strategy,
         "projected_reach": total_projected,
         "total_tokens": prev_tokens + result["total_tokens"],
-        "total_cost": prev_cost + result["cost"]
+        "total_cost": prev_cost + result["cost"],
+        "vs_distributions": {**prev_dists, "channel_strategy": vs_result} if vs_result else prev_dists,
+        "vs_used": state.get("vs_used", False) or (vs_result is not None),
     }
 
 
