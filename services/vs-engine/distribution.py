@@ -188,6 +188,9 @@ class DiscreteDist:
     def __len__(self) -> int:
         return len(self._items)
 
+    def __getitem__(self, index: int) -> Item:
+        return self._items[index]
+
     def argmax(self) -> Item:
         """Return the Item with the highest probability.
 
