@@ -55,10 +55,12 @@ Tab state is local to the component. Switching threads resets to auto-selected t
 
 ### Connection
 
-- Uses `client.runs.stream(threadId, runId)` with `streamMode: "events"`
-- SSE connection through existing `/api/langgraph/[...path]` proxy (already handles `text/event-stream`)
+- Uses LangGraph SDK `client.runs.stream(threadId, latestRunId)` with `streamMode: "events"`
+- The SDK's `runs.stream()` returns an `AsyncGenerator` — consumed via `for await` loop in a client-side async function
+- The SDK routes through the existing `/api/langgraph/[...path]` proxy (SDK's `apiUrl` points there), which adds the `x-api-key` header and passes through the SSE response body
+- **Not a browser `EventSource`** — the SDK handles the SSE parsing internally and yields typed event objects
 - Connection opens when user clicks a `busy` thread (auto-selected)
-- Connection closes when: run completes, user switches threads, or component unmounts
+- Connection closes when: run completes, user switches threads, or component unmounts (via `AbortController`)
 
 ### Run ID Resolution
 
@@ -116,10 +118,16 @@ The stream requires a valid `runId`. Rather than relying on the potentially stal
 
 ### Data Source
 
-- Agent outputs are already in thread state as `*_output` keys
-- `getThreadState()` already extracts `completedOutputs: string[]` (key names only)
+- Agent outputs live in thread state under various key patterns
+- The existing `_output` suffix filter misses three keys: `prose_quality_pass_1`, `prose_quality_pass_2`, `compliance_result`
+- Replace the suffix-based heuristic with an exhaustive key set matching `OUTPUT_LABELS` in `agent-detail.tsx`:
+  ```
+  research_output, clinical_output, gap_analysis_output, learning_objectives_output,
+  needs_assessment_output, curriculum_output, protocol_output, marketing_output,
+  grant_package_output, prose_quality_pass_1, prose_quality_pass_2, compliance_result
+  ```
+- `completedOutputs: string[]` remains unchanged (used by `pipeline-progress.tsx` for step-completion logic via `OUTPUT_MAP`) — updated to use the exhaustive key set
 - Add a **new** field `outputContents: Record<string, string>` mapping output key → full text content
-- `completedOutputs: string[]` remains unchanged (used by `pipeline-progress.tsx` for step-completion logic via `OUTPUT_MAP`)
 - Both fields populated from the same state parse — `completedOutputs` gets the key names, `outputContents` gets the text
 
 ---
@@ -229,7 +237,7 @@ The stream requires a valid `runId`. Rather than relying on the potentially stal
 ### Behavior
 
 - Panel splits vertically: current run (left), previous run (right)
-- Previous run found via `getPreviousRunOutput()` in `agentsApi.ts` (REST call, not SSE): queries `client.threads.search({ metadata: { project_id: "..." } })`, filters to threads created before current, gets state of most recent match
+- Previous run found via `getPreviousRunOutput()` in `agentsApi.ts` (REST call, not SSE): queries `client.threads.search({ limit: 20 })`, then filters client-side by checking each thread's state for matching `project_id` (note: `project_id` is in thread state values, NOT thread metadata — cannot filter server-side). Filters to threads created before current, gets state of most recent match. Performance is acceptable for current scale (single user, ~50 total threads).
 - Line-level diff highlighting: added text green, removed text red
 - If no previous run exists: toggle disabled with tooltip "No previous run to compare"
 
@@ -279,8 +287,8 @@ The stream requires a valid `runId`. Rather than relying on the potentially stal
 LangGraph Cloud API
   │
   ├─ SSE: /threads/{id}/runs/{id}/stream (streamMode: "events")
-  │   └─→ proxy /api/langgraph → browser EventSource
-  │       └─→ agentsStreamApi.ts → Zustand store (streamEvents[])
+  │   └─→ proxy /api/langgraph (adds x-api-key) → SDK AsyncGenerator
+  │       └─→ agentsStreamApi.ts (for await loop) → Zustand store (streamEvents[])
   │           └─→ stream-tab.tsx (renders log lines)
   │           └─→ timeline-tab.tsx (extracts timing from events)
   │           └─→ detail-tab.tsx (token counts from events)
