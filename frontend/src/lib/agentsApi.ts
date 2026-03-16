@@ -58,15 +58,15 @@ export const OUTPUT_KEYS = [
 ] as const;
 
 export interface VsCandidate {
-  name: string;
-  description: string;
-  score: number;
+  content: string;
+  probability: number;
 }
 
 export interface VsDistribution {
-  agentName: string;
-  selected: VsCandidate;
+  distributionId: string;
   candidates: VsCandidate[];
+  selectedIndex: number;
+  confidence: number;
 }
 
 export async function listRunningAgents(): Promise<RunningAgent[]> {
@@ -76,12 +76,11 @@ export async function listRunningAgents(): Promise<RunningAgent[]> {
     limit: 50,
   });
 
-  const agents: RunningAgent[] = [];
-
-  for (const thread of threads) {
-    const runs = await client.runs.list(thread.thread_id, { limit: 1 });
-    const latestRun = runs[0];
-    if (latestRun) {
+  const results = await Promise.allSettled(
+    threads.map(async (thread) => {
+      const runs = await client.runs.list(thread.thread_id, { limit: 1 });
+      const latestRun = runs[0];
+      if (!latestRun) return null;
       let projectName = "";
       try {
         const state = await client.threads.getState(thread.thread_id);
@@ -90,19 +89,23 @@ export async function listRunningAgents(): Promise<RunningAgent[]> {
       } catch {
         // Thread state may not be available yet
       }
-      agents.push({
+      return {
         threadId: thread.thread_id,
         runId: latestRun.run_id,
         graphId: (thread.metadata?.graph_id as string) ?? "unknown",
-        status: latestRun.status,
+        status: latestRun.status as string,
         createdAt: thread.created_at,
         updatedAt: thread.updated_at,
         metadata: (thread.metadata as Record<string, unknown>) ?? {},
         projectName,
-      });
-    }
-  }
+      } as RunningAgent;
+    }),
+  );
 
+  const agents: RunningAgent[] = [];
+  for (const r of results) {
+    if (r.status === "fulfilled" && r.value) agents.push(r.value);
+  }
   return agents;
 }
 
@@ -110,31 +113,35 @@ export async function listAllAgents(): Promise<RunningAgent[]> {
   const client = createClient();
   const threads = await client.threads.search({ limit: 50 });
 
+  const results = await Promise.allSettled(
+    threads.map(async (thread) => {
+      const runs = await client.runs.list(thread.thread_id, { limit: 1 });
+      const latestRun = runs[0];
+      let projectName = "";
+      try {
+        const state = await client.threads.getState(thread.thread_id);
+        const vals = (state.values as Record<string, unknown>) ?? {};
+        projectName = (vals.project_name as string) ?? "";
+      } catch {
+        // Thread state may not be available yet
+      }
+      return {
+        threadId: thread.thread_id,
+        runId: latestRun?.run_id ?? "",
+        graphId: (thread.metadata?.graph_id as string) ?? "unknown",
+        status: (latestRun?.status as string) ?? "idle",
+        createdAt: thread.created_at,
+        updatedAt: thread.updated_at,
+        metadata: (thread.metadata as Record<string, unknown>) ?? {},
+        projectName,
+      } as RunningAgent;
+    }),
+  );
+
   const agents: RunningAgent[] = [];
-
-  for (const thread of threads) {
-    const runs = await client.runs.list(thread.thread_id, { limit: 1 });
-    const latestRun = runs[0];
-    let projectName = "";
-    try {
-      const state = await client.threads.getState(thread.thread_id);
-      const vals = (state.values as Record<string, unknown>) ?? {};
-      projectName = (vals.project_name as string) ?? "";
-    } catch {
-      // Thread state may not be available yet
-    }
-    agents.push({
-      threadId: thread.thread_id,
-      runId: latestRun?.run_id ?? "",
-      graphId: (thread.metadata?.graph_id as string) ?? "unknown",
-      status: latestRun?.status ?? "idle",
-      createdAt: thread.created_at,
-      updatedAt: thread.updated_at,
-      metadata: (thread.metadata as Record<string, unknown>) ?? {},
-      projectName,
-    });
+  for (const r of results) {
+    if (r.status === "fulfilled") agents.push(r.value);
   }
-
   return agents;
 }
 
@@ -169,12 +176,23 @@ export async function getThreadState(threadId: string): Promise<ThreadState> {
   const vsDistributions: Record<string, VsDistribution> = {};
   const rawVs = vals.vs_distributions as Record<string, unknown> | undefined;
   if (rawVs && typeof rawVs === "object") {
-    for (const [agentName, dist] of Object.entries(rawVs)) {
+    for (const [stepName, dist] of Object.entries(rawVs)) {
+      if (!dist || typeof dist !== "object") continue;
       const d = dist as Record<string, unknown>;
-      vsDistributions[agentName] = {
-        agentName: (d.agent_name as string) ?? agentName,
-        selected: (d.selected as VsCandidate) ?? { name: "", description: "", score: 0 },
-        candidates: (d.candidates as VsCandidate[]) ?? [],
+      const rawItems = (d.items as Array<Record<string, unknown>>) ?? [];
+      const candidates: VsCandidate[] = rawItems.map((item) => ({
+        content: (item.content as string) ?? "",
+        probability: (item.probability as number) ?? 0,
+      }));
+      // All agents currently use strategy="argmax", so highest probability = selected
+      const sorted = [...candidates].sort((a, b) => b.probability - a.probability);
+      vsDistributions[stepName] = {
+        distributionId: (d.distribution_id as string) ?? "",
+        candidates,
+        selectedIndex: candidates.length > 0
+          ? candidates.indexOf(sorted[0])
+          : -1,
+        confidence: sorted.length > 0 ? sorted[0].probability : 0,
       };
     }
   }
@@ -234,9 +252,9 @@ export async function getAgentStats(): Promise<AgentStats> {
   return stats;
 }
 
-export async function retryAgent(threadId: string): Promise<string> {
+export async function retryAgent(threadId: string, graphId: string): Promise<string> {
   const client = createClient();
-  const run = await client.runs.create(threadId, "needs_package", {});
+  const run = await client.runs.create(threadId, graphId, {});
   return run.run_id;
 }
 
@@ -246,10 +264,10 @@ export async function getPreviousRunOutput(
   outputKey: string,
 ): Promise<string | null> {
   const client = createClient();
-  const threads = await client.threads.search({ limit: 100 });
+  const threads = await client.threads.search({ limit: 20 });
 
   for (const thread of threads) {
-    if (thread.created_at >= beforeDate) continue;
+    if (new Date(thread.created_at) >= new Date(beforeDate)) continue;
     try {
       const state = await client.threads.getState(thread.thread_id);
       const vals = (state.values as Record<string, unknown>) ?? {};

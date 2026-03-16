@@ -277,7 +277,13 @@ The stream requires a valid `runId`. Rather than relying on the potentially stal
 
 ### Untouched Files
 
-- `agent-tree.tsx`, `agent-tree-item.tsx`, `stats-bar.tsx`, `assistants-registry.tsx`, `subagent-card.tsx` — no changes needed
+- `agent-tree.tsx`, `stats-bar.tsx`, `assistants-registry.tsx`, `subagent-card.tsx` — no changes needed
+
+### Modified (Task 1b addition)
+
+| File | Changes |
+|------|---------|
+| `components/agents/agent-tree-item.tsx` | Add project name display below graph ID |
 
 ---
 
