@@ -2,7 +2,14 @@
 
 import { create } from "zustand";
 import type { RunningAgent, AssistantInfo, AgentStats, ThreadState } from "@/lib/agentsApi";
+import type { StreamEvent } from "@/lib/agentsStreamApi";
 import * as agentsApi from "@/lib/agentsApi";
+import { connectStream } from "@/lib/agentsStreamApi";
+
+interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
 
 interface AgentsState {
   agents: RunningAgent[];
@@ -14,6 +21,13 @@ interface AgentsState {
   error: string | null;
   filter: "running" | "all" | "errors";
 
+  // Stream state
+  streamEvents: StreamEvent[];
+  streamStatus: "idle" | "connecting" | "streaming" | "ended" | "error";
+  tokenUsage: TokenUsage;
+  streamAbort: AbortController | null;
+
+  // Actions
   fetchRunning: () => Promise<void>;
   fetchAll: () => Promise<void>;
   fetchAssistants: () => Promise<void>;
@@ -21,9 +35,12 @@ interface AgentsState {
   fetchThreadState: (threadId: string) => Promise<void>;
   setSelected: (agent: RunningAgent | null) => void;
   setFilter: (filter: AgentsState["filter"]) => void;
+  startStream: (threadId: string) => void;
+  stopStream: () => void;
+  retryRun: (threadId: string) => Promise<void>;
 }
 
-export const useAgentsStore = create<AgentsState>((set) => ({
+export const useAgentsStore = create<AgentsState>((set, get) => ({
   agents: [],
   assistants: [],
   stats: null,
@@ -32,6 +49,11 @@ export const useAgentsStore = create<AgentsState>((set) => ({
   loading: false,
   error: null,
   filter: "all",
+
+  streamEvents: [],
+  streamStatus: "idle",
+  tokenUsage: { inputTokens: 0, outputTokens: 0 },
+  streamAbort: null,
 
   fetchRunning: async () => {
     set({ loading: true, error: null });
@@ -81,6 +103,75 @@ export const useAgentsStore = create<AgentsState>((set) => ({
     }
   },
 
-  setSelected: (agent) => set({ selectedAgent: agent, selectedState: null }),
+  setSelected: (agent) => {
+    const { streamAbort } = get();
+    if (streamAbort) streamAbort.abort();
+    set({
+      selectedAgent: agent,
+      selectedState: null,
+      streamEvents: [],
+      streamStatus: "idle",
+      tokenUsage: { inputTokens: 0, outputTokens: 0 },
+      streamAbort: null,
+    });
+  },
+
   setFilter: (filter) => set({ filter }),
+
+  startStream: (threadId: string) => {
+    const { streamAbort: existing } = get();
+    if (existing) existing.abort();
+
+    const abort = new AbortController();
+    set({
+      streamEvents: [],
+      streamStatus: "connecting",
+      tokenUsage: { inputTokens: 0, outputTokens: 0 },
+      streamAbort: abort,
+    });
+
+    connectStream(
+      threadId,
+      (event) => {
+        const state = get();
+        const newEvents = [...state.streamEvents, event];
+        const newTokens = { ...state.tokenUsage };
+        if (event.tokenUsage) {
+          newTokens.inputTokens += event.tokenUsage.inputTokens;
+          newTokens.outputTokens += event.tokenUsage.outputTokens;
+        }
+        set({
+          streamEvents: newEvents,
+          streamStatus: "streaming",
+          tokenUsage: newTokens,
+        });
+      },
+      () => {
+        set({ streamStatus: "ended", streamAbort: null });
+      },
+      abort.signal,
+    );
+  },
+
+  stopStream: () => {
+    const { streamAbort } = get();
+    if (streamAbort) streamAbort.abort();
+    set({ streamStatus: "ended", streamAbort: null });
+  },
+
+  retryRun: async (threadId: string) => {
+    const { selectedAgent } = get();
+    const graphId = selectedAgent?.graphId ?? "needs_package";
+    try {
+      const newRunId = await agentsApi.retryAgent(threadId, graphId);
+      if (selectedAgent && selectedAgent.threadId === threadId) {
+        set({
+          selectedAgent: { ...selectedAgent, runId: newRunId, status: "busy" },
+        });
+        get().startStream(threadId);
+      }
+    } catch (e) {
+      console.error("Failed to retry:", e);
+    }
+  },
 }));
