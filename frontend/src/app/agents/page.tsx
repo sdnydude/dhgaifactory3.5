@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { AgentTree } from "@/components/agents/agent-tree";
-import { AgentDetail } from "@/components/agents/agent-detail";
+import { AgentTabs } from "@/components/agents/agent-tabs";
 import { StatsBar } from "@/components/agents/stats-bar";
 import { AssistantsRegistry } from "@/components/agents/assistants-registry";
 import { useAgentsStore } from "@/stores/agents-store";
@@ -56,7 +56,7 @@ export default function AgentsPage() {
           {showRegistry ? (
             <AssistantsRegistry assistants={assistants} />
           ) : (
-            <AgentDetail agent={selectedAgent} state={selectedState} />
+            <AgentTabs agent={selectedAgent} state={selectedState} />
           )}
         </div>
       </div>
