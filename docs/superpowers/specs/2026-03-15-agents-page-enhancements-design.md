@@ -20,6 +20,8 @@ The agents page (`/agents`) currently shows thread metadata: status, pipeline pr
 
 **No new infrastructure required.** Uses existing LangGraph proxy, SDK streaming, and SSE passthrough.
 
+**Deployment note:** The frontend runs as a long-lived Node.js server in a Docker container (`dhg-frontend`), not as edge/serverless. The proxy route has no response timeout concern — Node.js keeps the SSE connection open for the full pipeline duration (up to 5 minutes per agent timeout). No `maxDuration` export needed.
+
 ---
 
 ## Tab Architecture
@@ -58,6 +60,13 @@ Tab state is local to the component. Switching threads resets to auto-selected t
 - Connection opens when user clicks a `busy` thread (auto-selected)
 - Connection closes when: run completes, user switches threads, or component unmounts
 
+### Run ID Resolution
+
+The stream requires a valid `runId`. Rather than relying on the potentially stale `selectedAgent.runId` from the store, `agentsStreamApi.ts` resolves the current run ID at connection time by calling `client.runs.list(threadId, { limit: 1 })`. This handles:
+- Initial connection (gets the active run)
+- After retry (gets the newly created run)
+- Stale store data (always fresh lookup)
+
 ### Display
 
 - Terminal-style dark panel (extends existing `log-stream.tsx` component)
@@ -73,6 +82,7 @@ Tab state is local to the component. Switching threads resets to auto-selected t
 | `on_llm_stream` | Token output (batched every 200ms to avoid flooding) |
 | `on_tool_start` | `[agent] Calling [tool_name]...` |
 | `on_tool_end` | `[agent] Tool result received` |
+| `on_llm_end` | (Not displayed — used internally for token count extraction) |
 
 ### Scroll Behavior
 
@@ -107,7 +117,10 @@ Tab state is local to the component. Switching threads resets to auto-selected t
 ### Data Source
 
 - Agent outputs are already in thread state as `*_output` keys
-- `getThreadState()` already extracts `completedOutputs` list — extend to include the actual text content
+- `getThreadState()` already extracts `completedOutputs: string[]` (key names only)
+- Add a **new** field `outputContents: Record<string, string>` mapping output key → full text content
+- `completedOutputs: string[]` remains unchanged (used by `pipeline-progress.tsx` for step-completion logic via `OUTPUT_MAP`)
+- Both fields populated from the same state parse — `completedOutputs` gets the key names, `outputContents` gets the text
 
 ---
 
@@ -156,14 +169,17 @@ Tab state is local to the component. Switching threads resets to auto-selected t
 ### Added: Token/Cost Summary
 
 - New metric cards: Total Tokens (input + output), Estimated Cost
-- Data from run metadata (LangSmith) or calculated from stream events (`on_llm_end` token counts)
+- **Data source: stream events only.** `on_llm_end` events include `usage_metadata` with `input_tokens` and `output_tokens`. These are accumulated in the Zustand store as events arrive. LangSmith trace data is NOT accessible through the LangGraph Cloud REST API — no separate LangSmith proxy is added.
+- For historical threads where no stream was captured: token cards show "—" (data unavailable). LangSmith has the full trace for detailed token analysis.
+- Cost estimate: calculated as `(input_tokens * $3 + output_tokens * $15) / 1M` (Claude Sonnet pricing)
 
 ### Added: Retry Button (Feature 7)
 
 - Appears next to each error in the errors section
 - Calls `client.runs.create()` on the same thread to restart from failed node
 - Shows "Retrying..." state while run starts
-- Thread returns to `busy`, Stream tab auto-activates
+- Retry response returns new run ID — store updates `selectedAgent.runId`
+- Thread returns to `busy`, Stream tab auto-activates (stream connects using fresh run ID via `runs.list()` resolution)
 
 ---
 
@@ -213,7 +229,7 @@ Tab state is local to the component. Switching threads resets to auto-selected t
 ### Behavior
 
 - Panel splits vertically: current run (left), previous run (right)
-- Previous run found by querying threads with matching `project_id` metadata, sorted by creation date
+- Previous run found via `getPreviousRunOutput()` in `agentsApi.ts` (REST call, not SSE): queries `client.threads.search({ metadata: { project_id: "..." } })`, filters to threads created before current, gets state of most recent match
 - Line-level diff highlighting: added text green, removed text red
 - If no previous run exists: toggle disabled with tooltip "No previous run to compare"
 
@@ -230,7 +246,7 @@ Tab state is local to the component. Switching threads resets to auto-selected t
 
 | File | Purpose |
 |------|---------|
-| `components/agents/agent-tabs.tsx` | Tab container with auto-selection logic |
+| `components/agents/agent-tabs.tsx` | Tab container with auto-selection logic; renders persistent header (graph ID, status badges) and PipelineProgress above tab row — these are extracted from current `agent-detail.tsx` |
 | `components/agents/stream-tab.tsx` | SSE stream panel |
 | `components/agents/detail-tab.tsx` | Refactored detail content |
 | `components/agents/vs-tab.tsx` | VS distribution table + sparklines |
@@ -245,15 +261,15 @@ Tab state is local to the component. Switching threads resets to auto-selected t
 | File | Changes |
 |------|---------|
 | `app/agents/page.tsx` | Replace `AgentDetail` with `AgentTabs` |
-| `lib/agentsApi.ts` | Extend `getThreadState()` for output text, VS data, timing data |
+| `lib/agentsApi.ts` | Extend `getThreadState()` for output text (`outputContents`), VS data, timing data; add `getPreviousRunOutput(projectId, beforeDate)` for diff view; add `retryAgent(threadId)` for retry button |
 | `stores/agents-store.ts` | Add stream events, output text, VS data to state |
 | `components/agents/agent-detail.tsx` | Refactor into `detail-tab.tsx` (original removed) |
 | `components/agents/log-stream.tsx` | Extend for SSE event rendering |
-| `components/agents/pipeline-progress.tsx` | Stays above tabs (no structural change) |
+| `components/agents/pipeline-progress.tsx` | No internal changes; render location moves from inside `agent-detail.tsx` to inside `agent-tabs.tsx` (above tab row) |
 
 ### Untouched Files
 
-- `agent-tree.tsx`, `agent-tree-item.tsx`, `stats-bar.tsx`, `assistants-registry.tsx` — no changes needed
+- `agent-tree.tsx`, `agent-tree-item.tsx`, `stats-bar.tsx`, `assistants-registry.tsx`, `subagent-card.tsx` — no changes needed
 
 ---
 
