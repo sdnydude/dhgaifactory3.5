@@ -29,7 +29,12 @@ export function AgentTreeItem({ agent, selected, onClick }: AgentTreeItemProps) 
       )}
     >
       <span className={cn("h-2 w-2 rounded-full shrink-0", STATUS_COLORS[agent.status] ?? "bg-muted-foreground/30")} />
-      <span className="flex-1 truncate font-medium">{agent.graphId}</span>
+      <div className="flex-1 min-w-0">
+        <span className="block truncate font-medium">{agent.graphId}</span>
+        {agent.projectName && (
+          <span className="block truncate text-[10px] text-muted-foreground">{agent.projectName}</span>
+        )}
+      </div>
       <Badge variant="outline" className="text-[9px] shrink-0">
         {agent.status}
       </Badge>
