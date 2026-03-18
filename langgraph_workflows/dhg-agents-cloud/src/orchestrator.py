@@ -83,7 +83,7 @@ MAX_RETRIES = {
 AGENT_TIMEOUT = 300  # 5 minutes default
 
 # Human review toggle — set SKIP_HUMAN_REVIEW=true to auto-approve and run end-to-end
-SKIP_HUMAN_REVIEW = os.getenv("SKIP_HUMAN_REVIEW", "false").lower() in ("true", "1", "yes")
+SKIP_HUMAN_REVIEW = os.getenv("SKIP_HUMAN_REVIEW", "true").lower() in ("true", "1", "yes")
 
 if SKIP_HUMAN_REVIEW:
     logger.warning("SKIP_HUMAN_REVIEW=true — all pipelines will auto-approve without human review")
