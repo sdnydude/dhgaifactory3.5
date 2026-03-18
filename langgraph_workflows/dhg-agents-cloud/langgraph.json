@@ -17,7 +17,7 @@
     "grant_package": "./src/orchestrator.py:grant_graph",
     "full_pipeline": "./src/orchestrator.py:full_graph"
   },
-  "env": ".env"
+  "env": "runtime.env"
 }
 
 
