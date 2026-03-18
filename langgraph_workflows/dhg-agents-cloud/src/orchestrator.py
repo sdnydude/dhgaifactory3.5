@@ -82,6 +82,12 @@ MAX_RETRIES = {
 # Timeout configuration (seconds)
 AGENT_TIMEOUT = 300  # 5 minutes default
 
+# Human review toggle — set SKIP_HUMAN_REVIEW=true to auto-approve and run end-to-end
+SKIP_HUMAN_REVIEW = os.getenv("SKIP_HUMAN_REVIEW", "false").lower() in ("true", "1", "yes")
+
+if SKIP_HUMAN_REVIEW:
+    logger.warning("SKIP_HUMAN_REVIEW=true — all pipelines will auto-approve without human review")
+
 
 # =============================================================================
 # STATE SCHEMA
@@ -931,6 +937,82 @@ async def human_review_node(state: CMEPipelineState) -> dict:
     }
 
 
+@traceable(name="auto_approve_node", run_type="chain", metadata={"skip_human_review": True})
+async def auto_approve_node(state: CMEPipelineState) -> dict:
+    """Auto-approve pipeline when SKIP_HUMAN_REVIEW is enabled.
+
+    Mirrors the human_review_node contract — sets human_review_status, logs VS
+    distributions and document metrics to LangSmith via @traceable, and notifies
+    the registry so the audit trail shows the review was intentionally skipped.
+    """
+    documents = {}
+    metrics = {}
+
+    if state.get("needs_assessment_output"):
+        na = state["needs_assessment_output"]
+        documents["needs_assessment"] = na.get("complete_document", "")
+        metrics["word_count"] = na.get("word_count", 0)
+        metrics["prose_density"] = na.get("prose_density", 0.0)
+        metrics["quality_passed"] = na.get("quality_passed", False)
+        metrics["banned_patterns_found"] = na.get("banned_patterns_found", [])
+
+    if state.get("curriculum_output"):
+        documents["curriculum_design"] = state["curriculum_output"].get("complete_document", "")
+    if state.get("protocol_output"):
+        documents["research_protocol"] = state["protocol_output"].get("complete_document", "")
+    if state.get("marketing_output"):
+        documents["marketing_plan"] = state["marketing_output"].get("complete_document", "")
+    if state.get("grant_package_output"):
+        documents["grant_package"] = state["grant_package_output"].get("complete_document_markdown", "")
+
+    if state.get("prose_quality_pass_1"):
+        metrics["prose_quality_pass_1"] = state["prose_quality_pass_1"]
+    if state.get("prose_quality_pass_2"):
+        metrics["prose_quality_pass_2"] = state["prose_quality_pass_2"]
+    if state.get("compliance_result"):
+        metrics["compliance_result"] = state["compliance_result"]
+
+    vs_distributions = {}
+    agent_output_keys = [
+        ("gap_analysis_output", "gap_analysis"),
+        ("needs_assessment_output", "needs_assessment"),
+        ("research_output", "research"),
+        ("clinical_practice_output", "clinical_practice"),
+        ("learning_objectives_output", "learning_objectives"),
+        ("curriculum_design_output", "curriculum_design"),
+        ("research_protocol_output", "research_protocol"),
+        ("marketing_plan_output", "marketing_plan"),
+        ("grant_writer_output", "grant_writer"),
+    ]
+    for output_key, agent_name in agent_output_keys:
+        agent_out = state.get(output_key) or {}
+        if isinstance(agent_out, dict) and agent_out.get("vs_distributions"):
+            for step_name, dist in agent_out["vs_distributions"].items():
+                vs_distributions[f"{agent_name}.{step_name}"] = dist
+
+    logger.info(
+        "Auto-approve: SKIP_HUMAN_REVIEW=true | project=%s | documents=%d | vs_distributions=%d",
+        state.get("project_id", ""),
+        len(documents),
+        len(vs_distributions),
+    )
+    logger.info("Auto-approve metrics: %s", {k: v for k, v in metrics.items() if k != "compliance_result"})
+
+    await _notify_registry_status(
+        project_id=state.get("project_id", ""),
+        pipeline_status="auto_approved",
+        current_step="human_review_auto_approved",
+    )
+
+    return {
+        "human_review_status": "approved",
+        "human_review_notes": "Auto-approved (SKIP_HUMAN_REVIEW=true)",
+        "status": PipelineStatus.APPROVED.value,
+        "current_step": "human_review_auto_approved",
+        "updated_at": datetime.now().isoformat(),
+    }
+
+
 MAX_REVIEW_ROUNDS = 10
 
 
@@ -1253,6 +1335,55 @@ def route_after_human_review_interrupt(state: CMEPipelineState) -> Literal["appr
 
 
 # =============================================================================
+# REVIEW WIRING HELPER
+# =============================================================================
+
+def _add_review_nodes_and_edges(workflow: StateGraph, revision_target: str):
+    """Add review-related nodes and their downstream edges based on SKIP_HUMAN_REVIEW.
+
+    When SKIP_HUMAN_REVIEW is false (default), adds:
+        human_review node → approved:complete / revision:process_feedback / rejected:failed
+        process_feedback node → continue:revision_target / max_rounds_exceeded:failed
+
+    When SKIP_HUMAN_REVIEW is true, adds:
+        auto_approve node → complete
+
+    The caller is responsible for wiring the incoming edge to either
+    "human_review" or "auto_approve" (use REVIEW_ENTRY_NODE for the name).
+
+    Args:
+        workflow: The StateGraph being built.
+        revision_target: Node to loop back to on revision (e.g. "grant_writer", "needs_assessment").
+    """
+    if SKIP_HUMAN_REVIEW:
+        workflow.add_node("auto_approve", auto_approve_node)
+        workflow.add_edge("auto_approve", "complete")
+    else:
+        workflow.add_node("human_review", human_review_node)
+        workflow.add_node("process_feedback", process_review_feedback)
+        workflow.add_conditional_edges(
+            "human_review",
+            route_after_human_review_interrupt,
+            {
+                "approved": "complete",
+                "revision": "process_feedback",
+                "rejected": "failed"
+            }
+        )
+        workflow.add_conditional_edges(
+            "process_feedback",
+            route_after_review_feedback,
+            {
+                "continue": revision_target,
+                "max_rounds_exceeded": "failed",
+            }
+        )
+
+
+REVIEW_ENTRY_NODE = "auto_approve" if SKIP_HUMAN_REVIEW else "human_review"
+
+
+# =============================================================================
 # RECIPE 1: NEEDS PACKAGE (with parallel execution)
 # Research + Clinical [parallel] → Gap Analysis → LO → Needs → Prose QA → Human Review
 # =============================================================================
@@ -1268,8 +1399,6 @@ def create_needs_package_graph():
     workflow.add_node("learning_objectives", run_learning_objectives_agent)
     workflow.add_node("needs_assessment", run_needs_assessment_agent)
     workflow.add_node("prose_quality", run_prose_quality_pass_1)
-    workflow.add_node("human_review", human_review_node)
-    workflow.add_node("process_feedback", process_review_feedback)
     workflow.add_node("complete", mark_complete)
     workflow.add_node("failed", mark_failed)
 
@@ -1284,30 +1413,13 @@ def create_needs_package_graph():
         "prose_quality",
         route_after_prose_quality_1,
         {
-            "continue": "human_review",
+            "continue": REVIEW_ENTRY_NODE,
             "retry_needs": "needs_assessment",
             "human_intervention": "failed"
         }
     )
 
-    workflow.add_conditional_edges(
-        "human_review",
-        route_after_human_review_interrupt,
-        {
-            "approved": "complete",
-            "revision": "process_feedback",
-            "rejected": "failed"
-        }
-    )
-
-    workflow.add_conditional_edges(
-        "process_feedback",
-        route_after_review_feedback,
-        {
-            "continue": "needs_assessment",
-            "max_rounds_exceeded": "failed",
-        }
-    )
+    _add_review_nodes_and_edges(workflow, revision_target="needs_assessment")
 
     workflow.add_edge("complete", END)
     workflow.add_edge("failed", END)
@@ -1332,8 +1444,6 @@ def create_curriculum_package_graph():
     workflow.add_node("needs_assessment", run_needs_assessment_agent)
     workflow.add_node("prose_quality_1", run_prose_quality_pass_1)
     workflow.add_node("design_phase", run_design_phase_parallel)
-    workflow.add_node("human_review", human_review_node)
-    workflow.add_node("process_feedback", process_review_feedback)
     workflow.add_node("complete", mark_complete)
     workflow.add_node("failed", mark_failed)
 
@@ -1354,26 +1464,9 @@ def create_curriculum_package_graph():
         }
     )
 
-    workflow.add_edge("design_phase", "human_review")
+    workflow.add_edge("design_phase", REVIEW_ENTRY_NODE)
 
-    workflow.add_conditional_edges(
-        "human_review",
-        route_after_human_review_interrupt,
-        {
-            "approved": "complete",
-            "revision": "process_feedback",
-            "rejected": "failed"
-        }
-    )
-
-    workflow.add_conditional_edges(
-        "process_feedback",
-        route_after_review_feedback,
-        {
-            "continue": "design_phase",
-            "max_rounds_exceeded": "failed",
-        }
-    )
+    _add_review_nodes_and_edges(workflow, revision_target="design_phase")
 
     workflow.add_edge("complete", END)
     workflow.add_edge("failed", END)
@@ -1401,8 +1494,6 @@ def create_grant_package_graph():
     workflow.add_node("grant_writer", run_grant_writer_agent)
     workflow.add_node("prose_quality_2", run_prose_quality_pass_2)
     workflow.add_node("compliance", run_compliance_agent)
-    workflow.add_node("human_review", human_review_node)
-    workflow.add_node("process_feedback", process_review_feedback)
     workflow.add_node("complete", mark_complete)
     workflow.add_node("failed", mark_failed)
 
@@ -1440,29 +1531,12 @@ def create_grant_package_graph():
         "compliance",
         route_after_compliance,
         {
-            "continue": "human_review",
+            "continue": REVIEW_ENTRY_NODE,
             "revision_required": "grant_writer"
         }
     )
 
-    workflow.add_conditional_edges(
-        "human_review",
-        route_after_human_review_interrupt,
-        {
-            "approved": "complete",
-            "revision": "process_feedback",
-            "rejected": "failed"
-        }
-    )
-
-    workflow.add_conditional_edges(
-        "process_feedback",
-        route_after_review_feedback,
-        {
-            "continue": "grant_writer",
-            "max_rounds_exceeded": "failed",
-        }
-    )
+    _add_review_nodes_and_edges(workflow, revision_target="grant_writer")
 
     workflow.add_edge("complete", END)
     workflow.add_edge("failed", END)
@@ -1490,8 +1564,6 @@ def create_full_pipeline_graph():
     workflow.add_node("grant_writer", run_grant_writer_agent)
     workflow.add_node("prose_quality_2", run_prose_quality_pass_2)
     workflow.add_node("compliance", run_compliance_agent)
-    workflow.add_node("human_review", human_review_node)
-    workflow.add_node("process_feedback", process_review_feedback)
     workflow.add_node("complete", mark_complete)
     workflow.add_node("failed", mark_failed)
 
@@ -1529,29 +1601,12 @@ def create_full_pipeline_graph():
         "compliance",
         route_after_compliance,
         {
-            "continue": "human_review",
+            "continue": REVIEW_ENTRY_NODE,
             "revision_required": "grant_writer"
         }
     )
 
-    workflow.add_conditional_edges(
-        "human_review",
-        route_after_human_review_interrupt,
-        {
-            "approved": "complete",
-            "revision": "process_feedback",
-            "rejected": "failed"
-        }
-    )
-
-    workflow.add_conditional_edges(
-        "process_feedback",
-        route_after_review_feedback,
-        {
-            "continue": "grant_writer",
-            "max_rounds_exceeded": "failed",
-        }
-    )
+    _add_review_nodes_and_edges(workflow, revision_target="grant_writer")
 
     workflow.add_edge("complete", END)
     workflow.add_edge("failed", END)
@@ -1603,8 +1658,6 @@ async def create_checkpointed_needs_graph():
     workflow.add_node("learning_objectives", run_learning_objectives_agent)
     workflow.add_node("needs_assessment", run_needs_assessment_agent)
     workflow.add_node("prose_quality", run_prose_quality_pass_1)
-    workflow.add_node("human_review", human_review_node)
-    workflow.add_node("process_feedback", process_review_feedback)
     workflow.add_node("complete", mark_complete)
     workflow.add_node("failed", mark_failed)
 
@@ -1619,30 +1672,13 @@ async def create_checkpointed_needs_graph():
         "prose_quality",
         route_after_prose_quality_1,
         {
-            "continue": "human_review",
+            "continue": REVIEW_ENTRY_NODE,
             "retry_needs": "needs_assessment",
             "human_intervention": "failed"
         }
     )
 
-    workflow.add_conditional_edges(
-        "human_review",
-        route_after_human_review_interrupt,
-        {
-            "approved": "complete",
-            "revision": "process_feedback",
-            "rejected": "failed"
-        }
-    )
-
-    workflow.add_conditional_edges(
-        "process_feedback",
-        route_after_review_feedback,
-        {
-            "continue": "needs_assessment",
-            "max_rounds_exceeded": "failed",
-        }
-    )
+    _add_review_nodes_and_edges(workflow, revision_target="needs_assessment")
 
     workflow.add_edge("complete", END)
     workflow.add_edge("failed", END)
@@ -1665,8 +1701,6 @@ async def create_checkpointed_grant_graph():
     workflow.add_node("grant_writer", run_grant_writer_agent)
     workflow.add_node("prose_quality_2", run_prose_quality_pass_2)
     workflow.add_node("compliance", run_compliance_agent)
-    workflow.add_node("human_review", human_review_node)
-    workflow.add_node("process_feedback", process_review_feedback)
     workflow.add_node("complete", mark_complete)
     workflow.add_node("failed", mark_failed)
 
@@ -1704,29 +1738,12 @@ async def create_checkpointed_grant_graph():
         "compliance",
         route_after_compliance,
         {
-            "continue": "human_review",
+            "continue": REVIEW_ENTRY_NODE,
             "revision_required": "grant_writer"
         }
     )
 
-    workflow.add_conditional_edges(
-        "human_review",
-        route_after_human_review_interrupt,
-        {
-            "approved": "complete",
-            "revision": "process_feedback",
-            "rejected": "failed"
-        }
-    )
-
-    workflow.add_conditional_edges(
-        "process_feedback",
-        route_after_review_feedback,
-        {
-            "continue": "grant_writer",
-            "max_rounds_exceeded": "failed",
-        }
-    )
+    _add_review_nodes_and_edges(workflow, revision_target="grant_writer")
 
     workflow.add_edge("complete", END)
     workflow.add_edge("failed", END)

@@ -16,6 +16,7 @@ services:
       - AI_FACTORY_REGISTRY_URL=http://dhg-registry-api:8000
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://dhg-tempo:4317
       - VS_ENGINE_URL=http://dhg-vs-engine:8000
+      - SKIP_HUMAN_REVIEW=${SKIP_HUMAN_REVIEW:-false}
       - PYTHONPATH=/app/src
     restart: unless-stopped
     volumes:
