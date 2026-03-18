@@ -1460,7 +1460,7 @@ def create_curriculum_package_graph():
         {
             "continue": "design_phase",
             "retry_needs": "needs_assessment",
-            "human_intervention": REVIEW_ENTRY_NODE
+            "human_intervention": "design_phase" if SKIP_HUMAN_REVIEW else "human_review"
         }
     )
 
@@ -1510,7 +1510,7 @@ def create_grant_package_graph():
         {
             "continue": "design_phase",
             "retry_needs": "needs_assessment",
-            "human_intervention": REVIEW_ENTRY_NODE
+            "human_intervention": "design_phase" if SKIP_HUMAN_REVIEW else "human_review"
         }
     )
 
@@ -1523,7 +1523,7 @@ def create_grant_package_graph():
         {
             "continue": "compliance",
             "retry_grant": "grant_writer",
-            "human_intervention": REVIEW_ENTRY_NODE
+            "human_intervention": "compliance" if SKIP_HUMAN_REVIEW else "human_review"
         }
     )
 
@@ -1580,7 +1580,7 @@ def create_full_pipeline_graph():
         {
             "continue": "design_phase",
             "retry_needs": "needs_assessment",
-            "human_intervention": REVIEW_ENTRY_NODE
+            "human_intervention": "design_phase" if SKIP_HUMAN_REVIEW else "human_review"
         }
     )
 
@@ -1593,7 +1593,7 @@ def create_full_pipeline_graph():
         {
             "continue": "compliance",
             "retry_grant": "grant_writer",
-            "human_intervention": REVIEW_ENTRY_NODE
+            "human_intervention": "compliance" if SKIP_HUMAN_REVIEW else "human_review"
         }
     )
 
@@ -1717,7 +1717,7 @@ async def create_checkpointed_grant_graph():
         {
             "continue": "design_phase",
             "retry_needs": "needs_assessment",
-            "human_intervention": REVIEW_ENTRY_NODE
+            "human_intervention": "design_phase" if SKIP_HUMAN_REVIEW else "human_review"
         }
     )
 
@@ -1730,7 +1730,7 @@ async def create_checkpointed_grant_graph():
         {
             "continue": "compliance",
             "retry_grant": "grant_writer",
-            "human_intervention": REVIEW_ENTRY_NODE
+            "human_intervention": "compliance" if SKIP_HUMAN_REVIEW else "human_review"
         }
     )
 
