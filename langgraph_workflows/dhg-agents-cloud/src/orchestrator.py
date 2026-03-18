@@ -732,7 +732,7 @@ async def run_prose_quality_pass_1(state: CMEPipelineState) -> dict:
         graph = get_agent_graph("prose_quality")
         
         needs_output = state.get("needs_assessment_output", {})
-        document_text = needs_output.get("full_narrative", "")
+        document_text = needs_output.get("complete_document", "")
         
         agent_input = {
             "document_text": document_text,
@@ -1415,7 +1415,7 @@ def create_needs_package_graph():
         {
             "continue": REVIEW_ENTRY_NODE,
             "retry_needs": "needs_assessment",
-            "human_intervention": "failed"
+            "human_intervention": REVIEW_ENTRY_NODE
         }
     )
 
@@ -1460,7 +1460,7 @@ def create_curriculum_package_graph():
         {
             "continue": "design_phase",
             "retry_needs": "needs_assessment",
-            "human_intervention": "failed"
+            "human_intervention": REVIEW_ENTRY_NODE
         }
     )
 
@@ -1510,7 +1510,7 @@ def create_grant_package_graph():
         {
             "continue": "design_phase",
             "retry_needs": "needs_assessment",
-            "human_intervention": "failed"
+            "human_intervention": REVIEW_ENTRY_NODE
         }
     )
 
@@ -1523,7 +1523,7 @@ def create_grant_package_graph():
         {
             "continue": "compliance",
             "retry_grant": "grant_writer",
-            "human_intervention": "failed"
+            "human_intervention": REVIEW_ENTRY_NODE
         }
     )
 
@@ -1580,7 +1580,7 @@ def create_full_pipeline_graph():
         {
             "continue": "design_phase",
             "retry_needs": "needs_assessment",
-            "human_intervention": "failed"
+            "human_intervention": REVIEW_ENTRY_NODE
         }
     )
 
@@ -1593,7 +1593,7 @@ def create_full_pipeline_graph():
         {
             "continue": "compliance",
             "retry_grant": "grant_writer",
-            "human_intervention": "failed"
+            "human_intervention": REVIEW_ENTRY_NODE
         }
     )
 
@@ -1674,7 +1674,7 @@ async def create_checkpointed_needs_graph():
         {
             "continue": REVIEW_ENTRY_NODE,
             "retry_needs": "needs_assessment",
-            "human_intervention": "failed"
+            "human_intervention": REVIEW_ENTRY_NODE
         }
     )
 
@@ -1717,7 +1717,7 @@ async def create_checkpointed_grant_graph():
         {
             "continue": "design_phase",
             "retry_needs": "needs_assessment",
-            "human_intervention": "failed"
+            "human_intervention": REVIEW_ENTRY_NODE
         }
     )
 
@@ -1730,7 +1730,7 @@ async def create_checkpointed_grant_graph():
         {
             "continue": "compliance",
             "retry_grant": "grant_writer",
-            "human_intervention": "failed"
+            "human_intervention": REVIEW_ENTRY_NODE
         }
     )
 
