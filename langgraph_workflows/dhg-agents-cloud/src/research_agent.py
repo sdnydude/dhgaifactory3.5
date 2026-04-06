@@ -29,6 +29,9 @@ from extract_topic import extract_topic_node
 from pubmed_client import PubMedClient as SharedPubMedClient, build_references_section
 from vs_client import vs_generate, vs_select, vs_is_available
 
+# OpenTelemetry tracing (dual-export with LangSmith)
+from tracing import traced_node
+
 
 # =============================================================================
 # CONFIGURATION
@@ -357,6 +360,7 @@ PROHIBITED:
 # =============================================================================
 
 @traceable(name="research_epidemiology_node", run_type="chain")
+@traced_node("research_agent", "research_epidemiology_node")
 async def research_epidemiology_node(state: ResearchState) -> dict:
     """Research epidemiology data for the disease state."""
     
@@ -479,6 +483,7 @@ Return ONLY valid JSON matching the schema above. Every field must have a citati
 
 
 @traceable(name="research_economic_burden_node", run_type="chain")
+@traced_node("research_agent", "research_economic_burden_node")
 async def research_economic_burden_node(state: ResearchState) -> dict:
     """Research economic burden data."""
     
@@ -558,6 +563,7 @@ Return ONLY valid JSON. Every dollar amount must have a citation."""
 
 
 @traceable(name="research_treatment_landscape_node", run_type="chain")
+@traced_node("research_agent", "research_treatment_landscape_node")
 async def research_treatment_landscape_node(state: ResearchState) -> dict:
     """Research current treatment landscape."""
     
@@ -667,6 +673,7 @@ Return ONLY valid JSON. Name specific guidelines (ACC/AHA, ESC, etc.) and drugs.
 
 
 @traceable(name="research_guidelines_node", run_type="chain")
+@traced_node("research_agent", "research_guidelines_node")
 async def research_guidelines_node(state: ResearchState) -> dict:
     """Research clinical practice guidelines."""
     
@@ -751,6 +758,7 @@ Return ONLY valid JSON. Be specific about society names and years."""
 
 
 @traceable(name="research_market_intelligence_node", run_type="chain")
+@traced_node("research_agent", "research_market_intelligence_node")
 async def research_market_intelligence_node(state: ResearchState) -> dict:
     """Research market intelligence (if supporter context provided)."""
     
@@ -848,6 +856,7 @@ Return ONLY valid JSON. Be balanced and include competitive context."""
 
 
 @traceable(name="synthesize_research_node", run_type="chain")
+@traced_node("research_agent", "synthesize_research_node")
 async def synthesize_research_node(state: ResearchState) -> dict:
     """Synthesize all research into literature findings and gaps."""
     
@@ -933,6 +942,7 @@ Identify 5-10 key findings and 3-5 evidence gaps. Return ONLY valid JSON."""
 
 
 @traceable(name="assemble_research_report_node", run_type="chain")
+@traced_node("research_agent", "assemble_research_report_node")
 async def assemble_research_report_node(state: ResearchState) -> dict:
     """Assemble final research report."""
     
@@ -976,6 +986,7 @@ async def assemble_research_report_node(state: ResearchState) -> dict:
 
 
 @traceable(name="render_research_document_node", run_type="chain")
+@traced_node("research_agent", "render_research_document_node")
 async def render_research_document_node(state: ResearchState) -> dict:
     """Render the research report as a readable prose document."""
     
@@ -1046,6 +1057,7 @@ Write a complete, readable research document following the structure above. Use 
 
 
 @traceable(name="generate_references_node", run_type="chain")
+@traced_node("research_agent", "generate_references_node")
 async def generate_references_node(state: ResearchState) -> dict:
     """Generate PubMed-verified AMA references for the full document."""
     document = state.get("research_document", "")

@@ -27,6 +27,9 @@ from extract_topic import extract_topic_node
 from pubmed_client import PubMedClient, build_references_section
 from vs_client import vs_generate, vs_select, vs_is_available
 
+# OpenTelemetry tracing (dual-export with LangSmith)
+from tracing import traced_node
+
 
 # =============================================================================
 # CONFIGURATION
@@ -197,6 +200,7 @@ When citing, mentally track what each number refers to (e.g. [1] = Smith et al. 
 # =============================================================================
 
 @traceable(name="define_study_objectives_node", run_type="chain")
+@traced_node("research_protocol_agent", "define_study_objectives_node")
 async def define_study_objectives_node(state: ResearchProtocolState) -> dict:
     """Define primary and secondary study objectives."""
     
@@ -291,6 +295,7 @@ Return ONLY valid JSON."""
 
 
 @traceable(name="design_study_node", run_type="chain")
+@traced_node("research_protocol_agent", "design_study_node")
 async def design_study_node(state: ResearchProtocolState) -> dict:
     """Design study type, population, and sample size."""
     
@@ -383,6 +388,7 @@ Return ONLY valid JSON."""
 
 
 @traceable(name="specify_outcomes_node", run_type="chain")
+@traced_node("research_protocol_agent", "specify_outcomes_node")
 async def specify_outcomes_node(state: ResearchProtocolState) -> dict:
     """Specify primary and secondary outcome measures."""
     
@@ -473,6 +479,7 @@ Return ONLY valid JSON."""
 
 
 @traceable(name="design_instruments_node", run_type="chain")
+@traced_node("research_protocol_agent", "design_instruments_node")
 async def design_instruments_node(state: ResearchProtocolState) -> dict:
     """Design assessment instruments."""
     
@@ -557,6 +564,7 @@ Return ONLY valid JSON."""
 
 
 @traceable(name="create_data_collection_plan_node", run_type="chain")
+@traced_node("research_protocol_agent", "create_data_collection_plan_node")
 async def create_data_collection_plan_node(state: ResearchProtocolState) -> dict:
     """Create the data collection plan."""
     
@@ -620,6 +628,7 @@ async def create_data_collection_plan_node(state: ResearchProtocolState) -> dict
 
 
 @traceable(name="develop_statistical_plan_node", run_type="chain")
+@traced_node("research_protocol_agent", "develop_statistical_plan_node")
 async def develop_statistical_plan_node(state: ResearchProtocolState) -> dict:
     """Develop the statistical analysis plan."""
     
@@ -705,6 +714,7 @@ Return ONLY valid JSON."""
 
 
 @traceable(name="address_ethics_node", run_type="chain")
+@traced_node("research_protocol_agent", "address_ethics_node")
 async def address_ethics_node(state: ResearchProtocolState) -> dict:
     """Address ethical considerations."""
     
@@ -723,6 +733,7 @@ async def address_ethics_node(state: ResearchProtocolState) -> dict:
 
 
 @traceable(name="assemble_protocol_report_node", run_type="chain")
+@traced_node("research_protocol_agent", "assemble_protocol_report_node")
 async def assemble_protocol_report_node(state: ResearchProtocolState) -> dict:
     """Assemble the final protocol report."""
     
@@ -787,6 +798,7 @@ async def assemble_protocol_report_node(state: ResearchProtocolState) -> dict:
 
 
 @traceable(name="render_protocol_document_node", run_type="chain")
+@traced_node("research_protocol_agent", "render_protocol_document_node")
 async def render_protocol_document_node(state: ResearchProtocolState) -> dict:
     """Render the protocol as a readable document."""
     
@@ -844,6 +856,7 @@ Format as a complete, formal research protocol document."""
 # =============================================================================
 
 @traceable(name="generate_references_node", run_type="chain")
+@traced_node("research_protocol_agent", "generate_references_node")
 async def generate_references_node(state: ResearchProtocolState) -> dict:
     """Generate PubMed-verified AMA references for the protocol document."""
     document = state.get("protocol_document", "")

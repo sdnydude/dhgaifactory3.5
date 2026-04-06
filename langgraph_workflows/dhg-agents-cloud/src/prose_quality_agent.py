@@ -28,6 +28,9 @@ from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, END
 from langsmith import traceable
 
+# OpenTelemetry tracing (dual-export with LangSmith)
+from tracing import traced_node
+
 
 # =============================================================================
 # BANNED PATTERNS (Zero Tolerance)
@@ -422,6 +425,7 @@ def generate_revision_instructions(
 # =============================================================================
 
 @traceable(name="parse_document_node", run_type="chain")
+@traced_node("prose_quality_agent", "parse_document_node")
 async def parse_document_node(state: ProseQualityState) -> dict:
     """Parse document into sections."""
     text = state.get("document_text", "")
@@ -434,6 +438,7 @@ async def parse_document_node(state: ProseQualityState) -> dict:
 
 
 @traceable(name="check_ai_patterns_node", run_type="chain")
+@traced_node("prose_quality_agent", "check_ai_patterns_node")
 async def check_ai_patterns_node(state: ProseQualityState) -> dict:
     """Detect AI patterns in document."""
     text = state.get("document_text", "")
@@ -447,6 +452,7 @@ async def check_ai_patterns_node(state: ProseQualityState) -> dict:
 
 
 @traceable(name="check_prose_density_node", run_type="chain")
+@traced_node("prose_quality_agent", "check_prose_density_node")
 async def check_prose_density_node(state: ProseQualityState) -> dict:
     """Calculate prose density."""
     text = state.get("document_text", "")
@@ -470,6 +476,7 @@ async def check_prose_density_node(state: ProseQualityState) -> dict:
 
 
 @traceable(name="check_word_counts_node", run_type="chain")
+@traced_node("prose_quality_agent", "check_word_counts_node")
 async def check_word_counts_node(state: ProseQualityState) -> dict:
     """Check word counts against targets."""
     text = state.get("document_text", "")
@@ -503,6 +510,7 @@ async def check_word_counts_node(state: ProseQualityState) -> dict:
 
 
 @traceable(name="check_cold_open_node", run_type="chain")
+@traced_node("prose_quality_agent", "check_cold_open_node")
 async def check_cold_open_node(state: ProseQualityState) -> dict:
     """Validate cold open (Pass 1 only)."""
     pass_number = state.get("pass_number", 1)
@@ -531,6 +539,7 @@ async def check_cold_open_node(state: ProseQualityState) -> dict:
 
 
 @traceable(name="check_character_thread_node", run_type="chain")
+@traced_node("prose_quality_agent", "check_character_thread_node")
 async def check_character_thread_node(state: ProseQualityState) -> dict:
     """Track character appearances."""
     text = state.get("document_text", "")
@@ -553,6 +562,7 @@ async def check_character_thread_node(state: ProseQualityState) -> dict:
 
 
 @traceable(name="calculate_score_node", run_type="chain")
+@traced_node("prose_quality_agent", "calculate_score_node")
 async def calculate_score_node(state: ProseQualityState) -> dict:
     """Calculate overall score and generate instructions."""
     pass_number = state.get("pass_number", 1)

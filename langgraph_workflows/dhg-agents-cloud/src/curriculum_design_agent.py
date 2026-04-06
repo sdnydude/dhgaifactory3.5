@@ -27,6 +27,9 @@ from extract_topic import extract_topic_node
 from pubmed_client import PubMedClient, build_references_section
 from vs_client import vs_generate, vs_select, vs_is_available
 
+# OpenTelemetry tracing (dual-export with LangSmith)
+from tracing import traced_node
+
 
 # =============================================================================
 # CONFIGURATION
@@ -210,6 +213,7 @@ When citing, mentally track what each number refers to (e.g. [1] = Smith et al. 
 # =============================================================================
 
 @traceable(name="design_format_node", run_type="chain")
+@traced_node("curriculum_design_agent", "design_format_node")
 async def design_format_node(state: CurriculumDesignState) -> dict:
     """Design the format and session structure."""
     
@@ -322,6 +326,7 @@ Return ONLY valid JSON."""
 
 
 @traceable(name="design_content_outline_node", run_type="chain")
+@traced_node("curriculum_design_agent", "design_content_outline_node")
 async def design_content_outline_node(state: CurriculumDesignState) -> dict:
     """Design content modules aligned to objectives."""
     
@@ -409,6 +414,7 @@ Return ONLY valid JSON."""
 
 
 @traceable(name="design_cases_node", run_type="chain")
+@traced_node("curriculum_design_agent", "design_cases_node")
 async def design_cases_node(state: CurriculumDesignState) -> dict:
     """Design case scenarios for the activity."""
     
@@ -509,6 +515,7 @@ Return ONLY valid JSON."""
 
 
 @traceable(name="specify_faculty_node", run_type="chain")
+@traced_node("curriculum_design_agent", "specify_faculty_node")
 async def specify_faculty_node(state: CurriculumDesignState) -> dict:
     """Specify faculty requirements."""
     
@@ -586,6 +593,7 @@ Return ONLY valid JSON."""
 
 
 @traceable(name="write_innovation_section_node", run_type="chain")
+@traced_node("curriculum_design_agent", "write_innovation_section_node")
 async def write_innovation_section_node(state: CurriculumDesignState) -> dict:
     """Write the innovation section (500+ words)."""
     
@@ -688,6 +696,7 @@ Return ONLY valid JSON."""
 
 
 @traceable(name="design_assessment_strategy_node", run_type="chain")
+@traced_node("curriculum_design_agent", "design_assessment_strategy_node")
 async def design_assessment_strategy_node(state: CurriculumDesignState) -> dict:
     """Design the assessment strategy."""
     
@@ -767,6 +776,7 @@ Return ONLY valid JSON."""
 
 
 @traceable(name="document_implementation_node", run_type="chain")
+@traced_node("curriculum_design_agent", "document_implementation_node")
 async def document_implementation_node(state: CurriculumDesignState) -> dict:
     """Document implementation requirements."""
     
@@ -809,6 +819,7 @@ async def document_implementation_node(state: CurriculumDesignState) -> dict:
 
 
 @traceable(name="assemble_curriculum_report_node", run_type="chain")
+@traced_node("curriculum_design_agent", "assemble_curriculum_report_node")
 async def assemble_curriculum_report_node(state: CurriculumDesignState) -> dict:
     """Assemble the final curriculum report."""
     
@@ -847,6 +858,7 @@ async def assemble_curriculum_report_node(state: CurriculumDesignState) -> dict:
 
 
 @traceable(name="render_curriculum_document_node", run_type="chain")
+@traced_node("curriculum_design_agent", "render_curriculum_document_node")
 async def render_curriculum_document_node(state: CurriculumDesignState) -> dict:
     """Render the curriculum as a readable document."""
     
@@ -903,6 +915,7 @@ Present as a production-ready specification document."""
 # =============================================================================
 
 @traceable(name="generate_references_node", run_type="chain")
+@traced_node("curriculum_design_agent", "generate_references_node")
 async def generate_references_node(state: CurriculumDesignState) -> dict:
     """Generate PubMed-verified AMA references for the curriculum document."""
     document = state.get("curriculum_document", "")

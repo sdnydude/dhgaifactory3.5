@@ -30,6 +30,9 @@ from extract_topic import extract_topic_node
 from pubmed_client import PubMedClient, build_references_section
 from vs_client import vs_generate, vs_select, vs_is_available
 
+# OpenTelemetry tracing (dual-export with LangSmith)
+from tracing import traced_node
+
 
 # =============================================================================
 # STATE DEFINITION
@@ -183,6 +186,7 @@ When citing, mentally track what each number refers to (e.g. [1] = Smith et al. 
 # =============================================================================
 
 @traceable(name="draft_cover_letter_node", run_type="chain")
+@traced_node("grant_writer_agent", "draft_cover_letter_node")
 async def draft_cover_letter_node(state: GrantWriterState) -> dict:
     """Draft the cover letter."""
     
@@ -257,6 +261,7 @@ You are drafting the COVER LETTER. Return a JSON object:
 
 
 @traceable(name="draft_executive_summary_node", run_type="chain")
+@traced_node("grant_writer_agent", "draft_executive_summary_node")
 async def draft_executive_summary_node(state: GrantWriterState) -> dict:
     """Draft the executive summary."""
     
@@ -333,6 +338,7 @@ You are drafting the EXECUTIVE SUMMARY. Return a JSON object:
 
 
 @traceable(name="integrate_needs_assessment_node", run_type="chain")
+@traced_node("grant_writer_agent", "integrate_needs_assessment_node")
 async def integrate_needs_assessment_node(state: GrantWriterState) -> dict:
     """Integrate the full Needs Assessment from upstream agent."""
     
@@ -349,6 +355,7 @@ async def integrate_needs_assessment_node(state: GrantWriterState) -> dict:
 
 
 @traceable(name="format_learning_objectives_node", run_type="chain")
+@traced_node("grant_writer_agent", "format_learning_objectives_node")
 async def format_learning_objectives_node(state: GrantWriterState) -> dict:
     """Format Learning Objectives section."""
     
@@ -371,6 +378,7 @@ async def format_learning_objectives_node(state: GrantWriterState) -> dict:
 
 
 @traceable(name="integrate_curriculum_node", run_type="chain")
+@traced_node("grant_writer_agent", "integrate_curriculum_node")
 async def integrate_curriculum_node(state: GrantWriterState) -> dict:
     """Integrate Curriculum Design."""
     
@@ -389,6 +397,7 @@ async def integrate_curriculum_node(state: GrantWriterState) -> dict:
 
 
 @traceable(name="create_faculty_section_node", run_type="chain")
+@traced_node("grant_writer_agent", "create_faculty_section_node")
 async def create_faculty_section_node(state: GrantWriterState) -> dict:
     """Create Faculty and Planning Committee section using LLM."""
     
@@ -458,6 +467,7 @@ Requirements:
 
 
 @traceable(name="integrate_outcomes_node", run_type="chain")
+@traced_node("grant_writer_agent", "integrate_outcomes_node")
 async def integrate_outcomes_node(state: GrantWriterState) -> dict:
     """Integrate Outcomes and Evaluation Plan from Research Protocol."""
     
@@ -476,6 +486,7 @@ async def integrate_outcomes_node(state: GrantWriterState) -> dict:
 
 
 @traceable(name="integrate_marketing_node", run_type="chain")
+@traced_node("grant_writer_agent", "integrate_marketing_node")
 async def integrate_marketing_node(state: GrantWriterState) -> dict:
     """Integrate Marketing and Audience Generation Plan."""
     
@@ -494,6 +505,7 @@ async def integrate_marketing_node(state: GrantWriterState) -> dict:
 
 
 @traceable(name="create_budget_section_node", run_type="chain")
+@traced_node("grant_writer_agent", "create_budget_section_node")
 async def create_budget_section_node(state: GrantWriterState) -> dict:
     """Create Budget section with LLM-generated justification."""
     
@@ -571,6 +583,7 @@ Requirements:
 
 
 @traceable(name="draft_org_qualifications_node", run_type="chain")
+@traced_node("grant_writer_agent", "draft_org_qualifications_node")
 async def draft_org_qualifications_node(state: GrantWriterState) -> dict:
     """Draft Organizational Qualifications."""
     
@@ -636,6 +649,7 @@ Emphasize:
 
 
 @traceable(name="draft_independence_node", run_type="chain")
+@traced_node("grant_writer_agent", "draft_independence_node")
 async def draft_independence_node(state: GrantWriterState) -> dict:
     """Draft Independence and Compliance section using LLM."""
     
@@ -714,6 +728,7 @@ def _extract_section_content(section: Dict[str, Any]) -> str:
 
 
 @traceable(name="assemble_package_node", run_type="chain")
+@traced_node("grant_writer_agent", "assemble_package_node")
 async def assemble_package_node(state: GrantWriterState) -> dict:
     """Assemble the final Grant Package Output with actual document generation."""
     
@@ -838,6 +853,7 @@ async def assemble_package_node(state: GrantWriterState) -> dict:
 
 
 @traceable(name="grant_generate_references_node", run_type="chain")
+@traced_node("grant_writer_agent", "generate_references_node")
 async def generate_references_node(state: GrantWriterState) -> dict:
     """Generate PubMed-verified AMA references for the complete grant document."""
     document = state.get("complete_document_markdown", "")

@@ -27,6 +27,9 @@ from extract_topic import extract_topic_node
 from pubmed_client import PubMedClient, build_references_section
 from vs_client import vs_generate, vs_select, vs_is_available
 
+# OpenTelemetry tracing (dual-export with LangSmith)
+from tracing import traced_node
+
 
 # =============================================================================
 # CONFIGURATION
@@ -188,6 +191,7 @@ When citing, mentally track what each number refers to (e.g. [1] = Smith et al. 
 # =============================================================================
 
 @traceable(name="synthesize_inputs_node", run_type="chain")
+@traced_node("gap_analysis_agent", "synthesize_inputs_node")
 async def synthesize_inputs_node(state: GapAnalysisState) -> dict:
     """Synthesize research and clinical practice findings."""
     
@@ -255,6 +259,7 @@ Identify key disconnects between evidence and practice. Return ONLY valid JSON."
 
 
 @traceable(name="identify_gaps_node", run_type="chain")
+@traced_node("gap_analysis_agent", "identify_gaps_node")
 async def identify_gaps_node(state: GapAnalysisState) -> dict:
     """Identify all potential educational gaps."""
     
@@ -370,6 +375,7 @@ Identify 5-8 distinct, quantified gaps. Each must have evidence and barrier cate
 
 
 @traceable(name="validate_gaps_node", run_type="chain")
+@traced_node("gap_analysis_agent", "validate_gaps_node")
 async def validate_gaps_node(state: GapAnalysisState) -> dict:
     """Validate each gap meets all criteria and add addressability assessment."""
     
@@ -440,6 +446,7 @@ Return ONLY valid JSON with validated_gaps array."""
 
 
 @traceable(name="prioritize_gaps_node", run_type="chain")
+@traced_node("gap_analysis_agent", "prioritize_gaps_node")
 async def prioritize_gaps_node(state: GapAnalysisState) -> dict:
     """Score and prioritize gaps."""
     
@@ -539,6 +546,7 @@ Apply the scoring rubric to each gap. Return ranked by total score (highest firs
 
 
 @traceable(name="assemble_gap_report_node", run_type="chain")
+@traced_node("gap_analysis_agent", "assemble_gap_report_node")
 async def assemble_gap_report_node(state: GapAnalysisState) -> dict:
     """Assemble the final gap analysis report."""
     
@@ -600,6 +608,7 @@ async def assemble_gap_report_node(state: GapAnalysisState) -> dict:
 
 
 @traceable(name="render_gap_document_node", run_type="chain")
+@traced_node("gap_analysis_agent", "render_gap_document_node")
 async def render_gap_document_node(state: GapAnalysisState) -> dict:
     """Render the gap report as a readable prose document."""
     
@@ -657,6 +666,7 @@ Write a complete, readable gap analysis report. Emphasize quantified deltas and 
 
 
 @traceable(name="generate_references_node", run_type="chain")
+@traced_node("gap_analysis_agent", "generate_references_node")
 async def generate_references_node(state: GapAnalysisState) -> dict:
     """Verify inline citations against PubMed and append AMA-formatted references."""
     document = state.get("gap_analysis_document", "")

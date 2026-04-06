@@ -27,6 +27,9 @@ from extract_topic import extract_topic_node
 from pubmed_client import PubMedClient, build_references_section
 from vs_client import vs_generate, vs_select, vs_is_available
 
+# OpenTelemetry tracing (dual-export with LangSmith)
+from tracing import traced_node
+
 
 # =============================================================================
 # CONFIGURATION
@@ -193,6 +196,7 @@ When citing, mentally track what each number refers to (e.g. [1] = Smith et al. 
 # =============================================================================
 
 @traceable(name="develop_audience_profile_node", run_type="chain")
+@traced_node("marketing_plan_agent", "develop_audience_profile_node")
 async def develop_audience_profile_node(state: MarketingPlanState) -> dict:
     """Develop detailed audience profile."""
     
@@ -282,6 +286,7 @@ Return ONLY valid JSON."""
 
 
 @traceable(name="craft_key_messages_node", run_type="chain")
+@traced_node("marketing_plan_agent", "craft_key_messages_node")
 async def craft_key_messages_node(state: MarketingPlanState) -> dict:
     """Craft key marketing messages."""
     
@@ -367,6 +372,7 @@ Return ONLY valid JSON."""
 
 
 @traceable(name="develop_channel_strategy_node", run_type="chain")
+@traced_node("marketing_plan_agent", "develop_channel_strategy_node")
 async def develop_channel_strategy_node(state: MarketingPlanState) -> dict:
     """Develop multi-channel marketing strategy."""
     
@@ -482,6 +488,7 @@ Return ONLY valid JSON."""
 
 
 @traceable(name="create_budget_allocation_node", run_type="chain")
+@traced_node("marketing_plan_agent", "create_budget_allocation_node")
 async def create_budget_allocation_node(state: MarketingPlanState) -> dict:
     """Create detailed budget allocation."""
     
@@ -538,6 +545,7 @@ async def create_budget_allocation_node(state: MarketingPlanState) -> dict:
 
 
 @traceable(name="build_timeline_node", run_type="chain")
+@traced_node("marketing_plan_agent", "build_timeline_node")
 async def build_timeline_node(state: MarketingPlanState) -> dict:
     """Build marketing timeline."""
     
@@ -613,6 +621,7 @@ Return ONLY valid JSON."""
 
 
 @traceable(name="define_metrics_node", run_type="chain")
+@traced_node("marketing_plan_agent", "define_metrics_node")
 async def define_metrics_node(state: MarketingPlanState) -> dict:
     """Define performance metrics and KPIs."""
     
@@ -665,6 +674,7 @@ async def define_metrics_node(state: MarketingPlanState) -> dict:
 
 
 @traceable(name="assemble_marketing_report_node", run_type="chain")
+@traced_node("marketing_plan_agent", "assemble_marketing_report_node")
 async def assemble_marketing_report_node(state: MarketingPlanState) -> dict:
     """Assemble the final marketing report."""
     
@@ -707,6 +717,7 @@ async def assemble_marketing_report_node(state: MarketingPlanState) -> dict:
 
 
 @traceable(name="render_marketing_document_node", run_type="chain")
+@traced_node("marketing_plan_agent", "render_marketing_document_node")
 async def render_marketing_document_node(state: MarketingPlanState) -> dict:
     """Render the marketing plan as a readable document."""
     
@@ -756,6 +767,7 @@ Present as a complete, actionable marketing plan."""
 
 
 @traceable(name="marketing_generate_references_node", run_type="chain")
+@traced_node("marketing_plan_agent", "generate_references_node")
 async def generate_references_node(state: MarketingPlanState) -> dict:
     """Generate PubMed-verified AMA references for the marketing document."""
     document = state.get("marketing_document", "")

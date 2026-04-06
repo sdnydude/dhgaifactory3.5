@@ -25,6 +25,9 @@ from langsmith import traceable
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 
+# OpenTelemetry tracing (dual-export with LangSmith)
+from tracing import traced_node
+
 
 # =============================================================================
 # CONFIGURATION
@@ -161,6 +164,7 @@ def _extract_text_content(package: Dict[str, Any]) -> str:
 
 
 @traceable(name="check_bias_regex_node", run_type="chain")
+@traced_node("compliance_review_agent", "check_bias_regex_node")
 async def check_bias_regex_node(state: ComplianceState) -> dict:
     """Run regex-based bias detection."""
     
@@ -201,6 +205,7 @@ async def check_bias_regex_node(state: ComplianceState) -> dict:
 
 
 @traceable(name="review_independence_node", run_type="chain")
+@traced_node("compliance_review_agent", "review_independence_node")
 async def review_independence_node(state: ComplianceState) -> dict:
     """Review Standards 1 (Independence) & 6 (Commercial Support)."""
     
@@ -262,6 +267,7 @@ Return JSON:
 
 
 @traceable(name="review_content_validity_node", run_type="chain")
+@traced_node("compliance_review_agent", "review_content_validity_node")
 async def review_content_validity_node(state: ComplianceState) -> dict:
     """Review Standard 3 (Content Validity & Fair Balance)."""
     
@@ -331,6 +337,7 @@ Return JSON:
 
 
 @traceable(name="generate_compliance_report_node", run_type="chain")
+@traced_node("compliance_review_agent", "generate_compliance_report_node")
 async def generate_compliance_report_node(state: ComplianceState) -> dict:
     """Generate final compliance report."""
     

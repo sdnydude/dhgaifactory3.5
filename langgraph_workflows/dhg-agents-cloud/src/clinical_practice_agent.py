@@ -29,6 +29,9 @@ from extract_topic import extract_topic_node
 from pubmed_client import PubMedClient, build_references_section
 from vs_client import vs_generate, vs_select, vs_is_available
 
+# OpenTelemetry tracing (dual-export with LangSmith)
+from tracing import traced_node
+
 
 # =============================================================================
 # CONFIGURATION
@@ -251,6 +254,7 @@ PROHIBITED:
 # =============================================================================
 
 @traceable(name="analyze_standard_of_care_node", run_type="chain")
+@traced_node("clinical_practice_agent", "analyze_standard_of_care_node")
 async def analyze_standard_of_care_node(state: ClinicalPracticeState) -> dict:
     """Define the guideline-recommended standard of care."""
     
@@ -332,6 +336,7 @@ Return ONLY valid JSON. Be specific about guideline sources and years."""
 
 
 @traceable(name="analyze_real_world_practice_node", run_type="chain")
+@traced_node("clinical_practice_agent", "analyze_real_world_practice_node")
 async def analyze_real_world_practice_node(state: ClinicalPracticeState) -> dict:
     """Analyze actual real-world practice patterns vs guidelines."""
     
@@ -421,6 +426,7 @@ Return ONLY valid JSON. Quantify all gaps with specific percentages and sources.
 
 
 @traceable(name="identify_barriers_node", run_type="chain")
+@traced_node("clinical_practice_agent", "identify_barriers_node")
 async def identify_barriers_node(state: ClinicalPracticeState) -> dict:
     """Identify and categorize barriers to optimal care."""
     
@@ -530,6 +536,7 @@ Return ONLY valid JSON. Every barrier must be categorized and have evidence."""
 
 
 @traceable(name="analyze_specialty_perspectives_node", run_type="chain")
+@traced_node("clinical_practice_agent", "analyze_specialty_perspectives_node")
 async def analyze_specialty_perspectives_node(state: ClinicalPracticeState) -> dict:
     """Analyze specialty-specific perspectives and care coordination."""
     
@@ -611,6 +618,7 @@ Return ONLY valid JSON. Include specific data on referral rates and coordination
 
 
 @traceable(name="analyze_setting_variations_node", run_type="chain")
+@traced_node("clinical_practice_agent", "analyze_setting_variations_node")
 async def analyze_setting_variations_node(state: ClinicalPracticeState) -> dict:
     """Analyze practice variations by setting."""
     
@@ -669,6 +677,7 @@ Return ONLY valid JSON with specific comparative data."""
 
 
 @traceable(name="assemble_clinical_report_node", run_type="chain")
+@traced_node("clinical_practice_agent", "assemble_clinical_report_node")
 async def assemble_clinical_report_node(state: ClinicalPracticeState) -> dict:
     """Assemble the final clinical practice report."""
     
@@ -696,6 +705,7 @@ async def assemble_clinical_report_node(state: ClinicalPracticeState) -> dict:
 
 
 @traceable(name="render_clinical_document_node", run_type="chain")
+@traced_node("clinical_practice_agent", "render_clinical_document_node")
 async def render_clinical_document_node(state: ClinicalPracticeState) -> dict:
     """Render the report as a readable prose document."""
     
@@ -755,6 +765,7 @@ Write a complete, readable report following the structure above. Emphasize the g
 
 
 @traceable(name="generate_references_node", run_type="chain")
+@traced_node("clinical_practice_agent", "generate_references_node")
 async def generate_references_node(state: ClinicalPracticeState) -> dict:
     """Generate PubMed-verified AMA references for the full document."""
     document = state.get("clinical_practice_document", "")

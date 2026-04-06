@@ -27,6 +27,9 @@ from extract_topic import extract_topic_node
 from pubmed_client import PubMedClient, build_references_section
 from vs_client import vs_generate, vs_select, vs_is_available
 
+# OpenTelemetry tracing (dual-export with LangSmith)
+from tracing import traced_node
+
 
 # =============================================================================
 # CONFIGURATION
@@ -208,6 +211,7 @@ When citing, mentally track what each number refers to (e.g. [1] = Smith et al. 
 # =============================================================================
 
 @traceable(name="plan_distribution_node", run_type="chain")
+@traced_node("learning_objectives_agent", "plan_distribution_node")
 async def plan_distribution_node(state: LearningObjectivesState) -> dict:
     """Plan objective distribution based on target Moore level."""
     
@@ -275,6 +279,7 @@ async def plan_distribution_node(state: LearningObjectivesState) -> dict:
 
 
 @traceable(name="draft_level_5_objectives_node", run_type="chain")
+@traced_node("learning_objectives_agent", "draft_level_5_objectives_node")
 async def draft_level_5_objectives_node(state: LearningObjectivesState) -> dict:
     """Draft Level 5 (Performance) objectives."""
     
@@ -378,6 +383,7 @@ Return ONLY valid JSON."""
 
 
 @traceable(name="draft_level_4_objectives_node", run_type="chain")
+@traced_node("learning_objectives_agent", "draft_level_4_objectives_node")
 async def draft_level_4_objectives_node(state: LearningObjectivesState) -> dict:
     """Draft Level 4 (Competence) objectives."""
     
@@ -483,6 +489,7 @@ Return ONLY valid JSON."""
 
 
 @traceable(name="draft_level_3_objectives_node", run_type="chain")
+@traced_node("learning_objectives_agent", "draft_level_3_objectives_node")
 async def draft_level_3_objectives_node(state: LearningObjectivesState) -> dict:
     """Draft Level 3 objectives only if gaps remain uncovered."""
     
@@ -589,6 +596,7 @@ Return ONLY valid JSON."""
 
 
 @traceable(name="build_coverage_matrix_node", run_type="chain")
+@traced_node("learning_objectives_agent", "build_coverage_matrix_node")
 async def build_coverage_matrix_node(state: LearningObjectivesState) -> dict:
     """Build gap coverage matrix and compile all objectives."""
     
@@ -640,6 +648,7 @@ async def build_coverage_matrix_node(state: LearningObjectivesState) -> dict:
 
 
 @traceable(name="assemble_objectives_report_node", run_type="chain")
+@traced_node("learning_objectives_agent", "assemble_objectives_report_node")
 async def assemble_objectives_report_node(state: LearningObjectivesState) -> dict:
     """Assemble the final learning objectives report."""
     
@@ -709,6 +718,7 @@ async def assemble_objectives_report_node(state: LearningObjectivesState) -> dic
 
 
 @traceable(name="render_objectives_document_node", run_type="chain")
+@traced_node("learning_objectives_agent", "render_objectives_document_node")
 async def render_objectives_document_node(state: LearningObjectivesState) -> dict:
     """Render the objectives as a readable document."""
     
@@ -763,6 +773,7 @@ Present objectives professionally with:
 
 
 @traceable(name="generate_references_node", run_type="chain")
+@traced_node("learning_objectives_agent", "generate_references_node")
 async def generate_references_node(state: LearningObjectivesState) -> dict:
     """Verify inline citations against PubMed and append AMA-formatted references."""
     document = state.get("learning_objectives_document", "")
