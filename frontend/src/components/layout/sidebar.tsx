@@ -8,9 +8,11 @@ import {
   Inbox,
   MessageSquare,
   Activity,
-  Sparkles,
   Search,
   Monitor,
+  Sparkles,
+  BarChart3,
+  Settings,
   PanelLeftClose,
   PanelLeft,
   Moon,
@@ -24,18 +26,27 @@ import {
   TooltipContent,
 } from "@/components/ui/tooltip";
 import { useAppStore } from "@/stores/app-store";
+import { useSession } from "@/hooks/use-session";
 import { useTheme } from "@/hooks/use-theme";
 import { cn } from "@/lib/utils";
+import { SECTION_LABELS, type RoutePermission } from "@/lib/permissions";
 
-const NAV_ITEMS = [
-  { href: "/projects", icon: FolderKanban, label: "Projects", badgeKey: "processing" as const },
-  { href: "/inbox", icon: Inbox, label: "Inbox", badgeKey: "inbox" as const },
-  { href: "/search", icon: Search, label: "Search", badgeKey: null },
-  { href: "/chat", icon: MessageSquare, label: "Chat", badgeKey: null },
-  { href: "/agents", icon: Activity, label: "Agents", badgeKey: null },
-  { href: "/monitoring", icon: Monitor, label: "Monitoring", badgeKey: null },
-  { href: "/studio", icon: Sparkles, label: "Studio", badgeKey: null },
-];
+const ROUTE_ICONS: Record<string, typeof FolderKanban> = {
+  "/projects": FolderKanban,
+  "/inbox": Inbox,
+  "/chat": MessageSquare,
+  "/search": Search,
+  "/agents": Activity,
+  "/dashboards": BarChart3,
+  "/monitoring": Monitor,
+  "/studio": Sparkles,
+  "/admin": Settings,
+};
+
+const BADGE_KEYS: Record<string, "inbox" | "processing" | null> = {
+  "/projects": "processing",
+  "/inbox": "inbox",
+};
 
 function NavLink({
   href,
@@ -84,6 +95,7 @@ export function Sidebar() {
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
   const badgeCounts = useAppStore((s) => s.badgeCounts);
   const { darkMode, toggleDarkMode } = useTheme();
+  const { visibleRoutes } = useSession();
   const [cloudStatus, setCloudStatus] = useState<"ok" | "down" | "checking">("checking");
 
   useEffect(() => {
@@ -97,6 +109,16 @@ export function Sidebar() {
     const interval = setInterval(check, 60_000);
     return () => { active = false; clearInterval(interval); };
   }, []);
+
+  // Group routes by section
+  const sections = ["work", "observe", "manage"];
+  const groupedRoutes: Record<string, RoutePermission[]> = {};
+  for (const section of sections) {
+    const routes = visibleRoutes.filter((r) => r.section === section);
+    if (routes.length > 0) {
+      groupedRoutes[section] = routes;
+    }
+  }
 
   return (
     <aside
@@ -125,31 +147,52 @@ export function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 py-2 space-y-1 px-2">
-        {NAV_ITEMS.map((item) => {
-          const active = pathname.startsWith(item.href);
-          const badge = item.badgeKey ? badgeCounts[item.badgeKey] : 0;
-
-          if (collapsed) {
-            return (
-              <Tooltip key={item.href}>
-                <TooltipTrigger className="w-full">
-                  <NavLink href={item.href} active={active} collapsed icon={item.icon} label={item.label} badge={badge} />
-                </TooltipTrigger>
-                <TooltipContent side="right" className="flex items-center gap-2">
-                  {item.label}
-                  {badge > 0 && (
-                    <Badge variant="secondary" className="h-5 text-[10px]">
-                      {badge}
-                    </Badge>
-                  )}
-                </TooltipContent>
-              </Tooltip>
-            );
-          }
+      <nav className="flex-1 py-2 px-2 overflow-auto">
+        {sections.map((section) => {
+          const routes = groupedRoutes[section];
+          if (!routes) return null;
 
           return (
-            <NavLink key={item.href} href={item.href} active={active} collapsed={false} icon={item.icon} label={item.label} badge={badge} />
+            <div key={section} className="mb-3">
+              {!collapsed && (
+                <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {SECTION_LABELS[section]}
+                </div>
+              )}
+              {collapsed && section !== "work" && (
+                <div className="mx-2 my-2 border-t border-border" />
+              )}
+              <div className="space-y-0.5">
+                {routes.map((route) => {
+                  const active = pathname.startsWith(route.path);
+                  const Icon = ROUTE_ICONS[route.path] ?? Activity;
+                  const badgeKey = BADGE_KEYS[route.path];
+                  const badge = badgeKey ? badgeCounts[badgeKey] : 0;
+
+                  if (collapsed) {
+                    return (
+                      <Tooltip key={route.path}>
+                        <TooltipTrigger className="w-full">
+                          <NavLink href={route.path} active={active} collapsed icon={Icon} label={route.label} badge={badge} />
+                        </TooltipTrigger>
+                        <TooltipContent side="right" className="flex items-center gap-2">
+                          {route.label}
+                          {badge > 0 && (
+                            <Badge variant="secondary" className="h-5 text-[10px]">
+                              {badge}
+                            </Badge>
+                          )}
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  }
+
+                  return (
+                    <NavLink key={route.path} href={route.path} active={active} collapsed={false} icon={Icon} label={route.label} badge={badge} />
+                  );
+                })}
+              </div>
+            </div>
           );
         })}
       </nav>
