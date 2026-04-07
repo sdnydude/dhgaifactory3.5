@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const response = await fetch(`${REGISTRY_API_URL}/api/admin/users/me`, {
+    const response = await fetch(`${REGISTRY_API_URL}/api/v1/security/users/me`, {
       headers,
     });
 
