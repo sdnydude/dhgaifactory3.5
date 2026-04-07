@@ -170,6 +170,21 @@ async def create_user(
     return _user_to_response(user)
 
 
+@router.get("/users/me")
+async def get_current_user_profile(
+    user: AuthenticatedUser = Depends(get_current_user),
+):
+    """Return the authenticated user's profile and roles."""
+    return {
+        "id": user.id,
+        "email": user.email,
+        "display_name": user.display_name,
+        "is_active": user.is_active,
+        "roles": user.roles,
+        "permissions": user.permissions,
+    }
+
+
 @router.get("/users/{user_id}", response_model=UserResponse)
 async def get_user(
     user_id: UUID,
