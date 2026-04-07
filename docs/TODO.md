@@ -1,5 +1,5 @@
 # DHG AI Factory — Master Task List
-**Last Updated:** Apr 6, 2026
+**Last Updated:** Apr 7, 2026
 
 ## System Status
 - **Containers:** 37 running, all healthy (0 unhealthy)
@@ -10,7 +10,7 @@
 - **Disk:** Root 12% (1.9TB), Data 4% (3.6TB)
 - **Observability:** Full stack operational — Prometheus (6/6 targets UP), Grafana, Loki+Promtail, Tempo+OTel, Alertmanager, cAdvisor, Node/Postgres exporters
 - **CI/CD:** GitHub Actions (lint, test, compose validation, doc drift checker)
-- **Tests:** 61 tests across 7 files (61 passing)
+- **Tests:** 105 tests across 8 files (105 passing)
 
 ---
 
@@ -22,8 +22,8 @@
 
 ## Phase 2: VS Wave 1 Verification
 
-4. [ ] End-to-end VS pipeline test (agent -> VS engine -> frontend inbox)
-5. [ ] Confirm VS metrics visible in Grafana VS dashboard
+4. [x] ~~End-to-end VS pipeline test~~ — DONE (generate + select + metrics all verified)
+5. [x] ~~Confirm VS metrics visible in Grafana VS dashboard~~ — DONE (Prometheus scraping, dashboard JSON provisioned)
 
 ## Phase 3: Frontend Features
 
@@ -49,7 +49,7 @@
 
 ## Phase 6: Security & Infrastructure
 
-19. [ ] Build DHG Security Agent (Cloudflare Access, GraphQL analytics)
+19. [x] ~~Build DHG Security Agent (Cloudflare Access, GraphQL analytics)~~ — DONE (RBAC models, JWT auth, audit logging, admin endpoints, 44 tests)
 20. [x] ~~Decommission legacy Docker agents (ports 8002-8008)~~ — DONE (stopped, restart: "no")
 21. [x] ~~Decommission LibreChat stack~~ — DONE (5 containers, 1 volume, 2.4 GB removed)
 22. [x] ~~Docker disk cleanup~~ — DONE (34.6 GB reclaimed via prune)
@@ -68,6 +68,7 @@
 
 ## Completed (April 2026)
 
+- [x] Security/RBAC system: Cloudflare JWT auth, 5-role RBAC, audit logging, admin endpoints, CORS lockdown, Alembic migration, 44 tests (105 total)
 - [x] Infrastructure audit re-run (March vs April comparison)
 - [x] Promtail -> Loki log pipeline fixed (Docker Root Dir volume mount)
 - [x] Cloudflare tunnel cleanup (removed unused c2l route)
@@ -144,4 +145,5 @@
 - v2: Mar 14, 2026 — saved as docs/archive/TODO_v2.md
 - v3: Mar 15, 2026 — phased execution order, VS completion
 - v4: Apr 6, 2026 — post-audit update, stale items resolved, reprioritized
-- v5: Apr 6, 2026 — current (test fixes complete, 61/61 passing, doc drift CI)
+- v5: Apr 6, 2026 — test fixes complete, 61/61 passing, doc drift CI
+- v6: Apr 7, 2026 — current (security/RBAC complete, 105/105 passing)

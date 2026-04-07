@@ -234,9 +234,21 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"✗ Database connection failed: {e}")
         registry_db_errors.inc()
-    
+
+    # Seed security roles on startup
+    try:
+        from security_endpoints import seed_roles
+        db = SessionLocal()
+        try:
+            seed_roles(db)
+            print("✓ Security roles seeded")
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"✗ Security role seeding failed: {e}")
+
     yield
-    
+
     # Shutdown
     print("Shutting down Registry API...")
 
@@ -255,6 +267,7 @@ from claude_endpoints import router as claude_router
 from cme_endpoints import router as cme_router
 from import_api import router as import_router
 from search_api import router as search_router
+from security_endpoints import router as security_router
 
 # Include routers
 app.include_router(agent_router)
@@ -264,13 +277,19 @@ app.include_router(claude_router)
 app.include_router(cme_router)
 app.include_router(import_router)
 app.include_router(search_router)
+app.include_router(security_router)
 
-# Add CORS middleware
+# Add CORS middleware — locked to production origin + localhost for development
+ALLOWED_ORIGINS = [
+    "https://app.digitalharmonyai.com",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for now
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 

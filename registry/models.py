@@ -605,3 +605,101 @@ class CMESourceReference(Base):
     project = relationship("CMEProject", back_populates="source_references")
     document = relationship("CMEDocument", back_populates="references")
 
+
+# =============================================================================
+# SECURITY / RBAC MODELS
+# =============================================================================
+
+class SecurityUser(Base):
+    """Authenticated user identity — created on first Cloudflare Access login."""
+    __tablename__ = "security_users"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    display_name = Column(String(255), nullable=False)
+    cloudflare_id = Column(String(255), nullable=True, unique=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    last_login_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    # Relationships
+    user_roles = relationship("SecurityUserRole", back_populates="user", cascade="all, delete-orphan",
+                              foreign_keys="SecurityUserRole.user_id")
+    project_access = relationship("SecurityProjectAccess", back_populates="user", cascade="all, delete-orphan",
+                                  foreign_keys="SecurityProjectAccess.user_id")
+
+
+class SecurityRole(Base):
+    """System role with a fixed permission set (admin, operations, finance, editor, viewer)."""
+    __tablename__ = "security_roles"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(50), unique=True, nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    permissions = Column(JSONB, nullable=False, default={})
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    # Relationships
+    user_roles = relationship("SecurityUserRole", back_populates="role")
+
+
+class SecurityUserRole(Base):
+    """Many-to-many: a user can hold multiple roles simultaneously."""
+    __tablename__ = "security_user_roles"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("security_users.id", ondelete="CASCADE"), nullable=False, index=True)
+    role_id = Column(UUID(as_uuid=True), ForeignKey("security_roles.id", ondelete="CASCADE"), nullable=False, index=True)
+    granted_by = Column(UUID(as_uuid=True), ForeignKey("security_users.id", ondelete="SET NULL"), nullable=True)
+    granted_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "role_id", name="uq_security_user_role"),
+    )
+
+    # Relationships
+    user = relationship("SecurityUser", back_populates="user_roles", foreign_keys=[user_id])
+    role = relationship("SecurityRole", back_populates="user_roles")
+    granter = relationship("SecurityUser", foreign_keys=[granted_by])
+
+
+class SecurityProjectAccess(Base):
+    """Per-project access grant — editors/viewers only see assigned projects."""
+    __tablename__ = "security_project_access"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("security_users.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("cme_projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    access_level = Column(String(50), nullable=False, default="viewer")
+    granted_by = Column(UUID(as_uuid=True), ForeignKey("security_users.id", ondelete="SET NULL"), nullable=True)
+    granted_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "project_id", name="uq_security_user_project"),
+    )
+
+    # Relationships
+    user = relationship("SecurityUser", back_populates="project_access", foreign_keys=[user_id])
+    project = relationship("CMEProject")
+    granter = relationship("SecurityUser", foreign_keys=[granted_by])
+
+
+class SecurityAuditLog(Base):
+    """Immutable audit trail — every security-relevant action recorded."""
+    __tablename__ = "security_audit_log"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("security_users.id", ondelete="SET NULL"), nullable=True)
+    user_email = Column(String(255), nullable=False)
+    action = Column(String(100), nullable=False, index=True)
+    resource_type = Column(String(100), nullable=True)
+    resource_id = Column(String(255), nullable=True)
+    detail = Column(JSONB, nullable=True)
+    ip_address = Column(String(45), nullable=True)
+    user_agent = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+
+    # No updated_at, no cascade delete — audit logs are immutable
+    user = relationship("SecurityUser", foreign_keys=[user_id])
+
