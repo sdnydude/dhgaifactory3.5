@@ -97,7 +97,6 @@ Docker-based FastAPI agents defined in `docker-compose.yml` under `agents/`. The
 | Stack | Main Port | Containers | Status |
 |-------|-----------|------------|--------|
 | Transcribe Pipeline | 8200 | 12 containers, GPU-accelerated | Running |
-| LibreChat | 3010 | 3 containers | Running (deprecated, will be removed) |
 | Infisical | 8089 | 5 containers | Running |
 
 ### Docker Networks

@@ -2,7 +2,7 @@
 **Last Updated:** Apr 6, 2026
 
 ## System Status
-- **Containers:** 60 running, all healthy (0 unhealthy)
+- **Containers:** 37 running, all healthy (0 unhealthy)
 - **LangGraph Server:** Cloud production at `dhg-agents-526554f2bb905517adab9bd53427c745.us.langgraph.app` (15 graphs)
 - **VS Engine:** Running, healthy, Prometheus metrics active
 - **Frontend:** Next.js on :3000 (shadcn/ui + assistant-ui + CopilotKit)
@@ -16,7 +16,7 @@
 
 ## Phase 1: Immediate (Fix / Unblock)
 
-1. [ ] Fix gh auth and push 6 unpushed commits
+1. [x] ~~Fix gh auth and push commits~~ — DONE (7 commits pushed)
 2. [x] ~~Fix 16 DB-dependent test failures~~ — DONE (61/61 passing, conftest.py rewritten with `app.dependency_overrides`)
 3. [x] ~~Investigate Dify worker instability~~ — DONE (decommissioned Dify + RAGFlow, zero usage)
 
@@ -51,8 +51,8 @@
 
 19. [ ] Build DHG Security Agent (Cloudflare Access, GraphQL analytics)
 20. [x] ~~Decommission legacy Docker agents (ports 8002-8008)~~ — DONE (stopped, restart: "no")
-21. [ ] Decommission LibreChat stack
-22. [ ] Docker disk cleanup (~107 GB reclaimable)
+21. [x] ~~Decommission LibreChat stack~~ — DONE (5 containers, 1 volume, 2.4 GB removed)
+22. [x] ~~Docker disk cleanup~~ — DONE (34.6 GB reclaimed via prune)
 
 ## Backlog
 
