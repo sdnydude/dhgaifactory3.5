@@ -9,16 +9,16 @@
 - **GPU:** RTX 5080 (16GB VRAM, 26% used by Ollama)
 - **Disk:** Root 12% (1.9TB), Data 4% (3.6TB)
 - **Observability:** Full stack operational — Prometheus (6/6 targets UP), Grafana, Loki+Promtail, Tempo+OTel, Alertmanager, cAdvisor, Node/Postgres exporters
-- **CI/CD:** GitHub Actions (lint, test, compose validation, doc drift checker)
-- **Tests:** 61 tests across 7 files (61 passing)
+- **CI/CD:** GitHub Actions (lint, test, compose validation)
+- **Tests:** 44 tests across 7 files (28 passing, 16 DB-dependent need localhost PostgreSQL)
 
 ---
 
 ## Phase 1: Immediate (Fix / Unblock)
 
-1. [ ] Fix gh auth and push 6 unpushed commits
-2. [x] ~~Fix 16 DB-dependent test failures~~ — DONE (61/61 passing, conftest.py rewritten with `app.dependency_overrides`)
-3. [x] ~~Investigate Dify worker instability~~ — DONE (decommissioned Dify + RAGFlow, zero usage)
+1. [ ] Fix gh auth and push 3 unpushed commits
+2. [ ] Fix 16 DB-dependent test failures (mock `get_db` injection or use localhost:5432)
+3. [ ] Investigate Dify worker instability (79 restarts) — decide: fix or decommission
 
 ## Phase 2: VS Wave 1 Verification
 
@@ -50,7 +50,7 @@
 ## Phase 6: Security & Infrastructure
 
 19. [ ] Build DHG Security Agent (Cloudflare Access, GraphQL analytics)
-20. [x] ~~Decommission legacy Docker agents (ports 8002-8008)~~ — DONE (stopped, restart: "no")
+20. [ ] Decommission legacy Docker agents (ports 8002-8008)
 21. [ ] Decommission LibreChat stack
 22. [ ] Docker disk cleanup (~107 GB reclaimable)
 
@@ -61,7 +61,7 @@
 25. [ ] Code Interpreter
 26. [ ] Claude Files API
 27. [ ] XMP Metadata (Visuals Agent)
-28. [x] ~~RAGFlow configuration~~ — DECOMMISSIONED (zero usage, removed)
+28. [ ] RAGFlow configuration (LLM connection, first knowledge base)
 29. [ ] `/ship` command implementation and testing
 
 ---
@@ -78,9 +78,6 @@
 - [x] API tests: 23 new tests (CME endpoints + agent endpoints + conftest Prometheus cleanup)
 - [x] GitHub Actions CI pipeline with lint, test, compose validation
 - [x] Full documentation review and update (CLAUDE.md, README.md, TODO.md, operational docs)
-- [x] Documentation drift checker (scripts/generate-docs.py + CI job)
-- [x] Fixed 16 DB-dependent test failures (conftest.py dependency_overrides, schema fixes) — 61/61 passing
-- [x] Decommissioned Dify (13 containers, 80 restarts, zero usage) and RAGFlow (5 containers, zero usage)
 
 ## Completed (Mar 14-15, 2026)
 
@@ -143,5 +140,4 @@
 - v1: Feb 26, 2026 — saved as docs/archive/TODO_v1.md
 - v2: Mar 14, 2026 — saved as docs/archive/TODO_v2.md
 - v3: Mar 15, 2026 — phased execution order, VS completion
-- v4: Apr 6, 2026 — post-audit update, stale items resolved, reprioritized
-- v5: Apr 6, 2026 — current (test fixes complete, 61/61 passing, doc drift CI)
+- v4: Apr 6, 2026 — current (post-audit update, stale items resolved, reprioritized)

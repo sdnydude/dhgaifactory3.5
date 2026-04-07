@@ -25,9 +25,9 @@ services:
     restart: unless-stopped
 
   # ============================================================================
-  # MASTER ORCHESTRATOR AGENT
+  # LEGACY AGENTS (DECOMMISSIONED — restart: "no" to prevent auto-start)
   # ============================================================================
-  
+
   orchestrator:
     build:
       context: .
@@ -60,7 +60,7 @@ services:
       retries: 3
     networks:
       - dhg-network
-    restart: unless-stopped
+    restart: "no"
 
   # ============================================================================
   # SPECIALIZED AGENTS
@@ -89,7 +89,7 @@ services:
       - registry-db
     networks:
       - dhg-network
-    restart: unless-stopped
+    restart: "no"
 
   research:
     build:
@@ -116,7 +116,7 @@ services:
       - registry-db
     networks:
       - dhg-network
-    restart: unless-stopped
+    restart: "no"
 
   curriculum:
     build:
@@ -137,7 +137,7 @@ services:
       - registry-db
     networks:
       - dhg-network
-    restart: unless-stopped
+    restart: "no"
 
   outcomes:
     build:
@@ -158,7 +158,7 @@ services:
       - registry-db
     networks:
       - dhg-network
-    restart: unless-stopped
+    restart: "no"
 
   competitor-intel:
     build:
@@ -179,7 +179,7 @@ services:
       - registry-db
     networks:
       - dhg-network
-    restart: unless-stopped
+    restart: "no"
 
   qa-compliance:
     build:
@@ -202,7 +202,7 @@ services:
       - registry-db
     networks:
       - dhg-network
-    restart: unless-stopped
+    restart: "no"
 
   web-ui:
     build:
@@ -218,7 +218,7 @@ services:
       - VITE_ORCHESTRATOR_URL=${VITE_ORCHESTRATOR_URL:-ws://localhost:8011/ws}
     networks:
       - dhg-network
-    restart: unless-stopped
+    restart: "no"
 
   visuals:
     build:
@@ -241,7 +241,7 @@ services:
       - registry-db
     networks:
       - dhg-network
-    restart: unless-stopped
+    restart: "no"
 
   ollama:
     image: ollama/ollama:latest

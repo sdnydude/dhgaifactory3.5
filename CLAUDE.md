@@ -49,21 +49,21 @@ All agents have dual tracing: LangSmith (@traceable) + OpenTelemetry (@traced_no
 
 **Architecture patterns across all agents:** Each agent has its own TypedDict state, ChatAnthropic (Claude Sonnet) with @traceable LangSmith decorators on every node, asyncio.wait_for with 5-minute timeout, standardized error records. Parallel execution via asyncio.gather with return_exceptions=True. Quality gates use conditional edges with retry loops (up to 3 iterations before human escalation).
 
-### Legacy Agent System (BEING DECOMMISSIONED)
+### Legacy Agent System (DECOMMISSIONED)
 
-Docker-based FastAPI agents defined in `docker-compose.yml` under `agents/`. These predate the LangGraph migration. All are currently running but not actively used for production CME work:
+Docker-based FastAPI agents defined in `docker-compose.yml` under `agents/`. These predate the LangGraph migration. All stopped with `restart: "no"` — will not restart on reboot. Source code retained in `agents/` for reference.
 
 | Container | Port | Status |
 |-----------|------|--------|
-| dhg-aifactory-orchestrator | 2024 | Running (legacy, not used by frontend) |
-| dhg-medical-llm | 8002 | Running |
-| dhg-research | 8003 | Running |
-| dhg-curriculum | 8004 | Running |
-| dhg-outcomes | 8005 | Running |
-| dhg-competitor-intel | 8006 | Running |
-| dhg-qa-compliance | 8007 | Running |
-| dhg-visuals-media | 8008 | Running |
-| dhg-aifactory-web-ui | — | STOPPED (decommissioned, replaced by dhg-frontend) |
+| dhg-aifactory-orchestrator | 2024 | STOPPED |
+| dhg-medical-llm | 8002 | STOPPED |
+| dhg-research | 8003 | STOPPED |
+| dhg-curriculum | 8004 | STOPPED |
+| dhg-outcomes | 8005 | STOPPED |
+| dhg-competitor-intel | 8006 | STOPPED |
+| dhg-qa-compliance | 8007 | STOPPED |
+| dhg-visuals-media | 8008 | STOPPED |
+| dhg-aifactory-web-ui | 3005 | STOPPED |
 
 ### Infrastructure Services
 
@@ -97,8 +97,6 @@ Docker-based FastAPI agents defined in `docker-compose.yml` under `agents/`. The
 | Stack | Main Port | Containers | Status |
 |-------|-----------|------------|--------|
 | Transcribe Pipeline | 8200 | 12 containers, GPU-accelerated | Running |
-| Dify | 5001 (API) | 13 containers | Running (workers unstable, 79 restarts) |
-| RAGFlow | 8585 | 5 containers | Running |
 | LibreChat | 3010 | 3 containers | Running (deprecated, will be removed) |
 | Infisical | 8089 | 5 containers | Running |
 
@@ -118,11 +116,9 @@ Docker-based FastAPI agents defined in `docker-compose.yml` under `agents/`. The
 
 ### Open
 
-**O1: Dify Worker Instability** — docker-worker-1 and docker-worker_beat-1 have 79 restart counts each. Dify nginx, web, and plugin_daemon containers are stopped. If Dify is still needed, investigate root cause.
+**O1: Legacy Orchestrator Port Conflict** — docker-compose.yml maps orchestrator to port 2024. docker-compose.override.yml maps registry-api to 8011. The legacy orchestrator on 2024 is orphaned — nothing connects to it.
 
-**O2: Legacy Orchestrator Port Conflict** — docker-compose.yml maps orchestrator to port 2024. docker-compose.override.yml maps registry-api to 8011. The legacy orchestrator on 2024 is orphaned — nothing connects to it.
-
-**O3: gh Auth Expired** — GitHub CLI token is invalid. 3 commits unpushed. Run `gh auth login -h github.com` to restore.
+**O2: gh Auth Expired** — GitHub CLI token is invalid. 3 commits unpushed. Run `gh auth login -h github.com` to restore.
 
 ### Resolved (Feb–April 2026)
 
@@ -130,6 +126,8 @@ Docker-based FastAPI agents defined in `docker-compose.yml` under `agents/`. The
 - **C2 Web-UI can't reach LangGraph** — RESOLVED. Legacy web-ui decommissioned. New dhg-frontend connects directly to LangGraph Cloud via langgraph-sdk.
 - **C3 LangGraph network isolation** — MITIGATED. Production runs in LangGraph Cloud (no local network needed). Dev instance still uses host.docker.internal.
 - **C4 Infisical crash-looping** — RESOLVED. All 5 Infisical containers running stable (Up 2+ days).
+- **Dify** — DECOMMISSIONED. Zero usage, workers crash-looping (80 restarts). All containers, volumes, databases, and directories deleted.
+- **RAGFlow** — DECOMMISSIONED. Zero usage, idle task executor. All containers, volumes, and directories deleted.
 - **C5 Hardcoded IPs in web-ui** — RESOLVED. Legacy web-ui decommissioned. New frontend uses env vars.
 - **C6 Stale files at root** — RESOLVED. Proxy scripts removed, .bak files cleaned.
 - **C7 No CI/CD** — RESOLVED. GitHub Actions CI in `.github/workflows/ci.yml` (lint, test, compose validation).
