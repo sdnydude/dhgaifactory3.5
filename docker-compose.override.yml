@@ -224,7 +224,7 @@ services:
     depends_on:
       - loki
     healthcheck:
-      test: ["CMD-SHELL", "wget --spider -q http://localhost:9080/ready"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/9080'"]
       interval: 30s
       timeout: 10s
       retries: 3
