@@ -19,6 +19,11 @@ async function proxyRequest(
     accept: req.headers.get("accept") || "application/json",
   };
 
+  const cfToken = req.cookies.get("CF_Authorization")?.value;
+  if (cfToken) {
+    headers["Cf-Access-Jwt-Assertion"] = cfToken;
+  }
+
   const contentType = req.headers.get("content-type");
   if (contentType) {
     headers["content-type"] = contentType;
