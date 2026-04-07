@@ -1,12 +1,20 @@
 # DHG AI Factory API Documentation
 
-Complete API reference for the DHG AI Factory multi-agent orchestration system.
+> **Note (April 2026):** The production agent system now runs on **LangGraph Cloud**, not the legacy FastAPI agents below. For current endpoints, see `docs/REGISTRY_API.md` (data registry) and the LangGraph SDK documentation. The legacy agent APIs documented below (ports 8002-8008) are from the pre-LangGraph architecture and are being decommissioned.
 
-## Quick Reference
+## Current Services
 
 | Service | Port | Base URL | Swagger Docs |
 |---------|------|----------|--------------|
-| Orchestrator | 8011 | `http://localhost:8011` | `/docs` |
+| Registry API | 8011 | `http://localhost:8011` | `/docs` |
+| LangGraph (dev) | 2026 | `http://localhost:2026` | `/ok` |
+| Frontend | 3000 | `http://localhost:3000` | — |
+| VS Engine | 8013 | `http://localhost:8013` | — |
+
+## Legacy Agent APIs (Being Decommissioned)
+
+| Service | Port | Base URL | Swagger Docs |
+|---------|------|----------|--------------|
 | Medical LLM | 8002 | `http://localhost:8002` | `/docs` |
 | Research | 8003 | `http://localhost:8003` | `/docs` |
 | Curriculum | 8004 | `http://localhost:8004` | `/docs` |

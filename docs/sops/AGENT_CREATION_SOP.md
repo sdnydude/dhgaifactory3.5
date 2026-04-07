@@ -1,14 +1,14 @@
 # SOP: DHG AI Agent Creation
 
-**Version:** 1.0.0 (Jan 25, 2026)
+**Version:** 2.0.0 (Apr 6, 2026)
 **Division:** DHG AI Factory
 
 ## 1. Overview
 This SOP defines the standardized process for creating AI agents within the DHG AI Factory ecosystem. All agents must follow this structure to ensure interoperability and registry compliance.
 
-## 2. Choosing Agent Type
-- **LangGraph Agent**: Use for complex workflows, multi-step research, or stateful interactions. (Preferred for Cloud deployment).
-- **FastAPI Docker Agent**: Use for simple tool-based agents or legacy integrations.
+## 2. Agent Type
+- **LangGraph Agent**: The ONLY agent type for new development. All new agents must be LangGraph graphs registered in `langgraph.json`.
+- **FastAPI Docker Agent**: Legacy only. Do not create new FastAPI agents — these are being decommissioned.
 
 ## 3. Step-by-Step Walkthrough
 
@@ -22,9 +22,10 @@ Every agent must have a manifest defining its:
 
 ### Step 2: Implementation (LangGraph)
 1. **Define AgentState**: Must include `topic`, `messages`, and tracking fields (`request_id`, `user_id`).
-2. **Implement Nodes**: Each function must be `@traceable`.
+2. **Implement Nodes**: Each function must have both `@traceable` (LangSmith) and `@traced_node("agent_name", "node_name")` (OTel/Tempo) decorators.
 3. **Build Graph**: Use `StateGraph` and define entry/exit edges.
 4. **Compile**: Export strictly as `graph = build_graph()`.
+5. **Tracing**: Import `from tracing import traced_node` for OTel instrumentation.
 
 ### Step 3: Central Registry Integration
 1. Initialize `AIFactoryRegistry` client.
@@ -45,4 +46,4 @@ Every agent must have a manifest defining its:
 ## 5. Deployment
 - Push to DHG GitHub Repository.
 - Configure `.env` with appropriate API keys (Infisical preferred).
-- Register in Central Registry via `http://10.0.0.251:8500`.
+- Register graph in `langgraph.json` and deploy to LangGraph Cloud.

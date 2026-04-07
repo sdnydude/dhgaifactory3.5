@@ -2,72 +2,114 @@
 
 > **Canonical source of truth:** See `CLAUDE.md` in the project root for the current architecture, known issues, and technology stack. This file provides supplementary diagrams.
 
-The DHG AI Factory is designed as a modular, local-first AI processing stack. It leverages containerization for consistency and scalability, with a focus on observability and data integrity.
-
 ## High-Level Overview
 
 ```mermaid
 graph TD
-    User[User / Client] -->|HTTP API| Registry[Registry API]
-    User -->|HTTP API| ASR[ASR Service]
+    User[User / Browser] -->|HTTPS| CF[Cloudflare Tunnel]
+    CF -->|HTTP| Frontend[Next.js Frontend :3000]
     
-    subgraph "Data Layer"
-        Registry -->|Read/Write| DB[(Postgres + pgvector)]
+    Frontend -->|langgraph-sdk| LGCloud[LangGraph Cloud]
+    Frontend -->|REST| Registry[Registry API :8011]
+    
+    subgraph "LangGraph Agent Layer"
+        LGCloud -->|invoke| Agents[11 Agent Graphs]
+        LGCloud -->|compose| Orchestrators[4 Orchestrator Recipes]
+        Agents -->|Claude Sonnet| Anthropic[Anthropic API]
+        Agents -->|@traceable| LangSmith[LangSmith]
+        Agents -->|@traced_node| Tempo[Tempo :3200]
     end
     
-    subgraph "Compute Layer"
-        ASR -->|Store Result| Registry
-        ASR -->|GPU Acceleration| GPU[NVIDIA GPU]
+    subgraph "Data Layer"
+        Registry -->|SQLAlchemy| DB[(PostgreSQL 15 + pgvector)]
+        VSEngine[VS Engine :8013] -->|Anthropic| Anthropic
+        SessionLogger[Session Logger :8009] -->|embeddings| Ollama[Ollama :11434]
     end
     
     subgraph "Observability Layer"
-        Prometheus[Prometheus] -->|Scrape Metrics| Registry
-        Prometheus -->|Scrape Metrics| ASR
-        Prometheus -->|Scrape Metrics| DB
-        
-        Loki[Loki] -->|Ingest Logs| Registry
-        Loki -->|Ingest Logs| ASR
-        
-        Grafana[Grafana] -->|Query| Prometheus
-        Grafana -->|Query| Loki
+        Prometheus[Prometheus :9090] -->|scrape| Registry
+        Prometheus -->|scrape| VSEngine
+        Promtail[Promtail] -->|ship logs| Loki[Loki :3100]
+        Prometheus -->|alert| Alertmanager[Alertmanager :9093]
+        Grafana[Grafana :3001] -->|query| Prometheus
+        Grafana -->|query| Loki
+        Grafana -->|query| Tempo
     end
 ```
 
 ## Components
 
-### 1. Registry Service (Core)
-The central nervous system of the factory.
-- **Role**: Manages all metadata, media assets, and transcription results.
-- **Tech Stack**: Python (FastAPI), SQLAlchemy, Pydantic.
-- **Database**: PostgreSQL 15 with `pgvector` for future semantic search capabilities.
-- **Key Features**:
-    - UUID-based entity tracking.
-    - Audit logging for all operations.
-    - Health and metrics endpoints.
+### 1. LangGraph Agent System (Production)
+The core content generation engine. 15 graphs running in LangGraph Cloud (production) or localhost:2026 (development).
+- **11 Individual Agents:** Each with TypedDict state, Claude Sonnet LLM, dual tracing (LangSmith + OTel), async timeouts, quality gates.
+- **4 Orchestrator Recipes:** Compose agents into pipelines with parallel execution, quality gates, and human-in-the-loop review via `interrupt()`.
+- **Config:** `langgraph_workflows/dhg-agents-cloud/langgraph.json`
 
-### 2. ASR Service (Compute)
-Dedicated service for speech-to-text processing.
-- **Role**: Transcribes audio files into text with timestamps.
-- **Tech Stack**: Python (FastAPI), OpenAI Whisper.
-- **Hardware Acceleration**: 
-    - **NVIDIA GPU**: Uses CUDA for high-performance inference (production).
-    - **CPU Fallback**: Automatically degrades to CPU if no GPU is found (dev/mac).
-- **Integration**: Pushes results directly to the Registry API upon completion.
+### 2. Registry API (Data Hub)
+Central data management service. FastAPI with SQLAlchemy 2.0.
+- **64 tables** in PostgreSQL 15 + pgvector
+- **Endpoints:** Agent registry, CME project CRUD, session tracking, media/transcription, search/RAG
+- **Metrics:** Prometheus histograms for read/write latency, operation counts, errors
+- **Container:** dhg-registry-api on port 8011
 
-### 3. Observability Stack
-Ensures the system is monitored and debuggable.
-- **Prometheus**: Time-series database for metrics (latency, error rates, throughput).
-- **Loki**: Log aggregation system (like Splunk/ELK but for logs).
-- **Grafana**: Visualization dashboard for metrics and logs.
+### 3. Next.js Frontend
+Production frontend connecting to LangGraph Cloud via langgraph-sdk.
+- **Stack:** Next.js 16 + shadcn/ui + assistant-ui + CopilotKit
+- **Features:** Chat interface, graph selector (15 graphs), Agent Inbox (human review), generative UI panels
+- **Container:** dhg-frontend on port 3000
+- **External:** app.digitalharmonyai.com via Cloudflare Tunnel
+
+### 4. VS Engine (Verbalized Sampling)
+Divergent-convergent mechanism for content generation diversity.
+- **Container:** dhg-vs-engine on port 8013
+- **External:** vs.digitalharmonyai.com via Cloudflare Tunnel
+- **Metrics:** Prometheus (spread, selection_delta)
+
+### 5. Observability Stack
+Full monitoring, logging, and tracing.
+- **Metrics:** Prometheus -> Alertmanager -> Grafana (6 scrape targets)
+- **Logs:** Promtail -> Loki -> Grafana (Docker container logs)
+- **Traces:** OTel SDK -> Tempo -> Grafana (agent execution traces)
+- **APM:** LangSmith (@traceable on every agent node)
+- **Configs:** `observability/` directory
+
+### 6. Ollama (Local LLM)
+Local inference for embeddings and summarization.
+- **Models:** qwen3:14b, llama3.1:8b, nomic-embed-text
+- **GPU:** NVIDIA RTX 5080 (16GB VRAM)
+- **Container:** dhg-ollama on port 11434
 
 ## Data Flow
 
-1. **Ingestion**: User uploads an audio file to the ASR Service.
-2. **Processing**: ASR Service processes the audio (using GPU if available).
-3. **Storage**: 
-    - ASR Service calls Registry API to store the transcript.
-    - Registry API saves metadata and text to PostgreSQL.
-4. **Monitoring**: 
-    - Prometheus scrapes metrics from both services every 15s.
-    - Logs are shipped to Loki.
-    - User views system health in Grafana.
+### CME Content Generation
+```
+User (Frontend) -> LangGraph Cloud -> Orchestrator Recipe
+  -> [Parallel] Research + Clinical Practice agents
+  -> Gap Analysis agent
+  -> Learning Objectives agent  
+  -> Needs Assessment agent
+  -> Prose Quality agent (de-AI-ification pass)
+  -> [Human Review Gate via interrupt()]
+  -> Compliance Review agent
+  -> Grant Writer agent (final assembly)
+  -> Response to User
+```
+
+### Observability
+```
+Agent Node Execution
+  -> @traceable decorator -> LangSmith (LLM traces)
+  -> @traced_node decorator -> OTel SDK -> Tempo (infrastructure traces)
+  -> Container stdout -> Promtail -> Loki (logs)
+  -> /metrics endpoint -> Prometheus (metrics)
+  -> All queryable in Grafana
+```
+
+## Docker Network Topology
+
+| Network | Services |
+|---------|----------|
+| dhgaifactory35_dhg-network | Registry, legacy agents, frontend, VS engine, observability |
+| dhg-agents-cloud_default | LangGraph dev server (port 2026) |
+| dhg-transcribe_default | Transcribe pipeline (12 containers) |
+| Host network | Node Exporter (pid: host, network_mode: host) |

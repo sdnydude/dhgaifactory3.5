@@ -1,6 +1,6 @@
 # SOP: LangGraph Cloud & LangSmith Suite
 
-**Version:** 1.0.0 (Jan 25, 2026)
+**Version:** 2.0.0 (Apr 6, 2026)
 **Platform:** LangGraph Cloud + LangSmith Studio
 
 ## 1. Overview
@@ -25,10 +25,11 @@ When an error occurs:
 3. Review inputs/outputs for that specific node.
 
 ## 5. Deployment Workflow
-1. **Local Dev**: Run `langgraph dev --host 0.0.0.0 --port 2026`.
-2. **Verification**: Confirm registry registration.
-3. **Commit**: Push to `feature/langgraph-migration`.
+1. **Local Dev**: Run `langgraph dev --host 0.0.0.0 --port 2026` or `docker compose up -d` in `langgraph_workflows/dhg-agents-cloud/`.
+2. **Verification**: `curl http://localhost:2026/ok` and test via LangSmith Studio.
+3. **Commit**: Push to `master` branch.
 4. **Deploy**: Auto-deployment to LangGraph Cloud via GitHub integration.
+5. **Production URL**: `https://dhg-agents-526554f2bb905517adab9bd53427c745.us.langgraph.app` (auth via `x-api-key` header with `LANGCHAIN_API_KEY`).
 
 ## 6. Best Practices
 - Use `@traceable` on all critical functions.

@@ -1,87 +1,85 @@
 # DHG AI Factory — Master Task List
-**Last Updated:** Mar 15, 2026
+**Last Updated:** Apr 6, 2026
 
 ## System Status
-- **Containers:** 63 running (1 unhealthy: dhg-frontend)
+- **Containers:** 60 running, all healthy (0 unhealthy)
 - **LangGraph Server:** Cloud production at `dhg-agents-526554f2bb905517adab9bd53427c745.us.langgraph.app` (15 graphs)
 - **VS Engine:** Running, healthy, Prometheus metrics active
 - **Frontend:** Next.js on :3000 (shadcn/ui + assistant-ui + CopilotKit)
-- **GPU:** RTX 5080 (transcribe pipeline idle)
-- **Disk:** ~12% used (1.9TB)
-- **Observability:** Prometheus :9090, Grafana :3001, Loki :3100, Tempo :3200, Alertmanager :9093, Promtail, cAdvisor :8080, Node Exporter, Postgres Exporter :9187
+- **GPU:** RTX 5080 (16GB VRAM, 26% used by Ollama)
+- **Disk:** Root 12% (1.9TB), Data 4% (3.6TB)
+- **Observability:** Full stack operational — Prometheus (6/6 targets UP), Grafana, Loki+Promtail, Tempo+OTel, Alertmanager, cAdvisor, Node/Postgres exporters
+- **CI/CD:** GitHub Actions (lint, test, compose validation)
+- **Tests:** 44 tests across 7 files (28 passing, 16 DB-dependent need localhost PostgreSQL)
 
 ---
 
-## Phase 0: Close Out VS Branch (do first)
+## Phase 1: Immediate (Fix / Unblock)
 
-1. [ ] Commit 4 uncommitted changes on `feature/vs-agent-integration` (mem_limit, alert fix, alerts-panel, ship-state)
-2. [ ] Merge `feature/vs-agent-integration` → `master`
-
-## Phase 1: Fix Broken Things
-
-3. [ ] Fix `dhg-frontend` unhealthy healthcheck (wget not available in container)
-4. [ ] Commit alert rule fix (ContainerHighMemory divide-by-zero guard)
+1. [ ] Fix gh auth and push 3 unpushed commits
+2. [ ] Fix 16 DB-dependent test failures (mock `get_db` injection or use localhost:5432)
+3. [ ] Investigate Dify worker instability (79 restarts) — decide: fix or decommission
 
 ## Phase 2: VS Wave 1 Verification
 
-5. [ ] End-to-end VS pipeline test (agent → VS engine → frontend inbox)
-6. [ ] Confirm VS metrics visible in Grafana VS dashboard
+4. [ ] End-to-end VS pipeline test (agent -> VS engine -> frontend inbox)
+5. [ ] Confirm VS metrics visible in Grafana VS dashboard
 
-## Phase 3: `/ship` Command
+## Phase 3: Frontend Features
 
-7. [ ] Write `.claude/commands/ship.md` (7-phase workflow)
-8. [ ] Write explorer agent prompt `.claude/commands/ship-agents/explore.md`
-9. [ ] Write reviewer agent prompt `.claude/commands/ship-agents/review.md`
-10. [ ] Test `/ship` on a real feature
+6. [ ] Generative UI — domain panels (leads, projects, CMS) in chat
+7. [ ] MCP integration — agents to external tools
+8. [ ] Memory — persistent context via LangGraph checkpointing
+9. [ ] LLManager — approval workflow with reflection for CME review
+10. [ ] React Flow — visual LangGraph workflow editor
+11. [ ] Tremor — token usage and agent performance dashboards
+12. [ ] Refine — admin console with FastAPI data providers
 
-## Phase 4: Monitoring Dashboard
+## Phase 4: CME Pipeline End-to-End
 
-11. [ ] Session-logger data visualization (graphs/tables for 42 sessions, 462 chunks, 642 concepts)
-12. [ ] Wire Loki/Tempo/Alertmanager tabs on monitoring page
-13. [ ] Expand Grafana dashboards (LangGraph agent performance, session-logger metrics)
-14. [ ] Alert rules for critical services (container down, high error rate, disk usage)
+13. [ ] End-to-end CME pipeline test (intake -> agents -> review -> output)
+14. [ ] Human review implementation wired to frontend inbox with full feedback loop
 
-## Phase 5: Frontend Features
+## Phase 5: Hardening
 
-15. [ ] Generative UI — domain panels (leads, projects, CMS) in chat
-16. [ ] MCP integration — agents to external tools
-17. [ ] Memory — persistent context via LangGraph checkpointing
-18. [ ] LLManager — approval workflow with reflection for CME review
+15. [ ] Agent-level integration tests (beyond registry API tests)
+16. [ ] Performance benchmarks for full pipeline
+17. [ ] Verify Tempo trace ingestion from LangGraph agents end-to-end
+18. [ ] CD — automated deploy on merge to master
 
-## Phase 6: CME Pipeline
+## Phase 6: Security & Infrastructure
 
-19. [ ] Human review implementation (interrupt()-based, wired to frontend inbox)
-20. [ ] End-to-end CME pipeline test (intake → agents → review → output)
-
-## Phase 7: Hardening
-
-21. [ ] Agent-level unit tests (currently only session-logger has tests)
-22. [ ] Performance benchmarks for full pipeline
-23. [ ] Verify Tempo trace ingestion from LangGraph agents end-to-end
-24. [ ] Healthchecks on remaining containers (ollama, promtail, node-exporter)
-
-## Phase 8: CI/CD & Security
-
-25. [ ] Expand CI (test suite, lint, type-check, Docker build validation)
-26. [ ] CD — automated deploy on merge to master
-27. [ ] Build DHG Security Agent (Cloudflare Access, GraphQL analytics)
-
-## Phase 9: RAGFlow
-
-28. [ ] Configure LLM connection
-29. [ ] Create first knowledge base
+19. [ ] Build DHG Security Agent (Cloudflare Access, GraphQL analytics)
+20. [ ] Decommission legacy Docker agents (ports 8002-8008)
+21. [ ] Decommission LibreChat stack
+22. [ ] Docker disk cleanup (~107 GB reclaimable)
 
 ## Backlog
 
-30. [ ] VS Wave 2: Team Roster UI
-31. [ ] Video Content Pipeline (Vimeo, YouTube, AI clip generation)
-32. [ ] Code Interpreter
-33. [ ] Claude Files API
-34. [ ] XMP Metadata (Visuals Agent)
+23. [ ] VS Wave 2: Team Roster UI
+24. [ ] Video Content Pipeline (Vimeo, YouTube, AI clip generation)
+25. [ ] Code Interpreter
+26. [ ] Claude Files API
+27. [ ] XMP Metadata (Visuals Agent)
+28. [ ] RAGFlow configuration (LLM connection, first knowledge base)
+29. [ ] `/ship` command implementation and testing
 
 ---
 
-## Completed (Mar 14–15, 2026)
+## Completed (April 2026)
+
+- [x] Infrastructure audit re-run (March vs April comparison)
+- [x] Promtail -> Loki log pipeline fixed (Docker Root Dir volume mount)
+- [x] Cloudflare tunnel cleanup (removed unused c2l route)
+- [x] OTel tracing added to all 11 LangGraph agents (85 @traced_node decorators)
+- [x] Documentation consolidated (42 docs archived, CLAUDE.md canonical)
+- [x] Healthchecks added to 6 containers (Promtail, Ollama, Tempo, Node Exporter, Postgres Exporter, LangGraph)
+- [x] Healthcheck commands fixed (Promtail wget->bash, Ollama curl->bash)
+- [x] API tests: 23 new tests (CME endpoints + agent endpoints + conftest Prometheus cleanup)
+- [x] GitHub Actions CI pipeline with lint, test, compose validation
+- [x] Full documentation review and update (CLAUDE.md, README.md, TODO.md, operational docs)
+
+## Completed (Mar 14-15, 2026)
 
 - [x] VS Engine built and deployed (healthy, Prometheus metrics: spread, selection_delta)
 - [x] VS integrated into all 8 content agents (36 generation nodes)
@@ -90,7 +88,7 @@
 - [x] VS alternatives panel in frontend inbox
 - [x] Migrated gap_analysis_agent from vs_distribution to vs_distributions dict
 
-## Completed (Mar 10–14, 2026)
+## Completed (Mar 10-14, 2026)
 
 - [x] Session Capture Pipeline fully built (session-logger v2.0.0, Ollama embeddings 768d, summarization, PDF export, knowledge graph)
 - [x] Switched all embeddings from OpenAI to Ollama (nomic-embed-text 768d)
@@ -101,7 +99,7 @@
 - [x] CME intake template created
 - [x] Market intelligence design spec documented
 
-## Completed (Mar 3–9, 2026)
+## Completed (Mar 3-9, 2026)
 
 - [x] Antigravity-to-Claude Code migration COMPLETE (10/10 criteria met)
 - [x] Frontend rebuilt on Next.js + shadcn/ui + assistant-ui + CopilotKit
@@ -114,34 +112,32 @@
 - [x] Topic extraction, PubMed citations, references added to all 9 content agents
 - [x] Graceful OTel degradation, importlib Cloud runtime fix
 
-## Completed (Feb 27 – Mar 2, 2026)
+## Completed (Feb 27 - Mar 2, 2026)
 
 - [x] Resolved C1 port conflict, C3 network isolation, C5 hardcoded IPs, C6 stale files
 - [x] Security fix: python-multipart CVE
 - [x] Prometheus Docker service discovery, GitHub Actions CI
-- [x] Promtail → Loki, Tempo tracing, registry-db fixes
-- [x] Infisical orphan removed, Dify removed, LibreChat removed
-- [x] Cloudflare tunnel updated, LangGraph Cloud configured
+- [x] Promtail -> Loki, Tempo tracing, registry-db fixes
+- [x] Infisical orphan removed, Dify port moved, LibreChat deprecated
+- [x] Cloudflare tunnel configured, LangGraph Cloud production deployment
 
-## Completed (Feb 18–26, 2026)
+## Completed (Feb 18-26, 2026)
 
 - [x] 54 containers inventoried, LangGraph frontend strategy decided
 - [x] Observability exporters deployed, cAdvisor upgraded
 - [x] Migrated to Claude Code
 
-## Completed (Feb 3–17, 2026)
+## Completed (Earlier)
 
 - [x] Audio agent, Recipe-Based Orchestrator, Marketing Plan agent
 - [x] Docker healthchecks, Registry-API rebuild, LangGraph proxy
-
-## Completed (Jan 18 – Feb 2, 2026)
-
 - [x] CME intake PostgreSQL, RAGFlow OAuth, Infisical CLI
 - [x] Antigravity sessions ingested, pgAdmin deployed
 
 ---
 
 ## Version History
-- v1: Feb 26, 2026 — saved as TODO_v1.md
-- v2: Mar 14, 2026 — saved as TODO_v2.md
-- v3: Mar 15, 2026 — current (phased execution order, VS completion, status corrections)
+- v1: Feb 26, 2026 — saved as docs/archive/TODO_v1.md
+- v2: Mar 14, 2026 — saved as docs/archive/TODO_v2.md
+- v3: Mar 15, 2026 — phased execution order, VS completion
+- v4: Apr 6, 2026 — current (post-audit update, stale items resolved, reprioritized)

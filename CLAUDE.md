@@ -6,37 +6,39 @@ You are the sole AI development partner for Digital Harmony Group's AI Factory. 
 
 **Owner:** Stephen Webber — CEO/Founder, 35+ years in business development and medical education. Bills at $450/hour. Expects Fortune 500 execution quality.
 
-**Server:** g700data1 (10.0.0.251), Ubuntu 24.04, Docker 29.1.5, NVIDIA RTX 5080 (16GB VRAM), 64GB RAM, 1.9TB disk (11% used).
+**Server:** g700data1 (10.0.0.251), Ubuntu 24.04, Docker 29.1.5, NVIDIA RTX 5080 (16GB VRAM), 64GB RAM, 1.9TB root disk (12% used), 3.6TB data disk at /mnt/4tb (4% used). Docker Root Dir: /mnt/4tb/docker.
 
 **Repo:** https://github.com/sdnydude/dhgaifactory3.5.git — Branch: master (current).
 
 ---
 
-## Architecture (Current State — March 2026)
+## Architecture (Current State — April 2026)
 
 There are TWO agent systems. The CURRENT system is LangGraph. The LEGACY system is Docker-based FastAPI agents that are being decommissioned.
 
 ### LangGraph Agent System (CURRENT — Production)
 
-15 graphs registered in `langgraph_workflows/dhg-agents-cloud/langgraph.json`, running as LangGraph Server on port 2026:
+15 graphs registered in `langgraph_workflows/dhg-agents-cloud/langgraph.json`. Production runs on LangGraph Cloud; local dev instance on port 2026:
 
 **11 Individual Agent Graphs:**
 
 | Agent | File | Lines | Key Pattern |
 |-------|------|-------|-------------|
-| Needs Assessment | needs_assessment_agent.py | 1005 | 10-node sequential, cold open framework, 3100+ word validation |
-| Research | research_agent.py | 1025 | Literature/PubMed queries, 30+ sources |
-| Clinical Practice | clinical_practice_agent.py | 762 | Barrier identification, standard-of-care analysis |
-| Gap Analysis | gap_analysis_agent.py | 703 | 5+ evidence-based gaps, quantification |
-| Learning Objectives | learning_objectives_agent.py | 807 | Moore's Expanded Framework mapping |
-| Curriculum Design | curriculum_design_agent.py | 921 | Educational design + innovation section |
-| Research Protocol | research_protocol_agent.py | 868 | IRB-ready outcomes protocol |
-| Marketing Plan | marketing_plan_agent.py | 779 | Audience strategy + channel budget |
-| Grant Writer | grant_writer_agent.py | 783 | Full package assembly |
-| Prose Quality | prose_quality_agent.py | 662 | De-AI-ification scoring, banned pattern detection |
-| Compliance Review | compliance_review_agent.py | 429 | ACCME verification |
+| Needs Assessment | needs_assessment_agent.py | 1110 | 10-node sequential, cold open framework, 3100+ word validation |
+| Research | research_agent.py | 1160 | Literature/PubMed queries, 30+ sources |
+| Clinical Practice | clinical_practice_agent.py | 864 | Barrier identification, standard-of-care analysis |
+| Gap Analysis | gap_analysis_agent.py | 775 | 5+ evidence-based gaps, quantification |
+| Learning Objectives | learning_objectives_agent.py | 894 | Moore's Expanded Framework mapping |
+| Curriculum Design | curriculum_design_agent.py | 1045 | Educational design + innovation section |
+| Research Protocol | research_protocol_agent.py | 977 | IRB-ready outcomes protocol |
+| Marketing Plan | marketing_plan_agent.py | 867 | Audience strategy + channel budget |
+| Grant Writer | grant_writer_agent.py | 926 | Full package assembly |
+| Prose Quality | prose_quality_agent.py | 672 | De-AI-ification scoring, banned pattern detection |
+| Compliance Review | compliance_review_agent.py | 436 | ACCME verification |
 
-**4 Orchestrator Composition Graphs (in orchestrator.py, 1408 lines):**
+All agents have dual tracing: LangSmith (@traceable) + OpenTelemetry (@traced_node) decorators on every graph node (85 total across 9 content agents + orchestrator).
+
+**4 Orchestrator Composition Graphs (in orchestrator.py, 1889 lines):**
 
 | Recipe | Export | Pattern |
 |--------|--------|---------|
@@ -49,100 +51,94 @@ There are TWO agent systems. The CURRENT system is LangGraph. The LEGACY system 
 
 ### Legacy Agent System (BEING DECOMMISSIONED)
 
-Docker-based FastAPI agents defined in `docker-compose.yml` under `agents/`. These predate the LangGraph migration:
+Docker-based FastAPI agents defined in `docker-compose.yml` under `agents/`. These predate the LangGraph migration. All are currently running but not actively used for production CME work:
 
 | Container | Port | Status |
 |-----------|------|--------|
-| dhg-aifactory-orchestrator | 8011 (OVERRIDDEN by registry-api) | Running but orphaned — web-ui can't reach it |
+| dhg-aifactory-orchestrator | 2024 | Running (legacy, not used by frontend) |
 | dhg-medical-llm | 8002 | Running |
 | dhg-research | 8003 | Running |
+| dhg-curriculum | 8004 | Running |
+| dhg-outcomes | 8005 | Running |
 | dhg-competitor-intel | 8006 | Running |
+| dhg-qa-compliance | 8007 | Running |
 | dhg-visuals-media | 8008 | Running |
-| dhg-curriculum | 8004 | STOPPED 3+ weeks |
-| dhg-outcomes | 8005 | STOPPED 3+ weeks |
-| dhg-qa-compliance | 8007 | STOPPED 3+ weeks |
+| dhg-aifactory-web-ui | — | STOPPED (decommissioned, replaced by dhg-frontend) |
 
 ### Infrastructure Services
 
 | Service | Port | Purpose |
 |---------|------|---------|
-| dhg-registry-db | 5432 | PostgreSQL 15 + pgvector (57 tables) |
-| dhg-registry-api | 8011 | FastAPI data registry, Prometheus /metrics |
+| dhg-registry-db | 5432 | PostgreSQL 15 + pgvector (64 tables) |
+| dhg-registry-api | 8011 | FastAPI data registry, Prometheus /metrics, CME endpoints |
+| dhg-frontend | 3000 | Next.js production frontend (shadcn/ui + assistant-ui + CopilotKit) |
+| dhg-vs-engine | 8013 | Verbalized Sampling engine, Prometheus metrics |
 | dhg-ollama | 11434 | Ollama (llama3.1:8b, nomic-embed-text, qwen3:14b) |
-| dhg-session-logger | 8009 | Session tracking |
+| dhg-session-logger | 8009 | Session tracking with Ollama embeddings |
 | dhg-logo-maker | 8012 | Logo generation |
+| dhg-audio-agent | 8101 | Audio processing agent |
 
 ### Observability Stack
 
 | Service | Port | Status |
 |---------|------|--------|
-| dhg-prometheus | 9090 | 5 scrape targets, needs Docker SD |
-| dhg-grafana | 3001 | Dashboards provisioned, needs more |
-| dhg-loki | 3100 | Running but NO log ingestion configured |
+| dhg-prometheus | 9090 | 6 scrape targets, all UP |
+| dhg-grafana | 3001 | Dashboards: core golden signals, Docker overview |
+| dhg-loki | 3100 | Log aggregation via Promtail |
+| dhg-tempo | 3200 | Distributed tracing (OTel gRPC :4317, HTTP :4318) |
+| dhg-promtail | — | Docker container log shipping to Loki |
+| dhg-alertmanager | 9093 | Alert routing (webhook to registry-api) |
 | dhg-cadvisor | 8080 | Container metrics (v0.51.0) |
 | dhg-node-exporter | 9100 | Host metrics |
 | dhg-postgres-exporter | 9187 | Registry-db metrics |
 
 ### Additional Stacks (running independently)
 
-| Stack | Main Port | Containers |
-|-------|-----------|------------|
-| Transcribe Pipeline | 8200 | 12 containers, GPU-accelerated |
-| Dify | 3000 | 8 containers |
-| RAGFlow | 8585 | 3 containers |
-| LibreChat | 3010 | 3 containers (BEING DEPRECATED) |
-| Infisical | 8089 | 5 containers (1 crash-looping) |
+| Stack | Main Port | Containers | Status |
+|-------|-----------|------------|--------|
+| Transcribe Pipeline | 8200 | 12 containers, GPU-accelerated | Running |
+| Dify | 5001 (API) | 13 containers | Running (workers unstable, 79 restarts) |
+| RAGFlow | 8585 | 5 containers | Running |
+| LibreChat | 3010 | 3 containers | Running (deprecated, will be removed) |
+| Infisical | 8089 | 5 containers | Running |
 
-### Docker Networks (CRITICAL — isolation issues)
+### Docker Networks
 
 | Network | Members |
 |---------|---------|
-| dhgaifactory35_dhg-network | Main DHG stack (registry, agents, observability) |
-| dhg-agents-cloud_default | LangGraph Server ONLY (isolated from main stack!) |
+| dhgaifactory35_dhg-network | Main DHG stack (registry, agents, frontend, observability) |
+| dhg-agents-cloud_default | LangGraph dev server (port 2026) |
 | dhg-transcribe_default | Transcribe pipeline |
 
-**The LangGraph server is on its own Docker network, isolated from the main DHG stack. It uses `host.docker.internal` for cross-container communication. AI_FACTORY_REGISTRY_URL points to port 8500 which NOTHING listens on.**
+**Note:** The LangGraph dev server on port 2026 is on its own network. Production LangGraph runs in LangGraph Cloud (see MEMORY.md for cloud URL). The dev instance uses `host.docker.internal` for cross-container communication.
 
 ---
 
-## Known Critical Issues (from Feb 28, 2026 Audit)
+## Known Issues (Updated April 2026)
 
-### C1: Port 8011 Conflict
-docker-compose.yml maps orchestrator to 8011:8000. docker-compose.override.yml maps registry-api to 8011:8000. Override wins. Web-UI hardcodes ws://10.0.0.251:8011 thinking it's the orchestrator but hits registry-api instead.
+### Open
 
-### C2: Web-UI Cannot Reach LangGraph Agents
-The web-ui (web-ui/src/) connects to the legacy orchestrator via WebSocket at :8011. LangGraph Server runs on :2026 with a REST API. There is NO integration code connecting them. The web-UI cannot invoke any of the 15 LangGraph graphs.
+**O1: Dify Worker Instability** — docker-worker-1 and docker-worker_beat-1 have 79 restart counts each. Dify nginx, web, and plugin_daemon containers are stopped. If Dify is still needed, investigate root cause.
 
-### C3: LangGraph Network Isolation + Wrong Registry URL
-LangGraph compose uses `host.docker.internal` instead of Docker network names. AI_FACTORY_REGISTRY_URL=http://host.docker.internal:8500 — port 8500 does not exist. Ollama URL should use container name on dhg-network.
+**O2: Legacy Orchestrator Port Conflict** — docker-compose.yml maps orchestrator to port 2024. docker-compose.override.yml maps registry-api to 8011. The legacy orchestrator on 2024 is orphaned — nothing connects to it.
 
-### C4: Infisical Crash-Looping (Exit 255)
-The infisical container has been crash-looping. May affect secret management.
+**O3: gh Auth Expired** — GitHub CLI token is invalid. 3 commits unpushed. Run `gh auth login -h github.com` to restore.
 
-### C5: Hardcoded IPs in Web-UI
-Multiple files hardcode http://10.0.0.251:8011: MainLayout.jsx, App.jsx, StudioContext.jsx, AgentStatusPanel.jsx.
+### Resolved (Feb–April 2026)
 
-### C6: Stale Files at Project Root
-MainLayout.jsx (50KB copy), main.py (24KB old monolith), architect_agentV3.py, test_ws_client.py, docker-compose.yml.bak, WARP.md.backup, plus 9 .bak/.backup files throughout.
-
-### C7: No CI/CD
-No GitHub Actions. .circleci config is stale. No automated testing or deployment.
-
-### C8: Minimal Test Coverage
-7 test files total. No pytest.ini at root. No test runner in CI.
-
-### C9: Documentation Sprawl
-60+ docs with overlapping, contradictory, and stale content. No single source of truth beyond TODO.md.
-
-### C10: Loki Has No Log Ingestion
-Running but zero containers ship logs to it.
-
-### RECENTLY FIXED
-- Registry-db healthcheck was connecting to wrong database (fixed: -d dhg_registry)
-- Registry-db had no restart policy (fixed: unless-stopped)
-- cAdvisor Docker API version mismatch (fixed: v0.47.2 → v0.51.0)
-- Orphan infisical container removed
-- 5 stale containers removed
+- **C1 Port 8011 conflict** — RESOLVED. Legacy orchestrator moved to 2024, registry-api owns 8011.
+- **C2 Web-UI can't reach LangGraph** — RESOLVED. Legacy web-ui decommissioned. New dhg-frontend connects directly to LangGraph Cloud via langgraph-sdk.
+- **C3 LangGraph network isolation** — MITIGATED. Production runs in LangGraph Cloud (no local network needed). Dev instance still uses host.docker.internal.
+- **C4 Infisical crash-looping** — RESOLVED. All 5 Infisical containers running stable (Up 2+ days).
+- **C5 Hardcoded IPs in web-ui** — RESOLVED. Legacy web-ui decommissioned. New frontend uses env vars.
+- **C6 Stale files at root** — RESOLVED. Proxy scripts removed, .bak files cleaned.
+- **C7 No CI/CD** — RESOLVED. GitHub Actions CI in `.github/workflows/ci.yml` (lint, test, compose validation).
+- **C8 Minimal test coverage** — IMPROVED. 44 tests across 7 test files (registry API + CME + agent endpoints). CI runs pytest.
+- **C9 Documentation sprawl** — IMPROVED. 42 stale docs archived to `docs/archive/`. CLAUDE.md is canonical.
+- **C10 Loki no log ingestion** — RESOLVED. Promtail configured, shipping Docker container logs to Loki. Volume mount corrected for Docker Root Dir at `/mnt/4tb/docker`.
+- Registry-db healthcheck, restart policy, cAdvisor version — all fixed.
+- Healthchecks added to all containers (Promtail, Ollama, Tempo, Node Exporter, Postgres Exporter, LangGraph).
+- OTel tracing added to all 11 LangGraph agents (85 @traced_node decorators).
 
 ---
 
@@ -172,16 +168,20 @@ LibreChat is being deprecated. The target frontend stack (from March 2026 UI res
 | LangGraph compose | langgraph_workflows/dhg-agents-cloud/docker-compose.yml |
 | LangGraph config | langgraph_workflows/dhg-agents-cloud/langgraph.json |
 | LangGraph agents | langgraph_workflows/dhg-agents-cloud/src/*.py |
+| OTel tracing | langgraph_workflows/dhg-agents-cloud/src/tracing.py |
 | Orchestrator | langgraph_workflows/dhg-agents-cloud/src/orchestrator.py |
 | Registry API | registry/api.py |
-| CME endpoints | registry/cme_endpoints.py (990 lines, largest endpoint file) |
+| CME endpoints | registry/cme_endpoints.py |
+| Agent endpoints | registry/agent_endpoints.py |
 | DB models | registry/models.py |
 | Schemas | registry/schemas.py |
-| Web-UI router | web-ui/src/App.jsx |
-| Web-UI layout | web-ui/src/components/MainLayout.jsx |
-| Observability | observability/ |
+| Registry tests | registry/test_*.py (7 test files, 44 tests) |
+| Frontend | frontend/src/ |
+| VS Engine | services/vs-engine/ |
+| Observability configs | observability/ (prometheus, grafana, loki, tempo, promtail, alertmanager) |
 | Agent architecture docs | DHG-CME-12-Agent-Docs/ |
 | Current priorities | docs/TODO.md |
+| CI/CD | .github/workflows/ci.yml |
 | Environment vars | .env (secrets — never expose) |
 
 ---
@@ -253,7 +253,7 @@ Use semantic tokens, not raw hex values, in code.
 | Layer | Technology |
 |-------|-----------|
 | Orchestration | LangGraph (StateGraph, Command pattern) |
-| Observability | LangSmith (@traceable), Prometheus, Grafana, Loki |
+| Observability | LangSmith (@traceable), OTel/Tempo (@traced_node), Prometheus, Grafana, Loki, Alertmanager |
 | Checkpointing | PostgresSaver (production persistence) |
 | Agent LLM | Claude Sonnet via ChatAnthropic |
 | Local LLM | Ollama (qwen3:14b, llama3.1:8b) |

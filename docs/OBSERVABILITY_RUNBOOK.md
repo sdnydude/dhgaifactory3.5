@@ -42,13 +42,13 @@ curl -s http://localhost:9093/-/healthy         # Alertmanager
 
 **Config:** `observability/prometheus/prometheus.yml`
 
-**Scrape targets (6):**
+**Scrape targets (6, all UP as of April 2026):**
 - `prometheus` (self, :9090)
 - `registry-api` (:8000/metrics)
+- `vs-engine` (:8000/metrics)
 - `postgres` (postgres-exporter, :9187)
 - `node-exporter` (host gateway, :9100)
 - `cadvisor` (:8080)
-- `docker-sd` (Docker service discovery)
 
 **Check targets:** http://localhost:9090/targets
 
@@ -74,7 +74,7 @@ curl -s http://localhost:9093/-/healthy         # Alertmanager
 ## Loki + Promtail
 
 **Promtail config:** `observability/promtail/promtail-config.yml`
-Scrapes Docker container logs from `/var/lib/docker/containers/`.
+Scrapes Docker container logs. **Important:** Docker Root Dir is `/mnt/4tb/docker`, so the volume mount maps `/mnt/4tb/docker/containers` to `/var/lib/docker/containers` inside the container.
 
 **Query logs in Grafana:**
 ```logql

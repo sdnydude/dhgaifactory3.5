@@ -1,9 +1,10 @@
 # DHG Registry API Documentation
 
-**Version:** 1.0  
-**Base URL:** `http://10.0.0.251:8011`  
+**Version:** 2.0 (Updated April 2026)  
+**Base URL:** `http://localhost:8011`  
 **Container:** `dhg-registry-api`  
-**Port:** 8011 → 8000 (internal)
+**Port:** 8011 → 8000 (internal)  
+**Interactive Docs:** http://localhost:8011/docs (Swagger) | http://localhost:8011/redoc
 
 ---
 
@@ -23,13 +24,13 @@ The Registry API is the central data management service for the DHG AI Factory. 
 
 ```bash
 # Health check
-curl http://10.0.0.251:8011/healthz
+curl http://localhost:8011/healthz
 
 # List all antigravity sessions
-curl http://10.0.0.251:8011/api/v1/antigravity/chats
+curl http://localhost:8011/api/v1/antigravity/chats
 
 # List registered agents
-curl http://10.0.0.251:8011/api/v1/agents
+curl http://localhost:8011/api/v1/agents
 ```
 
 ---
@@ -123,6 +124,49 @@ Currently no authentication required (internal network only).
 | POST | `/api/v1/artifacts` | Create artifact |
 | GET | `/api/v1/artifacts/conversation/{conversation_id}` | Get artifacts for conversation |
 | GET | `/api/v1/artifacts/{artifact_id}` | Get specific artifact |
+
+### CME Projects
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/cme/projects` | Create CME project |
+| GET | `/api/cme/projects` | List CME projects (filterable by status) |
+| GET | `/api/cme/projects/{id}` | Get project details |
+| POST | `/api/cme/projects/{id}/start` | Start project execution |
+| POST | `/api/cme/projects/{id}/pause` | Pause project |
+| POST | `/api/cme/projects/{id}/cancel` | Cancel project |
+| GET | `/api/cme/projects/{id}/outputs` | Get all agent outputs for project |
+| GET | `/api/cme/projects/{id}/outputs/{agent}` | Get specific agent output |
+
+### CME Webhooks
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/cme/webhook/agent-complete` | Agent completion notification |
+| POST | `/api/cme/webhook/pipeline-status` | Pipeline status update |
+
+### CME Reviewers
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/cme/reviewers` | List reviewers |
+| POST | `/api/cme/reviewers` | Create reviewer |
+| DELETE | `/api/cme/reviewers/{id}` | Delete reviewer |
+
+### CME Search
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/cme/search?q=` | Search CME content |
+
+### Session Logger
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/sessions` | List sessions |
+| POST | `/api/v1/sessions` | Create session |
+| GET | `/api/v1/sessions/{id}/chunks` | Get session chunks |
+| GET | `/api/v1/sessions/stats` | Session statistics |
 
 ### WebSocket
 
@@ -239,6 +283,6 @@ The registry uses PostgreSQL with pgvector extension. Tables:
 ## API Documentation (Interactive)
 
 OpenAPI/Swagger docs available at:
-- **Swagger UI:** http://10.0.0.251:8011/docs
-- **ReDoc:** http://10.0.0.251:8011/redoc
-- **OpenAPI JSON:** http://10.0.0.251:8011/openapi.json
+- **Swagger UI:** http://localhost:8011/docs
+- **ReDoc:** http://localhost:8011/redoc
+- **OpenAPI JSON:** http://localhost:8011/openapi.json

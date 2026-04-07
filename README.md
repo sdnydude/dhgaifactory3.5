@@ -1,569 +1,180 @@
-# DHG AI Factory - CME Pipeline Multi-Agent System
+# DHG AI Factory v3.5
 
-**Production-Ready Dockerized Multi-Agent Architecture for CME/NON-CME Content Generation**
+**Multi-Agent Platform for Pharmaceutical-Grade CME Grant Documentation**
+
+Digital Harmony Group's AI Factory — a LangGraph-based orchestration platform that generates ACCME-compliant Continuing Medical Education content using 11 specialized AI agents and 4 composition pipelines.
 
 ---
 
-## 🎯 Overview
-
-The DHG AI Factory is a sophisticated multi-agent system designed for automated generation of **ACCME-compliant CME content** and **NON-CME business/strategy materials**. It orchestrates 6 specialized agents through a master orchestrator to deliver funder-ready deliverables.
-
-### System Architecture
+## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    ORCHESTRATOR AGENT                        │
-│         (CME/NON-CME Mode Detection & Coordination)         │
-└──────────────────┬──────────────────────────────────────────┘
-                   │
-        ┌──────────┴──────────┐
-        │                     │
-┌───────▼─────────┐   ┌──────▼───────────┐
-│  Medical LLM    │   │    Research      │
-│  & NLP Agent    │   │  /Retriever      │
-│                 │   │     Agent        │
-│ • ICD-10        │   │ • PubMed         │
-│ • NER           │   │ • ClinicalTrials │
-│ • Guidelines    │   │ • 9 Sources      │
-│ • SDOH/Equity   │   │ • URL Validation │
-└─────────────────┘   └──────────────────┘
-        │                     │
-        │    ┌────────────────┴──────────┐
-        │    │                           │
-┌───────▼────▼─────┐   ┌────────────────▼────┐
-│   Curriculum     │   │     Outcomes        │
-│     Agent        │   │      Agent          │
-│                  │   │                     │
-│ • 6-10 Objectives│   │ • Moore Levels 3-5  │
-│ • Moore Mapping  │   │ • Pre/Post/6-week   │
-│ • Faculty Briefs │   │ • 3 Pathways        │
-└──────────────────┘   └─────────────────────┘
-        │                     │
-        │    ┌────────────────┴──────────┐
-        │    │                           │
-┌───────▼────▼─────┐   ┌────────────────▼────┐
-│  Competitor      │   │  QA/Compliance      │
-│  Intelligence    │   │      Agent          │
-│     Agent        │   │                     │
-│ • Market Analysis│   │ • ACCME Validation  │
-│ • 7 Field Extract│   │ • Fair Balance      │
-│ • Differentiation│   │ • NO Hallucinations │
-└──────────────────┘   └─────────────────────┘
-                   │
-        ┌──────────▼──────────┐
-        │  PostgreSQL + Vector│
-        │   (DHG Registry)    │
-        └─────────────────────┘
+                          LangGraph Cloud (Production)
+                          localhost:2026 (Development)
+                                    |
+              ┌─────────────────────┼──────────────────────┐
+              |                     |                      |
+     ┌────────┴─────────┐  ┌───────┴────────┐  ┌─────────┴──────────┐
+     | Orchestrator      |  | Content Agents |  | Quality Gates      |
+     | Recipes (4)       |  | (9 agents)     |  | (2 agents)         |
+     |                   |  |                |  |                    |
+     | needs_package     |  | research       |  | prose_quality      |
+     | curriculum_package|  | clinical_pract |  | compliance_review  |
+     | grant_package     |  | gap_analysis   |  |                    |
+     | full_pipeline     |  | learning_obj   |  └────────────────────┘
+     └───────────────────┘  | curriculum_des |
+                            | research_proto |
+                            | marketing_plan |
+                            | grant_writer   |
+                            | needs_assessmt |
+                            └────────────────┘
+              |                     |                      |
+     ┌────────┴─────────────────────┴──────────────────────┴──┐
+     |                    Infrastructure                       |
+     |  PostgreSQL 15 + pgvector  |  Ollama (qwen3, llama3.1) |
+     |  Registry API (:8011)      |  VS Engine (:8013)         |
+     |  Next.js Frontend (:3000)  |  Session Logger (:8009)    |
+     └─────────────────────────────────────────────────────────┘
+              |
+     ┌────────┴──────────────────────────────────────────────┐
+     |                   Observability                        |
+     |  Prometheus → Alertmanager → Grafana                   |
+     |  Promtail → Loki → Grafana                             |
+     |  OTel SDK → Tempo → Grafana                            |
+     |  LangSmith (@traceable on every node)                  |
+     └────────────────────────────────────────────────────────┘
 ```
 
----
+## 15 LangGraph Graphs
 
-## ✅ Complete Agent System
+**11 Individual Agents** — each with TypedDict state, Claude Sonnet LLM, dual tracing (LangSmith + OTel), 5-minute async timeouts, and quality gate retry loops:
 
-### 1. **Orchestrator Agent** (Master)
-- **Port**: 8001
-- **Responsibilities**:
-  - CME vs NON-CME mode detection
-  - Multi-agent coordination
-  - Task routing and orchestration
-  - Final deliverable compilation
-  
-### 2. **Medical LLM & NLP Agent**
-- **Port**: 8002
-- **Capabilities**:
-  - ICD-10 code extraction
-  - Clinical NER (diseases, drugs, devices, labs)
-  - Guideline summarization (ACR, ACC/AHA, ADA, GOLD, etc.)
-  - Quality measure suggestions (NQF/CMS/MIPS)
-  - SDOH/equity analysis
-  
-### 3. **Research/Retriever Agent**
-- **Port**: 8003
-- **Data Sources** (9):
-  - PubMed/NCBI
-  - ClinicalTrials.gov
-  - CDC WONDER
-  - CMS Quality Measures
-  - USPSTF
-  - AHRQ Evidence Reports
-  - NIH RePORTER
-  - Consensus API
-  - Perplexity API
-- **Features**: Caching, URL validation, reference management
+| Agent | Purpose |
+|-------|---------|
+| Needs Assessment | Cold open narrative, 3100+ word validation |
+| Research | Literature/PubMed queries, 30+ sources |
+| Clinical Practice | Barrier identification, standard-of-care |
+| Gap Analysis | 5+ evidence-based gaps, quantification |
+| Learning Objectives | Moore's Expanded Framework mapping |
+| Curriculum Design | Educational design + innovation section |
+| Research Protocol | IRB-ready outcomes protocol |
+| Marketing Plan | Audience strategy + channel budget |
+| Grant Writer | Full package assembly |
+| Prose Quality | De-AI-ification scoring, banned pattern detection |
+| Compliance Review | ACCME standards verification |
 
-### 4. **Curriculum Agent**
-- **Port**: 8004
-- **Outputs**:
-  - 6-10 learning objectives
-  - Moore Levels mapping
-  - ICD-10 & QI measure integration
-  - Activity-level curriculum outlines
-  - Faculty/instructor briefs
-  
-### 5. **Outcomes Agent**
-- **Port**: 8005
-- **Focus**: Moore Levels 3-5
-- **Deliverables**:
-  - Pre/post/6-week assessment instruments
-  - 3 innovative outcomes pathways
-  - Outcomes data mapping
-  - QI measures + ICD-10 integration
-  
-### 6. **Competitor Intelligence Agent**
-- **Port**: 8006
-- **Extracts**:
-  - Provider, Funder, Date, Format, Credits, Topic, URL
-  - Competitive differentiation summaries
-  - Market intelligence reports
-  - Provider/funder tracking
-  
-### 7. **QA/Compliance Agent**
-- **Port**: 8007
-- **Validates**:
-  - Compliance mode correctness
-  - No hallucinated sources
-  - Reference validation
-  - Word count constraints
-  - ACCME rules (CME mode only)
-  - Fair balance & commercial bias
+**4 Orchestrator Composition Graphs** — parallel execution via asyncio.gather, conditional quality gates, human-in-the-loop review:
+
+| Recipe | Pipeline |
+|--------|----------|
+| needs_package | Research + Clinical parallel -> Gap -> LO -> Needs -> Prose QA -> Human Review |
+| curriculum_package | Needs Package + Curriculum + Protocol + Marketing parallel -> Human Review |
+| grant_package | Full 11 agents, Prose QA 2 passes, Compliance gate, Human Review |
+| full_pipeline | Grant package with 3-way human review routing (approved/revision/rejected) |
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
-- **Docker** & **Docker Compose** installed
-- **8GB+ RAM** recommended
-- **API Keys** for:
-  - OpenAI or Anthropic (for LLM agents)
-  - Research APIs (PubMed, Consensus, Perplexity - optional)
+- Docker Engine 29+ with Docker Compose
+- NVIDIA GPU (optional, for Ollama local inference)
+- API keys: `ANTHROPIC_API_KEY`, `LANGCHAIN_API_KEY` (required); `GOOGLE_API_KEY`, `PERPLEXITY_API_KEY`, `NCBI_API_KEY` (optional)
 
-### 1. Clone & Setup
+### Start Infrastructure
 
 ```bash
-cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5
+# Main stack (registry, observability, frontend, legacy agents)
+docker compose up -d
 
-# Copy environment template
-cp .env.example .env
-
-# Edit .env with your API keys
-nano .env  # or vim, code, etc.
+# LangGraph dev server (separate compose)
+cd langgraph_workflows/dhg-agents-cloud
+docker compose up -d
 ```
 
-### 2. Configure Environment
+### Verify Health
 
-**Required Variables:**
 ```bash
-# LLM Providers
-OPENAI_API_KEY=sk-...
-ANTHROPIC_API_KEY=sk-ant-...
-
-# Database
-POSTGRES_PASSWORD=your_secure_password_here
+curl -s http://localhost:2026/ok          # LangGraph server
+curl -s http://localhost:8011/healthz     # Registry API
+curl -s http://localhost:3000             # Frontend
+curl -s http://localhost:9090/-/healthy   # Prometheus
 ```
 
-**Optional Research APIs:**
-```bash
-CONSENSUS_API_KEY=...
-PERPLEXITY_API_KEY=...
-PUBMED_API_KEY=...
+### Access Services
+
+| Service | URL |
+|---------|-----|
+| Frontend | http://localhost:3000 |
+| Registry API (Swagger) | http://localhost:8011/docs |
+| Grafana | http://localhost:3001 (admin/admin) |
+| Prometheus | http://localhost:9090 |
+| LangGraph Studio | http://localhost:2026 |
+
+---
+
+## Project Structure
+
 ```
-
-### 3. Build & Launch
-
-```bash
-# Build all agents
-docker-compose build
-
-# Start the system
-docker-compose up -d
-
-# Check logs
-docker-compose logs -f orchestrator
-```
-
-### 4. Verify System Health
-
-```bash
-# Check orchestrator
-curl http://localhost:8001/health
-
-# Check all agents
-for port in 8001 8002 8003 8004 8005 8006 8007; do
-  echo "Checking port $port..."
-  curl -s http://localhost:$port/health | jq .
-done
+dhgaifactory3.5/
+  langgraph_workflows/dhg-agents-cloud/
+    src/                    # 11 agent graphs + orchestrator + tracing
+    langgraph.json          # Graph registry (15 graphs)
+    docker-compose.yml      # LangGraph dev server
+  registry/                 # FastAPI registry API + CME endpoints
+  frontend/                 # Next.js + shadcn/ui + assistant-ui + CopilotKit
+  services/
+    vs-engine/              # Verbalized Sampling engine
+    session-logger/         # Session capture with Ollama embeddings
+    logo-maker/             # Logo generation
+  agents/                   # Legacy FastAPI agents (being decommissioned)
+  observability/            # Prometheus, Grafana, Loki, Tempo, Promtail configs
+  DHG-CME-12-Agent-Docs/    # 12-agent system architecture documentation
+  docs/                     # Active documentation
+  docs/archive/             # Historical/superseded docs
+  .github/workflows/ci.yml # GitHub Actions CI (lint, test, compose validation)
+  docker-compose.yml        # Main infrastructure compose
+  docker-compose.override.yml # Services, observability, frontend
+  CLAUDE.md                 # Canonical source of truth for architecture & rules
 ```
 
 ---
 
-## 📋 Usage
+## Technology Stack
 
-### Generate CME Needs Assessment
-
-```bash
-curl -X POST http://localhost:8001/orchestrate \
-  -H "Content-Type: application/json" \
-  -d '{
-    "task_type": "needs_assessment",
-    "topic": "Type 2 Diabetes Management",
-    "compliance_mode": "auto",
-    "target_audience": "Primary Care Physicians",
-    "word_count_target": 1250,
-    "include_sdoh": true,
-    "include_equity": true
-  }'
-```
-
-### Response Structure
-
-```json
-{
-  "task_id": "uuid",
-  "status": "completed",
-  "compliance_mode": "cme",
-  "deliverables": {
-    "needs_assessment": "...",
-    "references": [...],
-    "research_summary": "...",
-    "qa_report": {...},
-    "metadata": {...}
-  },
-  "violations": [],
-  "warnings": []
-}
-```
+| Layer | Technology |
+|-------|-----------|
+| Orchestration | LangGraph (StateGraph, Command pattern) |
+| Observability | LangSmith + OTel/Tempo + Prometheus + Grafana + Loki |
+| Agent LLM | Claude Sonnet via ChatAnthropic |
+| Local LLM | Ollama (qwen3:14b, llama3.1:8b, nomic-embed-text) |
+| Backend | FastAPI, SQLAlchemy 2.0, Pydantic 2.5 |
+| Database | PostgreSQL 15 + pgvector (64 tables) |
+| Frontend | Next.js 16, shadcn/ui, assistant-ui, CopilotKit |
+| Container Runtime | Docker Engine 29.1.5 |
+| CI/CD | GitHub Actions |
+| External Access | Cloudflare Tunnel + Cloudflare Access (Google OAuth) |
 
 ---
 
-## 🏗️ Architecture Details
+## Documentation
 
-### Database Schema (PostgreSQL + pgvector)
-
-```sql
--- Core Tables
-references         -- All validated citations
-events             -- Request/response logs
-api_cache          -- Research caching
-topic_source_state -- Incremental updates
-vector             -- Embeddings (pgvector)
-
--- CME Tracking
-segments           -- Content segments
-assessments        -- Pre/post/follow-up
-outcomes           -- Moore Levels data
-```
-
-### Agent Communication
-
-- **Protocol**: HTTP/REST
-- **Format**: JSON
-- **Timeout**: 300s default
-- **Retry**: Configurable per agent
-
-### Data Flow
-
-```
-User Request
-    ↓
-Orchestrator (detect mode)
-    ↓
-Research Agent → validate URLs → insert registry
-    ↓
-Medical LLM Agent → generate content
-    ↓
-QA/Compliance Agent → validate
-    ↓
-[If violations] → Medical LLM Agent (corrections)
-    ↓
-Orchestrator → compile deliverables
-    ↓
-Response to User
-```
+- **CLAUDE.md** — Canonical architecture, rules, and system state
+- **docs/TODO.md** — Master task list with phased priorities
+- **docs/FRONTEND.md** — Frontend architecture and components
+- **docs/REGISTRY_API.md** — Registry API endpoint reference
+- **docs/OBSERVABILITY_RUNBOOK.md** — Monitoring operational procedures
+- **DHG-CME-12-Agent-Docs/** — Complete 12-agent system specifications
 
 ---
 
-## 🔧 Configuration
-
-### Environment Variables Reference
-
-| Variable | Description | Required | Default |
-|----------|-------------|----------|---------|
-| `POSTGRES_PASSWORD` | Database password | ✅ | changeme |
-| `OPENAI_API_KEY` | OpenAI API key | ✅ | - |
-| `CME_MODE_DEFAULT` | Default compliance mode | ❌ | auto |
-| `LOG_LEVEL` | Logging level | ❌ | INFO |
-| `ACCME_STRICT_MODE` | Enforce strict ACCME | ❌ | true |
-
-Full list: See `.env.example`
-
-### Port Mapping
-
-| Service | Internal | External | Purpose |
-|---------|----------|----------|---------|
-| Orchestrator | 8000 | 8001 | Master coordination |
-| Medical LLM | 8000 | 8002 | Medical NLP |
-| Research | 8000 | 8003 | Evidence gathering |
-| Curriculum | 8000 | 8004 | Learning objectives |
-| Outcomes | 8000 | 8005 | Assessment design |
-| Competitor Intel | 8000 | 8006 | Market analysis |
-| QA/Compliance | 8000 | 8007 | Validation |
-| PostgreSQL | 5432 | 5432 | Registry database |
-
----
-
-## 📊 Monitoring
-
-### Health Checks
-
-```bash
-# All agents
-docker-compose ps
-
-# Individual agent
-docker-compose exec orchestrator curl localhost:8000/health
-```
-
-### Logs
-
-```bash
-# All logs
-docker-compose logs -f
-
-# Specific agent
-docker-compose logs -f medical-llm
-
-# Error logs only
-docker-compose logs -f | grep ERROR
-```
-
-### Database Inspection
-
-```bash
-# Connect to registry
-docker-compose exec registry-db psql -U dhg -d dhg_registry
-
-# Check events
-SELECT * FROM events ORDER BY created_at DESC LIMIT 10;
-
-# Check references
-SELECT COUNT(*) FROM references WHERE validated = true;
-```
-
----
-
-## 🧪 Testing
-
-### Unit Tests
-
-```bash
-# Test individual agent
-docker-compose exec orchestrator pytest /app/tests
-
-# All agents
-for agent in orchestrator medical-llm research curriculum outcomes competitor-intel qa-compliance; do
-  docker-compose exec $agent pytest /app/tests
-done
-```
-
-### Integration Test
-
-```bash
-# Full pipeline test
-curl -X POST http://localhost:8001/orchestrate \
-  -H "Content-Type: application/json" \
-  -d @test_requests/needs_assessment_diabetes.json
-```
-
----
-
-## 🔐 Security
-
-### API Authentication
-
-Set `ENABLE_API_AUTH=true` in `.env`:
-
-```bash
-JWT_SECRET=your_jwt_secret_here
-JWT_EXPIRATION=3600
-```
-
-### Secrets Management
-
-**Never commit** `.env` to version control:
-
-```bash
-# Add to .gitignore
-echo ".env" >> .gitignore
-echo "docker-compose.secrets.yml" >> .gitignore
-```
-
----
-
-## 📈 Scaling
-
-### Horizontal Scaling
-
-```bash
-# Scale research agents to 3 instances
-docker-compose up -d --scale research=3
-
-# Scale medical-llm to 2 instances
-docker-compose up -d --scale medical-llm=2
-```
-
-### Load Balancing
-
-Add nginx reverse proxy:
-
-```yaml
-# Add to docker-compose.yml
-nginx:
-  image: nginx:alpine
-  ports:
-    - "80:80"
-  volumes:
-    - ./nginx.conf:/etc/nginx/nginx.conf
-```
-
----
-
-## 🐛 Troubleshooting
-
-### Agent Not Starting
-
-```bash
-# Check logs
-docker-compose logs orchestrator
-
-# Rebuild
-docker-compose build --no-cache orchestrator
-docker-compose up -d orchestrator
-```
-
-### Database Connection Issues
-
-```bash
-# Check database health
-docker-compose exec registry-db pg_isready -U dhg
-
-# Reset database
-docker-compose down -v
-docker-compose up -d registry-db
-```
-
-### Port Already in Use
-
-```bash
-# Find process using port 8001
-lsof -i :8001
-
-# Change port in docker-compose.yml
-# Or stop conflicting process
-```
-
----
-
-## 📚 API Documentation
-
-### Interactive Docs
-
-Once running, access:
-
-- **Orchestrator**: http://localhost:8001/docs
-- **Medical LLM**: http://localhost:8002/docs
-- **Research**: http://localhost:8003/docs
-- **Curriculum**: http://localhost:8004/docs
-- **Outcomes**: http://localhost:8005/docs
-- **Competitor Intel**: http://localhost:8006/docs
-- **QA/Compliance**: http://localhost:8007/docs
-
----
-
-## 🎓 Examples
-
-### CME Needs Assessment
-
-**Request:**
-```json
-{
-  "task_type": "needs_assessment",
-  "topic": "Heart Failure Management Updates",
-  "compliance_mode": "cme",
-  "target_audience": "Cardiologists",
-  "word_count_target": 1250,
-  "reference_count_min": 8,
-  "include_sdoh": true
-}
-```
-
-### NON-CME Business Strategy
-
-**Request:**
-```json
-{
-  "task_type": "business_strategy",
-  "topic": "Digital CME Platform Launch",
-  "compliance_mode": "non-cme",
-  "additional_context": {
-    "market": "cardiology",
-    "budget": "$500K"
-  }
-}
-```
-
----
-
-## 🤝 Contributing
-
-### Adding New Agents
-
-1. Create agent directory: `agents/new-agent/`
-2. Add `main.py` with FastAPI app
-3. Create `Dockerfile`
-4. Add to `docker-compose.yml`
-5. Update orchestrator routing
-
-### Code Style
-
-```bash
-# Format code
-black agents/
-
-# Lint
-ruff check agents/
-
-# Type check
-mypy agents/
-```
-
----
-
-## 📝 License
-
-MIT License - See LICENSE file
-
----
-
-## 🆘 Support
-
-- **Issues**: GitHub Issues
-- **Documentation**: `/docs` directory
-- **Contact**: support@digitalharmonygroup.com
-
----
-
-## 🎉 Ready to Deploy!
-
-```bash
-# Production deployment
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-
-# Monitor
-docker-compose logs -f
-```
-
-**System Status**: ✅ **PRODUCTION READY**
-
-All 7 agents deployed and operational!
+## Server
+
+- **Host:** g700data1 (10.0.0.251)
+- **OS:** Ubuntu 24.04
+- **GPU:** NVIDIA RTX 5080 (16GB VRAM)
+- **RAM:** 64GB
+- **Disk:** 1.9TB root (12% used), 3.6TB data (4% used)
+- **Containers:** ~60 running across 5 stacks
+- **External:** app.digitalharmonyai.com (frontend), vs.digitalharmonyai.com (VS Engine)
