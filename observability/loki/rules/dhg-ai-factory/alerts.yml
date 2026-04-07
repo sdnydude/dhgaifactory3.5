@@ -1,0 +1,46 @@
+groups:
+  - name: dhg-log-alerts
+    rules:
+      - alert: HighErrorRate
+        expr: |
+          sum(count_over_time({job="dhg-ai-factory", level=~"error|fatal|critical|ERROR|FATAL|CRITICAL"}[5m])) > 50
+        for: 5m
+        labels:
+          severity: warning
+          source: loki
+        annotations:
+          summary: "High error rate in logs ({{ $value }} errors in 5m)"
+          description: "More than 50 error-level log lines detected across all containers in the last 5 minutes."
+
+      - alert: ContainerErrorSpike
+        expr: |
+          sum by (container) (count_over_time({job="dhg-ai-factory", level=~"error|fatal|critical|ERROR|FATAL|CRITICAL"}[5m])) > 20
+        for: 2m
+        labels:
+          severity: warning
+          source: loki
+        annotations:
+          summary: "Container {{ $labels.container }} error spike ({{ $value }} errors in 5m)"
+          description: "A single container is producing more than 20 errors in 5 minutes, indicating a potential service issue."
+
+      - alert: PostgresFatalError
+        expr: |
+          count_over_time({job="dhg-ai-factory", container="dhg-registry-db", level=~"fatal|panic|FATAL|PANIC"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          source: loki
+        annotations:
+          summary: "PostgreSQL FATAL/PANIC error detected"
+          description: "A FATAL or PANIC level error was logged by the registry database. Immediate investigation required."
+
+      - alert: NoLogsFromRegistryApi
+        expr: |
+          absent_over_time({job="dhg-ai-factory", container="dhg-registry-api"}[10m])
+        for: 5m
+        labels:
+          severity: warning
+          source: loki
+        annotations:
+          summary: "No logs received from registry-api for 10+ minutes"
+          description: "The registry API container has not emitted any logs. It may be down or Promtail may have lost connectivity."

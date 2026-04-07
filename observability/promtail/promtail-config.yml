@@ -9,14 +9,48 @@ clients:
   - url: http://loki:3100/loki/api/v1/push
 
 scrape_configs:
-  - job_name: docker
-    static_configs:
-      - targets:
-          - localhost
-        labels:
-          job: docker
-          __path__: /var/lib/docker/containers/*/*-json.log
+  - job_name: dhg-ai-factory
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      # Extract container name (strip leading /)
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.+)'
+        target_label: container
+      # Set job label for all containers
+      - target_label: job
+        replacement: dhg-ai-factory
+      # Extract compose service name
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_service']
+        target_label: compose_service
+      # Extract compose project name
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_project']
+        target_label: compose_project
     pipeline_stages:
       - docker: {}
+      # Extract log level from common formats:
+      #   Python: level=INFO, WARNING, ERROR
+      #   JSON:   "level": "info"
+      #   PostgreSQL: LOG:, ERROR:, FATAL:
+      #   Go/generic: level=info, msg=
+      - regex:
+          expression: '(?i)(?:"level"\s*[:=]\s*"(?P<json_level>[^"]+)"|(?:^|\s)level[=:]\s*(?P<kv_level>DEBUG|INFO|WARN(?:ING)?|ERROR|FATAL|CRITICAL)|(?:^|\s)(?P<pg_level>LOG|ERROR|FATAL|PANIC|WARNING|NOTICE|DEBUG)\s*:)'
+      # Normalize: pick whichever capture group matched
+      - template:
+          source: level
+          template: '{{ if .json_level }}{{ .json_level }}{{ else if .kv_level }}{{ .kv_level }}{{ else if .pg_level }}{{ .pg_level }}{{ else }}unknown{{ end }}'
+      - labels:
+          level:
       - labeldrop:
+          - json_level
+          - kv_level
+          - pg_level
           - filename
+      # Drop noisy healthcheck/metrics endpoint log lines
+      - match:
+          selector: '{job="dhg-ai-factory"}'
+          stages:
+            - drop:
+                expression: '"(?:GET|HEAD) /(?:health[z]?|ready|metrics|api/health|api/tags|-/healthy|ok)\s'
+                drop_counter_reason: healthcheck

@@ -1,0 +1,146 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    { "asDropdown": false, "icon": "external link", "includeVars": false, "keepTime": true, "tags": ["dhg"], "targetBlank": true, "title": "DHG Dashboards", "type": "dashboards" }
+  ],
+  "liveNow": false,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100, "panels": [], "title": "Trace Search", "type": "row"
+    },
+    {
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 1 },
+      "id": 1,
+      "options": {},
+      "targets": [
+        {
+          "queryType": "traceqlSearch",
+          "limit": 50,
+          "filters": [
+            { "id": "service-name", "tag": "service.name", "operator": "=", "value": ["dhg-langgraph-agents"], "scope": "resource" },
+            { "id": "duration", "tag": "duration", "operator": ">", "value": ["100ms"] }
+          ],
+          "refId": "A"
+        }
+      ],
+      "title": "Recent Traces (>100ms)",
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 13 },
+      "id": 101, "panels": [], "title": "Service Graph", "type": "row"
+    },
+    {
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "gridPos": { "h": 14, "w": 24, "x": 0, "y": 14 },
+      "id": 10,
+      "options": {},
+      "targets": [
+        {
+          "queryType": "serviceMap",
+          "serviceMapQuery": "{ resource.service.name = \"dhg-langgraph-agents\" }",
+          "refId": "A"
+        }
+      ],
+      "title": "Agent Service Map",
+      "type": "nodeGraph"
+    },
+    {
+      "collapsed": true,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 28 },
+      "id": 102,
+      "panels": [
+        {
+          "datasource": { "type": "tempo", "uid": "tempo" },
+          "fieldConfig": { "defaults": {}, "overrides": [] },
+          "gridPos": { "h": 12, "w": 24, "x": 0, "y": 29 },
+          "id": 20,
+          "options": {},
+          "targets": [
+            {
+              "queryType": "traceqlSearch",
+              "limit": 50,
+              "filters": [
+                { "id": "service-name", "tag": "service.name", "operator": "=", "value": ["dhg-langgraph-agents"], "scope": "resource" },
+                { "id": "status", "tag": "status", "operator": "=", "value": ["error"], "scope": "intrinsic" }
+              ],
+              "refId": "A"
+            }
+          ],
+          "title": "Error Traces",
+          "type": "table"
+        },
+        {
+          "datasource": { "type": "tempo", "uid": "tempo" },
+          "fieldConfig": { "defaults": {}, "overrides": [] },
+          "gridPos": { "h": 12, "w": 24, "x": 0, "y": 41 },
+          "id": 21,
+          "options": {},
+          "targets": [
+            {
+              "queryType": "traceqlSearch",
+              "limit": 20,
+              "filters": [
+                { "id": "service-name", "tag": "service.name", "operator": "=", "value": ["dhg-langgraph-agents"], "scope": "resource" },
+                { "id": "duration", "tag": "duration", "operator": ">", "value": ["5s"] }
+              ],
+              "refId": "A"
+            }
+          ],
+          "title": "Slow Traces (>5s)",
+          "type": "table"
+        }
+      ],
+      "title": "Error & Slow Traces (click to expand)",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 29 },
+      "id": 103,
+      "panels": [
+        {
+          "datasource": { "type": "tempo", "uid": "tempo" },
+          "fieldConfig": { "defaults": {}, "overrides": [] },
+          "gridPos": { "h": 16, "w": 24, "x": 0, "y": 30 },
+          "id": 30,
+          "options": {},
+          "targets": [
+            {
+              "queryType": "traceql",
+              "query": "{ resource.service.name = \"dhg-langgraph-agents\" }",
+              "limit": 100,
+              "refId": "A"
+            }
+          ],
+          "title": "TraceQL Explorer",
+          "type": "traces"
+        }
+      ],
+      "title": "Trace Detail Explorer (click to expand)",
+      "type": "row"
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["dhg", "langgraph", "traces", "tempo"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "DHG LangGraph Agent Traces",
+  "uid": "dhg-langgraph-traces",
+  "version": 1,
+  "weekStart": ""
+}
