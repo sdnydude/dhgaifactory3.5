@@ -51,19 +51,7 @@ All agents have dual tracing: LangSmith (@traceable) + OpenTelemetry (@traced_no
 
 ### Legacy Agent System (DECOMMISSIONED)
 
-Docker-based FastAPI agents defined in `docker-compose.yml` under `agents/`. These predate the LangGraph migration. All stopped with `restart: "no"` — will not restart on reboot. Source code retained in `agents/` for reference.
-
-| Container | Port | Status |
-|-----------|------|--------|
-| dhg-aifactory-orchestrator | 2024 | STOPPED |
-| dhg-medical-llm | 8002 | STOPPED |
-| dhg-research | 8003 | STOPPED |
-| dhg-curriculum | 8004 | STOPPED |
-| dhg-outcomes | 8005 | STOPPED |
-| dhg-competitor-intel | 8006 | STOPPED |
-| dhg-qa-compliance | 8007 | STOPPED |
-| dhg-visuals-media | 8008 | STOPPED |
-| dhg-aifactory-web-ui | 3005 | STOPPED |
+9 Docker-based FastAPI agents (ports 2024, 8002-8008, 3005) — all stopped with `restart: "no"`, will not restart on reboot. Source code retained in `agents/` for reference. Do not build new features on these.
 
 ### Infrastructure Services
 
@@ -71,7 +59,7 @@ Docker-based FastAPI agents defined in `docker-compose.yml` under `agents/`. The
 |---------|------|---------|
 | dhg-registry-db | 5432 | PostgreSQL 15 + pgvector (64 tables) |
 | dhg-registry-api | 8011 | FastAPI data registry, Prometheus /metrics, CME endpoints |
-| dhg-frontend | 3000 | Next.js production frontend (shadcn/ui + assistant-ui + CopilotKit) |
+| dhg-frontend | 3000 | Next.js production frontend (shadcn/ui + assistant-ui + CopilotKit). Role-aware sidebar (Work/Observe/Manage sections). |
 | dhg-vs-engine | 8013 | Verbalized Sampling engine, Prometheus metrics |
 | dhg-ollama | 11434 | Ollama (llama3.1:8b, nomic-embed-text, qwen3:14b) |
 | dhg-session-logger | 8009 | Session tracking with Ollama embeddings |
@@ -91,6 +79,28 @@ Docker-based FastAPI agents defined in `docker-compose.yml` under `agents/`. The
 | dhg-cadvisor | 8080 | Container metrics (v0.51.0) |
 | dhg-node-exporter | 9100 | Host metrics |
 | dhg-postgres-exporter | 9187 | Registry-db metrics |
+
+### Auth & RBAC (Added April 2026)
+
+4-layer defense-in-depth: Cloudflare Access WAF → Next.js middleware (JWT cookie check, route guard) → FastAPI middleware (JWT signature validation, permission enforcement) → PostgreSQL RBAC tables.
+
+- Cloudflare JWT from `Cf-Access-Jwt-Assertion` header, validated against JWKS
+- 5 roles seeded: admin, operations, finance, editor, viewer
+- 5 DB tables: security_users, security_roles, security_user_roles, security_project_access, security_audit_log
+- Backend: registry/auth.py (validation + dependencies), registry/security_endpoints.py (API at /api/v1/security)
+- Frontend: middleware.ts (route guard), stores/session-store.ts (Zustand), hooks/use-session.ts, lib/permissions.ts
+- Dev mode: SECURITY_DEV_MODE=true bypasses all auth (backend + frontend)
+- Registry proxy: frontend/src/app/api/registry/[...path]/route.ts forwards Cloudflare JWT to registry API
+
+### LLManager Review Inbox (Added April 2026)
+
+Human-in-the-loop review workflow at /inbox. Master-detail layout: left sidebar lists pending LangGraph interrupted threads, right panel shows document with AI quality assessment.
+
+- Components: frontend/src/components/review/ (inbox-master-detail, review-panel, reflection-panel, metrics-bar, decision-bar, document-viewer, vs-alternatives)
+- Store: frontend/src/stores/review-store.ts (Zustand)
+- API: frontend/src/lib/inboxApi.ts (queries LangGraph SDK for interrupted threads, resumes with decisions)
+- AI Reflection: quality signals (prose score, banned patterns, ACCME compliance) + approve/revise recommendation
+- Auto-refreshes every 30s
 
 ### Additional Stacks (running independently)
 
@@ -119,29 +129,15 @@ Docker-based FastAPI agents defined in `docker-compose.yml` under `agents/`. The
 
 **O2: gh Auth Expired** — GitHub CLI token is invalid. 3 commits unpushed. Run `gh auth login -h github.com` to restore.
 
-### Resolved (Feb–April 2026)
+### Resolved
 
-- **C1 Port 8011 conflict** — RESOLVED. Legacy orchestrator moved to 2024, registry-api owns 8011.
-- **C2 Web-UI can't reach LangGraph** — RESOLVED. Legacy web-ui decommissioned. New dhg-frontend connects directly to LangGraph Cloud via langgraph-sdk.
-- **C3 LangGraph network isolation** — MITIGATED. Production runs in LangGraph Cloud (no local network needed). Dev instance still uses host.docker.internal.
-- **C4 Infisical crash-looping** — RESOLVED. All 5 Infisical containers running stable (Up 2+ days).
-- **Dify** — DECOMMISSIONED. Zero usage, workers crash-looping (80 restarts). All containers, volumes, databases, and directories deleted.
-- **RAGFlow** — DECOMMISSIONED. Zero usage, idle task executor. All containers, volumes, and directories deleted.
-- **C5 Hardcoded IPs in web-ui** — RESOLVED. Legacy web-ui decommissioned. New frontend uses env vars.
-- **C6 Stale files at root** — RESOLVED. Proxy scripts removed, .bak files cleaned.
-- **C7 No CI/CD** — RESOLVED. GitHub Actions CI in `.github/workflows/ci.yml` (lint, test, compose validation).
-- **C8 Minimal test coverage** — IMPROVED. 44 tests across 7 test files (registry API + CME + agent endpoints). CI runs pytest.
-- **C9 Documentation sprawl** — IMPROVED. 42 stale docs archived to `docs/archive/`. CLAUDE.md is canonical.
-- **C10 Loki no log ingestion** — RESOLVED. Promtail configured, shipping Docker container logs to Loki. Volume mount corrected for Docker Root Dir at `/mnt/4tb/docker`.
-- Registry-db healthcheck, restart policy, cAdvisor version — all fixed.
-- Healthchecks added to all containers (Promtail, Ollama, Tempo, Node Exporter, Postgres Exporter, LangGraph).
-- OTel tracing added to all 11 LangGraph agents (85 @traced_node decorators).
+17 issues resolved Feb–April 2026. Full history: `docs/resolved-issues.md`.
 
 ---
 
 ## Frontend Migration Strategy (Decided Feb 18, 2026)
 
-LibreChat is being deprecated. The target frontend stack (from March 2026 UI research):
+The frontend stack (decided Feb 2026, implemented March–April 2026):
 
 **Approach A — Modular Composition (APPROVED):**
 - shadcn/ui — unified design system
@@ -172,13 +168,20 @@ LibreChat is being deprecated. The target frontend stack (from March 2026 UI res
 | Agent endpoints | registry/agent_endpoints.py |
 | DB models | registry/models.py |
 | Schemas | registry/schemas.py |
-| Registry tests | registry/test_*.py (7 test files, 44 tests) |
+| Registry tests | registry/test_*.py (5 test files, 105 tests) |
 | Frontend | frontend/src/ |
 | VS Engine | services/vs-engine/ |
 | Observability configs | observability/ (prometheus, grafana, loki, tempo, promtail, alertmanager) |
 | Agent architecture docs | DHG-CME-12-Agent-Docs/ |
 | Current priorities | docs/TODO.md |
 | CI/CD | .github/workflows/ci.yml |
+| Auth module | registry/auth.py |
+| Security API | registry/security_endpoints.py |
+| Security schemas | registry/security_schemas.py |
+| RBAC migration | registry/alembic/versions/004_add_security_rbac.py |
+| Frontend auth | frontend/src/middleware.ts, frontend/src/lib/permissions.ts |
+| Review components | frontend/src/components/review/ |
+| Inbox API | frontend/src/lib/inboxApi.ts |
 | Environment vars | .env (secrets — never expose) |
 
 ---
@@ -259,7 +262,3 @@ Use semantic tokens, not raw hex values, in code.
 | Container runtime | Docker Engine 29.1.5 |
 | Frontend (target) | Next.js, shadcn/ui, assistant-ui, CopilotKit, Refine, React Flow |
 | Secrets | Infisical (when stable), .env (current) |
-
-## What Is NOT In Use
-
-Node-RED is fully deprecated. Do not mention or reference it in any context. Zapier is not used. On24 is not used. The legacy web-ui WebSocket connection to the orchestrator is broken and will be replaced, not fixed.

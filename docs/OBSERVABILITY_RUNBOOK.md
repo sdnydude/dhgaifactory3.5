@@ -65,9 +65,18 @@ curl -s http://localhost:9093/-/healthy         # Alertmanager
 - Loki (http://loki:3100)
 - Tempo (http://tempo:3200) — traces-to-logs linking enabled
 
-**Dashboards:** `observability/grafana/provisioning/dashboards/json/`
-- `dhg-core-golden.json` — Core system metrics
-- `docker-overview.json` — Container overview
+**Dashboards (8):** `observability/grafana/provisioning/dashboards/json/`
+
+| Dashboard | File | Purpose |
+|-----------|------|---------|
+| Core Golden Signals | `dhg-core-golden.json` | CPU, memory, network, disk — the four golden signals |
+| Docker Overview | `docker-overview.json` | Per-container resource usage, restart counts |
+| Registry API | `dhg-registry-api.json` | Request rate, latency, error rate for FastAPI endpoints |
+| PostgreSQL | `dhg-postgresql.json` | Connection pool, query performance, table stats |
+| Log Analytics | `dhg-log-analytics.json` | Log volume by container, error rates, pattern search |
+| LangGraph Traces | `dhg-langgraph-traces.json` | Tempo trace search by service, duration, status |
+| Alerting | `dhg-alerting.json` | Alert state overview, firing/resolved history |
+| VS Engine | `vs-engine.json` | Verbalized Sampling metrics (generate, select, latency) |
 
 ---
 
@@ -75,6 +84,15 @@ curl -s http://localhost:9093/-/healthy         # Alertmanager
 
 **Promtail config:** `observability/promtail/promtail-config.yml`
 Scrapes Docker container logs. **Important:** Docker Root Dir is `/mnt/4tb/docker`, so the volume mount maps `/mnt/4tb/docker/containers` to `/var/lib/docker/containers` inside the container.
+
+**Loki alerting rules:** `observability/loki/rules/dhg-ai-factory/alerts.yml`
+
+| Alert | Condition | Severity |
+|-------|-----------|----------|
+| HighErrorRate | >50 error-level log lines across all containers in 5m | warning |
+| ContainerErrorSpike | >20 errors from a single container in 5m | warning |
+| PostgresFatalError | Any FATAL/PANIC from registry-db | critical |
+| NoLogsFromRegistryApi | No logs received from registry-api for 10+ minutes | warning |
 
 **Query logs in Grafana:**
 ```logql
