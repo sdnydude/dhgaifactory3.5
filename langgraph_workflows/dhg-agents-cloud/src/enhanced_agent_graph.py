@@ -4,7 +4,8 @@ Includes: parallel execution, conditional routing, rich metadata
 """
 
 from langgraph.graph import StateGraph, END
-from typing import TypedDict, List, Literal
+from typing import List, Literal
+from typing_extensions import TypedDict
 from datetime import datetime
 
 

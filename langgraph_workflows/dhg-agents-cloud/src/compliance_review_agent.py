@@ -15,7 +15,8 @@ import re
 import json
 import operator
 from datetime import datetime
-from typing import TypedDict, List, Dict, Any, Optional, Annotated
+from typing import List, Dict, Any, Optional, Annotated
+from typing_extensions import TypedDict
 from enum import Enum
 
 from langgraph.graph import StateGraph, END

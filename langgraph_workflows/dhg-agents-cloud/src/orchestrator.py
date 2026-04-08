@@ -23,7 +23,8 @@ import sys
 import operator
 import asyncio
 from datetime import datetime
-from typing import TypedDict, List, Dict, Any, Optional, Annotated, Literal
+from typing import List, Dict, Any, Optional, Annotated, Literal
+from typing_extensions import TypedDict
 from enum import Enum
 import httpx
 
