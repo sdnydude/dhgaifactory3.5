@@ -2259,3 +2259,248 @@ async def get_rag_context(
         estimated_tokens=estimated_tokens,
         project_scope=req.project_id,
     )
+
+
+# =============================================================================
+# CRUD ENDPOINTS — Registry Agent Gateway
+# =============================================================================
+
+class SourceReferenceCreate(BaseModel):
+    """Create a source reference (citation) for a project."""
+    project_id: str
+    ref_type: str = Field(..., description="pubmed, doi, url, journal, guideline")
+    ref_id: Optional[str] = Field(None, description="PubMed ID or DOI")
+    title: str
+    authors: Optional[str] = None
+    journal: Optional[str] = None
+    publication_date: Optional[str] = None
+    url: Optional[str] = None
+    abstract: Optional[str] = None
+    cached_content: Optional[Dict[str, Any]] = None
+    document_id: Optional[str] = None
+    verification_status: Optional[str] = Field(None, description="verified, not_found, retracted, outdated, landmark")
+    verified_by: Optional[str] = None
+
+
+class AgentOutputCreate(BaseModel):
+    """Create an agent output record."""
+    project_id: str
+    agent_name: str
+    output_type: str = "document"
+    content: Dict[str, Any]
+    quality_score: Optional[float] = None
+    document_text: Optional[str] = None
+    langsmith_trace_id: Optional[str] = None
+
+
+class DocumentCreate(BaseModel):
+    """Create an immutable CME document version."""
+    project_id: str
+    agent_output_id: Optional[str] = None
+    document_type: str
+    title: str
+    content_text: str
+    content_html: Optional[str] = None
+    content_json: Optional[Dict[str, Any]] = None
+    word_count: Optional[int] = None
+    quality_score: Optional[float] = None
+    quality_passed: Optional[bool] = None
+    quality_details: Optional[Dict[str, Any]] = None
+    source_references: Optional[List[Dict[str, Any]]] = None
+    created_by: str = "registry_agent"
+
+
+@router.post("/source-references", status_code=status.HTTP_201_CREATED)
+async def create_source_reference(
+    ref: SourceReferenceCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Create a source reference. Returns 409 if project_id + ref_id already exists."""
+    start = time.time()
+
+    project = db.query(CMEProject).filter(CMEProject.id == ref.project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Project {ref.project_id} not found")
+
+    if ref.ref_id:
+        existing = db.query(CMESourceReference).filter(
+            CMESourceReference.project_id == project.id,
+            CMESourceReference.ref_id == ref.ref_id,
+        ).first()
+        if existing:
+            elapsed = (time.time() - start) * 1000
+            registry_write_latency.observe(elapsed)
+            return {"id": str(existing.id), "status": "already_exists"}
+
+    pub_date = None
+    if ref.publication_date:
+        try:
+            pub_date = datetime.fromisoformat(ref.publication_date).date()
+        except (ValueError, TypeError):
+            pub_date = None
+
+    new_ref = CMESourceReference(
+        project_id=project.id,
+        document_id=uuid.UUID(ref.document_id) if ref.document_id else None,
+        ref_type=ref.ref_type,
+        ref_id=ref.ref_id,
+        title=ref.title,
+        authors=ref.authors or "",
+        journal=ref.journal or "",
+        publication_date=pub_date,
+        url=ref.url or "",
+        abstract=ref.abstract or "",
+        cached_content=ref.cached_content,
+        verification_status=ref.verification_status,
+        verified_at=datetime.utcnow() if ref.verification_status else None,
+        verified_by=ref.verified_by,
+    )
+    db.add(new_ref)
+    db.flush()
+
+    ref_text = f"{ref.title} {ref.authors or ''} {ref.abstract or ''}"
+    background_tasks.add_task(_generate_embedding_and_save, "cme_source_references", new_ref.id, ref_text)
+
+    db.commit()
+
+    elapsed = (time.time() - start) * 1000
+    registry_write_latency.observe(elapsed)
+    registry_write_operations.labels(operation="create_source_reference").inc()
+
+    return {"id": str(new_ref.id), "status": "created"}
+
+
+@router.post("/agent-outputs", status_code=status.HTTP_201_CREATED)
+async def create_agent_output(
+    req: AgentOutputCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Create an agent output. Returns 409 if project_id + agent_name already exists."""
+    start = time.time()
+
+    project = db.query(CMEProject).filter(CMEProject.id == req.project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Project {req.project_id} not found")
+
+    existing = db.query(CMEAgentOutput).filter(
+        CMEAgentOutput.project_id == project.id,
+        CMEAgentOutput.agent_name == req.agent_name,
+    ).first()
+    if existing:
+        elapsed = (time.time() - start) * 1000
+        registry_write_latency.observe(elapsed)
+        return {"id": str(existing.id), "status": "already_exists"}
+
+    new_output = CMEAgentOutput(
+        project_id=project.id,
+        agent_name=req.agent_name,
+        output_type=req.output_type,
+        content=req.content,
+        quality_score=req.quality_score,
+        document_text=req.document_text,
+        langsmith_trace_id=req.langsmith_trace_id,
+    )
+    db.add(new_output)
+    db.flush()
+
+    if req.document_text:
+        background_tasks.add_task(_generate_embedding_and_save, "cme_agent_outputs", new_output.id, req.document_text)
+
+    db.commit()
+
+    elapsed = (time.time() - start) * 1000
+    registry_write_latency.observe(elapsed)
+    registry_write_operations.labels(operation="create_agent_output").inc()
+
+    return {"id": str(new_output.id), "status": "created"}
+
+
+@router.post("/documents", status_code=status.HTTP_201_CREATED)
+async def create_document(
+    req: DocumentCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Create an immutable document version. Auto-increments version if one exists."""
+    start = time.time()
+
+    project = db.query(CMEProject).filter(CMEProject.id == req.project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Project {req.project_id} not found")
+
+    current = db.query(CMEDocument).filter(
+        CMEDocument.project_id == project.id,
+        CMEDocument.document_type == req.document_type,
+        CMEDocument.is_current == True,
+    ).first()
+
+    new_version = 1
+    if current:
+        new_version = current.version + 1
+        current.is_current = False
+
+    now = datetime.utcnow()
+    new_doc = CMEDocument(
+        project_id=project.id,
+        agent_output_id=uuid.UUID(req.agent_output_id) if req.agent_output_id else None,
+        document_type=req.document_type,
+        version=new_version,
+        is_current=True,
+        title=req.title,
+        content_text=req.content_text,
+        content_html=req.content_html,
+        content_json=req.content_json,
+        word_count=req.word_count or len(req.content_text.split()),
+        quality_score=req.quality_score,
+        quality_passed=req.quality_passed,
+        quality_details=req.quality_details,
+        source_references=req.source_references or [],
+        created_by=req.created_by,
+        retention_until=datetime(now.year + 7, now.month, now.day),
+    )
+    db.add(new_doc)
+    db.flush()
+
+    background_tasks.add_task(_generate_embedding_and_save, "cme_documents", new_doc.id, req.content_text)
+
+    db.commit()
+
+    elapsed = (time.time() - start) * 1000
+    registry_write_latency.observe(elapsed)
+    registry_write_operations.labels(operation="create_document").inc()
+
+    return {"id": str(new_doc.id), "version": new_version, "status": "created"}
+
+
+async def _generate_embedding_and_save(table_name: str, record_id, text_content: str):
+    """Background task: generate embedding and update the record."""
+    emb = await _generate_embedding(text_content)
+    if emb is None:
+        return
+
+    from database import SessionLocal
+    db = SessionLocal()
+    try:
+        if table_name == "cme_source_references":
+            db.execute(
+                text("UPDATE cme_source_references SET embedding = CAST(:emb AS vector) WHERE id = :rid"),
+                {"emb": f"[{','.join(str(v) for v in emb)}]", "rid": str(record_id)},
+            )
+        elif table_name == "cme_agent_outputs":
+            db.execute(
+                text("UPDATE cme_agent_outputs SET embedding = CAST(:emb AS vector) WHERE id = :rid"),
+                {"emb": f"[{','.join(str(v) for v in emb)}]", "rid": str(record_id)},
+            )
+        elif table_name == "cme_documents":
+            db.execute(
+                text("UPDATE cme_documents SET embedding = CAST(:emb AS vector) WHERE id = :rid"),
+                {"emb": f"[{','.join(str(v) for v in emb)}]", "rid": str(record_id)},
+            )
+        db.commit()
+    except Exception as exc:
+        logger.error("Failed to save embedding for %s/%s: %s", table_name, record_id, exc)
+        db.rollback()
+    finally:
+        db.close()

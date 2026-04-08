@@ -599,6 +599,11 @@ class CMESourceReference(Base):
     accessed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     cached_content = Column(JSONB, nullable=True)
 
+    # Verification (populated by Citation Checker agent)
+    verification_status = Column(String(50), nullable=True, index=True)  # verified | not_found | retracted | outdated | landmark
+    verified_at = Column(DateTime(timezone=True), nullable=True)
+    verified_by = Column(String(100), nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     # Relationships
