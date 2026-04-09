@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useCallback } from "react";
-import { Inbox, RefreshCw, AlertCircle } from "lucide-react";
+import { useEffect, useCallback, useRef } from "react";
+import { Inbox, RefreshCw, AlertCircle, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -11,6 +11,7 @@ import { useReviewStore } from "@/stores/review-store";
 import { listPendingReviews, resumeThread } from "@/lib/inboxApi";
 import type { ResumeValue } from "./types";
 import { cn } from "@/lib/utils";
+import { DEMO_REVIEWS, isDemoReview } from "./demo-reviews";
 
 const GRAPH_LABELS: Record<string, string> = {
   needs_package: "Needs Package",
@@ -57,12 +58,21 @@ export function InboxMasterDetail() {
     removeReview,
   } = useReviewStore();
 
+  const demoDismissedRef = useRef(false);
+
   const fetchReviews = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const data = await listPendingReviews();
-      setReviews(data);
+      if (data.length > 0) {
+        demoDismissedRef.current = false;
+        setReviews(data);
+      } else if (!demoDismissedRef.current) {
+        setReviews(DEMO_REVIEWS);
+      } else {
+        setReviews([]);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load reviews");
     }
@@ -76,11 +86,23 @@ export function InboxMasterDetail() {
 
   const selectedReview = reviews.find((r) => r.threadId === selectedReviewId);
 
+  const isDemo = reviews.length > 0 && reviews.every((r) => isDemoReview(r.threadId));
+
   const handleAction = async (
     threadId: string,
     graphId: string,
     resumeValue: ResumeValue,
   ) => {
+    if (isDemoReview(threadId)) {
+      removeReview(threadId);
+      const remainingDemo = reviews.filter(
+        (r) => r.threadId !== threadId && isDemoReview(r.threadId),
+      );
+      if (remainingDemo.length === 0) {
+        demoDismissedRef.current = true;
+      }
+      return;
+    }
     setActionLoading(threadId);
     try {
       await resumeThread(threadId, graphId, resumeValue);
@@ -112,6 +134,13 @@ export function InboxMasterDetail() {
           <div className="mx-3 mt-2 flex items-center gap-2 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
             {error}
+          </div>
+        )}
+
+        {isDemo && (
+          <div className="mx-3 mt-2 flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+            <Info className="h-3.5 w-3.5 shrink-0" />
+            Sample data — reviews appear when agents reach human review gates
           </div>
         )}
 
