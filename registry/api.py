@@ -16,11 +16,12 @@ logger = logging.getLogger("dhg.registry")
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
-from pydantic import BaseModel, Field, UUID4, UUID4, Field
-from sqlalchemy import create_engine, select, func
-from sqlalchemy.orm import Session, sessionmaker
-from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
+from pydantic import BaseModel, Field, UUID4
+from sqlalchemy import select, func
+from sqlalchemy.orm import Session
+from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 
+from database import engine, SessionLocal, get_db, db_connections
 from models import Base, Media, Transcript, Segment, Event, Project, Conversation, Message, Artifact
 
 
@@ -62,57 +63,10 @@ registry_db_errors = Counter(
     'Total number of database connection errors'
 )
 
-db_connections = Gauge(
-    'registry_db_connections',
-    'Number of active database connections'
-)
-
 
 # ============================================================================
-# Database Setup
+# Database Setup — imported from database.py (single source of truth)
 # ============================================================================
-def get_database_url() -> str:
-    """Get database URL with password from env or files"""
-    # 1. Use DATABASE_URL if explicitly provided
-    db_url = os.getenv("DATABASE_URL")
-    if db_url:
-        return db_url
-        
-    # 2. Get password from secret file or env
-    db_password_file = os.getenv("DB_PASSWORD_FILE", "/run/secrets/db_password")
-    try:
-        with open(db_password_file, "r") as f:
-            password = f.read().strip()
-    except FileNotFoundError:
-        # Check both DB_PASSWORD and POSTGRES_PASSWORD
-        password = os.getenv("DB_PASSWORD") or os.getenv("POSTGRES_PASSWORD", "weenie64")
-    
-    # 3. Build from components (check both DB_ and POSTGRES_ prefixes)
-    user = os.getenv("DB_USER") or os.getenv("POSTGRES_USER", "dhg")
-    host = os.getenv("DB_HOST") or os.getenv("POSTGRES_HOST", "localhost")
-    port = os.getenv("DB_PORT") or os.getenv("POSTGRES_PORT", "5432")
-    name = os.getenv("DB_NAME") or os.getenv("POSTGRES_DB", "dhg_registry")
-    
-    return f"postgresql://{user}:{password}@{host}:{port}/{name}"
-
-
-DATABASE_URL = get_database_url()
-engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_size=10, max_overflow=20)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-
-def get_db():
-    """Database session dependency"""
-    db = SessionLocal()
-    db_connections.inc()
-    try:
-        yield db
-    except Exception as e:
-        registry_db_errors.inc()
-        raise
-    finally:
-        db_connections.dec()
-        db.close()
 
 
 # ============================================================================

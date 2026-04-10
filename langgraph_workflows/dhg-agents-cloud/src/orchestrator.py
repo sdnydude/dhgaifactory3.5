@@ -494,6 +494,13 @@ async def run_gap_analysis_agent(state: CMEPipelineState) -> dict:
             "last_checkpoint": datetime.now().isoformat(),
             "checkpoint_agent": "gap_analysis"
         }
+    except asyncio.TimeoutError:
+        return {
+            "errors": state.get("errors", []) + [
+                create_error_record("timeout", "Gap Analysis agent timed out", "gap_analysis")
+            ],
+            "current_step": "gap_analysis_timeout"
+        }
     except Exception as e:
         return {
             "errors": state.get("errors", []) + [
@@ -525,6 +532,13 @@ async def run_learning_objectives_agent(state: CMEPipelineState) -> dict:
             "current_step": "learning_objectives_complete",
             "last_checkpoint": datetime.now().isoformat(),
             "checkpoint_agent": "learning_objectives"
+        }
+    except asyncio.TimeoutError:
+        return {
+            "errors": state.get("errors", []) + [
+                create_error_record("timeout", "Learning Objectives agent timed out", "learning_objectives")
+            ],
+            "current_step": "learning_objectives_timeout"
         }
     except Exception as e:
         return {
@@ -567,6 +581,13 @@ async def run_needs_assessment_agent(state: CMEPipelineState) -> dict:
             "last_checkpoint": datetime.now().isoformat(),
             "checkpoint_agent": "needs_assessment"
         }
+    except asyncio.TimeoutError:
+        return {
+            "errors": state.get("errors", []) + [
+                create_error_record("timeout", "Needs Assessment agent timed out", "needs_assessment")
+            ],
+            "current_step": "needs_assessment_timeout"
+        }
     except Exception as e:
         return {
             "errors": state.get("errors", []) + [
@@ -598,6 +619,13 @@ async def run_curriculum_agent(state: CMEPipelineState) -> dict:
             "current_step": "curriculum_complete",
             "last_checkpoint": datetime.now().isoformat(),
             "checkpoint_agent": "curriculum"
+        }
+    except asyncio.TimeoutError:
+        return {
+            "errors": state.get("errors", []) + [
+                create_error_record("timeout", "Curriculum agent timed out", "curriculum")
+            ],
+            "current_step": "curriculum_timeout"
         }
     except Exception as e:
         return {
@@ -631,6 +659,13 @@ async def run_protocol_agent(state: CMEPipelineState) -> dict:
             "last_checkpoint": datetime.now().isoformat(),
             "checkpoint_agent": "protocol"
         }
+    except asyncio.TimeoutError:
+        return {
+            "errors": state.get("errors", []) + [
+                create_error_record("timeout", "Protocol agent timed out", "protocol")
+            ],
+            "current_step": "protocol_timeout"
+        }
     except Exception as e:
         return {
             "errors": state.get("errors", []) + [
@@ -662,6 +697,13 @@ async def run_marketing_agent(state: CMEPipelineState) -> dict:
             "current_step": "marketing_complete",
             "last_checkpoint": datetime.now().isoformat(),
             "checkpoint_agent": "marketing"
+        }
+    except asyncio.TimeoutError:
+        return {
+            "errors": state.get("errors", []) + [
+                create_error_record("timeout", "Marketing agent timed out", "marketing")
+            ],
+            "current_step": "marketing_timeout"
         }
     except Exception as e:
         return {
@@ -717,6 +759,13 @@ async def run_grant_writer_agent(state: CMEPipelineState) -> dict:
             "last_checkpoint": datetime.now().isoformat(),
             "checkpoint_agent": "grant_writer"
         }
+    except asyncio.TimeoutError:
+        return {
+            "errors": state.get("errors", []) + [
+                create_error_record("timeout", "Grant Writer agent timed out", "grant_writer")
+            ],
+            "current_step": "grant_writer_timeout"
+        }
     except Exception as e:
         return {
             "errors": state.get("errors", []) + [
@@ -757,6 +806,13 @@ async def run_prose_quality_pass_1(state: CMEPipelineState) -> dict:
             "retry_count": new_retry_count,
             "last_checkpoint": datetime.now().isoformat(),
             "checkpoint_agent": "prose_quality_1"
+        }
+    except asyncio.TimeoutError:
+        return {
+            "errors": state.get("errors", []) + [
+                create_error_record("timeout", "Prose Quality (Pass 1) agent timed out", "prose_quality_1")
+            ],
+            "current_step": "prose_quality_1_timeout"
         }
     except Exception as e:
         return {
@@ -799,6 +855,13 @@ async def run_prose_quality_pass_2(state: CMEPipelineState) -> dict:
             "last_checkpoint": datetime.now().isoformat(),
             "checkpoint_agent": "prose_quality_2"
         }
+    except asyncio.TimeoutError:
+        return {
+            "errors": state.get("errors", []) + [
+                create_error_record("timeout", "Prose Quality (Pass 2) agent timed out", "prose_quality_2")
+            ],
+            "current_step": "prose_quality_2_timeout"
+        }
     except Exception as e:
         return {
             "errors": state.get("errors", []) + [
@@ -831,6 +894,13 @@ async def run_compliance_agent(state: CMEPipelineState) -> dict:
             "current_step": "compliance_complete",
             "last_checkpoint": datetime.now().isoformat(),
             "checkpoint_agent": "compliance"
+        }
+    except asyncio.TimeoutError:
+        return {
+            "errors": state.get("errors", []) + [
+                create_error_record("timeout", "Compliance agent timed out", "compliance")
+            ],
+            "current_step": "compliance_timeout"
         }
     except Exception as e:
         return {

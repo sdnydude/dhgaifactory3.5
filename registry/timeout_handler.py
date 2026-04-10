@@ -19,20 +19,11 @@ from sqlalchemy.orm import Session
 from langsmith import traceable
 
 # Database imports
-from database import SessionLocal
+from database import SessionLocal, get_db
 from models import CMEProject, CMEReviewAssignment, CMEReviewerConfig
 
 # Notification service
 from notification_service import notification_service
-
-
-async def get_db():
-    """Get database session."""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 @traceable(name="check_sla_timeouts", run_type="chain")

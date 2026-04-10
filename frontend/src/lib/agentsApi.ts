@@ -152,7 +152,7 @@ export async function listAllAgents(): Promise<RunningAgent[]> {
 
   const agents: RunningAgent[] = [];
   for (const r of results) {
-    if (r.status === "fulfilled") agents.push(r.value);
+    if (r.status === "fulfilled" && r.value) agents.push(r.value);
   }
   return agents;
 }
