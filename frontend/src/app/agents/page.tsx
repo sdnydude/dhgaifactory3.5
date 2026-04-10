@@ -4,28 +4,25 @@ import { useEffect, useRef } from "react";
 import { AgentTree } from "@/components/agents/agent-tree";
 import { AgentTabs } from "@/components/agents/agent-tabs";
 import { StatsBar } from "@/components/agents/stats-bar";
-import { AssistantsRegistry } from "@/components/agents/assistants-registry";
+import { AgentsLibrary } from "@/components/agents/agents-library";
 import { useAgentsStore } from "@/stores/agents-store";
 
 export default function AgentsPage() {
   const {
     selectedAgent,
     selectedState,
-    assistants,
     stats,
     filter,
     fetchRunning,
     fetchAll,
-    fetchAssistants,
     fetchStats,
     fetchThreadState,
   } = useAgentsStore();
   const intervalRef = useRef<ReturnType<typeof setInterval>>(undefined);
 
   useEffect(() => {
-    fetchAssistants();
     fetchStats();
-  }, [fetchAssistants, fetchStats]);
+  }, [fetchStats]);
 
   useEffect(() => {
     const fetch = filter === "all" ? fetchAll : fetchRunning;
@@ -45,7 +42,7 @@ export default function AgentsPage() {
     return () => clearInterval(id);
   }, [selectedAgent, fetchThreadState]);
 
-  const showRegistry = !selectedAgent;
+  const showLibrary = !selectedAgent;
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -53,8 +50,8 @@ export default function AgentsPage() {
       <div className="flex flex-1 overflow-hidden">
         <AgentTree />
         <div className="flex-1 overflow-hidden">
-          {showRegistry ? (
-            <AssistantsRegistry assistants={assistants} />
+          {showLibrary ? (
+            <AgentsLibrary />
           ) : (
             <AgentTabs agent={selectedAgent} state={selectedState} />
           )}
