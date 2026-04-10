@@ -708,3 +708,28 @@ class SecurityAuditLog(Base):
     # No updated_at, no cascade delete — audit logs are immutable
     user = relationship("SecurityUser", foreign_keys=[user_id])
 
+
+# =============================================================================
+# FRONTEND DESIGN SPEC MODELS
+# =============================================================================
+
+class FrontendDesignSpec(Base):
+    """Tracks frontend feature design specs with component lists and visual polish config."""
+    __tablename__ = "frontend_design_specs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    feature_name = Column(String(255), nullable=False)
+    slug = Column(String(255), nullable=False, unique=True, index=True)
+    status = Column(String(50), default="draft")
+    spec_path = Column(String(512), nullable=False)
+    comp_path = Column(String(512), nullable=True)
+    description = Column(Text, nullable=False)
+    components = Column(JSONB, default=[])
+    design_tokens = Column(JSONB, default={})
+    visual_polish = Column(JSONB, default={})
+    approved_by = Column(String(255), nullable=True)
+    approved_at = Column(DateTime(timezone=True), nullable=True)
+    implemented_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+

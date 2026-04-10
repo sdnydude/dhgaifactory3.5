@@ -179,8 +179,8 @@ export function AgentSlideOver({ agent, onClose, onNavigate }: SlideOverProps) {
           <div className="pt-4 border-t border-border">
             <TooltipProvider>
               <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button disabled className="w-full" variant="outline">
+                <TooltipTrigger className="w-full">
+                  <Button disabled className="w-full pointer-events-none" variant="outline">
                     <Play className="h-4 w-4 mr-2" />
                     Run Agent
                   </Button>

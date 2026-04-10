@@ -1,8 +1,10 @@
 import { Client } from "@langchain/langgraph-sdk";
 
 const createClient = () => {
-  const baseUrl = process.env.NEXT_PUBLIC_LANGGRAPH_API_URL ||
-    (typeof window !== "undefined" ? `${window.location.origin}/api/langgraph` : "http://localhost:3000/api/langgraph");
+  const envUrl = process.env.NEXT_PUBLIC_LANGGRAPH_API_URL ?? "/api/langgraph";
+  const baseUrl = envUrl.startsWith("/")
+    ? (typeof window !== "undefined" ? `${window.location.origin}${envUrl}` : `http://localhost:3000${envUrl}`)
+    : envUrl;
   return new Client({ apiUrl: baseUrl });
 };
 
@@ -48,6 +50,16 @@ export interface AgentStats {
   failed: number;
   interrupted: number;
   idle: number;
+}
+
+export interface GraphStats {
+  graphId: string;
+  totalRuns: number;
+  succeeded: number;
+  failed: number;
+  running: number;
+  successRate: number;
+  lastRunAt: string | null;
 }
 
 export const OUTPUT_KEYS = [
@@ -157,6 +169,53 @@ export async function listAssistants(): Promise<AssistantInfo[]> {
   }));
 }
 
+/** Extract the Markdown document text from a structured agent output. */
+function extractDocumentText(key: string, value: unknown): string {
+  if (typeof value === "string") return value;
+  if (!value || typeof value !== "object") return JSON.stringify(value);
+
+  const obj = value as Record<string, unknown>;
+
+  // Known document field mappings per output key
+  const DOCUMENT_FIELDS: Record<string, string> = {
+    research_output: "research_document",
+    clinical_output: "clinical_practice_document",
+    gap_analysis_output: "gap_analysis_document",
+    learning_objectives_output: "learning_objectives_document",
+    needs_assessment_output: "complete_document",
+    curriculum_output: "curriculum_document",
+    protocol_output: "protocol_document",
+    marketing_output: "marketing_document",
+    grant_package_output: "grant_package_document",
+    prose_quality_pass_1: "document_text",
+    prose_quality_pass_2: "document_text",
+    compliance_result: "compliance_document",
+  };
+
+  // Try the known field first
+  const knownField = DOCUMENT_FIELDS[key];
+  if (knownField && typeof obj[knownField] === "string") {
+    return obj[knownField] as string;
+  }
+
+  // Fallback: find any key ending in _document or _text with substantial content
+  for (const [k, v] of Object.entries(obj)) {
+    if (typeof v === "string" && v.length > 200 && (k.endsWith("_document") || k.endsWith("_text") || k === "complete_document")) {
+      return v;
+    }
+  }
+
+  // Fallback: last message content (agents store their narrative in messages)
+  if (Array.isArray(obj.messages) && obj.messages.length > 0) {
+    const last = obj.messages[obj.messages.length - 1] as Record<string, unknown>;
+    if (typeof last?.content === "string" && last.content.length > 100) {
+      return last.content as string;
+    }
+  }
+
+  return JSON.stringify(value);
+}
+
 export async function getThreadState(threadId: string): Promise<ThreadState> {
   const client = createClient();
   const state = await client.threads.getState(threadId);
@@ -167,9 +226,7 @@ export async function getThreadState(threadId: string): Promise<ThreadState> {
   for (const key of OUTPUT_KEYS) {
     if (vals[key] != null) {
       completedOutputs.push(key);
-      outputContents[key] = typeof vals[key] === "string"
-        ? (vals[key] as string)
-        : JSON.stringify(vals[key]);
+      outputContents[key] = extractDocumentText(key, vals[key]);
     }
   }
 
@@ -250,6 +307,48 @@ export async function getAgentStats(): Promise<AgentStats> {
   }
 
   return stats;
+}
+
+export async function getGraphStats(): Promise<GraphStats[]> {
+  const client = createClient();
+  const threads = await client.threads.search({ limit: 100 });
+
+  const statsMap: Record<string, {
+    totalRuns: number;
+    succeeded: number;
+    failed: number;
+    running: number;
+    lastRunAt: string | null;
+  }> = {};
+
+  for (const thread of threads) {
+    const graphId = (thread.metadata?.graph_id as string) ?? "unknown";
+    if (!statsMap[graphId]) {
+      statsMap[graphId] = { totalRuns: 0, succeeded: 0, failed: 0, running: 0, lastRunAt: null };
+    }
+    const entry = statsMap[graphId];
+    entry.totalRuns++;
+
+    const s = thread.status;
+    if (s === "busy") entry.running++;
+    else if (s === "error") entry.failed++;
+    else if (s === "idle" || s === "interrupted") entry.succeeded++;
+
+    const updatedAt = thread.updated_at;
+    if (updatedAt && (!entry.lastRunAt || updatedAt > entry.lastRunAt)) {
+      entry.lastRunAt = updatedAt;
+    }
+  }
+
+  return Object.entries(statsMap).map(([graphId, s]) => ({
+    graphId,
+    totalRuns: s.totalRuns,
+    succeeded: s.succeeded,
+    failed: s.failed,
+    running: s.running,
+    successRate: s.totalRuns > 0 ? Math.round((s.succeeded / s.totalRuns) * 100) : 0,
+    lastRunAt: s.lastRunAt,
+  }));
 }
 
 export async function retryAgent(threadId: string, graphId: string): Promise<string> {

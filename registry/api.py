@@ -268,6 +268,7 @@ from cme_endpoints import router as cme_router
 from import_api import router as import_router
 from search_api import router as search_router
 from security_endpoints import router as security_router
+from frontend_specs_endpoints import router as frontend_specs_router
 
 # Include routers
 app.include_router(agent_router)
@@ -278,6 +279,7 @@ app.include_router(cme_router)
 app.include_router(import_router)
 app.include_router(search_router)
 app.include_router(security_router)
+app.include_router(frontend_specs_router)
 
 # Add CORS middleware — locked to production origin + localhost for development
 ALLOWED_ORIGINS = [
