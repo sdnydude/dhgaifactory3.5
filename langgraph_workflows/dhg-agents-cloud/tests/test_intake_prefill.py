@@ -121,3 +121,57 @@ class TestSearchLiterature:
         assert result["pubmed_results"] == []
         assert len(result["errors"]) == 1
         assert "PubMed" in result["errors"][0]["error"]
+
+
+# ---------------------------------------------------------------------------
+# build_context node tests
+# ---------------------------------------------------------------------------
+
+class TestBuildContext:
+    """Tests for build_context node (no LLM call — pure data transformation)."""
+
+    @pytest.mark.asyncio
+    async def test_builds_context_from_articles(self):
+        """Articles are formatted into a research context string."""
+        articles = [
+            {
+                "pmid": "11111",
+                "title": "SGLT2 Inhibitors in HFrEF",
+                "abstract": "SGLT2i showed significant reduction in hospitalization.",
+                "year": 2025,
+                "journal": "NEJM",
+                "journal_abbrev": "N Engl J Med",
+            },
+        ]
+        state = _make_sample_state(pubmed_results=articles)
+        result = await ipa.build_context(state)
+
+        assert "research_context" in result
+        assert "SGLT2 Inhibitors in HFrEF" in result["research_context"]
+        assert "heart failure" in result["research_context"].lower()
+        assert "research_summary" in result
+        assert "1" in result["research_summary"]  # "Reviewed 1 recent publications"
+
+    @pytest.mark.asyncio
+    async def test_empty_articles_returns_fallback_context(self):
+        """No PubMed results produces a fallback context string."""
+        state = _make_sample_state(pubmed_results=[])
+        result = await ipa.build_context(state)
+
+        assert "research_context" in result
+        assert "no pubmed results" in result["research_context"].lower() or \
+               "general medical knowledge" in result["research_context"].lower()
+
+    @pytest.mark.asyncio
+    async def test_context_includes_audience_and_hcp_types(self):
+        """Research context includes target audience and HCP types."""
+        articles = [{"pmid": "1", "title": "Test", "abstract": "...", "year": 2025, "journal": "", "journal_abbrev": ""}]
+        state = _make_sample_state(
+            pubmed_results=articles,
+            target_audience_primary=["primary care physicians"],
+            target_hcp_types=["MD/DO", "NP"],
+        )
+        result = await ipa.build_context(state)
+
+        assert "primary care physicians" in result["research_context"]
+        assert "MD/DO" in result["research_context"]

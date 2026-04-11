@@ -133,8 +133,49 @@ async def search_literature(state: IntakePrefillState) -> dict:
 @traceable(name="intake_prefill.build_context", run_type="chain")
 @traced_node("intake_prefill", "build_context")
 async def build_context(state: IntakePrefillState) -> dict:
-    """Parse PubMed results into a structured research context string."""
-    raise NotImplementedError("Task 3")
+    """Parse PubMed results into a structured research context string. No LLM call."""
+    articles = state.get("pubmed_results", [])
+    disease = state["disease_state"]
+    area = state["therapeutic_area"]
+    audiences = ", ".join(state.get("target_audience_primary", []))
+    hcp_types = ", ".join(state.get("target_hcp_types", []))
+
+    if not articles:
+        return {
+            "research_context": (
+                f"No PubMed results found for {disease}. "
+                f"Generate based on general medical knowledge of {area}."
+            ),
+            "research_summary": f"No recent publications found for {disease}.",
+        }
+
+    context_parts = []
+    for i, article in enumerate(articles[:15], 1):
+        title = article.get("title", "Untitled")
+        year = article.get("year", "N/A")
+        journal = article.get("journal_abbrev") or article.get("journal", "")
+        abstract = article.get("abstract", "No abstract available")
+        context_parts.append(
+            f"[{i}] {title} ({year})\n"
+            f"Journal: {journal}\n"
+            f"Abstract: {abstract}\n"
+        )
+
+    context = (
+        f"DISEASE STATE: {disease}\n"
+        f"THERAPEUTIC AREA: {area}\n"
+        f"TARGET AUDIENCE: {audiences}\n"
+        f"HCP TYPES: {hcp_types}\n\n"
+        f"LITERATURE REVIEW ({len(articles)} articles):\n\n"
+        + "\n".join(context_parts)
+    )
+
+    summary = (
+        f"Reviewed {len(articles)} recent publications on "
+        f"{disease} in {area}."
+    )
+
+    return {"research_context": context, "research_summary": summary}
 
 
 @traceable(name="intake_prefill.generate_prefill", run_type="chain")
