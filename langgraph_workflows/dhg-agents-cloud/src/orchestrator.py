@@ -384,6 +384,7 @@ async def initialize_pipeline(state: CMEPipelineState) -> dict:
     logger.info(
         f"Pipeline initialized: project={flat.get('project_name', 'unknown')}, "
         f"area={flat.get('therapeutic_area', 'unknown')}, "
+        f"disease={flat.get('disease_state', 'unknown')}, "
         f"audience={flat.get('target_audience', 'unknown')}, "
         f"fields_flattened={len(flat)}"
     )
