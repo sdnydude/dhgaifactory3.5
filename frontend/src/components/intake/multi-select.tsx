@@ -13,6 +13,7 @@ interface MultiSelectProps {
   onChange: (value: string[]) => void;
   placeholder?: string;
   maxSelections?: number;
+  renderLabel?: (option: string) => React.ReactNode;
 }
 
 export function MultiSelect({
@@ -21,6 +22,7 @@ export function MultiSelect({
   onChange,
   placeholder = "Select options...",
   maxSelections,
+  renderLabel,
 }: MultiSelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -92,7 +94,7 @@ export function MultiSelect({
                     )}>
                       {selected && <Check className="h-3 w-3 text-primary-foreground" />}
                     </div>
-                    {option}
+                    {renderLabel ? renderLabel(option) : option}
                   </button>
                 );
               })

@@ -32,11 +32,12 @@ logger = logging.getLogger(__name__)
 class IntakePrefillState(TypedDict):
     """State for the intake prefill agent."""
     # INPUT
-    therapeutic_area: str
-    disease_state: str
+    therapeutic_area: list[str]
+    disease_state: list[str]
     target_audience_primary: list[str]
     target_hcp_types: list[str]
     project_name: str
+    additional_context: str
 
     # PROCESSING
     messages: Annotated[list, add_messages]
@@ -104,9 +105,11 @@ llm = LLMClient()
 @traced_node("intake_prefill", "search_literature")
 async def search_literature(state: IntakePrefillState) -> dict:
     """Search PubMed for literature relevant to the disease state."""
-    disease = state["disease_state"]
-    area = state["therapeutic_area"]
+    diseases = state.get("disease_state", [])
+    areas = state.get("therapeutic_area", [])
     audiences = state.get("target_audience_primary", [])
+    disease = " OR ".join(diseases) if diseases else ""
+    area = " ".join(areas)
     query = f"{disease} {area} {' '.join(audiences)}".strip()
 
     pubmed = PubMedClient()
@@ -135,8 +138,8 @@ async def search_literature(state: IntakePrefillState) -> dict:
 async def build_context(state: IntakePrefillState) -> dict:
     """Parse PubMed results into a structured research context string. No LLM call."""
     articles = state.get("pubmed_results", [])
-    disease = state["disease_state"]
-    area = state["therapeutic_area"]
+    disease = ", ".join(state.get("disease_state", []))
+    area = ", ".join(state.get("therapeutic_area", []))
     audiences = ", ".join(state.get("target_audience_primary", []))
     hcp_types = ", ".join(state.get("target_hcp_types", []))
 
@@ -188,7 +191,7 @@ PREFILL_USER_TEMPLATE = """PROJECT INFORMATION:
 - Disease State: {disease_state}
 - Target Audience: {target_audience}
 - HCP Types: {hcp_types}
-
+{additional_context_block}
 {research_context}
 
 Generate a JSON object with this structure. Use the literature review to ground suggestions in evidence. For fields you cannot confidently suggest, use null.
@@ -259,12 +262,18 @@ Generate a JSON object with this structure. Use the literature review to ground 
 @traced_node("intake_prefill", "generate_prefill")
 async def generate_prefill(state: IntakePrefillState) -> dict:
     """Single LLM call to generate draft values for sections B-H."""
+    additional = state.get("additional_context", "").strip()
+    context_block = (
+        f"\nADDITIONAL CONTEXT FROM USER:\n{additional}\n"
+        if additional else ""
+    )
     prompt = PREFILL_USER_TEMPLATE.format(
         project_name=state["project_name"],
-        therapeutic_area=state["therapeutic_area"],
-        disease_state=state["disease_state"],
+        therapeutic_area=", ".join(state.get("therapeutic_area", [])),
+        disease_state=", ".join(state.get("disease_state", [])),
         target_audience=", ".join(state.get("target_audience_primary", [])),
         hcp_types=", ".join(state.get("target_hcp_types", [])),
+        additional_context_block=context_block,
         research_context=state.get("research_context", ""),
     )
 

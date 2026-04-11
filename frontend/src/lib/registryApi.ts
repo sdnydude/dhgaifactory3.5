@@ -222,6 +222,7 @@ export async function prefillIntake(
       disease_state: sectionA.disease_state,
       target_audience_primary: sectionA.target_audience_primary,
       target_hcp_types: sectionA.target_hcp_types,
+      additional_context: sectionA.additional_context,
     }),
   });
 }

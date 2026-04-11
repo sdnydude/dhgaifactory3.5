@@ -45,8 +45,9 @@ class TestGraphStructure:
 def _make_sample_state(**overrides) -> dict:
     """Build a minimal IntakePrefillState dict for unit tests."""
     base = {
-        "therapeutic_area": "cardiology",
-        "disease_state": "heart failure with reduced ejection fraction",
+        "therapeutic_area": ["cardiology"],
+        "disease_state": ["heart failure with reduced ejection fraction"],
+        "additional_context": "",
         "target_audience_primary": ["cardiologists", "internists"],
         "target_hcp_types": ["MD/DO"],
         "project_name": "HFrEF GDMT Update 2026",
@@ -95,8 +96,8 @@ class TestSearchLiterature:
         mock_pubmed.fetch_details = AsyncMock(return_value=[])
 
         state = _make_sample_state(
-            disease_state="atrial fibrillation",
-            therapeutic_area="electrophysiology",
+            disease_state=["atrial fibrillation"],
+            therapeutic_area=["electrophysiology"],
         )
 
         with patch.object(ipa, "PubMedClient", return_value=mock_pubmed):

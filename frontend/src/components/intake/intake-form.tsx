@@ -202,7 +202,7 @@ export function IntakeForm() {
             {prefilling ? (
               <>
                 <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                Researching {intake.section_a.disease_state}...
+                Researching {intake.section_a.disease_state.join(", ")}...
               </>
             ) : (
               <>

@@ -2,10 +2,30 @@
 
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { MultiSelect } from "./multi-select";
 import { TARGET_AUDIENCES, HCP_CREDENTIAL_TYPES, THERAPEUTIC_AREAS, DISEASE_STATES } from "./cme-options";
 import type { SectionA } from "@/types/cme";
+
+const DISEASE_STATE_VALUES = DISEASE_STATES.map((d) => d.value);
+const DISEASE_TIER_MAP = new Map(DISEASE_STATES.map((d) => [d.value, d.tier]));
+const TIER_STYLES = {
+  high: "text-green-600 dark:text-green-400",
+  medium: "text-amber-600 dark:text-amber-400",
+  low: "text-zinc-400 dark:text-zinc-500",
+} as const;
+
+function renderDiseaseLabel(option: string) {
+  const tier = DISEASE_TIER_MAP.get(option);
+  if (!tier) return option;
+  const letter = tier === "high" ? "H" : tier === "medium" ? "M" : "L";
+  return (
+    <span>
+      <span className={`text-xs font-medium mr-1.5 ${TIER_STYLES[tier]}`}>{letter}</span>
+      {option}
+    </span>
+  );
+}
 
 interface Props {
   data: SectionA;
@@ -35,55 +55,25 @@ export function SectionABasics({ data, onChange }: Props) {
 
       <div className="space-y-2">
         <Label>Therapeutic Area *</Label>
-        <Select value={data.therapeutic_area} onValueChange={(v) => update({ therapeutic_area: v ?? "" })}>
-          <SelectTrigger>
-            <SelectValue placeholder="Select therapeutic area" />
-          </SelectTrigger>
-          <SelectContent>
-            {THERAPEUTIC_AREAS.map((area) => (
-              <SelectItem key={area} value={area}>
-                {area}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <MultiSelect
+          options={THERAPEUTIC_AREAS}
+          value={data.therapeutic_area}
+          onChange={(v) => update({ therapeutic_area: v })}
+          placeholder="Select therapeutic areas..."
+          maxSelections={5}
+        />
       </div>
 
       <div className="space-y-2">
         <Label>Disease State *</Label>
-        <Select value={data.disease_state} onValueChange={(v) => update({ disease_state: v ?? "" })}>
-          <SelectTrigger>
-            <SelectValue placeholder="Select disease state" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectLabel>High Funding Likelihood</SelectLabel>
-              {DISEASE_STATES.filter((d) => d.tier === "high").map((d) => (
-                <SelectItem key={d.value} value={d.value}>
-                  <span className="text-xs font-medium text-green-600 dark:text-green-400 mr-1.5">H</span>{d.value}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-            <SelectSeparator />
-            <SelectGroup>
-              <SelectLabel>Medium Funding Likelihood</SelectLabel>
-              {DISEASE_STATES.filter((d) => d.tier === "medium").map((d) => (
-                <SelectItem key={d.value} value={d.value}>
-                  <span className="text-xs font-medium text-amber-600 dark:text-amber-400 mr-1.5">M</span>{d.value}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-            <SelectSeparator />
-            <SelectGroup>
-              <SelectLabel>Lower Funding Likelihood</SelectLabel>
-              {DISEASE_STATES.filter((d) => d.tier === "low").map((d) => (
-                <SelectItem key={d.value} value={d.value}>
-                  <span className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mr-1.5">L</span>{d.value}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
+        <MultiSelect
+          options={DISEASE_STATE_VALUES}
+          value={data.disease_state}
+          onChange={(v) => update({ disease_state: v })}
+          placeholder="Select disease states..."
+          maxSelections={10}
+          renderLabel={renderDiseaseLabel}
+        />
         <p className="text-[10px] text-muted-foreground">H/M/L = funding likelihood based on pharma commercial support activity</p>
       </div>
 
@@ -118,6 +108,19 @@ export function SectionABasics({ data, onChange }: Props) {
           placeholder="Select credential types..."
         />
         <p className="text-[10px] text-muted-foreground">Professional designations eligible for this activity</p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="additional_context">Additional Context</Label>
+        <Textarea
+          id="additional_context"
+          value={data.additional_context ?? ""}
+          onChange={(e) => update({ additional_context: e.target.value || undefined })}
+          placeholder="Clinical hypotheses, focus areas, key treatments, strategic direction — anything that helps the AI generate better drafts"
+          rows={4}
+          maxLength={2000}
+        />
+        <p className="text-[10px] text-muted-foreground">Optional — helps the AI prefill produce more relevant drafts</p>
       </div>
     </div>
   );

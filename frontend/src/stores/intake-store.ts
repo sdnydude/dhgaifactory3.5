@@ -8,8 +8,8 @@ function createEmptyIntake(): IntakeSubmission {
   return {
     section_a: {
       project_name: "",
-      therapeutic_area: "",
-      disease_state: "",
+      therapeutic_area: [],
+      disease_state: [],
       target_audience_primary: [],
     },
     section_b: { supporter_name: "" },
@@ -143,6 +143,25 @@ export const useIntakeStore = create<IntakeState>()(
     }),
     {
       name: "dhg-intake-draft",
+      version: 1,
+      migrate: (persisted: unknown, version: number) => {
+        if (version === 0) {
+          const state = persisted as Record<string, unknown>;
+          const intake = state.intake as Record<string, unknown> | undefined;
+          if (intake) {
+            const a = intake.section_a as Record<string, unknown> | undefined;
+            if (a) {
+              if (typeof a.therapeutic_area === "string") {
+                a.therapeutic_area = a.therapeutic_area ? [a.therapeutic_area] : [];
+              }
+              if (typeof a.disease_state === "string") {
+                a.disease_state = a.disease_state ? [a.disease_state] : [];
+              }
+            }
+          }
+        }
+        return persisted as IntakeState;
+      },
     },
   ),
 );

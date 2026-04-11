@@ -18,11 +18,12 @@ export enum CMEProjectStatus {
 
 export interface SectionA {
   project_name: string;
-  therapeutic_area: string;
-  disease_state: string;
+  therapeutic_area: string[];
+  disease_state: string[];
   target_audience_primary: string[];
   target_audience_secondary?: string[];
   target_hcp_types?: string[];
+  additional_context?: string;
 }
 
 export interface SectionB {

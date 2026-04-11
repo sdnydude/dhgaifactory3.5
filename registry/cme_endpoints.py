@@ -171,10 +171,11 @@ class IntakeSubmission(BaseModel):
 class PrefillRequest(BaseModel):
     """Section A fields needed to trigger intake prefill."""
     project_name: str = Field(..., min_length=5, max_length=200)
-    therapeutic_area: str = Field(..., min_length=1, max_length=200)
-    disease_state: str = Field(..., min_length=1, max_length=200)
+    therapeutic_area: List[str] = Field(..., min_length=1, max_length=5)
+    disease_state: List[str] = Field(..., min_length=1, max_length=10)
     target_audience_primary: List[str] = Field(..., min_length=1, max_length=5)
     target_hcp_types: Optional[List[str]] = Field(None)
+    additional_context: Optional[str] = Field(None, max_length=2000)
 
 
 # =============================================================================
@@ -990,6 +991,7 @@ async def prefill_intake(request: PrefillRequest):
         "disease_state": request.disease_state,
         "target_audience_primary": request.target_audience_primary,
         "target_hcp_types": request.target_hcp_types or [],
+        "additional_context": request.additional_context or "",
     }
     try:
         result = await trigger_intake_prefill(payload)

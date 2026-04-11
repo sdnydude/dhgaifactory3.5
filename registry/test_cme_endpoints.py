@@ -151,8 +151,8 @@ class TestIntakePrefill:
             "/api/cme/intake/prefill",
             json={
                 "project_name": "Hi",
-                "therapeutic_area": "cardiology",
-                "disease_state": "heart failure",
+                "therapeutic_area": ["cardiology"],
+                "disease_state": ["heart failure"],
                 "target_audience_primary": ["cardiologists"],
             },
         )
@@ -173,8 +173,8 @@ class TestIntakePrefill:
             "/api/cme/intake/prefill",
             json={
                 "project_name": "HFrEF GDMT Update",
-                "therapeutic_area": "cardiology",
-                "disease_state": "heart failure",
+                "therapeutic_area": ["cardiology"],
+                "disease_state": ["heart failure"],
                 "target_audience_primary": ["cardiologists"],
             },
         )
@@ -193,8 +193,8 @@ class TestIntakePrefill:
             "/api/cme/intake/prefill",
             json={
                 "project_name": "HFrEF GDMT Update",
-                "therapeutic_area": "cardiology",
-                "disease_state": "heart failure",
+                "therapeutic_area": ["cardiology"],
+                "disease_state": ["heart failure"],
                 "target_audience_primary": ["cardiologists"],
             },
         )
