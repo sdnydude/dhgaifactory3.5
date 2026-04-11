@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Loader2, Sparkles, CheckCheck, Trash2 } from "lucide-react";
 import { SectionNav, SECTIONS } from "./section-nav";
 import { SectionABasics } from "./section-a-basics";
 import { SectionBSupporter } from "./section-b-supporter";
@@ -39,8 +40,23 @@ function isSectionComplete(intake: IntakeSubmission, sectionId: string): boolean
 
 export function IntakeForm() {
   const router = useRouter();
-  const { intake, updateIntake, activeSection, setActiveSection, reset } = useIntakeStore();
+  const {
+    intake,
+    updateIntake,
+    activeSection,
+    setActiveSection,
+    reset,
+    prefillStatus,
+    researchSummary,
+    prefillConfidence,
+    applyPrefill,
+    acceptSection,
+    clearSection,
+    acceptAll,
+    clearAll,
+  } = useIntakeStore();
   const [saving, setSaving] = useState(false);
+  const [prefilling, setPrefilling] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const completedSections = useMemo(() => {
@@ -56,6 +72,26 @@ export function IntakeForm() {
     intake.section_a.therapeutic_area.length > 0 &&
     intake.section_a.disease_state.length > 0 &&
     intake.section_a.target_audience_primary.length >= 1;
+
+  const hasPrefilled = Object.values(prefillStatus).some((s) => s === "prefilled");
+
+  async function handlePrefill() {
+    setPrefilling(true);
+    setError(null);
+    try {
+      const result = await registryApi.prefillIntake(intake.section_a);
+      applyPrefill(
+        result.prefill_sections,
+        result.research_summary,
+        result.confidence,
+      );
+      setActiveSection("b");
+    } catch (e) {
+      setError("Prefill unavailable \u2014 you can fill sections manually.");
+    } finally {
+      setPrefilling(false);
+    }
+  }
 
   async function handleSave(startPipeline: boolean) {
     setSaving(true);
@@ -97,26 +133,89 @@ export function IntakeForm() {
         activeSection={activeSection}
         onSelect={setActiveSection}
         completedSections={completedSections}
+        prefillStatus={prefillStatus}
+        prefillConfidence={prefillConfidence}
+        onAcceptSection={acceptSection}
+        onClearSection={clearSection}
       />
       <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Prefill banner — entrance animation via tw-animate-css */}
+        {hasPrefilled && (
+          <div
+            role="status"
+            className="mx-6 mt-4 rounded-md border border-primary/20 bg-primary/5 p-3 flex items-center gap-3 animate-in fade-in slide-in-from-top-2 duration-300"
+          >
+            <Sparkles className="h-4 w-4 text-primary shrink-0" aria-hidden="true" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground">
+                AI Draft Ready
+              </p>
+              {researchSummary && (
+                <p className="text-xs text-muted-foreground truncate">
+                  {researchSummary}
+                </p>
+              )}
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-green-500 hover:bg-muted"
+              onClick={acceptAll}
+              aria-label="Accept all AI-drafted sections"
+            >
+              <CheckCheck className="h-3.5 w-3.5 mr-1" />
+              Accept All
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+              onClick={clearAll}
+              aria-label="Clear all AI-drafted sections"
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-1" />
+              Clear All
+            </Button>
+          </div>
+        )}
+
         <div className="flex-1 overflow-auto p-6 max-w-2xl">
           {renderSection()}
         </div>
 
         {error && (
-          <div className="mx-6 mb-3 rounded-md bg-destructive/10 text-destructive text-sm p-3">
+          <div role="alert" className="mx-6 mb-3 rounded-md bg-destructive/10 text-destructive text-sm p-3">
             {error}
           </div>
         )}
 
         <div className="border-t border-border px-6 py-3 flex items-center gap-3">
-          <Button variant="outline" onClick={() => router.push("/projects")} disabled={saving}>
+          <Button variant="outline" onClick={() => router.push("/projects")} disabled={saving || prefilling}>
             Cancel
           </Button>
-          <Button variant="secondary" onClick={() => handleSave(false)} disabled={!canSave || saving}>
+          <Button
+            variant="outline"
+            onClick={handlePrefill}
+            disabled={!canSave || prefilling || saving}
+            className="border-primary/30 text-primary hover:bg-primary/5"
+          >
+            {prefilling ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                Researching {intake.section_a.disease_state}...
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                Research &amp; Prefill
+              </>
+            )}
+          </Button>
+          <div className="flex-1" />
+          <Button variant="secondary" onClick={() => handleSave(false)} disabled={!canSave || saving || prefilling}>
             {saving ? "Saving..." : "Save Draft"}
           </Button>
-          <Button onClick={() => handleSave(true)} disabled={!canSave || saving}>
+          <Button onClick={() => handleSave(true)} disabled={!canSave || saving || prefilling}>
             {saving ? "Starting..." : "Save & Start Pipeline"}
           </Button>
         </div>
