@@ -14,6 +14,7 @@
     "compliance_review": "./src/compliance_review_agent.py:graph",
     "citation_checker": "./src/citation_checker_agent.py:graph",
     "registry": "./src/registry_agent.py:graph",
+    "intake_prefill": "./src/intake_prefill_agent.py:graph",
     "needs_package": "./src/orchestrator.py:needs_graph",
     "curriculum_package": "./src/orchestrator.py:curriculum_graph",
     "grant_package": "./src/orchestrator.py:grant_graph",
