@@ -324,7 +324,7 @@ def flatten_intake(intake: Dict[str, Any]) -> Dict[str, Any]:
     flat["measurement_approach"] = f.get("measurement_approach", "")
     flat["moore_levels_target"] = f.get("moore_levels_target", [])
     flat["follow_up_timeline"] = f.get("follow_up_timeline", "")
-    flat["outcome_goals"] = flat["primary_outcomes"]  # gap_analysis / learning_objectives alias
+    flat["outcome_goals"] = list(flat["primary_outcomes"])  # gap_analysis / learning_objectives alias
     moore_list = flat["moore_levels_target"]
     flat["moore_level_target"] = moore_list[0] if moore_list else ""  # singular alias
 
@@ -336,7 +336,7 @@ def flatten_intake(intake: Dict[str, Any]) -> Dict[str, Any]:
     flat["competitor_products_to_mention"] = g.get("competitor_products_to_mention", [])
     flat["supporter_products"] = g.get("competitor_products_to_mention", [])  # research agent alias
     flat["regulatory_considerations"] = g.get("regulatory_considerations", "")
-    flat["competitor_products"] = flat["competitor_products_to_mention"]  # compliance / research alias
+    flat["competitor_products"] = list(flat["competitor_products_to_mention"])  # compliance / research alias
 
     # --- Section H: Logistics ---
     h = intake.get("section_h", {})
