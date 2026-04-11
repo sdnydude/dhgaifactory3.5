@@ -315,11 +315,105 @@ async def generate_prefill(state: IntakePrefillState) -> dict:
     }
 
 
+# Section field schemas: field_name -> tuple of acceptable types
+SECTION_SCHEMAS: Dict[str, Dict[str, tuple]] = {
+    "section_b": {
+        "supporter_name": (str,),
+        "supporter_contact_name": (str, type(None)),
+        "supporter_contact_email": (str, type(None)),
+        "grant_amount_requested": (int, float, type(None)),
+        "grant_submission_deadline": (str, type(None)),
+    },
+    "section_c": {
+        "learning_format": (str,),
+        "duration_minutes": (int, type(None)),
+        "include_post_test": (bool,),
+        "include_pre_test": (bool,),
+        "faculty_count": (int, type(None)),
+    },
+    "section_d": {
+        "clinical_topics": (list,),
+        "treatment_modalities": (list, type(None)),
+        "patient_population": (str, type(None)),
+        "stage_of_disease": (str, type(None)),
+        "comorbidities": (list, type(None)),
+    },
+    "section_e": {
+        "knowledge_gaps": (list, type(None)),
+        "competence_gaps": (list, type(None)),
+        "performance_gaps": (list, type(None)),
+        "gap_evidence_sources": (list, type(None)),
+        "gap_priority": (str, type(None)),
+    },
+    "section_f": {
+        "primary_outcomes": (list, type(None)),
+        "secondary_outcomes": (list, type(None)),
+        "measurement_approach": (str, type(None)),
+        "moore_levels_target": (list, type(None)),
+        "follow_up_timeline": (str, type(None)),
+    },
+    "section_g": {
+        "key_messages": (list, type(None)),
+        "required_references": (list, type(None)),
+        "excluded_topics": (list, type(None)),
+        "competitor_products_to_mention": (list, type(None)),
+        "regulatory_considerations": (str, type(None)),
+    },
+    "section_h": {
+        "distribution_channels": (list, type(None)),
+        "geo_restrictions": (list, type(None)),
+        "language_requirements": (list, type(None)),
+        "target_launch_date": (str, type(None)),
+        "expiration_date": (str, type(None)),
+    },
+}
+
+
+def _coerce_field(value: Any, accepted_types: tuple) -> Any:
+    """Coerce a value to match the accepted types, or return a sensible default."""
+    if isinstance(value, accepted_types):
+        return value
+    if type(None) in accepted_types and value is None:
+        return None
+    # Attempt coercions for required (non-nullable) types
+    if str in accepted_types and not isinstance(value, str):
+        return str(value) if value is not None else ""
+    if list in accepted_types and not isinstance(value, list):
+        return list(value) if isinstance(value, (list, tuple)) else []
+    if bool in accepted_types and not isinstance(value, bool):
+        return bool(value) if value is not None else False
+    if int in accepted_types and not isinstance(value, int):
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            return None if type(None) in accepted_types else 0
+    return None
+
+
 @traceable(name="intake_prefill.validate_output", run_type="chain")
 @traced_node("intake_prefill", "validate_output")
 async def validate_output(state: IntakePrefillState) -> dict:
     """Type-check and sanitize the LLM output against section schemas."""
-    raise NotImplementedError("Task 5")
+    prefill = state.get("prefill_sections", {})
+    validated = {}
+    errors = list(state.get("errors", []))
+
+    for section_key, schema in SECTION_SCHEMAS.items():
+        section_data = prefill.get(section_key)
+        if not isinstance(section_data, dict):
+            errors.append({
+                "node": "validate_output",
+                "error": f"Missing or invalid {section_key}",
+            })
+            continue
+
+        cleaned = {}
+        for field_name, accepted_types in schema.items():
+            value = section_data.get(field_name)
+            cleaned[field_name] = _coerce_field(value, accepted_types)
+        validated[section_key] = cleaned
+
+    return {"prefill_sections": validated, "errors": errors}
 
 
 # =============================================================================

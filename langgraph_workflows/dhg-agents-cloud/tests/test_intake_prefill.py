@@ -322,3 +322,61 @@ class TestGeneratePrefill:
 
         assert result["prefill_sections"] == {}
         assert len(result["errors"]) >= 1
+
+
+# ---------------------------------------------------------------------------
+# validate_output node tests
+# ---------------------------------------------------------------------------
+
+class TestValidateOutput:
+    """Tests for validate_output node (no LLM — pure validation)."""
+
+    @pytest.mark.asyncio
+    async def test_valid_sections_pass_through(self):
+        """Well-formed sections pass validation unchanged."""
+        valid_sections = json.loads(MOCK_LLM_JSON_RESPONSE)
+        del valid_sections["confidence"]
+        state = _make_sample_state(prefill_sections=valid_sections)
+        result = await ipa.validate_output(state)
+
+        assert "section_d" in result["prefill_sections"]
+        assert result["prefill_sections"]["section_d"]["clinical_topics"] == [
+            "GDMT optimization", "SGLT2 inhibitors", "Device therapy"
+        ]
+
+    @pytest.mark.asyncio
+    async def test_wrong_type_coerced_to_default(self):
+        """Fields with wrong types are coerced to appropriate defaults."""
+        bad_sections = {
+            "section_c": {
+                "learning_format": 12345,        # should be str — coerced to "12345"
+                "duration_minutes": "ninety",     # should be int — coerced to None
+                "include_post_test": "yes",       # should be bool — coerced to True
+                "include_pre_test": 0,            # should be bool — coerced to False
+                "faculty_count": 3,               # correct
+            },
+        }
+        state = _make_sample_state(prefill_sections=bad_sections)
+        result = await ipa.validate_output(state)
+
+        sec_c = result["prefill_sections"]["section_c"]
+        assert isinstance(sec_c["learning_format"], str)
+        assert sec_c["faculty_count"] == 3
+
+    @pytest.mark.asyncio
+    async def test_missing_section_produces_error(self):
+        """Sections missing entirely produce error records."""
+        state = _make_sample_state(prefill_sections={"section_b": {"supporter_name": ""}})
+        result = await ipa.validate_output(state)
+
+        assert len(result["errors"]) > 0
+        error_sections = [e["error"] for e in result["errors"]]
+        assert any("section_c" in err for err in error_sections)
+
+    @pytest.mark.asyncio
+    async def test_empty_prefill_all_errors(self):
+        """Empty prefill_sections logs errors for all 7 sections."""
+        state = _make_sample_state(prefill_sections={})
+        result = await ipa.validate_output(state)
+
+        assert len(result["errors"]) == 7  # sections b through h
