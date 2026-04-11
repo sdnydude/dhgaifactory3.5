@@ -10,7 +10,7 @@ Covers:
 """
 
 from datetime import datetime
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -614,3 +614,117 @@ class TestFlattenIntake:
     def test_supporter_company_maps_from_supporter_name(self):
         flat = orch.flatten_intake(self.SAMPLE_SECTIONED_INTAKE)
         assert flat["supporter_company"] == "Acme Pharma"
+
+
+# ============================================================================
+# Wrapper agent_input passthrough tests
+# ============================================================================
+
+
+class TestWrapperPassthrough:
+    """Verify that run_*_agent wrappers pass disease-critical intake fields."""
+
+    @pytest.mark.asyncio
+    async def test_research_agent_receives_disease_state(self, sample_pipeline_state):
+        """run_research_agent must pass disease_state to the agent."""
+        captured_input = {}
+
+        async def fake_invoke(agent_input):
+            captured_input.update(agent_input)
+            return {"research_report": "mocked"}
+
+        mock_graph = MagicMock()
+        mock_graph.ainvoke = fake_invoke
+
+        with patch("orchestrator.get_agent_graph", return_value=mock_graph):
+            await orch.run_research_agent(sample_pipeline_state)
+
+        assert captured_input["disease_state"] == "heart failure with reduced ejection fraction"
+        assert captured_input["therapeutic_area"] == "cardiology"
+        assert captured_input["supporter_company"] == "Test Pharma"
+        assert captured_input["supporter_products"] == ["sacubitril/valsartan"]
+        assert captured_input["known_gaps"] == ["Underutilization of GDMT"]
+        assert captured_input["competitor_products"] == ["dapagliflozin"]
+        assert captured_input["geographic_focus"] == "United States"
+
+    @pytest.mark.asyncio
+    async def test_clinical_agent_receives_disease_state(self, sample_pipeline_state):
+        """run_clinical_agent must pass disease_state to the agent."""
+        captured_input = {}
+
+        async def fake_invoke(agent_input):
+            captured_input.update(agent_input)
+            return {"clinical_report": "mocked"}
+
+        mock_graph = MagicMock()
+        mock_graph.ainvoke = fake_invoke
+
+        with patch("orchestrator.get_agent_graph", return_value=mock_graph):
+            await orch.run_clinical_agent(sample_pipeline_state)
+
+        assert captured_input["disease_state"] == "heart failure with reduced ejection fraction"
+        assert captured_input["therapeutic_area"] == "cardiology"
+        assert captured_input["geographic_focus"] == "United States"
+        assert captured_input["known_gaps"] == ["Underutilization of GDMT"]
+
+    @pytest.mark.asyncio
+    async def test_gap_analysis_agent_receives_disease_state(self, sample_pipeline_state):
+        """run_gap_analysis_agent must pass disease_state to the agent."""
+        captured_input = {}
+
+        async def fake_invoke(agent_input):
+            captured_input.update(agent_input)
+            return {"gap_report": "mocked"}
+
+        mock_graph = MagicMock()
+        mock_graph.ainvoke = fake_invoke
+
+        with patch("orchestrator.get_agent_graph", return_value=mock_graph):
+            await orch.run_gap_analysis_agent(sample_pipeline_state)
+
+        assert captured_input["disease_state"] == "heart failure with reduced ejection fraction"
+        assert captured_input["target_audience"] == "primary care physicians"
+        assert captured_input["known_gaps"] == ["Underutilization of GDMT"]
+        assert captured_input["outcome_goals"] == ["Improved GDMT adherence"]
+
+    @pytest.mark.asyncio
+    async def test_learning_objectives_agent_receives_disease_state(self, sample_pipeline_state):
+        """run_learning_objectives_agent must pass disease_state to the agent."""
+        captured_input = {}
+
+        async def fake_invoke(agent_input):
+            captured_input.update(agent_input)
+            return {"lo_report": "mocked"}
+
+        mock_graph = MagicMock()
+        mock_graph.ainvoke = fake_invoke
+
+        with patch("orchestrator.get_agent_graph", return_value=mock_graph):
+            await orch.run_learning_objectives_agent(sample_pipeline_state)
+
+        assert captured_input["disease_state"] == "heart failure with reduced ejection fraction"
+        assert captured_input["therapeutic_area"] == "cardiology"
+        assert captured_input["educational_format"] == "webinar"
+        assert captured_input["moore_level_target"] == "Level 5"
+        assert captured_input["outcome_goals"] == ["Improved GDMT adherence"]
+
+    @pytest.mark.asyncio
+    async def test_compliance_agent_receives_full_context(self, sample_pipeline_state):
+        """run_compliance_agent must pass supporter_products and accreditation_types."""
+        captured_input = {}
+        sample_pipeline_state["grant_package_output"] = {"document": "mocked grant"}
+
+        async def fake_invoke(agent_input):
+            captured_input.update(agent_input)
+            return {"compliance_report": "mocked"}
+
+        mock_graph = MagicMock()
+        mock_graph.ainvoke = fake_invoke
+
+        with patch("orchestrator.get_agent_graph", return_value=mock_graph):
+            await orch.run_compliance_agent(sample_pipeline_state)
+
+        assert captured_input["supporter_company"] == "Test Pharma"
+        assert captured_input["supporter_products"] == ["sacubitril/valsartan"]
+        assert captured_input["competitor_products"] == ["dapagliflozin"]
+        assert captured_input["accreditation_types"] == ["ACCME"]

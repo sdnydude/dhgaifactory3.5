@@ -407,17 +407,24 @@ async def run_research_agent(state: CMEPipelineState) -> dict:
     try:
         graph = get_agent_graph("research")
         
+        intake = state.get("intake_data", {})
         agent_input = {
-            "therapeutic_area": state.get("intake_data", {}).get("therapeutic_area", ""),
-            "target_audience": state.get("intake_data", {}).get("target_audience", ""),
-            "research_questions": state.get("intake_data", {}).get("research_questions", []),
+            "therapeutic_area": intake.get("therapeutic_area", ""),
+            "disease_state": intake.get("disease_state", ""),
+            "target_audience": intake.get("target_audience", ""),
+            "geographic_focus": intake.get("geographic_focus", ""),
+            "supporter_company": intake.get("supporter_company", ""),
+            "supporter_products": intake.get("supporter_products", []),
+            "known_gaps": intake.get("known_gaps", []),
+            "competitor_products": intake.get("competitor_products", []),
+            "research_questions": intake.get("research_questions", []),
         }
-        
+
         result = await asyncio.wait_for(
             graph.ainvoke(agent_input),
             timeout=AGENT_TIMEOUT
         )
-        
+
         return {
             "research_output": result,
             "current_step": "research_complete",
@@ -446,16 +453,22 @@ async def run_clinical_agent(state: CMEPipelineState) -> dict:
     try:
         graph = get_agent_graph("clinical")
         
+        intake = state.get("intake_data", {})
         agent_input = {
-            "therapeutic_area": state.get("intake_data", {}).get("therapeutic_area", ""),
-            "target_audience": state.get("intake_data", {}).get("target_audience", ""),
+            "therapeutic_area": intake.get("therapeutic_area", ""),
+            "disease_state": intake.get("disease_state", ""),
+            "target_audience": intake.get("target_audience", ""),
+            "geographic_focus": intake.get("geographic_focus", ""),
+            "practice_settings": intake.get("practice_settings", []),
+            "known_gaps": intake.get("known_gaps", []),
+            "known_barriers": intake.get("known_barriers", []),
         }
-        
+
         result = await asyncio.wait_for(
             graph.ainvoke(agent_input),
             timeout=AGENT_TIMEOUT
         )
-        
+
         return {
             "clinical_output": result,
             "current_step": "clinical_complete",
@@ -484,17 +497,23 @@ async def run_gap_analysis_agent(state: CMEPipelineState) -> dict:
     try:
         graph = get_agent_graph("gap_analysis")
         
+        intake = state.get("intake_data", {})
         agent_input = {
             "research_output": state.get("research_output", {}),
             "clinical_output": state.get("clinical_output", {}),
-            "therapeutic_area": state.get("intake_data", {}).get("therapeutic_area", ""),
+            "therapeutic_area": intake.get("therapeutic_area", ""),
+            "disease_state": intake.get("disease_state", ""),
+            "target_audience": intake.get("target_audience", ""),
+            "known_gaps": intake.get("known_gaps", []),
+            "educational_priorities": intake.get("educational_priorities", []),
+            "outcome_goals": intake.get("outcome_goals", []),
         }
-        
+
         result = await asyncio.wait_for(
             graph.ainvoke(agent_input),
             timeout=AGENT_TIMEOUT
         )
-        
+
         return {
             "gap_analysis_output": result,
             "current_step": "gap_analysis_complete",
@@ -523,17 +542,23 @@ async def run_learning_objectives_agent(state: CMEPipelineState) -> dict:
     try:
         graph = get_agent_graph("learning_objectives")
         
+        intake = state.get("intake_data", {})
         agent_input = {
             "gap_analysis_output": state.get("gap_analysis_output", {}),
             "needs_assessment_output": state.get("needs_assessment_output", {}),
-            "target_audience": state.get("intake_data", {}).get("target_audience", ""),
+            "target_audience": intake.get("target_audience", ""),
+            "disease_state": intake.get("disease_state", ""),
+            "therapeutic_area": intake.get("therapeutic_area", ""),
+            "educational_format": intake.get("educational_format", ""),
+            "outcome_goals": intake.get("outcome_goals", []),
+            "moore_level_target": intake.get("moore_level_target", ""),
         }
-        
+
         result = await asyncio.wait_for(
             graph.ainvoke(agent_input),
             timeout=AGENT_TIMEOUT
         )
-        
+
         return {
             "learning_objectives_output": result,
             "current_step": "learning_objectives_complete",
@@ -886,9 +911,13 @@ async def run_compliance_agent(state: CMEPipelineState) -> dict:
         
         grant_output = state.get("grant_package_output", {})
         
+        intake = state.get("intake_data", {})
         agent_input = {
             "grant_package": grant_output,
-            "supporter_company": state.get("intake_data", {}).get("supporter_company", ""),
+            "supporter_company": intake.get("supporter_company", ""),
+            "supporter_products": intake.get("supporter_products", []),
+            "competitor_products": intake.get("competitor_products", []),
+            "accreditation_types": intake.get("accreditation_types", []),
         }
         
         result = await asyncio.wait_for(
