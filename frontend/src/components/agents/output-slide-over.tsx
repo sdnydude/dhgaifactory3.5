@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   Sheet,
   SheetContent,
@@ -106,7 +108,7 @@ export function OutputSlideOver({
           </SheetTitle>
         </SheetHeader>
 
-        <div className="mt-4">
+        <div className="mt-4 px-6 pb-8">
           {showDiff && previousContent ? (
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -149,8 +151,8 @@ export function OutputSlideOver({
               </div>
             </div>
           ) : (
-            <div className="text-sm leading-relaxed whitespace-pre-wrap font-[Inter]">
-              {content}
+            <div className="prose prose-sm dark:prose-invert max-w-none">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
             </div>
           )}
         </div>

@@ -40,8 +40,8 @@ graph TD
 ## Components
 
 ### 1. LangGraph Agent System (Production)
-The core content generation engine. 15 graphs running in LangGraph Cloud (production) or localhost:2026 (development).
-- **11 Individual Agents:** Each with TypedDict state, Claude Sonnet LLM, dual tracing (LangSmith + OTel), async timeouts, quality gates.
+The core content generation engine. 17 graphs running in LangGraph Cloud (production) or localhost:2026 (development).
+- **13 Individual Agents:** 11 content agents + Citation Checker (PubMed verification) + Registry Agent (gateway for all writes). Each with TypedDict state, Claude Sonnet LLM, dual tracing (LangSmith + OTel), async timeouts, quality gates.
 - **4 Orchestrator Recipes:** Compose agents into pipelines with parallel execution, quality gates, and human-in-the-loop review via `interrupt()`.
 - **Config:** `langgraph_workflows/dhg-agents-cloud/langgraph.json`
 
@@ -55,7 +55,7 @@ Central data management service. FastAPI with SQLAlchemy 2.0.
 ### 3. Next.js Frontend
 Production frontend connecting to LangGraph Cloud via langgraph-sdk.
 - **Stack:** Next.js 16 + shadcn/ui + assistant-ui + CopilotKit
-- **Features:** Chat interface, graph selector (15 graphs), Agent Inbox (human review), generative UI panels
+- **Features:** Chat interface, graph selector (17 graphs), Agent Inbox (human review), generative UI panels
 - **Container:** dhg-frontend on port 3000
 - **External:** app.digitalharmonyai.com via Cloudflare Tunnel
 

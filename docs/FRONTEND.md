@@ -78,7 +78,7 @@ frontend/src/
     chatApi.ts              — LangGraph client (createThread, sendMessage, etc.)
     inboxApi.ts             — Inbox API (list interrupted threads, resume)
     copilot-runtime.ts      — CopilotKit configuration
-    graphs.ts               — Static graph registry (15 graphs)
+    graphs.ts               — Static graph registry (17 graphs)
     utils.ts                — cn() utility
   middleware.ts             — Next.js Edge middleware (JWT check, route guard)
 ```

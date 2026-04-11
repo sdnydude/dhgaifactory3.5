@@ -27,6 +27,14 @@ Archived from CLAUDE.md on 2026-04-08. These issues are fully resolved and retai
 
 - **C9 Documentation sprawl** — IMPROVED. 42 stale docs archived to `docs/archive/`. CLAUDE.md is canonical.
 
+## LangGraph Cloud (April 8, 2026)
+
+- **TypedDict schema errors across all agents** — RESOLVED. LangGraph Cloud runs Python < 3.12; Pydantic requires `typing_extensions.TypedDict`. Fixed 11 agent files, all 17 graphs now returning valid schemas.
+- **Registry Agent added** — Gateway pattern for all agent writes to Registry API. Idempotency via SHA-256 keys, dead letter queue, batch citation support.
+- **Citation Checker refactored** — Removed embedded registry save; now produces `registry_request` output for Registry Agent to persist.
+- **3 CME POST endpoints added** — `/api/cme/source-references`, `/api/cme/agent-outputs`, `/api/cme/documents` with idempotency + background Ollama embeddings.
+- **DB migrations 004 + 005 applied** — RBAC tables + verification_status columns on cme_source_references.
+
 ## Decommissioned Services
 
 - **Dify** — DECOMMISSIONED. Zero usage, workers crash-looping (80 restarts). All containers, volumes, databases, and directories deleted.

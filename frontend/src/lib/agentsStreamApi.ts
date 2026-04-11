@@ -1,11 +1,10 @@
 import { Client } from "@langchain/langgraph-sdk";
 
 const createClient = () => {
-  const baseUrl =
-    process.env.NEXT_PUBLIC_LANGGRAPH_API_URL ||
-    (typeof window !== "undefined"
-      ? `${window.location.origin}/api/langgraph`
-      : "http://localhost:3000/api/langgraph");
+  const envUrl = process.env.NEXT_PUBLIC_LANGGRAPH_API_URL ?? "/api/langgraph";
+  const baseUrl = envUrl.startsWith("/")
+    ? (typeof window !== "undefined" ? `${window.location.origin}${envUrl}` : `http://localhost:3000${envUrl}`)
+    : envUrl;
   return new Client({ apiUrl: baseUrl });
 };
 

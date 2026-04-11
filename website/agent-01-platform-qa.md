@@ -293,7 +293,7 @@ Create comprehensive, realistic content for each file. Each document should be 8
 - **capabilities.md**: Document processing, conversational AI, workflow automation, content generation, data analysis, integration hub. Each as a module.
 - **use_cases.md**: Healthcare/CME, financial services, media production, enterprise operations, customer service. Real-world scenarios.
 - **technical_specs.md**: Python 3.11+, Docker, LangGraph, supported LLMs (Gemini, Claude, GPT-4), vector stores, GPU requirements, deployment options.
-- **pricing_model.md**: Starter, Professional, Enterprise tiers. Module-based pricing. Custom development at $450/hour.
+- **pricing_model.md**: Starter, Professional, Enterprise tiers. Module-based pricing. Custom development at $600/hour.
 - **faq.md**: 20 common questions with thorough answers covering security, deployment, customization, support, SLAs.
 - **company_overview.md**: DHG divisions (DHG CME, DHG Studios, DHG AI, DHG Productions, Streamcubation), 35 years experience, Stephen Webber CEO.
 - **differentiators.md**: Modular vs monolithic, general-purpose vs niche, enterprise-grade observability, Fortune 500 quality standards.

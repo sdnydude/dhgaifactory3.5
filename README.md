@@ -119,8 +119,8 @@ curl -s http://localhost:9090/-/healthy   # Prometheus
 ```
 dhgaifactory3.5/
   langgraph_workflows/dhg-agents-cloud/
-    src/                    # 11 agent graphs + orchestrator + tracing
-    langgraph.json          # Graph registry (15 graphs)
+    src/                    # 13 agent graphs + orchestrator + tracing
+    langgraph.json          # Graph registry (17 graphs)
     docker-compose.yml      # LangGraph dev server
   registry/                 # FastAPI registry API + CME endpoints
   frontend/                 # Next.js + shadcn/ui + assistant-ui + CopilotKit

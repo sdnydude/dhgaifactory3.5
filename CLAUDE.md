@@ -4,7 +4,7 @@
 
 You are the sole AI development partner for Digital Harmony Group's AI Factory. This is a multi-agent platform built on LangGraph that generates pharmaceutical-grade CME (Continuing Medical Education) grant documentation. The platform is also a general-purpose modular enterprise AI system — CME is approximately 10% of DHG's revenue. CME compliance mode activates only when Stephen explicitly toggles it.
 
-**Owner:** Stephen Webber — CEO/Founder, 35+ years in business development and medical education. Bills at $450/hour. Expects Fortune 500 execution quality.
+**Owner:** Stephen Webber — CEO/Founder, 35+ years in business development, medical education, and broadcast production. Producer/Director of broadcast livestreams, architect of efficient livestream and recording studios (NDI, Dante, TCP/IP VLANs). Bills at $600/hour. Expects Fortune 500 execution quality.
 
 **Server:** g700data1 (10.0.0.251), Ubuntu 24.04, Docker 29.1.5, NVIDIA RTX 5080 (16GB VRAM), 64GB RAM, 1.9TB root disk (12% used), 3.6TB data disk at /mnt/4tb (4% used). Docker Root Dir: /mnt/4tb/docker.
 
@@ -18,9 +18,9 @@ There are TWO agent systems. The CURRENT system is LangGraph. The LEGACY system 
 
 ### LangGraph Agent System (CURRENT — Production)
 
-15 graphs registered in `langgraph_workflows/dhg-agents-cloud/langgraph.json`. Production runs on LangGraph Cloud; local dev instance on port 2026:
+17 graphs registered in `langgraph_workflows/dhg-agents-cloud/langgraph.json`. Production runs on LangGraph Cloud; local dev instance on port 2026:
 
-**11 Individual Agent Graphs:**
+**13 Individual Agent Graphs:**
 
 | Agent | File | Lines | Key Pattern |
 |-------|------|-------|-------------|
@@ -35,6 +35,8 @@ There are TWO agent systems. The CURRENT system is LangGraph. The LEGACY system 
 | Grant Writer | grant_writer_agent.py | 926 | Full package assembly |
 | Prose Quality | prose_quality_agent.py | 672 | De-AI-ification scoring, banned pattern detection |
 | Compliance Review | compliance_review_agent.py | 436 | ACCME verification |
+| Citation Checker | citation_checker_agent.py | ~450 | PubMed verification, outputs registry_request for gateway |
+| Registry | registry_agent.py | ~290 | Gateway for all agent writes to Registry API, idempotency, dead letter queue |
 
 All agents have dual tracing: LangSmith (@traceable) + OpenTelemetry (@traced_node) decorators on every graph node (85 total across 9 content agents + orchestrator).
 

@@ -1,9 +1,9 @@
 # DHG AI Factory — Master Task List
-**Last Updated:** Apr 7, 2026
+**Last Updated:** Apr 8, 2026
 
 ## System Status
 - **Containers:** 37 running, all healthy (0 unhealthy)
-- **LangGraph Server:** Cloud production at `dhg-agents-526554f2bb905517adab9bd53427c745.us.langgraph.app` (15 graphs)
+- **LangGraph Server:** Cloud production at `dhg-agents-526554f2bb905517adab9bd53427c745.us.langgraph.app` (17 graphs)
 - **VS Engine:** Running, healthy, Prometheus metrics active
 - **Frontend:** Next.js on :3000 (shadcn/ui + assistant-ui + CopilotKit)
 - **GPU:** RTX 5080 (16GB VRAM, 26% used by Ollama)
@@ -27,12 +27,12 @@
 
 ## Phase 3: Frontend Features
 
-6. [ ] Generative UI — domain panels (leads, projects, CMS) in chat
-7. [ ] MCP integration — agents to external tools
-8. [ ] Memory — persistent context via LangGraph checkpointing
-9. [ ] LLManager — approval workflow with reflection for CME review
+6. [x] ~~Generative UI — domain panels in chat~~ — DONE (CopilotKit + 2 domain panels: needs-assessment, gap-analysis; studio page wired to 8 agents)
+7. [x] ~~MCP integration — agents to external tools~~ — DONE (3 MCP servers: LangSmith, DHG AI Tracker, Antigravity)
+8. [x] ~~Memory — persistent context via LangGraph checkpointing~~ — DONE (AsyncPostgresSaver in orchestrator, fallback to in-memory)
+9. [~] LLManager — approval workflow with reflection for CME review — PARTIAL (Apr 7-8: master-detail inbox, reflection panel, decision bar, review store, inboxApi; needs deeper CME-specific review logic)
 10. [ ] React Flow — visual LangGraph workflow editor
-11. [ ] Tremor — token usage and agent performance dashboards
+11. [ ] Tremor — token usage and agent performance dashboards (currently using Recharts for basic monitoring)
 12. [ ] Refine — admin console with FastAPI data providers
 
 ## Phase 4: CME Pipeline End-to-End
@@ -68,6 +68,13 @@
 
 ## Completed (April 2026)
 
+- [x] Registry Agent gateway — mediates all agent writes to Registry API (idempotency, dead letter queue, batch citations)
+- [x] 3 new CME POST endpoints (source-references, agent-outputs, documents) with idempotency + background Ollama embeddings
+- [x] Citation Checker refactored — embedded registry save replaced with prepare_registry_request output pattern
+- [x] DB migrations 004 (RBAC) + 005 (verification_status) applied
+- [x] Agent Creation SOP updated with deployment steps + admin approval gates
+- [x] TypedDict fix across 11 agent files for LangGraph Cloud Python < 3.12 compatibility
+- [x] All 17 graphs deployed to LangGraph Cloud (2 new: registry, citation_checker)
 - [x] Security/RBAC system: Cloudflare JWT auth, 5-role RBAC, audit logging, admin endpoints, CORS lockdown, Alembic migration, 44 tests (105 total)
 - [x] Infrastructure audit re-run (March vs April comparison)
 - [x] Promtail -> Loki log pipeline fixed (Docker Root Dir volume mount)
@@ -146,4 +153,5 @@
 - v3: Mar 15, 2026 — phased execution order, VS completion
 - v4: Apr 6, 2026 — post-audit update, stale items resolved, reprioritized
 - v5: Apr 6, 2026 — test fixes complete, 61/61 passing, doc drift CI
-- v6: Apr 7, 2026 — current (security/RBAC complete, 105/105 passing)
+- v6: Apr 7, 2026 — saved as docs/archive/TODO_v6.md
+- v7: Apr 8, 2026 — current (Registry Agent, citation checker refactor, 17 graphs deployed to cloud)

@@ -11,5 +11,5 @@
 
 ## Accountability
 - This platform supports a real business. Quality failures cost real money.
-- Stephen bills at $450/hr — every minute wasted on preventable errors has a cost.
+- Stephen bills at $600/hr — every minute wasted on preventable errors has a cost.
 - Follow master instructions and production workflows. No shortcuts.

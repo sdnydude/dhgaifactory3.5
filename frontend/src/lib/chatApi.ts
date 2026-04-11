@@ -5,9 +5,11 @@ import {
 } from "@assistant-ui/react-langgraph";
 
 const createClient = () => {
-  return new Client({
-    apiUrl: process.env.NEXT_PUBLIC_LANGGRAPH_API_URL || "/api/langgraph",
-  });
+  const envUrl = process.env.NEXT_PUBLIC_LANGGRAPH_API_URL ?? "/api/langgraph";
+  const baseUrl = envUrl.startsWith("/")
+    ? (typeof window !== "undefined" ? `${window.location.origin}${envUrl}` : `http://localhost:3000${envUrl}`)
+    : envUrl;
+  return new Client({ apiUrl: baseUrl });
 };
 
 export const createThread = async () => {
