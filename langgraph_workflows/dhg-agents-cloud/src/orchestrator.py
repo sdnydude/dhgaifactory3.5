@@ -295,6 +295,7 @@ def flatten_intake(intake: Dict[str, Any]) -> Dict[str, Any]:
     flat["include_post_test"] = c.get("include_post_test", False)
     flat["include_pre_test"] = c.get("include_pre_test", False)
     flat["faculty_count"] = c.get("faculty_count")
+    flat["educational_format"] = flat["learning_format"]  # learning_objectives agent alias
 
     # --- Section D: Clinical Focus ---
     d = intake.get("section_d", {})
@@ -313,6 +314,8 @@ def flatten_intake(intake: Dict[str, Any]) -> Dict[str, Any]:
     flat["performance_gaps"] = e.get("performance_gaps", [])
     flat["gap_evidence_sources"] = e.get("gap_evidence_sources", [])
     flat["gap_priority"] = e.get("gap_priority", "")
+    # Agents expect a single "known_gaps" list; intake splits into 3 types
+    flat["known_gaps"] = flat["knowledge_gaps"] + flat["competence_gaps"] + flat["performance_gaps"]
 
     # --- Section F: Outcomes ---
     f = intake.get("section_f", {})
@@ -321,6 +324,9 @@ def flatten_intake(intake: Dict[str, Any]) -> Dict[str, Any]:
     flat["measurement_approach"] = f.get("measurement_approach", "")
     flat["moore_levels_target"] = f.get("moore_levels_target", [])
     flat["follow_up_timeline"] = f.get("follow_up_timeline", "")
+    flat["outcome_goals"] = flat["primary_outcomes"]  # gap_analysis / learning_objectives alias
+    moore_list = flat["moore_levels_target"]
+    flat["moore_level_target"] = moore_list[0] if moore_list else ""  # singular alias
 
     # --- Section G: Content Requirements ---
     g = intake.get("section_g", {})
@@ -330,6 +336,7 @@ def flatten_intake(intake: Dict[str, Any]) -> Dict[str, Any]:
     flat["competitor_products_to_mention"] = g.get("competitor_products_to_mention", [])
     flat["supporter_products"] = g.get("competitor_products_to_mention", [])  # research agent alias
     flat["regulatory_considerations"] = g.get("regulatory_considerations", "")
+    flat["competitor_products"] = flat["competitor_products_to_mention"]  # compliance / research alias
 
     # --- Section H: Logistics ---
     h = intake.get("section_h", {})

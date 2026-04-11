@@ -527,3 +527,90 @@ class TestProcessReviewFeedback:
         result = await orch.process_review_feedback(sample_pipeline_state)
         assert result["status"] == "failed"
         assert "maximum" in result["current_step"]
+
+
+# ============================================================================
+# flatten_intake tests
+# ============================================================================
+
+
+class TestFlattenIntake:
+    """Tests for flatten_intake helper — especially new alias keys."""
+
+    SAMPLE_SECTIONED_INTAKE = {
+        "section_a": {
+            "project_name": "PMR Management Update",
+            "therapeutic_area": ["rheumatology"],
+            "disease_state": ["polymyalgia rheumatica"],
+            "target_audience_primary": ["rheumatologists", "internists"],
+        },
+        "section_b": {"supporter_name": "Acme Pharma"},
+        "section_c": {"learning_format": "webinar", "include_post_test": False, "include_pre_test": False},
+        "section_d": {
+            "clinical_topics": ["glucocorticoid tapering", "IL-6 inhibitors"],
+            "treatment_modalities": ["pharmacologic"],
+            "patient_population": "adults over 50",
+        },
+        "section_e": {
+            "knowledge_gaps": ["Optimal tapering protocols"],
+            "competence_gaps": ["Distinguishing PMR from RA"],
+            "performance_gaps": ["Monitoring for relapse"],
+        },
+        "section_f": {
+            "primary_outcomes": ["Reduced relapse rate"],
+            "moore_levels_target": ["Level 5", "Level 4"],
+        },
+        "section_g": {
+            "competitor_products_to_mention": ["tocilizumab", "sarilumab"],
+        },
+        "section_h": {"geo_restrictions": ["US", "EU"]},
+        "section_i": {"accme_compliant": True, "financial_disclosure_required": True,
+                      "off_label_discussion": False, "commercial_support_acknowledgment": True},
+        "section_j": {},
+    }
+
+    def test_disease_state_extracted(self):
+        flat = orch.flatten_intake(self.SAMPLE_SECTIONED_INTAKE)
+        assert flat["disease_state"] == ["polymyalgia rheumatica"]
+
+    def test_known_gaps_combines_three_gap_types(self):
+        flat = orch.flatten_intake(self.SAMPLE_SECTIONED_INTAKE)
+        assert flat["known_gaps"] == [
+            "Optimal tapering protocols",
+            "Distinguishing PMR from RA",
+            "Monitoring for relapse",
+        ]
+
+    def test_outcome_goals_aliases_primary_outcomes(self):
+        flat = orch.flatten_intake(self.SAMPLE_SECTIONED_INTAKE)
+        assert flat["outcome_goals"] == ["Reduced relapse rate"]
+
+    def test_moore_level_target_takes_first(self):
+        flat = orch.flatten_intake(self.SAMPLE_SECTIONED_INTAKE)
+        assert flat["moore_level_target"] == "Level 5"
+
+    def test_moore_level_target_empty_when_none(self):
+        intake = {**self.SAMPLE_SECTIONED_INTAKE, "section_f": {}}
+        flat = orch.flatten_intake(intake)
+        assert flat["moore_level_target"] == ""
+
+    def test_educational_format_aliases_learning_format(self):
+        flat = orch.flatten_intake(self.SAMPLE_SECTIONED_INTAKE)
+        assert flat["educational_format"] == "webinar"
+
+    def test_competitor_products_aliases(self):
+        flat = orch.flatten_intake(self.SAMPLE_SECTIONED_INTAKE)
+        assert flat["competitor_products"] == ["tocilizumab", "sarilumab"]
+
+    def test_geographic_focus_joins_list(self):
+        flat = orch.flatten_intake(self.SAMPLE_SECTIONED_INTAKE)
+        assert flat["geographic_focus"] == "US, EU"
+
+    def test_already_flat_returns_as_is(self):
+        flat_input = {"therapeutic_area": "oncology", "disease_state": "NSCLC"}
+        result = orch.flatten_intake(flat_input)
+        assert result == flat_input
+
+    def test_supporter_company_maps_from_supporter_name(self):
+        flat = orch.flatten_intake(self.SAMPLE_SECTIONED_INTAKE)
+        assert flat["supporter_company"] == "Acme Pharma"
