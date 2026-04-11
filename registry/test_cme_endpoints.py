@@ -8,7 +8,7 @@ Run with: pytest registry/test_cme_endpoints.py -v
 
 import uuid
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from datetime import datetime
 
 
@@ -128,3 +128,76 @@ class TestCMESearch:
         mock_db.execute.return_value.fetchall.return_value = []
         response = client.get("/api/cme/search?q=cardiology")
         assert response.status_code == 200
+
+
+class TestIntakePrefill:
+    """Tests for POST /api/cme/intake/prefill."""
+
+    def test_prefill_requires_body(self, client):
+        response = client.post("/api/cme/intake/prefill")
+        assert response.status_code == 422
+
+    def test_prefill_rejects_incomplete_section_a(self, client):
+        """Missing required fields in Section A returns 422."""
+        response = client.post(
+            "/api/cme/intake/prefill",
+            json={"project_name": "Test"},
+        )
+        assert response.status_code == 422
+
+    def test_prefill_rejects_short_project_name(self, client):
+        """Project name under 5 chars returns 422."""
+        response = client.post(
+            "/api/cme/intake/prefill",
+            json={
+                "project_name": "Hi",
+                "therapeutic_area": "cardiology",
+                "disease_state": "heart failure",
+                "target_audience_primary": ["cardiologists"],
+            },
+        )
+        assert response.status_code == 422
+
+    @patch("cme_endpoints.trigger_intake_prefill")
+    def test_prefill_success(self, mock_trigger, client):
+        """Valid Section A payload invokes the prefill agent and returns 200."""
+        mock_trigger.return_value = {
+            "prefill_sections": {
+                "section_b": {"supporter_name": ""},
+                "section_c": {"learning_format": "webinar"},
+            },
+            "research_summary": "Reviewed 10 articles on heart failure.",
+            "confidence": {"section_b": "low", "section_c": "medium"},
+        }
+        response = client.post(
+            "/api/cme/intake/prefill",
+            json={
+                "project_name": "HFrEF GDMT Update",
+                "therapeutic_area": "cardiology",
+                "disease_state": "heart failure",
+                "target_audience_primary": ["cardiologists"],
+            },
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert "prefill_sections" in body
+        assert "research_summary" in body
+        assert "confidence" in body
+        mock_trigger.assert_called_once()
+
+    @patch("cme_endpoints.trigger_intake_prefill")
+    def test_prefill_agent_failure_returns_502(self, mock_trigger, client):
+        """Agent failure returns 502 with error message."""
+        mock_trigger.side_effect = Exception("LangGraph Cloud timeout")
+        response = client.post(
+            "/api/cme/intake/prefill",
+            json={
+                "project_name": "HFrEF GDMT Update",
+                "therapeutic_area": "cardiology",
+                "disease_state": "heart failure",
+                "target_audience_primary": ["cardiologists"],
+            },
+        )
+        assert response.status_code == 502
+        assert "prefill" in response.json()["detail"].lower() or \
+               "unavailable" in response.json()["detail"].lower()

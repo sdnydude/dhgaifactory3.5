@@ -168,6 +168,15 @@ class IntakeSubmission(BaseModel):
     section_j: SectionJ_Additional
 
 
+class PrefillRequest(BaseModel):
+    """Section A fields needed to trigger intake prefill."""
+    project_name: str = Field(..., min_length=5, max_length=200)
+    therapeutic_area: str = Field(..., min_length=1, max_length=200)
+    disease_state: str = Field(..., min_length=1, max_length=200)
+    target_audience_primary: List[str] = Field(..., min_length=1, max_length=5)
+    target_hcp_types: Optional[List[str]] = Field(None)
+
+
 # =============================================================================
 # RESPONSE MODELS
 # =============================================================================
@@ -288,6 +297,45 @@ async def trigger_langgraph_pipeline(project_id: str, intake_data: dict) -> str:
     except Exception as e:
         logger.error(f"Failed to start LangGraph pipeline for project {project_id}: {e}")
         raise
+
+
+async def trigger_intake_prefill(payload: dict) -> dict:
+    """
+    Invoke the intake_prefill graph on LangGraph Cloud and wait for result.
+    Uses the /runs/wait endpoint to block until completion (90s timeout).
+    """
+    langgraph_url = os.getenv("LANGGRAPH_API_URL", LANGGRAPH_CLOUD_URL)
+    langchain_api_key = os.getenv("LANGCHAIN_API_KEY", "")
+    headers = {"x-api-key": langchain_api_key}
+
+    async with httpx.AsyncClient(timeout=90.0) as client:
+        # Create a thread
+        thread_resp = await client.post(
+            f"{langgraph_url}/threads",
+            json={"metadata": {"graph_id": "intake_prefill"}},
+            headers=headers,
+        )
+        thread_resp.raise_for_status()
+        thread_id = thread_resp.json()["thread_id"]
+
+        # Start a run and wait for completion
+        run_resp = await client.post(
+            f"{langgraph_url}/threads/{thread_id}/runs/wait",
+            json={
+                "assistant_id": "intake_prefill",
+                "input": payload,
+            },
+            headers=headers,
+            timeout=90.0,
+        )
+        run_resp.raise_for_status()
+        result = run_resp.json()
+
+        return {
+            "prefill_sections": result.get("prefill_sections", {}),
+            "research_summary": result.get("research_summary", ""),
+            "confidence": result.get("confidence", {}),
+        }
 
 
 def calculate_progress(agents_completed: List[str]) -> int:
@@ -928,6 +976,30 @@ async def sync_all_active_projects(db: Session = Depends(get_db)):
             results.append({"project_id": str(project.id), "error": "cloud_unreachable"})
 
     return {"synced": len(results), "results": results}
+
+
+@router.post("/intake/prefill")
+async def prefill_intake(request: PrefillRequest):
+    """
+    AI-powered prefill for CME intake sections B-H.
+    Takes Section A fields, queries PubMed, generates structured drafts.
+    """
+    payload = {
+        "project_name": request.project_name,
+        "therapeutic_area": request.therapeutic_area,
+        "disease_state": request.disease_state,
+        "target_audience_primary": request.target_audience_primary,
+        "target_hcp_types": request.target_hcp_types or [],
+    }
+    try:
+        result = await trigger_intake_prefill(payload)
+        return result
+    except Exception as e:
+        logger.error("Intake prefill failed: %s", e)
+        raise HTTPException(
+            status_code=502,
+            detail="Prefill unavailable — the AI agent could not complete the request.",
+        )
 
 
 # =============================================================================
