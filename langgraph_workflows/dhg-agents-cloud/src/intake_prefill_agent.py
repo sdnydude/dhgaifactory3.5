@@ -104,7 +104,30 @@ llm = LLMClient()
 @traced_node("intake_prefill", "search_literature")
 async def search_literature(state: IntakePrefillState) -> dict:
     """Search PubMed for literature relevant to the disease state."""
-    raise NotImplementedError("Task 2")
+    disease = state["disease_state"]
+    area = state["therapeutic_area"]
+    audiences = state.get("target_audience_primary", [])
+    query = f"{disease} {area} {' '.join(audiences)}".strip()
+
+    pubmed = PubMedClient()
+    try:
+        pmids = await asyncio.wait_for(
+            pubmed.search(query, max_results=20, years=5),
+            timeout=30,
+        )
+        articles = await asyncio.wait_for(
+            pubmed.fetch_details(pmids[:20]),
+            timeout=60,
+        )
+        return {"pubmed_results": articles}
+    except Exception as e:
+        logger.warning("PubMed search failed: %s", e)
+        return {
+            "pubmed_results": [],
+            "errors": list(state.get("errors", [])) + [
+                {"node": "search_literature", "error": f"PubMed search failed: {e}"}
+            ],
+        }
 
 
 @traceable(name="intake_prefill.build_context", run_type="chain")

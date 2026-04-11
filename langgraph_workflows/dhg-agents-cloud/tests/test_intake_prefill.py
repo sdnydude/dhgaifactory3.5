@@ -36,3 +36,88 @@ class TestGraphStructure:
         """The module-level `graph` is a compiled StateGraph."""
         assert hasattr(ipa, "graph")
         assert hasattr(ipa.graph, "invoke")
+
+
+# ---------------------------------------------------------------------------
+# search_literature node tests
+# ---------------------------------------------------------------------------
+
+def _make_sample_state(**overrides) -> dict:
+    """Build a minimal IntakePrefillState dict for unit tests."""
+    base = {
+        "therapeutic_area": "cardiology",
+        "disease_state": "heart failure with reduced ejection fraction",
+        "target_audience_primary": ["cardiologists", "internists"],
+        "target_hcp_types": ["MD/DO"],
+        "project_name": "HFrEF GDMT Update 2026",
+        "messages": [],
+        "pubmed_results": [],
+        "research_context": "",
+        "prefill_sections": {},
+        "research_summary": "",
+        "confidence": {},
+        "errors": [],
+        "total_tokens": 0,
+        "total_cost": 0.0,
+    }
+    base.update(overrides)
+    return base
+
+
+class TestSearchLiterature:
+    """Tests for search_literature node."""
+
+    @pytest.mark.asyncio
+    async def test_returns_pubmed_results(self):
+        """Successful PubMed search populates pubmed_results."""
+        sample_articles = [
+            {"pmid": "12345", "title": "HFrEF GDMT Review", "abstract": "...", "year": 2025},
+            {"pmid": "67890", "title": "SGLT2i in Heart Failure", "abstract": "...", "year": 2024},
+        ]
+        mock_pubmed = MagicMock()
+        mock_pubmed.search = AsyncMock(return_value=["12345", "67890"])
+        mock_pubmed.fetch_details = AsyncMock(return_value=sample_articles)
+
+        state = _make_sample_state()
+
+        with patch.object(ipa, "PubMedClient", return_value=mock_pubmed):
+            result = await ipa.search_literature(state)
+
+        assert "pubmed_results" in result
+        assert len(result["pubmed_results"]) == 2
+        assert result["pubmed_results"][0]["pmid"] == "12345"
+
+    @pytest.mark.asyncio
+    async def test_builds_query_from_disease_and_area(self):
+        """The PubMed query includes disease_state and therapeutic_area."""
+        mock_pubmed = MagicMock()
+        mock_pubmed.search = AsyncMock(return_value=[])
+        mock_pubmed.fetch_details = AsyncMock(return_value=[])
+
+        state = _make_sample_state(
+            disease_state="atrial fibrillation",
+            therapeutic_area="electrophysiology",
+        )
+
+        with patch.object(ipa, "PubMedClient", return_value=mock_pubmed):
+            await ipa.search_literature(state)
+
+        call_args = mock_pubmed.search.call_args
+        query = call_args[0][0] if call_args[0] else call_args[1].get("query", "")
+        assert "atrial fibrillation" in query
+        assert "electrophysiology" in query
+
+    @pytest.mark.asyncio
+    async def test_handles_pubmed_failure_gracefully(self):
+        """PubMed failure returns empty results + error record."""
+        mock_pubmed = MagicMock()
+        mock_pubmed.search = AsyncMock(side_effect=Exception("PubMed API timeout"))
+
+        state = _make_sample_state()
+
+        with patch.object(ipa, "PubMedClient", return_value=mock_pubmed):
+            result = await ipa.search_literature(state)
+
+        assert result["pubmed_results"] == []
+        assert len(result["errors"]) == 1
+        assert "PubMed" in result["errors"][0]["error"]
