@@ -270,8 +270,11 @@ def flatten_intake(intake: Dict[str, Any]) -> Dict[str, Any]:
     flat["project_name"] = a.get("project_name", "")
     flat["project_title"] = a.get("project_name", "")  # grant_writer uses project_title
     flat["activity_title"] = a.get("project_name", "")  # needs_assessment uses activity_title
-    flat["therapeutic_area"] = a.get("therapeutic_area", "")
-    flat["disease_state"] = a.get("disease_state", "")
+    # Agents expect these as comma-joined strings; frontend sends lists
+    ta = a.get("therapeutic_area", "")
+    flat["therapeutic_area"] = ", ".join(ta) if isinstance(ta, list) else str(ta)
+    ds = a.get("disease_state", "")
+    flat["disease_state"] = ", ".join(ds) if isinstance(ds, list) else str(ds)
     # Agents expect target_audience as a single string
     primary = a.get("target_audience_primary", [])
     flat["target_audience"] = ", ".join(primary) if isinstance(primary, list) else str(primary)

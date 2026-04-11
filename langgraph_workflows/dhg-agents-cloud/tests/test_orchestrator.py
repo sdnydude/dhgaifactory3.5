@@ -571,7 +571,7 @@ class TestFlattenIntake:
 
     def test_disease_state_extracted(self):
         flat = orch.flatten_intake(self.SAMPLE_SECTIONED_INTAKE)
-        assert flat["disease_state"] == ["polymyalgia rheumatica"]
+        assert flat["disease_state"] == "polymyalgia rheumatica"
 
     def test_known_gaps_combines_three_gap_types(self):
         flat = orch.flatten_intake(self.SAMPLE_SECTIONED_INTAKE)
@@ -601,6 +601,10 @@ class TestFlattenIntake:
     def test_competitor_products_aliases(self):
         flat = orch.flatten_intake(self.SAMPLE_SECTIONED_INTAKE)
         assert flat["competitor_products"] == ["tocilizumab", "sarilumab"]
+
+    def test_therapeutic_area_joined_to_string(self):
+        flat = orch.flatten_intake(self.SAMPLE_SECTIONED_INTAKE)
+        assert flat["therapeutic_area"] == "rheumatology"
 
     def test_geographic_focus_joins_list(self):
         flat = orch.flatten_intake(self.SAMPLE_SECTIONED_INTAKE)
