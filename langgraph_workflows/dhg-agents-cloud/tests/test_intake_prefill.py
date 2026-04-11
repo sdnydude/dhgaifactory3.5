@@ -175,3 +175,150 @@ class TestBuildContext:
 
         assert "primary care physicians" in result["research_context"]
         assert "MD/DO" in result["research_context"]
+
+
+# ---------------------------------------------------------------------------
+# generate_prefill node tests
+# ---------------------------------------------------------------------------
+
+MOCK_LLM_JSON_RESPONSE = json.dumps({
+    "section_b": {
+        "supporter_name": "",
+        "supporter_contact_name": None,
+        "supporter_contact_email": None,
+        "grant_amount_requested": 75000,
+        "grant_submission_deadline": None,
+    },
+    "section_c": {
+        "learning_format": "live-symposium",
+        "duration_minutes": 90,
+        "include_post_test": True,
+        "include_pre_test": True,
+        "faculty_count": 3,
+    },
+    "section_d": {
+        "clinical_topics": ["GDMT optimization", "SGLT2 inhibitors", "Device therapy"],
+        "treatment_modalities": ["Pharmacologic", "Device"],
+        "patient_population": "Adults with HFrEF (EF <= 40%)",
+        "stage_of_disease": "Chronic, stable",
+        "comorbidities": ["Diabetes", "CKD", "Hypertension"],
+    },
+    "section_e": {
+        "knowledge_gaps": ["Underutilization of ARNI therapy", "Delayed SGLT2i initiation"],
+        "competence_gaps": ["Risk stratification for device therapy"],
+        "performance_gaps": ["Failure to titrate to target doses"],
+        "gap_evidence_sources": ["ACC/AHA 2022 Guidelines", "CHAMP-HF Registry"],
+        "gap_priority": "high",
+    },
+    "section_f": {
+        "primary_outcomes": ["Increase in GDMT prescription rates"],
+        "secondary_outcomes": ["Improvement in dose titration to target"],
+        "measurement_approach": "Pre/post knowledge assessment with 60-day practice survey",
+        "moore_levels_target": [3, 4, 5],
+        "follow_up_timeline": "60 days post-activity",
+    },
+    "section_g": {
+        "key_messages": ["GDMT should be initiated early", "SGLT2i benefit is class-wide"],
+        "required_references": ["PMID:12345 - DAPA-HF trial", "PMID:67890 - EMPEROR-Reduced"],
+        "excluded_topics": None,
+        "competitor_products_to_mention": None,
+        "regulatory_considerations": "Off-label discussion of combination therapy",
+    },
+    "section_h": {
+        "distribution_channels": ["Medical society meetings", "Online CME platforms"],
+        "geo_restrictions": None,
+        "language_requirements": ["English"],
+        "target_launch_date": None,
+        "expiration_date": None,
+    },
+    "confidence": {
+        "section_b": "low",
+        "section_c": "medium",
+        "section_d": "high",
+        "section_e": "high",
+        "section_f": "high",
+        "section_g": "high",
+        "section_h": "medium",
+    },
+})
+
+
+def _mock_llm_generate(content: str):
+    """Build a mock for LLMClient.generate that returns given content."""
+    return AsyncMock(return_value={
+        "content": content,
+        "input_tokens": 500,
+        "output_tokens": 800,
+        "total_tokens": 1300,
+        "cost": 0.0135,
+    })
+
+
+class TestGeneratePrefill:
+    """Tests for generate_prefill node (mocked LLM)."""
+
+    @pytest.mark.asyncio
+    async def test_parses_valid_json_response(self):
+        """Valid JSON from LLM is parsed into prefill_sections and confidence."""
+        state = _make_sample_state(
+            research_context="LITERATURE REVIEW (5 articles): ...",
+        )
+
+        with patch.object(ipa.llm, "generate", _mock_llm_generate(MOCK_LLM_JSON_RESPONSE)):
+            result = await ipa.generate_prefill(state)
+
+        assert "prefill_sections" in result
+        assert "section_d" in result["prefill_sections"]
+        assert result["prefill_sections"]["section_d"]["clinical_topics"][0] == "GDMT optimization"
+        assert "confidence" in result
+        assert result["confidence"]["section_d"] == "high"
+
+    @pytest.mark.asyncio
+    async def test_accumulates_token_counts(self):
+        """Token counts are added to running totals."""
+        state = _make_sample_state(
+            research_context="...",
+            total_tokens=100,
+            total_cost=0.001,
+        )
+
+        with patch.object(ipa.llm, "generate", _mock_llm_generate(MOCK_LLM_JSON_RESPONSE)):
+            result = await ipa.generate_prefill(state)
+
+        assert result["total_tokens"] == 100 + 1300
+        assert result["total_cost"] > 0.001
+
+    @pytest.mark.asyncio
+    async def test_handles_markdown_fenced_json(self):
+        """LLM wrapping JSON in ```json fences is handled."""
+        fenced = "```json\n" + MOCK_LLM_JSON_RESPONSE + "\n```"
+        state = _make_sample_state(research_context="...")
+
+        with patch.object(ipa.llm, "generate", _mock_llm_generate(fenced)):
+            result = await ipa.generate_prefill(state)
+
+        assert "section_d" in result["prefill_sections"]
+
+    @pytest.mark.asyncio
+    async def test_llm_failure_returns_error(self):
+        """LLM call failure returns empty sections + error record."""
+        state = _make_sample_state(research_context="...")
+        mock_gen = AsyncMock(side_effect=Exception("LLM timeout"))
+
+        with patch.object(ipa.llm, "generate", mock_gen):
+            result = await ipa.generate_prefill(state)
+
+        assert result["prefill_sections"] == {}
+        assert len(result["errors"]) == 1
+        assert "LLM" in result["errors"][0]["error"] or "timeout" in result["errors"][0]["error"].lower()
+
+    @pytest.mark.asyncio
+    async def test_invalid_json_returns_error(self):
+        """Unparseable LLM output returns empty sections + error record."""
+        state = _make_sample_state(research_context="...")
+
+        with patch.object(ipa.llm, "generate", _mock_llm_generate("This is not JSON at all")):
+            result = await ipa.generate_prefill(state)
+
+        assert result["prefill_sections"] == {}
+        assert len(result["errors"]) >= 1

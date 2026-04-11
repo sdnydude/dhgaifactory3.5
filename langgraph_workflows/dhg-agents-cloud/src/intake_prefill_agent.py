@@ -178,11 +178,141 @@ async def build_context(state: IntakePrefillState) -> dict:
     return {"research_context": context, "research_summary": summary}
 
 
+PREFILL_SYSTEM_PROMPT = """You are a CME (Continuing Medical Education) intake form assistant.
+Based on project information and a literature review, generate draft values for sections B through H of a CME intake form.
+Return ONLY a JSON object — no markdown fences, no additional text."""
+
+PREFILL_USER_TEMPLATE = """PROJECT INFORMATION:
+- Project Name: {project_name}
+- Therapeutic Area: {therapeutic_area}
+- Disease State: {disease_state}
+- Target Audience: {target_audience}
+- HCP Types: {hcp_types}
+
+{research_context}
+
+Generate a JSON object with this structure. Use the literature review to ground suggestions in evidence. For fields you cannot confidently suggest, use null.
+
+{{
+  "section_b": {{
+    "supporter_name": "",
+    "supporter_contact_name": null,
+    "supporter_contact_email": null,
+    "grant_amount_requested": <typical grant amount as number or null>,
+    "grant_submission_deadline": null
+  }},
+  "section_c": {{
+    "learning_format": "<webinar|live-symposium|enduring-module|workshop>",
+    "duration_minutes": <integer>,
+    "include_post_test": <true|false>,
+    "include_pre_test": <true|false>,
+    "faculty_count": <integer>
+  }},
+  "section_d": {{
+    "clinical_topics": ["<topic>", ...],
+    "treatment_modalities": ["<modality>", ...],
+    "patient_population": "<description>",
+    "stage_of_disease": "<description or null>",
+    "comorbidities": ["<comorbidity>", ...]
+  }},
+  "section_e": {{
+    "knowledge_gaps": ["<gap>", ...],
+    "competence_gaps": ["<gap>", ...],
+    "performance_gaps": ["<gap>", ...],
+    "gap_evidence_sources": ["<source>", ...],
+    "gap_priority": "<high|medium|low>"
+  }},
+  "section_f": {{
+    "primary_outcomes": ["<outcome>", ...],
+    "secondary_outcomes": ["<outcome>", ...],
+    "measurement_approach": "<description>",
+    "moore_levels_target": [<integers from 1-7>],
+    "follow_up_timeline": "<timeline>"
+  }},
+  "section_g": {{
+    "key_messages": ["<message>", ...],
+    "required_references": ["PMID:<id> - <brief description>", ...],
+    "excluded_topics": null,
+    "competitor_products_to_mention": null,
+    "regulatory_considerations": "<notes or null>"
+  }},
+  "section_h": {{
+    "distribution_channels": ["<channel>", ...],
+    "geo_restrictions": null,
+    "language_requirements": ["English"],
+    "target_launch_date": null,
+    "expiration_date": null
+  }},
+  "confidence": {{
+    "section_b": "low",
+    "section_c": "<high|medium|low>",
+    "section_d": "<high|medium|low>",
+    "section_e": "<high|medium|low>",
+    "section_f": "<high|medium|low>",
+    "section_g": "<high|medium|low>",
+    "section_h": "<high|medium|low>"
+  }}
+}}"""
+
+
 @traceable(name="intake_prefill.generate_prefill", run_type="chain")
 @traced_node("intake_prefill", "generate_prefill")
 async def generate_prefill(state: IntakePrefillState) -> dict:
     """Single LLM call to generate draft values for sections B-H."""
-    raise NotImplementedError("Task 4")
+    prompt = PREFILL_USER_TEMPLATE.format(
+        project_name=state["project_name"],
+        therapeutic_area=state["therapeutic_area"],
+        disease_state=state["disease_state"],
+        target_audience=", ".join(state.get("target_audience_primary", [])),
+        hcp_types=", ".join(state.get("target_hcp_types", [])),
+        research_context=state.get("research_context", ""),
+    )
+
+    try:
+        response = await asyncio.wait_for(
+            llm.generate(PREFILL_SYSTEM_PROMPT, prompt),
+            timeout=300,
+        )
+    except Exception as e:
+        logger.error("LLM call failed in generate_prefill: %s", e)
+        return {
+            "prefill_sections": {},
+            "confidence": {},
+            "errors": list(state.get("errors", [])) + [
+                {"node": "generate_prefill", "error": f"LLM call failed: {e}"}
+            ],
+        }
+
+    content = response["content"].strip()
+
+    # Strip markdown code fences if present
+    if content.startswith("```"):
+        first_newline = content.index("\n") if "\n" in content else 3
+        content = content[first_newline + 1:]
+        if content.endswith("```"):
+            content = content[:-3].rstrip()
+
+    try:
+        raw = json.loads(content)
+    except json.JSONDecodeError as e:
+        logger.error("Failed to parse LLM JSON: %s", e)
+        return {
+            "prefill_sections": {},
+            "confidence": {},
+            "errors": list(state.get("errors", [])) + [
+                {"node": "generate_prefill", "error": f"Invalid JSON from LLM: {e}"}
+            ],
+        }
+
+    confidence = raw.pop("confidence", {})
+    prefill_sections = {k: v for k, v in raw.items() if k.startswith("section_")}
+
+    return {
+        "prefill_sections": prefill_sections,
+        "confidence": confidence,
+        "total_tokens": state.get("total_tokens", 0) + response["total_tokens"],
+        "total_cost": state.get("total_cost", 0.0) + response["cost"],
+    }
 
 
 @traceable(name="intake_prefill.validate_output", run_type="chain")
