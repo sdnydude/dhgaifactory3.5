@@ -191,6 +191,26 @@ export interface HybridSearchRequest {
   vector_weight?: number;
 }
 
+// =============================================================================
+// INTAKE PREFILL
+// =============================================================================
+
+export type PrefillConfidence = "high" | "medium" | "low";
+
+export interface PrefillResponse {
+  prefill_sections: {
+    section_b?: Partial<SectionB>;
+    section_c?: Partial<SectionC>;
+    section_d?: Partial<SectionD>;
+    section_e?: Partial<SectionE>;
+    section_f?: Partial<SectionF>;
+    section_g?: Partial<SectionG>;
+    section_h?: Partial<SectionH>;
+  };
+  research_summary: string;
+  confidence: Record<string, PrefillConfidence>;
+}
+
 export const PIPELINE_STEPS: PipelineStep[] = [
   { id: "research", label: "Research & Literature", agent: "research_agent", order: 1 },
   { id: "clinical", label: "Clinical Practice", agent: "clinical_practice_agent", order: 2 },

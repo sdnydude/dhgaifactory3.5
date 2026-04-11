@@ -7,6 +7,8 @@ import type {
   CMEProjectStatus,
   SearchResponse,
   HybridSearchRequest,
+  PrefillResponse,
+  SectionA,
 } from "@/types/cme";
 
 const BASE_URL = "/api/registry";
@@ -202,5 +204,24 @@ export async function hybridSearch(
   return apiFetch<SearchResponse>("/api/cme/search/hybrid", {
     method: "POST",
     body: JSON.stringify(req),
+  });
+}
+
+// =============================================================================
+// INTAKE PREFILL
+// =============================================================================
+
+export async function prefillIntake(
+  sectionA: SectionA,
+): Promise<PrefillResponse> {
+  return apiFetch<PrefillResponse>("/api/cme/intake/prefill", {
+    method: "POST",
+    body: JSON.stringify({
+      project_name: sectionA.project_name,
+      therapeutic_area: sectionA.therapeutic_area,
+      disease_state: sectionA.disease_state,
+      target_audience_primary: sectionA.target_audience_primary,
+      target_hcp_types: sectionA.target_hcp_types,
+    }),
   });
 }
