@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Fraunces, Source_Serif_4, IBM_Plex_Mono } from "next/font/google";
+import { Inter, Fraunces, Source_Serif_4, IBM_Plex_Mono, JetBrains_Mono } from "next/font/google";
 import { Providers } from "./providers";
 import "./globals.css";
 
@@ -28,6 +28,13 @@ const plexMono = IBM_Plex_Mono({
   display: "swap",
 });
 
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-telemetry",
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "700"],
+  display: "swap",
+});
+
 export const metadata: Metadata = {
   title: "DHG AI Factory",
   description: "AI Agents In Tune With You — Digital Harmony Group",
@@ -41,7 +48,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${inter.variable} ${fraunces.variable} ${sourceSerif.variable} ${plexMono.variable} antialiased font-sans`}
+        className={`${inter.variable} ${fraunces.variable} ${sourceSerif.variable} ${plexMono.variable} ${jetbrainsMono.variable} antialiased font-sans`}
       >
         <Providers>{children}</Providers>
       </body>
