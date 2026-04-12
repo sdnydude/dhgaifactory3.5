@@ -204,22 +204,6 @@ services:
       - dhg-network
     restart: "no"
 
-  web-ui:
-    build:
-      context: ./web-ui
-      dockerfile: Dockerfile
-    container_name: dhg-aifactory-web-ui
-    volumes:
-      - ./web-ui:/app
-      - /app/node_modules
-    ports:
-      - "3005:5173"
-    environment:
-      - VITE_ORCHESTRATOR_URL=${VITE_ORCHESTRATOR_URL:-ws://localhost:8011/ws}
-    networks:
-      - dhg-network
-    restart: "no"
-
   visuals:
     build:
       context: .
