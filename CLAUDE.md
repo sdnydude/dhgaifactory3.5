@@ -129,8 +129,6 @@ Human-in-the-loop review workflow at /inbox. Master-detail layout: left sidebar 
 
 **O1: Legacy Orchestrator Port Conflict** — docker-compose.yml maps orchestrator to port 2024. docker-compose.override.yml maps registry-api to 8011. The legacy orchestrator on 2024 is orphaned — nothing connects to it.
 
-**O2: gh Auth Expired** — GitHub CLI token is invalid. 3 commits unpushed. Run `gh auth login -h github.com` to restore.
-
 ### Resolved
 
 17 issues resolved Feb–April 2026. Full history: `docs/resolved-issues.md`.
