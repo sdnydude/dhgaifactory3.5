@@ -65,27 +65,27 @@ export function ConceptsChart({ concepts, loading }: ConceptsChartProps) {
         <BarChart data={data} layout="vertical" margin={{ left: 80, right: 20 }}>
           <CartesianGrid
             strokeDasharray="4 4"
-            stroke="hsl(var(--border))"
+            stroke="var(--border)"
             horizontal={false}
           />
           <XAxis
             type="number"
-            tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+            tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
             axisLine={false}
             tickLine={false}
           />
           <YAxis
             type="category"
             dataKey="name"
-            tick={{ fontSize: 12, fill: "hsl(var(--foreground))", fontFamily: "monospace" }}
+            tick={{ fontSize: 12, fill: "var(--foreground)", fontFamily: "monospace" }}
             axisLine={false}
             tickLine={false}
             width={80}
           />
           <Tooltip
             contentStyle={{
-              backgroundColor: "hsl(var(--card))",
-              border: "1px solid hsl(var(--border))",
+              backgroundColor: "var(--card)",
+              border: "1px solid var(--border)",
               borderRadius: "8px",
               fontSize: "12px",
             }}
@@ -98,7 +98,7 @@ export function ConceptsChart({ concepts, loading }: ConceptsChartProps) {
             {data.map((entry, index) => (
               <Cell
                 key={index}
-                fill="hsl(var(--primary))"
+                fill="var(--primary)"
                 className="transition-colors hover:fill-dhg-orange"
               />
             ))}

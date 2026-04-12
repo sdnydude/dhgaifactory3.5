@@ -58,32 +58,32 @@ export function DailyChart({ daily, loading }: DailyChartProps) {
         <AreaChart data={data}>
           <defs>
             <linearGradient id="sessionGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.2} />
-              <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.02} />
+              <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.2} />
+              <stop offset="95%" stopColor="var(--primary)" stopOpacity={0.02} />
             </linearGradient>
           </defs>
           <CartesianGrid
             strokeDasharray="4 4"
-            stroke="hsl(var(--border))"
+            stroke="var(--border)"
             vertical={false}
           />
           <XAxis
             dataKey="date"
-            tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+            tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
             axisLine={false}
             tickLine={false}
           />
           <YAxis
             allowDecimals={false}
-            tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+            tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
             axisLine={false}
             tickLine={false}
             width={30}
           />
           <Tooltip
             contentStyle={{
-              backgroundColor: "hsl(var(--card))",
-              border: "1px solid hsl(var(--border))",
+              backgroundColor: "var(--card)",
+              border: "1px solid var(--border)",
               borderRadius: "8px",
               fontSize: "12px",
             }}
@@ -91,11 +91,11 @@ export function DailyChart({ daily, loading }: DailyChartProps) {
           <Area
             type="monotone"
             dataKey="sessions"
-            stroke="hsl(var(--primary))"
+            stroke="var(--primary)"
             strokeWidth={2}
             fill="url(#sessionGradient)"
-            dot={{ fill: "hsl(var(--primary))", r: 4 }}
-            activeDot={{ fill: "hsl(var(--primary))", r: 6, stroke: "hsl(var(--background))", strokeWidth: 2 }}
+            dot={{ fill: "var(--primary)", r: 4 }}
+            activeDot={{ fill: "var(--primary)", r: 6, stroke: "var(--background)", strokeWidth: 2 }}
           />
         </AreaChart>
       </ResponsiveContainer>

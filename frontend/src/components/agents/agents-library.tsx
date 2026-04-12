@@ -153,7 +153,7 @@ export function AgentsLibrary() {
       <div
         className="p-4 space-y-4 overflow-auto h-full"
         style={{
-          background: "radial-gradient(ellipse at top, var(--dhg-surface, hsl(var(--card))) 0%, transparent 70%)",
+          background: "radial-gradient(ellipse at top, var(--dhg-surface, var(--card)) 0%, transparent 70%)",
         }}
       >
         <div className="flex items-center justify-between mb-1">
