@@ -406,25 +406,53 @@ class LLMRouter:
             )
         return self._cache["qwen_local"]
     
+    async def _get_local_model(self, task_type: str):
+        """Query registry API for a local model matching this task type."""
+        registry_url = os.getenv("REGISTRY_API_URL", "http://localhost:8011")
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(
+                    f"{registry_url}/api/v1/inference/models",
+                    params={"task_type": task_type},
+                )
+                resp.raise_for_status()
+                endpoints = resp.json()
+                if endpoints:
+                    ep = endpoints[0]
+                    cache_key = f"local_{ep['host']}_{ep['model_name']}"
+                    if cache_key not in self._cache:
+                        from langchain_openai import ChatOpenAI
+                        self._cache[cache_key] = ChatOpenAI(
+                            base_url=f"http://{ep['host']}:{ep['port']}/v1",
+                            api_key="local",
+                            model=ep["model_name"],
+                            max_tokens=4096,
+                        )
+                    return (self._cache[cache_key], ep["model_name"], 0.0)
+        except Exception as e:
+            logger.debug(f"Local model lookup failed for {task_type}: {e}")
+        return None
+
     def get_model(self, task: str, force_local: bool = False) -> tuple:
-        """Get model for task. Returns (model, name, cost_per_1k_output)"""
-        if force_local or self.prefer_local:
+        """Get model for task. Returns (model, name, cost_per_1k_output).
+        Tries local inference via registry API first, falls back to cloud.
+        """
+        if force_local:
             return (self._get_qwen_local(), "qwen3:14b", 0.0)
         
-        if task == "complex_synthesis":
-            return (self._get_claude_sonnet(), "claude-sonnet-3.5", 0.015)
-        elif task == "cme_content":
-            return (self._get_claude_sonnet(), "claude-sonnet-3.5", 0.015)
-        else:
-            return (self._get_claude_haiku(), "claude-haiku-3.5", 0.00025)
-            return (self._get_qwen_local(), "qwen3:14b", 0.0)
+        # Try local model via registry
+        try:
+            import asyncio
+            local = asyncio.run(self._get_local_model(task))
+            if local:
+                return local
+        except RuntimeError:
+            # Already in async context - can't use asyncio.run
+            pass
+        except Exception:
+            pass
         
-        if task == "complex_synthesis":
-             return (self._get_gemini_pro(), "gemini-1.5-pro", 0.0105)
-        elif task == "cme_content":
-             return (self._get_gemini_pro(), "gemini-1.5-pro", 0.0105)
-        else:
-             return (self._get_gemini_flash(), "gemini-1.5-flash", 0.0003)
+        # Cloud fallback
         if task == "complex_synthesis":
             return (self._get_claude_sonnet(), "claude-sonnet-4-20250514", 0.015)
         elif task == "extraction":
