@@ -18,6 +18,7 @@ langsmith>=0.1.140
 opentelemetry-api>=1.24.0
 opentelemetry-sdk>=1.24.0
 opentelemetry-exporter-otlp-proto-grpc>=1.24.0
+opentelemetry-exporter-otlp-proto-http>=1.25.0
 
 # Checkpointing
 langgraph-checkpoint-postgres>=2.0.0
