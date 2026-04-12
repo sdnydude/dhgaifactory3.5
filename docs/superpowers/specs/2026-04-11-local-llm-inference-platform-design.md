@@ -54,9 +54,11 @@ A multi-node local LLM inference platform for DHG AI Factory. Each node runs Oll
 
 ### Per-Node Stack
 
-Each inference node runs:
-- **Ollama** (native, not Docker) — model serving with built-in parallelism
+Each NEW inference node runs:
+- **Ollama** (native install) — model serving with built-in parallelism
 - **Node Gateway** (FastAPI on port 8100) — proxy, validation, logging, heartbeat
+
+**Exception:** g700data1 (.251) keeps its existing Docker-based Ollama (`dhg-ollama` container). The gateway on .251 addresses it at `http://dhg-ollama:11434` (Docker DNS) instead of `http://localhost:11434`.
 
 ### Data Storage
 
@@ -76,15 +78,27 @@ Each inference node runs:
 |------|-----|------|-------|------------|
 | 5090 (10.0.0.54) | RTX 5090 | 24GB | meditron3:8b | medical, clinical |
 | Jason (10.0.0.??) | RTX 5080 | 16GB | qwen2.5-vl:7b | vision, ebay_listing |
-| .251 g700data1 | RTX 5080 | 16GB | qwen3:14b, llama3.1:8b (existing) | general, bulk |
+| .251 g700data1 | RTX 5080 | 16GB | qwen3:14b, llama3.1:8b, nomic-embed-text (existing) | general, bulk, embedding |
+
+### VRAM Budget: g700data1 (.251, 16GB RTX 5080)
+
+qwen3:14b is already running on .251 and is the heaviest model. VRAM budget:
+- qwen3:14b weights (Q4): ~9GB
+- NUM_PARALLEL=2 KV cache: ~3GB
+- nomic-embed-text: ~0.3GB
+- Total: ~12.3GB of 16GB
+- Headroom: ~3.7GB
+
+Note: .251 also runs PostgreSQL, Docker services, LangGraph agents, and will run transcription. The 3.7GB headroom is tight. If OOM occurs, reduce to NUM_PARALLEL=1 or offload qwen3:14b to another node.
 
 ### Ollama Configuration (per node)
 
 ```
 OLLAMA_NUM_PARALLEL=2        # 2 concurrent requests
 OLLAMA_MAX_QUEUE=50          # Reject after 50 pending
-OLLAMA_CONTEXT_LENGTH=8192   # Keep context reasonable for VRAM
 ```
+
+Context length is set per-model via Modelfile or API `num_ctx` parameter (default 8192), not via environment variable.
 
 VRAM budget for 5090 (24GB) with NUM_PARALLEL=2:
 - Model weights: ~16GB
@@ -130,13 +144,15 @@ POST /admin/drain            <- graceful drain for updates
 NODE_NAME=5090
 NODE_HOST=10.0.0.54
 GATEWAY_PORT=8100
-OLLAMA_URL=http://localhost:11434
+OLLAMA_URL=http://localhost:11434          # or http://dhg-ollama:11434 on .251
 REGISTRY_API_URL=http://10.0.0.251:8011
-REGISTRY_DB_URL=postgresql://dhg:***@10.0.0.251:5432/dhg_registry
 ANTHROPIC_API_KEY=sk-...
 FALLBACK_ENABLED=true
 FALLBACK_MODEL=claude-sonnet-4-20250514
+GATEWAY_API_KEY=<shared-secret>            # for LAN-internal auth between agents and gateway
 ```
+
+Note: Gateways do NOT connect directly to PostgreSQL. All data writes go through the registry API. This keeps schema knowledge centralized and avoids N external DB connections.
 
 ### Codebase Structure
 
@@ -149,8 +165,8 @@ dhg-inference-gateway/
 │   ├── ollama_client.py     <- proxy to local Ollama
 │   ├── fallback.py          <- Claude API fallback logic
 │   ├── validation.py        <- instructor + Pydantic schemas
-│   ├── logging_db.py        <- write to llm_interactions on .251
-│   ├── logging_queue.py     <- local SQLite queue when .251 is down
+│   ├── logging_api.py       <- write to llm_interactions via registry API
+│   ├── logging_queue.py     <- local SQLite queue when .251 API is down
 │   ├── heartbeat.py         <- background task, POST to registry
 │   ├── registration.py      <- self-register on startup
 │   ├── queue.py             <- priority queue + rate limiting
@@ -180,7 +196,6 @@ instructor
 pydantic
 openai
 anthropic
-psycopg[binary]
 aiosqlite
 httpx
 prometheus-client
@@ -204,7 +219,7 @@ CREATE TABLE inference_nodes (
     gpu_model VARCHAR(100),
     gpu_vram_gb INTEGER,
     ram_gb INTEGER,
-    status VARCHAR(20) DEFAULT 'offline',
+    status VARCHAR(20) DEFAULT 'offline' CHECK (status IN ('online', 'offline', 'draining')),
     fallback_enabled BOOLEAN DEFAULT true,
     last_heartbeat TIMESTAMPTZ,
     registered_at TIMESTAMPTZ DEFAULT now(),
@@ -217,7 +232,7 @@ CREATE TABLE inference_nodes (
 ```sql
 CREATE TABLE inference_models (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    node_id UUID REFERENCES inference_nodes(id),
+    node_id UUID REFERENCES inference_nodes(id) ON DELETE CASCADE,
     model_name VARCHAR(255) NOT NULL,
     model_alias VARCHAR(100),
     task_types TEXT[] DEFAULT '{}',
@@ -225,7 +240,8 @@ CREATE TABLE inference_models (
     vram_usage_gb NUMERIC(4,1),
     loaded BOOLEAN DEFAULT false,
     max_context_length INTEGER,
-    created_at TIMESTAMPTZ DEFAULT now()
+    created_at TIMESTAMPTZ DEFAULT now(),
+    UNIQUE(node_id, model_name)
 );
 ```
 
@@ -235,10 +251,10 @@ CREATE TABLE inference_models (
 CREATE TABLE llm_interactions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     timestamp TIMESTAMPTZ DEFAULT now(),
-    user_id UUID REFERENCES security_users(id),
+    user_id UUID,                                  -- nullable: system/agent calls have no user
     node_id UUID REFERENCES inference_nodes(id),
     model_name VARCHAR(255) NOT NULL,
-    model_source VARCHAR(50) NOT NULL,
+    model_source VARCHAR(50) NOT NULL CHECK (model_source IN ('local_ollama', 'anthropic_api', 'google_api', 'openai_api')),
     model_digest VARCHAR(64),
     task_type VARCHAR(50),
     agent_name VARCHAR(100),
@@ -255,7 +271,8 @@ CREATE TABLE llm_interactions (
     fallback_used BOOLEAN DEFAULT false,
     fallback_reason TEXT,
     retry_count INTEGER DEFAULT 0,
-    estimated_cost_usd NUMERIC(10,6)
+    estimated_cost_usd NUMERIC(10,6),
+    synced_at TIMESTAMPTZ                          -- when row was written to DB (for delayed flush tracking)
 );
 
 CREATE INDEX idx_llm_interactions_user ON llm_interactions(user_id);
@@ -277,6 +294,8 @@ CREATE TABLE llm_quality_evals (
     graded_by VARCHAR(100),
     evaluated_at TIMESTAMPTZ DEFAULT now()
 );
+
+CREATE INDEX idx_llm_quality_evals_interaction ON llm_quality_evals(interaction_id);
 ```
 
 ### model_update_log
@@ -331,7 +350,36 @@ POST /api/v1/inference/nodes/register           <- gateway self-registers on sta
 POST /api/v1/inference/nodes/heartbeat          <- gateway reports health every 30s
 POST /api/v1/inference/nodes/drain              <- mark node as draining
 POST /api/v1/inference/nodes/activate           <- bring node back online
+POST /api/v1/inference/interactions             <- gateway logs request/response here (not direct DB)
+GET  /api/v1/inference/interactions             <- query interaction history
 ```
+
+---
+
+## Routing Resolution
+
+The routing_config `prefer` column uses the format `local:<alias>` where `<alias>` matches `inference_models.model_alias`. Resolution:
+
+```
+routing_config.prefer = "local:medical"
+    -> query: SELECT n.host, n.gateway_port, m.model_name
+       FROM inference_models m
+       JOIN inference_nodes n ON m.node_id = n.id
+       WHERE m.model_alias = 'medical'
+       AND n.status = 'online'
+       ORDER BY m.priority ASC
+       LIMIT 1
+    -> result: {host: "10.0.0.54", port: 8100, model: "meditron3:8b"}
+```
+
+Alias mapping:
+
+| model_alias | model_name | node |
+|-------------|-----------|------|
+| medical | meditron3:8b | 5090 |
+| vision | qwen2.5-vl:7b | Jason |
+| general | qwen3:14b | .251 |
+| embedding | nomic-embed-text | .251 |
 
 ---
 
@@ -339,11 +387,15 @@ POST /api/v1/inference/nodes/activate           <- bring node back online
 
 ### Current State
 
-LLMRouter in agent.py has hardcoded backends: ChatAnthropic, ChatGoogleGenerativeAI, ChatOllama with fixed OLLAMA_BASE_URL.
+LLMRouter in `langgraph_workflows/dhg-agents-cloud/src/agent.py` has hardcoded backends: ChatAnthropic, ChatGoogleGenerativeAI, ChatOllama with fixed OLLAMA_BASE_URL. This is the CURRENT production system (LangGraph-based).
+
+Note: The legacy Docker-based agents in `agents/` are decommissioned (restart: "no") and use direct Ollama calls. These are NOT in scope — they will not be migrated.
 
 ### New State
 
-LLMRouter queries registry API and routes by task type using routing_config table. Zero changes to the 13 agent files. Agents keep calling llm_router.get_model(task_type). Only LLMRouter internals change.
+LLMRouter queries registry API and routes by task type using routing_config table. Zero changes to the 13 LangGraph agent files. Agents keep calling llm_router.get_model(task_type). Only LLMRouter internals change.
+
+Some agents currently hardcode `ChatAnthropic(model="claude-sonnet-4-20250514")` directly instead of using LLMRouter. These agents will continue using Claude for now. As confidence in local models grows (tracked by feedback loops), these can be migrated to LLMRouter one at a time.
 
 ### Routing Priority
 
@@ -472,8 +524,9 @@ Weekly cron checks average quality grade and fallback rate per task type. Alerts
 ## Security
 
 - All traffic on 10.0.0.0/24 LAN
-- Gateway validates Cloudflare JWT or shared API key
-- user_id extracted from JWT, logged to llm_interactions
+- LAN-internal traffic: gateway validates shared API key (GATEWAY_API_KEY in .env)
+- External traffic (if exposed): Cloudflare JWT validation
+- user_id passed as header by calling agent, logged to llm_interactions (nullable for system calls)
 - Medical tasks configurable with fallback=null (PHI never leaves local)
 - API keys in .env files only
 
