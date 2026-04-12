@@ -4,7 +4,7 @@ import uuid
 DHG Registry - SQLAlchemy Models
 Media, Transcripts, Segments, Events tables
 """
-from sqlalchemy import Column, String, Integer, BigInteger, Float, Boolean, Text, DateTime, Date, ForeignKey, Index, UniqueConstraint
+from sqlalchemy import Column, String, Integer, BigInteger, Float, Boolean, Text, DateTime, Date, ForeignKey, Index, UniqueConstraint, Numeric
 from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY, TSVECTOR
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -733,3 +733,94 @@ class FrontendDesignSpec(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
+
+# =============================================================================
+# INFERENCE PLATFORM MODELS
+# =============================================================================
+
+class InferenceNode(Base):
+    __tablename__ = "inference_nodes"
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    node_name = Column(String(50), unique=True, nullable=False)
+    host = Column(String(255), nullable=False)
+    gateway_port = Column(Integer, default=8100)
+    ollama_port = Column(Integer, default=11434)
+    gpu_model = Column(String(100))
+    gpu_vram_gb = Column(Integer)
+    ram_gb = Column(Integer)
+    status = Column(String(20), default="offline")
+    fallback_enabled = Column(Boolean, default=True)
+    last_heartbeat = Column(DateTime(timezone=True))
+    registered_at = Column(DateTime(timezone=True), server_default=func.now())
+    metadata_ = Column("metadata", JSONB, default={})
+    models = relationship("InferenceModel", back_populates="node", cascade="all, delete-orphan")
+
+class InferenceModel(Base):
+    __tablename__ = "inference_models"
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    node_id = Column(UUID(as_uuid=True), ForeignKey("inference_nodes.id", ondelete="CASCADE"))
+    model_name = Column(String(255), nullable=False)
+    model_alias = Column(String(100))
+    task_types = Column(ARRAY(String), default=[])
+    priority = Column(Integer, default=1)
+    vram_usage_gb = Column(Numeric(4, 1))
+    loaded = Column(Boolean, default=False)
+    max_context_length = Column(Integer)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    node = relationship("InferenceNode", back_populates="models")
+
+class LLMInteraction(Base):
+    __tablename__ = "llm_interactions"
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+    user_id = Column(UUID(as_uuid=True), nullable=True)
+    node_id = Column(UUID(as_uuid=True), ForeignKey("inference_nodes.id"))
+    model_name = Column(String(255), nullable=False)
+    model_source = Column(String(50), nullable=False)
+    model_digest = Column(String(64))
+    task_type = Column(String(50))
+    agent_name = Column(String(100))
+    session_id = Column(UUID(as_uuid=True))
+    prompt_tokens = Column(Integer)
+    completion_tokens = Column(Integer)
+    latency_ms = Column(Integer)
+    input_hash = Column(String(64))
+    input_summary = Column(Text)
+    input_has_image = Column(Boolean, default=False)
+    output = Column(JSONB)
+    output_validated = Column(Boolean)
+    output_schema_name = Column(String(100))
+    fallback_used = Column(Boolean, default=False)
+    fallback_reason = Column(Text)
+    retry_count = Column(Integer, default=0)
+    estimated_cost_usd = Column(Numeric(10, 6))
+    synced_at = Column(DateTime(timezone=True))
+
+class LLMQualityEval(Base):
+    __tablename__ = "llm_quality_evals"
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    interaction_id = Column(UUID(as_uuid=True), ForeignKey("llm_interactions.id"))
+    grade = Column(Integer)
+    criteria = Column(JSONB)
+    issues = Column(ARRAY(String))
+    graded_by = Column(String(100))
+    evaluated_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class ModelUpdateLog(Base):
+    __tablename__ = "model_update_log"
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    node_id = Column(UUID(as_uuid=True), ForeignKey("inference_nodes.id"))
+    model_name = Column(String(255))
+    old_digest = Column(String(64))
+    new_digest = Column(String(64))
+    updated_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_by = Column(String(100))
+
+class RoutingConfig(Base):
+    __tablename__ = "routing_config"
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    task_type = Column(String(100), unique=True, nullable=False)
+    prefer = Column(String(100), nullable=False)
+    fallback = Column(String(100))
+    enabled = Column(Boolean, default=True)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now())
