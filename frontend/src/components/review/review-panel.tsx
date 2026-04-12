@@ -15,6 +15,13 @@ interface ReviewPanelProps {
   isLoading: boolean;
 }
 
+const RECIPE_LABELS: Record<string, string> = {
+  needs_package: "The Needs Package",
+  curriculum_package: "The Curriculum Package",
+  grant_package: "The Grant Package",
+  full_pipeline: "The Full Pipeline",
+};
+
 export function ReviewPanel({ payload, onSubmit, isLoading }: ReviewPanelProps) {
   const documents = buildDocumentSections(payload.document);
   const [activeDocIndex, setActiveDocIndex] = useState(0);
@@ -40,60 +47,140 @@ export function ReviewPanel({ payload, onSubmit, isLoading }: ReviewPanelProps) 
     }
   };
 
-  return (
-    <div className="flex flex-col border border-border rounded-lg overflow-hidden bg-background h-[70vh]">
-      <MetricsBar metrics={payload.metrics} reviewRound={payload.review_round} />
+  const recipeLabel = RECIPE_LABELS[payload.recipe] ?? payload.recipe;
 
-      {documents.length > 1 && (
-        <div className="flex border-b border-border">
-          {documents.map((doc, i) => (
-            <button
-              key={doc.id}
-              onClick={() => setActiveDocIndex(i)}
-              className={`px-4 py-2 text-xs font-medium transition-colors ${
-                i === activeDocIndex
-                  ? "border-b-2 border-dhg-purple text-dhg-purple"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {doc.label}
-            </button>
-          ))}
+  return (
+    <article className="mt-10 border-t-[3px] border-double border-foreground/85 pt-8">
+      {/* Manuscript masthead */}
+      <header className="mb-6">
+        <div className="flex items-baseline justify-between gap-4 border-b border-border pb-2 mb-5">
+          <span className="font-mono-editorial small-caps text-[10px] text-muted-foreground">
+            Manuscript for review
+          </span>
+          <span className="font-mono-editorial small-caps text-[10px] text-muted-foreground tabular-nums">
+            Round {payload.review_round + 1} of III
+          </span>
         </div>
+        <p
+          className="font-display italic text-foreground/60 text-sm"
+          style={{ fontVariationSettings: '"SOFT" 60, "opsz" 24' }}
+        >
+          Being a document of the
+        </p>
+        <h1
+          className="font-display font-semibold text-foreground leading-[0.95] mt-0.5"
+          style={{
+            fontSize: "3rem",
+            fontVariationSettings: '"SOFT" 70, "opsz" 144',
+            letterSpacing: "-0.022em",
+          }}
+        >
+          {recipeLabel}
+        </h1>
+        <p className="mt-3 font-serif-body text-[14px] text-muted-foreground">
+          Prepared for{" "}
+          <span className="italic text-foreground">
+            &ldquo;{payload.project_name}&rdquo;
+          </span>{" "}
+          · Current step:{" "}
+          <span className="font-mono-editorial text-[11px]">
+            {payload.current_step}
+          </span>
+        </p>
+      </header>
+
+      {/* Section tabs (if multi-document) */}
+      {documents.length > 1 && (
+        <nav className="flex flex-wrap gap-0 border-b border-border mb-5">
+          {documents.map((doc, i) => {
+            const active = i === activeDocIndex;
+            return (
+              <button
+                key={doc.id}
+                onClick={() => setActiveDocIndex(i)}
+                className={`relative px-4 py-2.5 font-display text-[13px] italic transition-colors ${
+                  active
+                    ? "text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                style={{ fontVariationSettings: '"SOFT" 50, "opsz" 36' }}
+              >
+                <span className="font-mono-editorial small-caps text-[9px] text-muted-foreground mr-2 tabular-nums">
+                  § {String(i + 1).padStart(2, "0")}
+                </span>
+                {doc.label}
+                {active && (
+                  <span
+                    aria-hidden
+                    className="absolute -bottom-px left-0 right-0 h-[2.5px] bg-[color:var(--color-dhg-orange)]"
+                  />
+                )}
+              </button>
+            );
+          })}
+        </nav>
       )}
 
-      <div className="flex flex-1 overflow-hidden">
-        <DocumentViewer
-          content={activeDoc?.content ?? ""}
-          comments={comments.filter((c) => !c.documentId || c.documentId === activeDoc?.id)}
-          pendingSelection={pendingSelection}
-          containerRef={containerRef}
-          onMouseUp={handleMouseUp}
-          onAddComment={addComment}
-          onClearSelection={clearPendingSelection}
-        />
+      {/* Footnote metrics bar */}
+      <MetricsBar metrics={payload.metrics} reviewRound={payload.review_round} />
 
-        <div className="hidden md:block w-72 border-l border-border overflow-auto">
+      {/* Body + marginalia */}
+      <div className="flex gap-8 mt-6">
+        <div className="flex-1 min-w-0">
+          <DocumentViewer
+            content={activeDoc?.content ?? ""}
+            comments={comments.filter((c) => !c.documentId || c.documentId === activeDoc?.id)}
+            pendingSelection={pendingSelection}
+            containerRef={containerRef}
+            onMouseUp={handleMouseUp}
+            onAddComment={addComment}
+            onClearSelection={clearPendingSelection}
+          />
+        </div>
+
+        <aside className="hidden lg:block w-64 shrink-0 border-l border-border pl-5">
+          <p
+            className="font-display italic text-[11px] small-caps text-muted-foreground mb-3 pb-2 border-b border-border"
+            style={{ fontVariationSettings: '"SOFT" 40, "opsz" 14' }}
+          >
+            Marginalia
+          </p>
           <CommentsSidebar
             comments={comments}
             onRemove={removeComment}
             onUpdate={updateComment}
             onScrollTo={handleScrollToComment}
           />
-        </div>
+        </aside>
       </div>
 
-      {/* VS Alternatives panel — full-width bar below doc+sidebar, above mobile sidebar */}
+      {/* VS alternatives — set as a separate numbered section */}
       {payload.vs_distributions && activeDoc && payload.vs_distributions[activeDoc.id] && (
-        <div className="px-4 py-2 border-t border-border">
+        <section className="mt-10 pt-6 border-t border-border">
+          <h2
+            className="font-display italic text-xl text-foreground mb-4"
+            style={{ fontVariationSettings: '"SOFT" 50, "opsz" 72' }}
+          >
+            <span className="font-mono-editorial small-caps text-[10px] text-muted-foreground mr-2 not-italic tabular-nums">
+              Appendix A ·
+            </span>
+            Alternative phrasings considered
+          </h2>
           <VSAlternatives
             distribution={payload.vs_distributions[activeDoc.id]}
             agentLabel={activeDoc.label}
           />
-        </div>
+        </section>
       )}
 
-      <div className="md:hidden border-t border-border max-h-48 overflow-auto">
+      {/* Mobile marginalia */}
+      <div className="lg:hidden mt-8 pt-6 border-t border-border">
+        <p
+          className="font-display italic text-[11px] small-caps text-muted-foreground mb-3"
+          style={{ fontVariationSettings: '"SOFT" 40, "opsz" 14' }}
+        >
+          Marginalia
+        </p>
         <CommentsSidebar
           comments={comments}
           onRemove={removeComment}
@@ -102,8 +189,11 @@ export function ReviewPanel({ payload, onSubmit, isLoading }: ReviewPanelProps) 
         />
       </div>
 
-      <DecisionBar comments={comments} onSubmit={onSubmit} isLoading={isLoading} />
-    </div>
+      {/* Editorial stamps */}
+      <div className="mt-10">
+        <DecisionBar comments={comments} onSubmit={onSubmit} isLoading={isLoading} />
+      </div>
+    </article>
   );
 }
 

@@ -1,15 +1,5 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  CheckCircle,
-  AlertTriangle,
-  XCircle,
-  Brain,
-  BarChart3,
-  Shield,
-} from "lucide-react";
 import type { ReviewMetrics } from "./types";
 
 interface ReflectionPanelProps {
@@ -18,148 +8,133 @@ interface ReflectionPanelProps {
   reviewRound: number;
 }
 
-function QualitySignal({
-  label,
-  passed,
-  detail,
-}: {
-  label: string;
-  passed: boolean | undefined;
-  detail?: string;
-}) {
-  const Icon = passed === true ? CheckCircle : passed === false ? XCircle : AlertTriangle;
-  const color = passed === true ? "text-green-600" : passed === false ? "text-red-600" : "text-yellow-600";
-
-  return (
-    <div className="flex items-center gap-2 text-sm">
-      <Icon className={`h-4 w-4 ${color}`} />
-      <span className="font-medium">{label}</span>
-      {detail && <span className="text-muted-foreground">({detail})</span>}
-    </div>
-  );
-}
+type Verdict = "approve" | "revise" | "attention";
 
 function buildRecommendation(metrics: ReviewMetrics): {
-  decision: "approve" | "revise" | "needs_attention";
-  reasoning: string;
+  verdict: Verdict;
+  headline: string;
+  note: string;
 } {
   const issues: string[] = [];
 
   if (metrics.quality_passed === false) {
-    issues.push("prose quality gate failed");
+    issues.push("the prose-quality gate has failed");
   }
   if (metrics.banned_patterns_found && metrics.banned_patterns_found.length > 0) {
-    issues.push(`${metrics.banned_patterns_found.length} banned patterns detected`);
+    issues.push(
+      `${metrics.banned_patterns_found.length} banned pattern${metrics.banned_patterns_found.length === 1 ? "" : "s"} detected`,
+    );
   }
   if (metrics.compliance_result) {
     const compliance = metrics.compliance_result as Record<string, unknown>;
     if (compliance.passed === false) {
-      issues.push("ACCME compliance check failed");
+      issues.push("the ACCME compliance check did not clear");
     }
   }
 
   if (issues.length === 0) {
     return {
-      decision: "approve",
-      reasoning: `All quality gates passed. Word count: ${metrics.word_count ?? "N/A"}. Prose density: ${metrics.prose_density ? `${(metrics.prose_density * 100).toFixed(0)}%` : "N/A"}. No banned patterns detected. Compliance verified.`,
+      verdict: "approve",
+      headline: "The gates stand open",
+      note: `All quality gates have cleared. ${metrics.word_count ? `The manuscript runs to ${metrics.word_count.toLocaleString()} words` : "The manuscript has been tallied"}${metrics.prose_density ? `, with a prose density of ${(metrics.prose_density * 100).toFixed(0)} percent` : ""}. No banned patterns surfaced; compliance was verified. In the judgment of your editors, this document is fit for the press.`,
     };
   }
 
   return {
-    decision: issues.length >= 2 ? "needs_attention" : "revise",
-    reasoning: `Issues found: ${issues.join("; ")}. Review carefully before approving.`,
+    verdict: issues.length >= 2 ? "attention" : "revise",
+    headline:
+      issues.length >= 2 ? "The editors advise caution" : "A revision is recommended",
+    note: `Before the press receives this manuscript, ${issues.join(", and ")}. Review the flagged sections carefully — the author may wish to address these matters before a final verdict is rendered.`,
   };
 }
 
-export function ReflectionPanel({ metrics, recipe, reviewRound }: ReflectionPanelProps) {
-  const recommendation = buildRecommendation(metrics);
+export function ReflectionPanel({ metrics, reviewRound }: ReflectionPanelProps) {
+  const rec = buildRecommendation(metrics);
 
-  const recBadgeVariant =
-    recommendation.decision === "approve"
-      ? "default"
-      : recommendation.decision === "revise"
-        ? "secondary"
-        : "destructive";
+  const verdictColor =
+    rec.verdict === "approve"
+      ? "var(--color-dhg-orange)"
+      : rec.verdict === "revise"
+        ? "var(--color-dhg-orange)"
+        : "#B91C1C";
 
-  const recLabel =
-    recommendation.decision === "approve"
-      ? "Recommend Approve"
-      : recommendation.decision === "revise"
-        ? "Suggest Revision"
-        : "Needs Attention";
+  const verdictLabel =
+    rec.verdict === "approve"
+      ? "Press permitted"
+      : rec.verdict === "revise"
+        ? "Revise & resubmit"
+        : "Editorial concern";
 
   return (
-    <Card className="border-border">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <Brain className="h-4 w-4 text-dhg-purple" />
-            AI Reflection
-          </CardTitle>
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="text-[10px]">
+    <section
+      className="relative mb-8 py-5 px-7 border-y border-foreground/80"
+      style={{ borderTopWidth: "1.5px" }}
+    >
+      <div className="flex items-baseline justify-between gap-4 mb-3">
+        <p
+          className="font-display italic text-[10px] small-caps text-muted-foreground"
+          style={{ fontVariationSettings: '"SOFT" 40, "opsz" 10' }}
+        >
+          Publisher&rsquo;s note
+        </p>
+        <div className="flex items-center gap-3">
+          {reviewRound > 0 && (
+            <span className="font-mono-editorial small-caps text-[9px] text-muted-foreground tabular-nums">
               Round {reviewRound}
-            </Badge>
-            <Badge variant={recBadgeVariant} className="text-[10px]">
-              {recLabel}
-            </Badge>
-          </div>
+            </span>
+          )}
+          <span
+            className="font-mono-editorial small-caps text-[9px] font-medium tabular-nums"
+            style={{ color: verdictColor }}
+          >
+            · {verdictLabel}
+          </span>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Quality Signals */}
-        <div>
-          <div className="flex items-center gap-1.5 mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            <BarChart3 className="h-3 w-3" />
-            Quality Signals
-          </div>
-          <div className="space-y-1.5">
-            <QualitySignal
-              label="Prose Quality"
-              passed={metrics.quality_passed}
-              detail={metrics.word_count ? `${metrics.word_count} words` : undefined}
-            />
-            <QualitySignal
-              label="Banned Patterns"
-              passed={!metrics.banned_patterns_found?.length}
-              detail={
-                metrics.banned_patterns_found?.length
-                  ? `${metrics.banned_patterns_found.length} found`
-                  : "clean"
-              }
-            />
-            {metrics.compliance_result && (
-              <QualitySignal
-                label="ACCME Compliance"
-                passed={(metrics.compliance_result as Record<string, unknown>).passed as boolean}
-              />
-            )}
-          </div>
-        </div>
+      </div>
 
-        {/* Recommendation */}
-        <div>
-          <div className="flex items-center gap-1.5 mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            <Shield className="h-3 w-3" />
-            Recommendation
-          </div>
-          <p className="text-sm text-foreground">{recommendation.reasoning}</p>
-        </div>
+      <h2
+        className="font-display italic text-[1.55rem] text-foreground leading-tight"
+        style={{
+          fontVariationSettings: '"SOFT" 70, "opsz" 96',
+          letterSpacing: "-0.01em",
+        }}
+      >
+        {rec.headline}.
+      </h2>
 
-        {/* Banned patterns detail */}
-        {metrics.banned_patterns_found && metrics.banned_patterns_found.length > 0 && (
-          <div className="rounded-md bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 px-3 py-2">
-            <p className="text-xs font-medium text-red-700 dark:text-red-300 mb-1">
-              Banned patterns found:
-            </p>
-            <ul className="text-xs text-red-600 dark:text-red-400 space-y-0.5">
-              {metrics.banned_patterns_found.map((pattern) => (
-                <li key={pattern} className="font-mono">{pattern}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      <p className="font-serif-body text-[13.5px] text-foreground/80 mt-3 leading-relaxed max-w-[52rem]">
+        {rec.note}
+      </p>
+
+      {metrics.banned_patterns_found && metrics.banned_patterns_found.length > 0 && (
+        <div className="mt-5 pt-4 border-t border-border">
+          <p
+            className="font-display italic text-[10px] small-caps text-muted-foreground mb-2"
+            style={{ fontVariationSettings: '"SOFT" 40, "opsz" 10' }}
+          >
+            Flagged phrases
+          </p>
+          <ul className="flex flex-wrap gap-x-5 gap-y-1">
+            {metrics.banned_patterns_found.map((pattern, i) => (
+              <li
+                key={pattern}
+                className="font-mono-editorial text-[11px] text-destructive"
+              >
+                <sup className="text-[8px] mr-0.5 opacity-70">{i + 1}</sup>
+                {pattern}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Signed */}
+      <p
+        className="mt-5 text-right font-display italic text-[11px] text-muted-foreground"
+        style={{ fontVariationSettings: '"SOFT" 60, "opsz" 12' }}
+      >
+        — Compiled by the reflection engine
+      </p>
+    </section>
   );
 }
