@@ -31,7 +31,7 @@ try:
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
     from opentelemetry.sdk.resources import Resource
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 
     _OTEL_AVAILABLE = True
 except ImportError:
@@ -48,7 +48,7 @@ DEPLOYMENT_ENV = os.getenv("DEPLOYMENT_ENVIRONMENT", "production")
 
 TEMPO_ENDPOINT = os.getenv(
     "OTEL_EXPORTER_OTLP_ENDPOINT",
-    "http://localhost:4317",
+    "http://localhost:4318",
 )
 
 # ---------------------------------------------------------------------------
@@ -66,10 +66,7 @@ if _OTEL_AVAILABLE:
 
     _provider = TracerProvider(resource=_resource)
 
-    _exporter = OTLPSpanExporter(
-        endpoint=TEMPO_ENDPOINT,
-        insecure=True,
-    )
+    _exporter = OTLPSpanExporter()
 
     _provider.add_span_processor(BatchSpanProcessor(_exporter))
 
