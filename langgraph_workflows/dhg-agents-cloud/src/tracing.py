@@ -48,7 +48,7 @@ DEPLOYMENT_ENV = os.getenv("DEPLOYMENT_ENVIRONMENT", "production")
 
 TEMPO_ENDPOINT = os.getenv(
     "OTEL_EXPORTER_OTLP_ENDPOINT",
-    "http://localhost:4318",
+    "https://otel.digitalharmonyai.com/v1/traces",
 )
 
 # ---------------------------------------------------------------------------
@@ -75,7 +75,10 @@ if _OTEL_AVAILABLE:
             "CF-Access-Client-Secret": _cf_secret,
         }
 
-    _exporter = OTLPSpanExporter(headers=_headers or None)
+    _exporter = OTLPSpanExporter(
+        endpoint=TEMPO_ENDPOINT,
+        headers=_headers or None,
+    )
 
     _provider.add_span_processor(BatchSpanProcessor(_exporter))
 
