@@ -732,3 +732,196 @@ class TestWrapperPassthrough:
         assert captured_input["supporter_products"] == ["sacubitril/valsartan"]
         assert captured_input["competitor_products"] == ["dapagliflozin"]
         assert captured_input["accreditation_types"] == ["ACCME"]
+
+
+# ============================================================================
+# flatten_intake tolerance tests
+#
+# Regression for pipeline run 019d8802-9e40-7933-b56d-61e944d7305d (COPD update,
+# project defeca67-e664-450e-b063-4f3b1ea69ce1) which failed 2026-04-13 with
+# TypeError("'NoneType' object is not iterable") inside the `initialize` node.
+#
+# Root cause: flatten_intake used d.get(key, default), which does NOT substitute
+# the default when the key exists with a None value — only when the key is
+# missing entirely. The frontend sends explicit null for unfilled optional
+# fields, so list(None), None + None, and str(None) errors all fire downstream.
+# ============================================================================
+
+
+class TestFlattenIntakeNoneTolerance:
+    """flatten_intake must tolerate explicit None values in optional fields."""
+
+    def _copd_payload(self):
+        """Trimmed COPD payload preserving every field that was None in the
+        failing production run (plus at least one populated field per section
+        so the happy-path merges still have something to flatten)."""
+        return {
+            "section_a": {
+                "project_name": "COPD update ",
+                "therapeutic_area": ["Family Medicine", "Pulmonology"],
+                "disease_state": ["Chronic Obstructive Pulmonary Disease (COPD)"],
+                "target_audience_primary": ["Pulmonologists"],
+                "target_audience_secondary": None,
+                "target_hcp_types": ["Nurse Practitioner (NP)"],
+            },
+            "section_b": {
+                "supporter_name": "",
+                "grant_amount_requested": None,
+                "supporter_contact_name": None,
+                "supporter_contact_email": None,
+                "grant_submission_deadline": None,
+            },
+            "section_c": {
+                "faculty_count": 2,
+                "learning_format": "enduring-module",
+                "duration_minutes": 60,
+                "include_pre_test": True,
+                "include_post_test": True,
+            },
+            "section_d": {
+                "clinical_topics": ["COPD diagnosis"],
+                "treatment_modalities": ["Triple therapy"],
+                "patient_population": "Adults with COPD",
+                "stage_of_disease": "All stages",
+                "comorbidities": ["Cardiovascular disease"],
+            },
+            "section_e": {
+                "gap_priority": "high",
+                "knowledge_gaps": ["Underdiagnosis"],
+                "competence_gaps": ["Spirometry interpretation"],
+                "performance_gaps": ["Early diagnosis avoidance"],
+                "gap_evidence_sources": ["GOLD 2025"],
+            },
+            "section_f": {
+                "primary_outcomes": ["Improved spirometry"],
+                "secondary_outcomes": ["CV risk"],
+                "measurement_approach": "Pre/post",
+                "moore_levels_target": [3, 4, 5],
+                "follow_up_timeline": "6 months",
+            },
+            "section_g": {
+                "key_messages": ["Spirometry matters"],
+                "required_references": ["PMID:25837578"],
+                "excluded_topics": None,  # <-- None instead of []
+                "competitor_products_to_mention": None,  # <-- None instead of [] (ORIGINAL CRASH SITE)
+                "regulatory_considerations": "FDA compliance",
+            },
+            "section_h": {
+                "target_launch_date": None,
+                "expiration_date": None,
+                "distribution_channels": ["CME aggregators"],
+                "geo_restrictions": None,  # <-- None instead of []
+                "language_requirements": ["English"],
+            },
+            "section_i": {
+                "accme_compliant": True,
+                "financial_disclosure_required": True,
+                "off_label_discussion": False,
+                "commercial_support_acknowledgment": True,
+            },
+            "section_j": {
+                "special_instructions": None,
+                "reference_materials": None,
+                "internal_notes": None,
+            },
+        }
+
+    def test_copd_payload_does_not_raise(self):
+        """The exact crash that killed project defeca67-…: list(None) on section_g.competitor_products_to_mention."""
+        payload = self._copd_payload()
+        # Must not raise.
+        flat = orch.flatten_intake(payload)
+        assert isinstance(flat, dict)
+
+    def test_none_list_fields_become_empty_lists(self):
+        """Every list-typed field explicitly set to None must flatten to []."""
+        flat = orch.flatten_intake(self._copd_payload())
+        # Section A
+        assert flat["target_audience_secondary"] == []
+        # Section G — the three None fields
+        assert flat["excluded_topics"] == []
+        assert flat["competitor_products_to_mention"] == []
+        assert flat["supporter_products"] == []
+        assert flat["competitor_products"] == []
+        # Section H
+        assert flat["geo_restrictions"] == []
+        # Section J
+        assert flat["reference_materials"] == []
+
+    def test_none_string_fields_become_empty_strings(self):
+        """Optional string fields set to None must flatten to ''."""
+        flat = orch.flatten_intake(self._copd_payload())
+        assert flat["supporter_contact"] == ""
+        assert flat["supporter_contact_email"] == ""
+        assert flat["grant_submission_deadline"] == ""
+        # Section H strings
+        assert flat["target_launch_date"] == ""
+        assert flat["expiration_date"] == ""
+        # Section J strings
+        assert flat["special_instructions"] == ""
+        assert flat["internal_notes"] == ""
+
+    def test_geographic_focus_from_none_is_empty_not_literal_None(self):
+        """Regression: str(None) used to produce the literal string 'None' for
+        geographic_focus, which then propagated into every downstream agent as
+        the geographic scope. Must be an empty string instead."""
+        flat = orch.flatten_intake(self._copd_payload())
+        assert flat["geographic_focus"] == ""
+        assert flat["geographic_focus"] != "None"
+
+    def test_known_gaps_concatenation_with_none_lists(self):
+        """Regression for line 321 — known_gaps = knowledge_gaps + competence_gaps + performance_gaps.
+        If any is None, concatenation used to raise TypeError."""
+        payload = self._copd_payload()
+        payload["section_e"]["knowledge_gaps"] = None
+        payload["section_e"]["competence_gaps"] = None
+        payload["section_e"]["performance_gaps"] = None
+        flat = orch.flatten_intake(payload)
+        assert flat["known_gaps"] == []
+
+    def test_primary_outcomes_none_does_not_crash_outcome_goals(self):
+        """Regression for line 330 — list(flat['primary_outcomes'])."""
+        payload = self._copd_payload()
+        payload["section_f"]["primary_outcomes"] = None
+        flat = orch.flatten_intake(payload)
+        assert flat["primary_outcomes"] == []
+        assert flat["outcome_goals"] == []
+
+    def test_populated_fields_still_flatten_correctly(self):
+        """Happy path must still work — the patch can't regress the common case."""
+        flat = orch.flatten_intake(self._copd_payload())
+        assert flat["project_name"] == "COPD update "
+        assert flat["therapeutic_area"] == "Family Medicine, Pulmonology"
+        assert flat["disease_state"] == "Chronic Obstructive Pulmonary Disease (COPD)"
+        assert flat["target_audience"] == "Pulmonologists"
+        assert flat["faculty_count"] == 2
+        assert flat["learning_format"] == "enduring-module"
+        assert flat["clinical_topics"] == ["COPD diagnosis"]
+        assert flat["knowledge_gaps"] == ["Underdiagnosis"]
+        assert flat["primary_outcomes"] == ["Improved spirometry"]
+        assert flat["key_messages"] == ["Spirometry matters"]
+        assert flat["accme_compliant"] is True
+        assert "ACCME" in flat["accreditation_types"]
+
+    def test_section_key_explicitly_none_is_tolerated(self):
+        """If a whole section is sent as null (not just missing), flatten_intake
+        must not crash on the next `.get()` call."""
+        payload = self._copd_payload()
+        payload["section_g"] = None
+        payload["section_h"] = None
+        flat = orch.flatten_intake(payload)
+        # All section-G derived fields should default to empty
+        assert flat["excluded_topics"] == []
+        assert flat["competitor_products_to_mention"] == []
+        assert flat["geo_restrictions"] == []
+        assert flat["geographic_focus"] == ""
+
+    def test_already_flat_intake_passes_through(self):
+        """Backward compatibility: if intake has no section_a key, return as-is."""
+        flat_input = {
+            "therapeutic_area": "cardiology",
+            "disease_state": "heart failure",
+            "target_audience": "primary care",
+        }
+        result = orch.flatten_intake(flat_input)
+        assert result == flat_input

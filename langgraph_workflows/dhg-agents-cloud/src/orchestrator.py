@@ -246,6 +246,62 @@ def get_agent_graph(agent_name: str):
 # INTAKE FLATTENING — Transform sectioned form data to flat agent keys
 # =============================================================================
 
+# Type-coercion helpers used by flatten_intake.
+#
+# The frontend sends optional fields as JSON null rather than omitting them,
+# which means dict.get(key, default) returns None (the default is NOT applied
+# when the key exists with a None value). These helpers enforce type-correct
+# empty defaults at every field boundary so downstream list()/join()/+ calls
+# can never crash on None. Regression: project defeca67-… / run 019d8802-…
+# crashed with TypeError at line 342 on list(None) for a field the frontend
+# sent as explicit null. Fixed 2026-04-13.
+
+
+def _section(intake: Dict[str, Any], key: str) -> Dict[str, Any]:
+    """Read a section dict, coercing missing / None / wrong-type to {}."""
+    value = intake.get(key)
+    return value if isinstance(value, dict) else {}
+
+
+def _list(section: Dict[str, Any], key: str) -> List[Any]:
+    """Read a list field, coercing missing / None / wrong-type to []."""
+    value = section.get(key)
+    return value if isinstance(value, list) else []
+
+
+def _str(section: Dict[str, Any], key: str, default: str = "") -> str:
+    """Read a string field, coercing missing / None / wrong-type to default."""
+    value = section.get(key)
+    return value if isinstance(value, str) else default
+
+
+def _bool(section: Dict[str, Any], key: str, default: bool = False) -> bool:
+    """Read a bool field, coercing missing / None / wrong-type to default."""
+    value = section.get(key)
+    return value if isinstance(value, bool) else default
+
+
+def _optional_int(section: Dict[str, Any], key: str) -> Optional[int]:
+    """Read an int field, coercing missing / None / wrong-type to None."""
+    value = section.get(key)
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _joined(section: Dict[str, Any], key: str) -> str:
+    """Read a field and render it as a comma-joined string.
+
+    Handles lists (joined), strings (passed through), and None / missing
+    (empty string). Regression-protects geographic_focus from becoming the
+    literal string "None" when geo_restrictions is sent as JSON null.
+    """
+    value = section.get(key)
+    if isinstance(value, list):
+        return ", ".join(str(x) for x in value)
+    if isinstance(value, str):
+        return value
+    return ""
+
+
 def flatten_intake(intake: Dict[str, Any]) -> Dict[str, Any]:
     """Flatten sectioned intake data into a flat dict for agent consumption.
 
@@ -255,9 +311,10 @@ def flatten_intake(intake: Dict[str, Any]) -> Dict[str, Any]:
     Agents expect flat keys:
         {"therapeutic_area": ..., "target_audience": ..., "supporter_company": ...}
 
-    This function handles the section unwrapping plus key renames where the form
-    field name differs from what agents expect. If intake is already flat (no
-    section_a key), it is returned as-is for backward compatibility.
+    Every field read goes through a type-coercion helper so explicit None
+    values from the frontend (common for unfilled optional fields) never
+    leak into downstream list()/join()/+ operations. If intake is already
+    flat (no section_a key), it is returned as-is for backward compatibility.
     """
     # Already flat — nothing to do
     if "section_a" not in intake:
@@ -266,109 +323,103 @@ def flatten_intake(intake: Dict[str, Any]) -> Dict[str, Any]:
     flat: Dict[str, Any] = {}
 
     # --- Section A: Project Basics ---
-    a = intake.get("section_a", {})
-    flat["project_name"] = a.get("project_name", "")
-    flat["project_title"] = a.get("project_name", "")  # grant_writer uses project_title
-    flat["activity_title"] = a.get("project_name", "")  # needs_assessment uses activity_title
-    # Agents expect these as comma-joined strings; frontend sends lists
-    ta = a.get("therapeutic_area", "")
-    flat["therapeutic_area"] = ", ".join(ta) if isinstance(ta, list) else str(ta)
-    ds = a.get("disease_state", "")
-    flat["disease_state"] = ", ".join(ds) if isinstance(ds, list) else str(ds)
-    # Agents expect target_audience as a single string
-    primary = a.get("target_audience_primary", [])
-    flat["target_audience"] = ", ".join(primary) if isinstance(primary, list) else str(primary)
-    flat["target_audience_primary"] = primary
-    flat["target_audience_secondary"] = a.get("target_audience_secondary", [])
-    flat["target_hcp_types"] = a.get("target_hcp_types", [])
+    a = _section(intake, "section_a")
+    project_name = _str(a, "project_name")
+    flat["project_name"] = project_name
+    flat["project_title"] = project_name  # grant_writer uses project_title
+    flat["activity_title"] = project_name  # needs_assessment uses activity_title
+    flat["therapeutic_area"] = _joined(a, "therapeutic_area")
+    flat["disease_state"] = _joined(a, "disease_state")
+    primary_audience = _list(a, "target_audience_primary")
+    flat["target_audience"] = ", ".join(str(x) for x in primary_audience)
+    flat["target_audience_primary"] = primary_audience
+    flat["target_audience_secondary"] = _list(a, "target_audience_secondary")
+    flat["target_hcp_types"] = _list(a, "target_hcp_types")
 
     # --- Section B: Supporter Information ---
-    b = intake.get("section_b", {})
-    flat["supporter_company"] = b.get("supporter_name", "")  # agents use supporter_company
-    flat["supporter_contact"] = b.get("supporter_contact_name", "")
-    flat["supporter_contact_email"] = b.get("supporter_contact_email", "")
+    b = _section(intake, "section_b")
+    flat["supporter_company"] = _str(b, "supporter_name")  # agents use supporter_company
+    flat["supporter_contact"] = _str(b, "supporter_contact_name")
+    flat["supporter_contact_email"] = _str(b, "supporter_contact_email")
     amount = b.get("grant_amount_requested")
     flat["requested_amount"] = str(amount) if amount is not None else ""
-    flat["grant_submission_deadline"] = b.get("grant_submission_deadline", "")
+    flat["grant_submission_deadline"] = _str(b, "grant_submission_deadline")
 
     # --- Section C: Educational Design ---
-    c = intake.get("section_c", {})
-    flat["learning_format"] = c.get("learning_format", "")
-    flat["duration_minutes"] = c.get("duration_minutes")
-    flat["include_post_test"] = c.get("include_post_test", False)
-    flat["include_pre_test"] = c.get("include_pre_test", False)
-    flat["faculty_count"] = c.get("faculty_count")
+    c = _section(intake, "section_c")
+    flat["learning_format"] = _str(c, "learning_format")
+    flat["duration_minutes"] = _optional_int(c, "duration_minutes")
+    flat["include_post_test"] = _bool(c, "include_post_test")
+    flat["include_pre_test"] = _bool(c, "include_pre_test")
+    flat["faculty_count"] = _optional_int(c, "faculty_count")
     flat["educational_format"] = flat["learning_format"]  # learning_objectives agent alias
 
     # --- Section D: Clinical Focus ---
-    d = intake.get("section_d", {})
-    clinical_topics = d.get("clinical_topics", [])
+    d = _section(intake, "section_d")
+    clinical_topics = _list(d, "clinical_topics")
     flat["clinical_topics"] = clinical_topics
     flat["research_questions"] = clinical_topics  # research agent reads research_questions
-    flat["treatment_modalities"] = d.get("treatment_modalities", [])
-    flat["patient_population"] = d.get("patient_population", "")
-    flat["stage_of_disease"] = d.get("stage_of_disease", "")
-    flat["comorbidities"] = d.get("comorbidities", [])
+    flat["treatment_modalities"] = _list(d, "treatment_modalities")
+    flat["patient_population"] = _str(d, "patient_population")
+    flat["stage_of_disease"] = _str(d, "stage_of_disease")
+    flat["comorbidities"] = _list(d, "comorbidities")
 
     # --- Section E: Practice Gaps ---
-    e = intake.get("section_e", {})
-    flat["knowledge_gaps"] = e.get("knowledge_gaps", [])
-    flat["competence_gaps"] = e.get("competence_gaps", [])
-    flat["performance_gaps"] = e.get("performance_gaps", [])
-    flat["gap_evidence_sources"] = e.get("gap_evidence_sources", [])
-    flat["gap_priority"] = e.get("gap_priority", "")
+    e = _section(intake, "section_e")
+    flat["knowledge_gaps"] = _list(e, "knowledge_gaps")
+    flat["competence_gaps"] = _list(e, "competence_gaps")
+    flat["performance_gaps"] = _list(e, "performance_gaps")
+    flat["gap_evidence_sources"] = _list(e, "gap_evidence_sources")
+    flat["gap_priority"] = _str(e, "gap_priority")
     # Agents expect a single "known_gaps" list; intake splits into 3 types
     flat["known_gaps"] = flat["knowledge_gaps"] + flat["competence_gaps"] + flat["performance_gaps"]
 
     # --- Section F: Outcomes ---
-    f = intake.get("section_f", {})
-    flat["primary_outcomes"] = f.get("primary_outcomes", [])
-    flat["secondary_outcomes"] = f.get("secondary_outcomes", [])
-    flat["measurement_approach"] = f.get("measurement_approach", "")
-    flat["moore_levels_target"] = f.get("moore_levels_target", [])
-    flat["follow_up_timeline"] = f.get("follow_up_timeline", "")
+    f = _section(intake, "section_f")
+    flat["primary_outcomes"] = _list(f, "primary_outcomes")
+    flat["secondary_outcomes"] = _list(f, "secondary_outcomes")
+    flat["measurement_approach"] = _str(f, "measurement_approach")
+    flat["moore_levels_target"] = _list(f, "moore_levels_target")
+    flat["follow_up_timeline"] = _str(f, "follow_up_timeline")
     flat["outcome_goals"] = list(flat["primary_outcomes"])  # gap_analysis / learning_objectives alias
     moore_list = flat["moore_levels_target"]
     flat["moore_level_target"] = moore_list[0] if moore_list else ""  # singular alias
 
     # --- Section G: Content Requirements ---
-    g = intake.get("section_g", {})
-    flat["key_messages"] = g.get("key_messages", [])
-    flat["required_references"] = g.get("required_references", [])
-    flat["excluded_topics"] = g.get("excluded_topics", [])
-    flat["competitor_products_to_mention"] = g.get("competitor_products_to_mention", [])
-    flat["supporter_products"] = g.get("competitor_products_to_mention", [])  # research agent alias
-    flat["regulatory_considerations"] = g.get("regulatory_considerations", "")
-    flat["competitor_products"] = list(flat["competitor_products_to_mention"])  # compliance / research alias
+    g = _section(intake, "section_g")
+    flat["key_messages"] = _list(g, "key_messages")
+    flat["required_references"] = _list(g, "required_references")
+    flat["excluded_topics"] = _list(g, "excluded_topics")
+    competitor_products = _list(g, "competitor_products_to_mention")
+    flat["competitor_products_to_mention"] = competitor_products
+    flat["supporter_products"] = list(competitor_products)  # research agent alias
+    flat["regulatory_considerations"] = _str(g, "regulatory_considerations")
+    flat["competitor_products"] = list(competitor_products)  # compliance / research alias
 
     # --- Section H: Logistics ---
-    h = intake.get("section_h", {})
-    flat["target_launch_date"] = h.get("target_launch_date", "")
-    flat["expiration_date"] = h.get("expiration_date", "")
-    flat["distribution_channels"] = h.get("distribution_channels", [])
-    geo = h.get("geo_restrictions", [])
-    flat["geo_restrictions"] = geo
-    flat["geographic_focus"] = ", ".join(geo) if isinstance(geo, list) else str(geo)
-    flat["language_requirements"] = h.get("language_requirements", [])
+    h = _section(intake, "section_h")
+    flat["target_launch_date"] = _str(h, "target_launch_date")
+    flat["expiration_date"] = _str(h, "expiration_date")
+    flat["distribution_channels"] = _list(h, "distribution_channels")
+    flat["geo_restrictions"] = _list(h, "geo_restrictions")
+    flat["geographic_focus"] = _joined(h, "geo_restrictions")
+    flat["language_requirements"] = _list(h, "language_requirements")
 
     # --- Section I: Compliance ---
-    i = intake.get("section_i", {})
-    flat["accme_compliant"] = i.get("accme_compliant", False)
-    flat["financial_disclosure_required"] = i.get("financial_disclosure_required", False)
-    flat["off_label_discussion"] = i.get("off_label_discussion", False)
-    flat["commercial_support_acknowledgment"] = i.get("commercial_support_acknowledgment", False)
-    # Build accreditation info from compliance flags
-    accreditation = []
-    if flat["accme_compliant"]:
-        accreditation.append("ACCME")
+    i = _section(intake, "section_i")
+    flat["accme_compliant"] = _bool(i, "accme_compliant")
+    flat["financial_disclosure_required"] = _bool(i, "financial_disclosure_required")
+    flat["off_label_discussion"] = _bool(i, "off_label_discussion")
+    flat["commercial_support_acknowledgment"] = _bool(i, "commercial_support_acknowledgment")
+    accreditation = ["ACCME"] if flat["accme_compliant"] else []
     flat["accreditation_types"] = accreditation
     flat["accreditation_statement"] = "ACCME-accredited" if flat["accme_compliant"] else ""
 
     # --- Section J: Additional ---
-    j = intake.get("section_j", {})
-    flat["special_instructions"] = j.get("special_instructions", "")
-    flat["reference_materials"] = j.get("reference_materials", [])
-    flat["internal_notes"] = j.get("internal_notes", "")
+    j = _section(intake, "section_j")
+    flat["special_instructions"] = _str(j, "special_instructions")
+    flat["reference_materials"] = _list(j, "reference_materials")
+    flat["internal_notes"] = _str(j, "internal_notes")
 
     return flat
 
