@@ -10,6 +10,7 @@ export enum CMEProjectStatus {
   COMPLETE = "complete",
   FAILED = "failed",
   CANCELLED = "cancelled",
+  ARCHIVED = "archived",
 }
 
 // =============================================================================

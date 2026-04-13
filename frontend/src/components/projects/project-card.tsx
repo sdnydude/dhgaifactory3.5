@@ -15,11 +15,13 @@ const STATUS_STYLES: Record<CMEProjectStatus, { label: string; variant: "default
   [CMEProjectStatus.COMPLETE]: { label: "Complete", variant: "secondary" },
   [CMEProjectStatus.FAILED]: { label: "Failed", variant: "destructive" },
   [CMEProjectStatus.CANCELLED]: { label: "Cancelled", variant: "secondary" },
+  [CMEProjectStatus.ARCHIVED]: { label: "Archived", variant: "secondary" },
 };
 
 export function ProjectCard({ project }: { project: CMEProjectDetail }) {
   const statusInfo = STATUS_STYLES[project.status] ?? STATUS_STYLES[CMEProjectStatus.INTAKE];
-  const therapeuticArea = (project.intake as Record<string, Record<string, string>>)?.section_a?.therapeutic_area;
+  const rawArea = (project.intake as Record<string, Record<string, unknown>>)?.section_a?.therapeutic_area;
+  const therapeuticArea = Array.isArray(rawArea) ? rawArea.join(", ") : typeof rawArea === "string" ? rawArea : null;
 
   return (
     <Link href={`/projects/${project.id}`}>

@@ -56,6 +56,7 @@ class CMEProjectStatus(str, Enum):
     COMPLETE = "complete"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    ARCHIVED = "archived"
 
 
 # =============================================================================
@@ -63,13 +64,14 @@ class CMEProjectStatus(str, Enum):
 # =============================================================================
 
 class SectionA_ProjectBasics(BaseModel):
-    """Section A: Project Basics (6 fields)"""
+    """Section A: Project Basics (7 fields)"""
     project_name: str = Field(..., min_length=5, max_length=200)
-    therapeutic_area: str = Field(..., min_length=1, max_length=200)
-    disease_state: str = Field(..., min_length=1, max_length=200)
+    therapeutic_area: List[str] = Field(..., min_length=1, max_length=5)
+    disease_state: List[str] = Field(..., min_length=1, max_length=10)
     target_audience_primary: List[str] = Field(..., min_length=1, max_length=5)
     target_audience_secondary: Optional[List[str]] = Field(None, max_length=3)
     target_hcp_types: Optional[List[str]] = Field(None, description="HCP credential types (MD/DO, NP, PA-C)")
+    additional_context: Optional[str] = Field(None, max_length=5000)
 
 
 class SectionB_Supporter(BaseModel):
@@ -175,7 +177,7 @@ class PrefillRequest(BaseModel):
     disease_state: List[str] = Field(..., min_length=1, max_length=10)
     target_audience_primary: List[str] = Field(..., min_length=1, max_length=5)
     target_hcp_types: Optional[List[str]] = Field(None)
-    additional_context: Optional[str] = Field(None, max_length=2000)
+    additional_context: Optional[str] = Field(None, max_length=5000)
 
 
 # =============================================================================
@@ -1072,11 +1074,13 @@ async def list_cme_projects(
     start = time.time()
     try:
         query = db.query(CMEProject)
-        
-        # Filter by status if provided
+
+        # Filter by status if provided; exclude archived from unfiltered list
         if status:
             query = query.filter(CMEProject.status == status.value)
-        
+        else:
+            query = query.filter(CMEProject.status != "archived")
+
         # Pagination
         projects = query.order_by(CMEProject.created_at.desc()).offset(skip).limit(limit).all()
         
@@ -1136,6 +1140,76 @@ async def get_cme_project(project_id: str, db: Session = Depends(get_db)):
     except Exception as e:
         registry_errors.labels(error_type="get_cme_project").inc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/projects/{project_id}", response_model=CMEProjectDetail)
+async def update_cme_project(
+    project_id: str,
+    intake: IntakeSubmission,
+    db: Session = Depends(get_db),
+):
+    """Update the intake data for a CME project. Only allowed while status is 'intake'."""
+    start = time.time()
+    try:
+        project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="CME project not found")
+
+        if project.status != "intake":
+            raise HTTPException(
+                status_code=409,
+                detail=f"Cannot edit: project status is '{project.status}'. Only 'intake' projects can be edited.",
+            )
+
+        intake_dict = intake.model_dump(mode="json")
+        project.name = intake.section_a.project_name
+        project.intake = intake_dict
+
+        # Re-extract intake fields
+        db.query(CMEIntakeField).filter(CMEIntakeField.project_id == project.id).delete()
+        _extract_intake_fields(project.id, intake_dict, db)
+
+        db.commit()
+        db.refresh(project)
+
+        registry_write_operations.labels(operation="update_cme_project").inc()
+        registry_write_latency.observe((time.time() - start) * 1000)
+
+        return CMEProjectDetail(
+            id=str(project.id),
+            name=project.name,
+            status=CMEProjectStatus(project.status),
+            current_agent=project.current_agent,
+            progress_percent=project.progress_percent or 0,
+            intake=project.intake,
+            created_at=project.created_at,
+            updated_at=project.updated_at,
+            outputs_available=list(project.outputs.keys()) if project.outputs else [],
+            human_review_status=project.human_review_status,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        registry_errors.labels(error_type="update_cme_project").inc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/projects/{project_id}/archive")
+async def archive_cme_project(project_id: str, db: Session = Depends(get_db)):
+    """Archive a CME project (soft delete). Can be called on any non-archived project."""
+    project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="CME project not found")
+
+    if project.status == "archived":
+        raise HTTPException(status_code=400, detail="Project is already archived")
+
+    project.status = "archived"
+    db.commit()
+
+    return {"status": "archived", "project_id": str(project.id)}
 
 
 # =============================================================================

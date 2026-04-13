@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Loader2, Sparkles, CheckCheck, Trash2 } from "lucide-react";
@@ -38,11 +38,18 @@ function isSectionComplete(intake: IntakeSubmission, sectionId: string): boolean
   }
 }
 
-export function IntakeForm() {
+interface IntakeFormProps {
+  mode?: "create" | "edit";
+  projectId?: string;
+  initialIntake?: IntakeSubmission;
+}
+
+export function IntakeForm({ mode = "create", projectId, initialIntake }: IntakeFormProps) {
   const router = useRouter();
   const {
     intake,
     updateIntake,
+    setIntake,
     activeSection,
     setActiveSection,
     reset,
@@ -58,6 +65,14 @@ export function IntakeForm() {
   const [saving, setSaving] = useState(false);
   const [prefilling, setPrefilling] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const seededRef = useRef(false);
+
+  useEffect(() => {
+    if (mode === "edit" && initialIntake && !seededRef.current) {
+      setIntake(initialIntake);
+      seededRef.current = true;
+    }
+  }, [mode, initialIntake, setIntake]);
 
   const completedSections = useMemo(() => {
     const set = new Set<string>();
@@ -97,14 +112,21 @@ export function IntakeForm() {
     setSaving(true);
     setError(null);
     try {
-      const result = await registryApi.createProject(intake);
+      let targetId: string;
+      if (mode === "edit" && projectId) {
+        const updated = await registryApi.updateProject(projectId, intake);
+        targetId = updated.id;
+      } else {
+        const result = await registryApi.createProject(intake);
+        targetId = result.project_id;
+      }
       if (startPipeline) {
-        registryApi.startPipeline(result.project_id).catch((e) => {
+        registryApi.startPipeline(targetId).catch((e) => {
           console.error("Pipeline start failed:", e);
         });
       }
       reset();
-      router.push(`/projects/${result.project_id}`);
+      router.push(`/projects/${targetId}`);
     } catch (e) {
       setError((e as Error).message);
       setSaving(false);
@@ -190,7 +212,11 @@ export function IntakeForm() {
         )}
 
         <div className="border-t border-border px-6 py-3 flex items-center gap-3">
-          <Button variant="outline" onClick={() => router.push("/projects")} disabled={saving || prefilling}>
+          <Button
+            variant="outline"
+            onClick={() => router.push(mode === "edit" && projectId ? `/projects/${projectId}` : "/projects")}
+            disabled={saving || prefilling}
+          >
             Cancel
           </Button>
           <Button
@@ -213,7 +239,7 @@ export function IntakeForm() {
           </Button>
           <div className="flex-1" />
           <Button variant="secondary" onClick={() => handleSave(false)} disabled={!canSave || saving || prefilling}>
-            {saving ? "Saving..." : "Save Draft"}
+            {saving ? "Saving..." : mode === "edit" ? "Update Draft" : "Save Draft"}
           </Button>
           <Button onClick={() => handleSave(true)} disabled={!canSave || saving || prefilling}>
             {saving ? "Starting..." : "Save & Start Pipeline"}

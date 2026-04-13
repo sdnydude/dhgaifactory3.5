@@ -14,6 +14,7 @@ interface ProjectsState {
   fetchProjects: () => Promise<void>;
   fetchProject: (id: string) => Promise<void>;
   fetchPipelineStatus: (id: string) => Promise<void>;
+  archiveProject: (id: string) => Promise<void>;
   clearCurrent: () => void;
 }
 
@@ -48,6 +49,19 @@ export const useProjectsStore = create<ProjectsState>((set) => ({
     try {
       const status = await registryApi.getPipelineStatus(id);
       set({ pipelineStatus: status });
+    } catch (e) {
+      set({ error: (e as Error).message });
+    }
+  },
+
+  archiveProject: async (id: string) => {
+    try {
+      await registryApi.archiveProject(id);
+      set((s) => ({
+        projects: s.projects.filter((p) => p.id !== id),
+        currentProject:
+          s.currentProject?.id === id ? null : s.currentProject,
+      }));
     } catch (e) {
       set({ error: (e as Error).message });
     }

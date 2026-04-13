@@ -62,6 +62,25 @@ export async function getProject(
   return apiFetch<CMEProjectDetail>(`/api/cme/projects/${projectId}`);
 }
 
+export async function updateProject(
+  projectId: string,
+  intake: IntakeSubmission,
+): Promise<CMEProjectDetail> {
+  return apiFetch<CMEProjectDetail>(`/api/cme/projects/${projectId}`, {
+    method: "PUT",
+    body: JSON.stringify(intake),
+  });
+}
+
+export async function archiveProject(
+  projectId: string,
+): Promise<{ status: string; project_id: string }> {
+  return apiFetch<{ status: string; project_id: string }>(
+    `/api/cme/projects/${projectId}/archive`,
+    { method: "POST" },
+  );
+}
+
 // =============================================================================
 // PIPELINE CONTROL
 // =============================================================================

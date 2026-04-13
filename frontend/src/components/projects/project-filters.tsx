@@ -2,7 +2,7 @@
 
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-export type ProjectFilter = "all" | "active" | "review" | "complete";
+export type ProjectFilter = "all" | "active" | "review" | "complete" | "archived";
 
 interface ProjectFiltersProps {
   value: ProjectFilter;
@@ -17,6 +17,7 @@ export function ProjectFilters({ value, onChange }: ProjectFiltersProps) {
         <TabsTrigger value="active">Active</TabsTrigger>
         <TabsTrigger value="review">Review</TabsTrigger>
         <TabsTrigger value="complete">Complete</TabsTrigger>
+        <TabsTrigger value="archived">Archived</TabsTrigger>
       </TabsList>
     </Tabs>
   );

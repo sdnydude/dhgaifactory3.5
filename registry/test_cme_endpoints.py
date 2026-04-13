@@ -57,6 +57,91 @@ class TestCMEProjectDetail:
         assert response.status_code == 404
 
 
+class TestCMEProjectUpdate:
+    """Tests for PUT /api/cme/projects/{id}."""
+
+    VALID_INTAKE = {
+        "section_a": {
+            "project_name": "HFrEF GDMT Update 2026",
+            "therapeutic_area": ["cardiology"],
+            "disease_state": ["heart failure"],
+            "target_audience_primary": ["cardiologists"],
+        },
+        "section_b": {"supporter_name": "Acme Pharma"},
+        "section_c": {"learning_format": "webinar", "include_post_test": False, "include_pre_test": False},
+        "section_d": {"clinical_topics": ["SGLT2 inhibitors"]},
+        "section_e": {},
+        "section_f": {},
+        "section_g": {},
+        "section_h": {},
+        "section_i": {
+            "accme_compliant": True,
+            "financial_disclosure_required": True,
+            "off_label_discussion": False,
+            "commercial_support_acknowledgment": True,
+        },
+        "section_j": {},
+    }
+
+    def test_update_nonexistent_returns_404(self, client, mock_db):
+        fake_id = str(uuid.uuid4())
+        mock_db.query.return_value.filter.return_value.first.return_value = None
+        response = client.put(f"/api/cme/projects/{fake_id}", json=self.VALID_INTAKE)
+        assert response.status_code == 404
+
+    def test_update_non_intake_returns_409(self, client, mock_db):
+        """Cannot edit a project that has already started processing."""
+        fake_id = str(uuid.uuid4())
+        mock_project = MagicMock()
+        mock_project.status = "processing"
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_project
+        response = client.put(f"/api/cme/projects/{fake_id}", json=self.VALID_INTAKE)
+        assert response.status_code == 409
+
+    def test_update_requires_valid_body(self, client):
+        fake_id = str(uuid.uuid4())
+        response = client.put(f"/api/cme/projects/{fake_id}", json={"bad": "data"})
+        assert response.status_code == 422
+
+
+class TestCMEProjectArchive:
+    """Tests for POST /api/cme/projects/{id}/archive."""
+
+    def test_archive_nonexistent_returns_404(self, client, mock_db):
+        fake_id = str(uuid.uuid4())
+        mock_db.query.return_value.filter.return_value.first.return_value = None
+        response = client.post(f"/api/cme/projects/{fake_id}/archive")
+        assert response.status_code == 404
+
+    def test_archive_already_archived_returns_400(self, client, mock_db):
+        fake_id = str(uuid.uuid4())
+        mock_project = MagicMock()
+        mock_project.status = "archived"
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_project
+        response = client.post(f"/api/cme/projects/{fake_id}/archive")
+        assert response.status_code == 400
+
+    def test_archive_intake_project_succeeds(self, client, mock_db):
+        fake_id = str(uuid.uuid4())
+        mock_project = MagicMock()
+        mock_project.id = fake_id
+        mock_project.status = "intake"
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_project
+        response = client.post(f"/api/cme/projects/{fake_id}/archive")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "archived"
+
+    def test_archive_complete_project_succeeds(self, client, mock_db):
+        fake_id = str(uuid.uuid4())
+        mock_project = MagicMock()
+        mock_project.id = fake_id
+        mock_project.status = "complete"
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_project
+        response = client.post(f"/api/cme/projects/{fake_id}/archive")
+        assert response.status_code == 200
+
+
 class TestCMEProjectExecution:
     def test_start_project_requires_valid_id(self, client, mock_db):
         fake_id = str(uuid.uuid4())

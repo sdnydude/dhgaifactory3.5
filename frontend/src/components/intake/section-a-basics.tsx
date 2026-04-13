@@ -118,7 +118,7 @@ export function SectionABasics({ data, onChange }: Props) {
           onChange={(e) => update({ additional_context: e.target.value || undefined })}
           placeholder="Clinical hypotheses, focus areas, key treatments, strategic direction — anything that helps the AI generate better drafts"
           rows={4}
-          maxLength={2000}
+          maxLength={5000}
         />
         <p className="text-[10px] text-muted-foreground">Optional — helps the AI prefill produce more relevant drafts</p>
       </div>

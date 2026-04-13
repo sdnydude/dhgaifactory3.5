@@ -8,17 +8,20 @@ import { ProjectCard } from "./project-card";
 import { ProjectFilters, type ProjectFilter } from "./project-filters";
 import { useProjectsStore } from "@/stores/projects-store";
 import { CMEProjectStatus } from "@/types/cme";
+import * as registryApi from "@/lib/registryApi";
 
 const FILTER_MAP: Record<ProjectFilter, CMEProjectStatus[] | null> = {
   all: null,
   active: [CMEProjectStatus.INTAKE, CMEProjectStatus.PROCESSING],
   review: [CMEProjectStatus.REVIEW],
   complete: [CMEProjectStatus.COMPLETE],
+  archived: [CMEProjectStatus.ARCHIVED],
 };
 
 export function ProjectBoard() {
   const { projects, loading, error, fetchProjects } = useProjectsStore();
   const [filter, setFilter] = useState<ProjectFilter>("all");
+  const [archivedProjects, setArchivedProjects] = useState<typeof projects>([]);
   const intervalRef = useRef<ReturnType<typeof setInterval>>(undefined);
 
   useEffect(() => {
@@ -27,9 +30,17 @@ export function ProjectBoard() {
     return () => clearInterval(intervalRef.current);
   }, [fetchProjects]);
 
-  const filtered = FILTER_MAP[filter]
-    ? projects.filter((p) => FILTER_MAP[filter]!.includes(p.status))
-    : projects;
+  // Fetch archived projects separately (excluded from default list)
+  useEffect(() => {
+    if (filter === "archived") {
+      registryApi.listProjects(CMEProjectStatus.ARCHIVED).then(setArchivedProjects).catch(() => {});
+    }
+  }, [filter]);
+
+  const displayProjects = filter === "archived" ? archivedProjects : projects;
+  const filtered = FILTER_MAP[filter] && filter !== "archived"
+    ? displayProjects.filter((p) => FILTER_MAP[filter]!.includes(p.status))
+    : displayProjects;
 
   return (
     <div className="flex flex-col h-full">
