@@ -310,7 +310,7 @@ function Row({
     <div className="flex items-baseline justify-between py-1.5 gap-3">
       <span className="mc-label">{label}</span>
       <span className="flex items-baseline gap-1.5">
-        <span className={`mc-readout text-[13px] ${toneClass}`}>{value}</span>
+        <span className={`mc-readout text-[15px] ${toneClass}`}>{value}</span>
         {hint && <span className="mc-cell">{hint}</span>}
       </span>
     </div>
@@ -378,7 +378,7 @@ export default function DashboardsPage() {
         <div className="flex items-baseline justify-between gap-6">
           <div className="flex items-baseline gap-6">
             <span className="mc-cell">DHG/OPS</span>
-            <h1 className="mc-readout text-[15px] tracking-[0.18em] uppercase text-[color:var(--mc-text)]">
+            <h1 className="mc-readout text-[17px] tracking-[0.18em] uppercase text-[color:var(--mc-text)]">
               Mission Control
             </h1>
             <span className="mc-cell hidden md:inline">
@@ -387,7 +387,7 @@ export default function DashboardsPage() {
           </div>
           <div className="flex items-baseline gap-5">
             <span className="mc-cell">
-              UTC <span className="mc-readout text-[11px] text-[color:var(--mc-text)]">{utcStamp}</span>
+              UTC <span className="mc-readout text-[13px] text-[color:var(--mc-text)]">{utcStamp}</span>
             </span>
             <span className="flex items-baseline gap-1.5">
               <span
@@ -400,7 +400,7 @@ export default function DashboardsPage() {
                 }`}
               />
               <span
-                className={`mc-readout text-[11px] tracking-[0.16em] ${
+                className={`mc-readout text-[13px] tracking-[0.16em] ${
                   systemTone === "ok"
                     ? "mc-ok"
                     : systemTone === "warn"
@@ -471,7 +471,7 @@ export default function DashboardsPage() {
                       {tg.labels.instance ?? "—"}
                     </div>
                     <div
-                      className={`mc-readout text-[10px] mt-1 ${
+                      className={`mc-readout text-[12px] mt-1 ${
                         tg.health === "up"
                           ? "mc-ok"
                           : tg.health === "down"
@@ -498,7 +498,7 @@ export default function DashboardsPage() {
               <div className="mc-label mb-1.5">Request rate · 1m</div>
               <div className="mc-value-lg mc-info mc-readout">
                 {formatNumber(t.regReqRate, { decimals: 2 })}
-                <span className="mc-delim text-[11px] ml-1">req/s</span>
+                <span className="mc-delim text-[13px] ml-1">req/s</span>
               </div>
               <div className="mt-2">
                 <Sparkline
@@ -532,7 +532,7 @@ export default function DashboardsPage() {
                 {t.regLatencyP95 !== null
                   ? `${(t.regLatencyP95 * 1000).toFixed(0)}`
                   : "——"}
-                <span className="mc-delim text-[11px] ml-1">ms</span>
+                <span className="mc-delim text-[13px] ml-1">ms</span>
               </div>
               <div className="mt-2">
                 <Sparkline
@@ -548,7 +548,7 @@ export default function DashboardsPage() {
         <Panel coord="B9" label="Alertmanager" className="lg:col-span-4">
           <div className="py-3">
             <div
-              className={`mc-readout text-[1.4rem] tracking-[0.1em] ${
+              className={`mc-readout text-[1.75rem] tracking-[0.1em] ${
                 firingTone === "ok"
                   ? "mc-ok"
                   : firingTone === "bad"
@@ -680,7 +680,7 @@ export default function DashboardsPage() {
                 className="group inline-flex items-baseline gap-2"
               >
                 <span className="mc-cell">→</span>
-                <span className="mc-readout text-[12px] text-[color:var(--mc-text)] group-hover:mc-info transition-colors">
+                <span className="mc-readout text-[14px] text-[color:var(--mc-text)] group-hover:mc-info transition-colors">
                   {ref.name}
                 </span>
                 <span className="mc-cell">{ref.note}</span>

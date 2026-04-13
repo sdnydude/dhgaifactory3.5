@@ -410,9 +410,9 @@
   --mc-frame: #1a2231;
   --mc-rule: #1e2a3c;
   --mc-grid: rgba(56, 189, 248, 0.04);
-  --mc-dim: #4a5666;
-  --mc-label: #6b7a8f;
-  --mc-text: #c7d4e5;
+  --mc-dim: #8a97ad;
+  --mc-label: #a3b1c7;
+  --mc-text: #e4ecf7;
   --mc-phosphor: #6ee7b7;
   --mc-phosphor-dim: #34d399;
   --mc-amber: #fbbf24;
@@ -500,7 +500,7 @@
 }
 
 .mc-label {
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--mc-label);
@@ -508,7 +508,7 @@
 }
 
 .mc-cell {
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.08em;
   color: var(--mc-dim);
   font-weight: 400;
@@ -522,14 +522,14 @@
 }
 
 .mc-value-lg {
-  font-size: 1.75rem;
+  font-size: 2.125rem;
   line-height: 1;
   color: var(--mc-text);
   font-weight: 300;
 }
 
 .mc-value-md {
-  font-size: 1.1rem;
+  font-size: 1.35rem;
   line-height: 1;
   color: var(--mc-text);
   font-weight: 400;
