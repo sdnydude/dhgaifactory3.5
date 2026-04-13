@@ -64,8 +64,6 @@ if _OTEL_AVAILABLE:
         }
     )
 
-    _provider = TracerProvider(resource=_resource)
-
     _headers = {}
     _cf_id = os.getenv("CF_ACCESS_CLIENT_ID")
     _cf_secret = os.getenv("CF_ACCESS_CLIENT_SECRET")
@@ -80,15 +78,29 @@ if _OTEL_AVAILABLE:
         headers=_headers or None,
     )
 
+    # TracerProvider race: LangSmith SDK (when LANGSMITH_OTEL_ENABLED=true) calls
+    # trace.set_tracer_provider() in Client.__init__ before user modules import.
+    # OTel's _TRACER_PROVIDER_SET_ONCE guard makes our set_tracer_provider() a
+    # silent no-op, orphaning our BatchSpanProcessor. Fix: if the global provider
+    # is already an SDK TracerProvider, attach our exporter to IT.
+    _existing = trace.get_tracer_provider()
+    if isinstance(_existing, TracerProvider):
+        _provider = _existing
+        _provider_mode = "attached-to-existing"
+    else:
+        _provider = TracerProvider(resource=_resource)
+        trace.set_tracer_provider(_provider)
+        _provider_mode = "installed-new"
+
     _provider.add_span_processor(BatchSpanProcessor(_exporter))
 
-    trace.set_tracer_provider(_provider)
-
     logger.info(
-        "OpenTelemetry initialized: service=%s endpoint=%s env=%s",
+        "OpenTelemetry initialized: service=%s endpoint=%s env=%s mode=%s provider=%s",
         SERVICE_NAME,
         TEMPO_ENDPOINT,
         DEPLOYMENT_ENV,
+        _provider_mode,
+        type(_provider).__module__ + "." + type(_provider).__name__,
     )
 
 
