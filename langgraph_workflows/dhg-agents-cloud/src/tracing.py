@@ -66,7 +66,16 @@ if _OTEL_AVAILABLE:
 
     _provider = TracerProvider(resource=_resource)
 
-    _exporter = OTLPSpanExporter()
+    _headers = {}
+    _cf_id = os.getenv("CF_ACCESS_CLIENT_ID")
+    _cf_secret = os.getenv("CF_ACCESS_CLIENT_SECRET")
+    if _cf_id and _cf_secret:
+        _headers = {
+            "CF-Access-Client-Id": _cf_id,
+            "CF-Access-Client-Secret": _cf_secret,
+        }
+
+    _exporter = OTLPSpanExporter(headers=_headers or None)
 
     _provider.add_span_processor(BatchSpanProcessor(_exporter))
 
