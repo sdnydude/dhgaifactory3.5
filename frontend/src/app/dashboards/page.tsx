@@ -124,6 +124,11 @@ function formatUptime(seconds: number | null): string {
   return `${m}m`;
 }
 
+interface LgTopNode {
+  span_name: string;
+  calls: number;
+}
+
 interface Telemetry {
   targets: PromTarget[] | null;
   alertsFiring: number | null;
@@ -139,6 +144,12 @@ interface Telemetry {
   nodeLoad1: number | null;
   nodeMemAvailPct: number | null;
   promUptime: number | null;
+
+  lgCalls15m: number | null;
+  lgLatencyP95: number | null;
+  lgActiveNodes: number | null;
+  lgTopNodes: LgTopNode[] | null;
+  lgCallsSpark: { v: number }[];
 
   regReqRateSpark: { v: number }[];
   regLatencySpark: { v: number }[];
@@ -160,12 +171,19 @@ const EMPTY: Telemetry = {
   nodeLoad1: null,
   nodeMemAvailPct: null,
   promUptime: null,
+  lgCalls15m: null,
+  lgLatencyP95: null,
+  lgActiveNodes: null,
+  lgTopNodes: null,
+  lgCallsSpark: [],
   regReqRateSpark: [],
   regLatencySpark: [],
   nodeLoadSpark: [],
   lastUpdated: null,
   reachable: true,
 };
+
+const LG_SERVICE_SELECTOR = '{service="dhg-langgraph-agents"}';
 
 async function fetchTelemetry(): Promise<Telemetry> {
   const [
@@ -180,9 +198,14 @@ async function fetchTelemetry(): Promise<Telemetry> {
     nodeLoad,
     nodeMem,
     promUp,
+    lgCalls,
+    lgLat,
+    lgNodes,
+    lgTop,
     regReqMatrix,
     regLatMatrix,
     loadMatrix,
+    lgCallsMatrix,
   ] = await Promise.all([
     fetchTargets(),
     fetchAlerts(),
@@ -205,14 +228,40 @@ async function fetchTelemetry(): Promise<Telemetry> {
     promQuery(
       'time() - process_start_time_seconds{job="prometheus"}',
     ),
+    promQuery(
+      `sum(increase(traces_spanmetrics_calls_total${LG_SERVICE_SELECTOR}[15m]))`,
+    ),
+    promQuery(
+      `histogram_quantile(0.95, sum by (le) (rate(traces_spanmetrics_latency_bucket${LG_SERVICE_SELECTOR}[5m])))`,
+    ),
+    promQuery(
+      `count(count by (span_name) (traces_spanmetrics_calls_total${LG_SERVICE_SELECTOR}))`,
+    ),
+    promQuery(
+      `topk(8, sum by (span_name) (increase(traces_spanmetrics_calls_total${LG_SERVICE_SELECTOR}[15m])))`,
+    ),
     promRange('sum(rate(http_requests_total{job="registry-api"}[1m]))'),
     promRange(
       'histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{job="registry-api"}[5m])))',
     ),
     promRange("node_load1"),
+    promRange(
+      `sum(rate(traces_spanmetrics_calls_total${LG_SERVICE_SELECTOR}[1m]))`,
+    ),
   ]);
 
   const reachable = targets !== null;
+
+  const lgTopNodes: LgTopNode[] | null =
+    lgTop === null
+      ? null
+      : lgTop
+          .map((r) => ({
+            span_name: r.metric.span_name ?? "unknown",
+            calls: parseFloat(r.value[1]),
+          }))
+          .filter((n) => Number.isFinite(n.calls) && n.calls > 0)
+          .sort((a, b) => b.calls - a.calls);
 
   return {
     targets,
@@ -226,6 +275,11 @@ async function fetchTelemetry(): Promise<Telemetry> {
     nodeLoad1: firstSample(nodeLoad),
     nodeMemAvailPct: firstSample(nodeMem),
     promUptime: firstSample(promUp),
+    lgCalls15m: firstSample(lgCalls),
+    lgLatencyP95: firstSample(lgLat),
+    lgActiveNodes: firstSample(lgNodes),
+    lgTopNodes,
+    lgCallsSpark: toSpark(lgCallsMatrix),
     regReqRateSpark: toSpark(regReqMatrix),
     regLatencySpark: toSpark(regLatMatrix),
     nodeLoadSpark: toSpark(loadMatrix),
@@ -643,9 +697,87 @@ export default function DashboardsPage() {
           />
         </Panel>
 
-        {/* === F. EXTERNAL REFS ======================== */}
+        {/* === F. LANGGRAPH AGENT TELEMETRY ============ */}
         <Panel
           coord="D1"
+          label="LangGraph Agents · Span Telemetry"
+          className="lg:col-span-12"
+        >
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div>
+              <div className="mc-label mb-1.5">Node invocations · 15m</div>
+              <div className="mc-value-lg mc-info mc-readout">
+                {formatNumber(t.lgCalls15m, { decimals: 0 })}
+                <span className="mc-delim text-[13px] ml-1">calls</span>
+              </div>
+              <div className="mt-2">
+                <Sparkline
+                  data={t.lgCallsSpark}
+                  color="var(--mc-cyan-dim)"
+                />
+              </div>
+            </div>
+            <div>
+              <div className="mc-label mb-1.5">Latency · p95 · 5m</div>
+              <div className="mc-value-lg mc-readout">
+                {t.lgLatencyP95 !== null
+                  ? `${(t.lgLatencyP95 * 1000).toFixed(0)}`
+                  : "——"}
+                <span className="mc-delim text-[13px] ml-1">ms</span>
+              </div>
+              <div className="mc-cell mt-3">
+                {t.lgLatencyP95 === null
+                  ? "NO HISTOGRAM DATA"
+                  : "derived from spanmetrics latency bucket"}
+              </div>
+            </div>
+            <div>
+              <div className="mc-label mb-1.5">Active nodes</div>
+              <div className="mc-value-lg mc-readout">
+                {formatNumber(t.lgActiveNodes, { decimals: 0 })}
+                <span className="mc-delim text-[13px] ml-1">span names</span>
+              </div>
+              <div className="mc-cell mt-3">
+                {t.lgActiveNodes === null
+                  ? "NO READING"
+                  : `${t.lgActiveNodes} distinct @traced_node decorators observed`}
+              </div>
+            </div>
+          </div>
+
+          <div className="mc-rule my-4" />
+
+          <div className="mc-label mb-2">Top nodes by call count · 15m</div>
+          {t.lgTopNodes === null && (
+            <div className="mc-cell py-3">NO TELEMETRY — SPANMETRICS UNAVAILABLE</div>
+          )}
+          {t.lgTopNodes !== null && t.lgTopNodes.length === 0 && (
+            <div className="mc-cell py-3">
+              NO CALLS IN WINDOW — TRIGGER A GRAPH RUN TO POPULATE
+            </div>
+          )}
+          {t.lgTopNodes !== null && t.lgTopNodes.length > 0 && (
+            <ul className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+              {t.lgTopNodes.map((node) => (
+                <li
+                  key={node.span_name}
+                  className="flex items-baseline justify-between py-1 gap-3 border-b border-[color:var(--mc-frame)]/40"
+                >
+                  <span className="mc-readout text-[13px] text-[color:var(--mc-text)] truncate">
+                    {node.span_name}
+                  </span>
+                  <span className="mc-readout text-[13px] mc-info tabular-nums">
+                    {node.calls.toFixed(0)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+
+        {/* === G. EXTERNAL REFS ======================== */}
+        <Panel
+          coord="E1"
           label="Deep Inspect · External Boards"
           className="lg:col-span-12"
         >
@@ -670,6 +802,11 @@ export default function DashboardsPage() {
                 name: "Tempo",
                 url: "http://10.0.0.251:3200",
                 note: "trace search · LAN only",
+              },
+              {
+                name: "LangSmith Cloud",
+                url: "https://smith.langchain.com",
+                note: "per-run LLM traces · external",
               },
             ].map((ref) => (
               <a
