@@ -1,5 +1,5 @@
 # DHG AI Factory — Master Task List
-**Last Updated:** Apr 13, 2026
+**Last Updated:** Apr 13, 2026 (v9)
 
 ## System Status
 - **Containers:** 37 running, all healthy (0 unhealthy)
@@ -39,6 +39,15 @@
 15. [ ] React Flow — visual LangGraph workflow editor
 16. [ ] Tremor — token usage and agent performance dashboards (currently using Recharts for basic monitoring)
 17. [ ] Refine — admin console with FastAPI data providers
+17a. [~] Dev Changelog (Admin/Reporting section) — editable agent-assisted development log at `/admin/reporting/dev-changelog`. Schema + 16-entry seed DONE (migration 007, verified). Design spec DONE (`docs/superpowers/specs/2026-04-13-dev-changelog-design.md`). First TanStack deployment in the product.
+    - **Build 1 IN PROGRESS** — 13 subtasks tracked via `TaskList` (IDs 1-13), dependency DAG wired. Execution waves:
+      - Wave 1 (parallel, no blockers): #1 install TanStack + shadcn table, #3 SQLAlchemy model, #7 route permissions, #10 editorial masthead component
+      - Wave 2: #2 DataTable wrapper (needs #1), #4 Pydantic schemas (needs #3), #8 page shell (needs #7)
+      - Wave 3: #5 backend endpoints (needs #4), #11 table with column defs (needs #2, #4)
+      - Wave 4: #6 backend tests (needs #5), #9 API client + Zustand store (needs #5)
+      - Wave 5: #12 view container (needs #8, #9, #10, #11)
+      - Wave 6: #13 e2e Playwright verify (needs #6, #12)
+    - Builds 2-5 queued: (2) detail slide-over + commit links, (3) inline edit + server-side ownership enforcement, (4) filters + saved views + timeline/kanban, (5) 3am nightly agent (BLOCKED on #21 Phase 1 Gate B so traces are visible before unattended runs).
 
 ## Phase 4: CME Pipeline End-to-End
 
@@ -50,11 +59,11 @@
 
 21. [~] LangGraph Telemetry Pipeline Repair (Phase 1) — Tempo→Prometheus span-metrics via `otel.digitalharmonyai.com` Cloudflare tunnel, new `dhg-langgraph-exporter` service, 6 alert rules. Plan dated 2026-04-12.
     - [x] Tasks 1–5: Cloudflare tunnel route, `tracing.py` swapped to OTLP/HTTP, CF Access headers passthrough, `pyproject.toml` deps, LangSmith shared TracerProvider fix (9 commits `c7b46e6..f236196`)
-    - [ ] Task 6: Phase 1 Gate A — explicit end-to-end span flow verification
-    - [ ] Tasks 7–13: `dhg-langgraph-exporter` service (TDD scaffold, impl, Dockerfile), compose wiring, Prometheus scrape job, 6 alert rules, Phase 1 Gate B
+    - [x] Task 6: Phase 1 Gate A — PASSED Apr 13. Root causes: (1) `CF_ACCESS_CLIENT_ID`/`SECRET` missing from LangGraph Cloud deployment — fixed via LangSmith New Revision `7477443f`. (2) Prometheus missing `--web.enable-remote-write-receiver` flag — fixed in `65d21fc`. Dashboards panel D1 wired in `8be7160`. Plan rewritten as v2 diagnostic ladder in `daf230a`.
+    - [ ] Tasks 7–13 (Phase 2): `dhg-langgraph-exporter` service (TDD scaffold, impl, Dockerfile), compose wiring, Prometheus scrape job, 6 alert rules, Phase 1 Gate B — see plan v2 §F
 22. [ ] Agent-level integration tests (beyond registry API tests)
 23. [ ] Performance benchmarks for full pipeline
-24. [ ] Verify Tempo trace ingestion from LangGraph agents end-to-end
+24. [x] ~~Verify Tempo trace ingestion from LangGraph agents end-to-end~~ — DONE via Phase 1 Gate A (Apr 13, see #21)
 25. [ ] CD — automated deploy on merge to master
 
 ## Phase 6: Security & Infrastructure
@@ -177,4 +186,5 @@
 - v5: Apr 6, 2026 — test fixes complete, 61/61 passing, doc drift CI
 - v6: Apr 7, 2026 — saved as docs/archive/TODO_v6.md
 - v7: Apr 8, 2026 — saved as docs/archive/TODO_v7.md (Registry Agent, citation checker refactor, 17 graphs deployed to cloud)
-- v8: Apr 13, 2026 — current (Agents Library, Intake Prefill Agent, Edit/Archive workflow, dashboards redesign, orchestrator passthrough, inference platform API, 112 tests)
+- v8: Apr 13, 2026 — saved as docs/archive/TODO_v8.md (Agents Library, Intake Prefill Agent, Edit/Archive workflow, dashboards redesign, orchestrator passthrough, inference platform API, 112 tests)
+- v9: Apr 13, 2026 — current (Dev Changelog Build 1 task DAG wired via TaskCreate, 13 subtasks IDs 1-13, Build 5 dependency on #21 Gate B made explicit; Phase 1 Gate A PASSED — CF_ACCESS secrets + Prometheus remote-write flag root-caused and fixed, plan v2 diagnostic ladder committed `daf230a`, dashboards panel D1 live)
