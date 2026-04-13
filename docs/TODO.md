@@ -48,7 +48,10 @@
 
 ## Phase 5: Hardening
 
-21. [ ] LangGraph Telemetry Pipeline Repair (Phase 1) — Tempo→Prometheus span-metrics via `otel.digitalharmonyai.com` Cloudflare tunnel, new `dhg-langgraph-exporter` service, 6 alert rules. Plan dated 2026-04-12.
+21. [~] LangGraph Telemetry Pipeline Repair (Phase 1) — Tempo→Prometheus span-metrics via `otel.digitalharmonyai.com` Cloudflare tunnel, new `dhg-langgraph-exporter` service, 6 alert rules. Plan dated 2026-04-12.
+    - [x] Tasks 1–5: Cloudflare tunnel route, `tracing.py` swapped to OTLP/HTTP, CF Access headers passthrough, `pyproject.toml` deps, LangSmith shared TracerProvider fix (9 commits `c7b46e6..f236196`)
+    - [ ] Task 6: Phase 1 Gate A — explicit end-to-end span flow verification
+    - [ ] Tasks 7–13: `dhg-langgraph-exporter` service (TDD scaffold, impl, Dockerfile), compose wiring, Prometheus scrape job, 6 alert rules, Phase 1 Gate B
 22. [ ] Agent-level integration tests (beyond registry API tests)
 23. [ ] Performance benchmarks for full pipeline
 24. [ ] Verify Tempo trace ingestion from LangGraph agents end-to-end
