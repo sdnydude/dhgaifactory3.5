@@ -159,7 +159,7 @@ class PerplexityClient:
     
     ACADEMIC_DOMAINS = [
         "pubmed.ncbi.nlm.nih.gov", "ncbi.nlm.nih.gov", "jamanetwork.com",
-        "nejm.org", "thelancet.com", "bmj.com", "acc.org", "heart.org",
+        "nejm.org", "thelancet.com", "bmj.com",
         "cms.gov", "ahrq.gov", "qualitynet.cms.gov"
     ]
     
@@ -178,13 +178,13 @@ class PerplexityClient:
         }
         
         system_prompt = """You are a clinical practice analyst.
-Focus on real-world practice data from:
-- Disease registries (PINNACLE, GWTG-HF, NCDR, etc.)
-- Claims database analyses
-- Physician practice surveys
-- Quality measure performance data
-Include specific utilization rates, adherence percentages, and outcome data.
-Cite sources with author/organization and year."""
+Focus on real-world practice data specific to the disease state in the user query. Prefer sources such as:
+- Disease-specific registries and quality-improvement programs relevant to the condition
+- Claims database analyses and administrative data studies
+- Physician practice surveys and adoption studies
+- Quality measure performance data (HEDIS, CMS quality measures, specialty-society measures)
+Include specific utilization rates, adherence percentages, and outcome data when available.
+Cite sources with author/organization and year. Do not substitute data from unrelated therapeutic areas when direct evidence is sparse — say so explicitly instead."""
         
         payload = {
             "model": "sonar-pro",
@@ -347,9 +347,9 @@ async def analyze_real_world_practice_node(state: ClinicalPracticeState) -> dict
     perplexity = PerplexityClient()
     rwp_result = await perplexity.search(
         f"What is the real-world utilization and adherence data for {disease} treatments? "
-        f"Include registry data (PINNACLE, GWTG-HF, NCDR), claims analyses, time to diagnosis, "
+        f"Include disease-specific registry or quality-program data where it exists, claims analyses, time to diagnosis, "
         f"actual prescribing rates, dose optimization rates, and quality measure performance. "
-        f"Focus on gaps between recommended and actual care."
+        f"Focus on gaps between recommended and actual care for {disease} specifically — do not substitute data from other conditions."
     )
     
     system = f"""{CLINICAL_PRACTICE_SYSTEM_PROMPT}
@@ -830,12 +830,12 @@ if __name__ == "__main__":
     
     async def test():
         test_state = {
-            "therapeutic_area": "cardiology",
-            "disease_state": "heart failure with preserved ejection fraction",
-            "target_audience": "cardiologists",
+            "therapeutic_area": "pulmonology",
+            "disease_state": "chronic obstructive pulmonary disease (COPD)",
+            "target_audience": "primary care clinicians and pulmonologists",
             "practice_settings": ["community hospital", "academic medical center"],
             "geographic_focus": "United States",
-            "known_gaps": ["Underuse of SGLT2 inhibitors"],
+            "known_gaps": ["Underuse of triple therapy in GOLD group E patients"],
             "known_barriers": ["Time constraints", "Lack of familiarity with new evidence"],
             "messages": [],
             "citations": [],

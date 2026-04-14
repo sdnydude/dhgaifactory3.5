@@ -653,7 +653,7 @@ You are developing a STATISTICAL ANALYSIS PLAN. Return a JSON object:
         }}
     ],
     "subgroup_analyses": [
-        "Specialty (cardiology vs internal medicine vs primary care)",
+        "Specialty (e.g., relevant subspecialty for the activity vs internal medicine vs primary care)",
         "Practice setting (academic vs community)"
     ],
     "handling_missing_data": "Paragraph describing missing data approach..."
@@ -929,30 +929,30 @@ if __name__ == "__main__":
             "objectives": [
                 {
                     "objective_id": "OBJ-001",
-                    "objective_text": "Initiate SGLT2 inhibitor therapy...",
+                    "objective_text": "Escalate to triple inhaled therapy in eligible GOLD group E patients...",
                     "moore_classification": {"level": "Level 5"},
                     "measurement": {"primary_method": "Commitment-to-change", "timing": "60 days"}
                 }
             ]
         }
-        
+
         mock_gaps = {
             "gaps": [
                 {
                     "gap_id": "GAP-001",
-                    "title": "SGLT2i Initiation Gap",
-                    "evidence": {"practice_guideline_delta": "77%"}
+                    "title": "Triple Therapy Escalation Gap",
+                    "evidence": {"practice_guideline_delta": "69%"}
                 }
             ]
         }
-        
+
         test_state = {
             "learning_objectives_report": mock_objectives,
             "gap_analysis_report": mock_gaps,
             "curriculum_report": {},
-            "therapeutic_area": "cardiology",
-            "disease_state": "heart failure",
-            "target_audience": "cardiologists",
+            "therapeutic_area": "pulmonology",
+            "disease_state": "chronic obstructive pulmonary disease (COPD)",
+            "target_audience": "primary care clinicians and pulmonologists",
             "estimated_reach": 200,
             "moore_level_target": "Level 5",
             "messages": [],

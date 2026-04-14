@@ -1127,9 +1127,9 @@ if __name__ == "__main__":
     
     async def test():
         test_state = {
-            "therapeutic_area": "cardiology",
-            "disease_state": "heart failure with preserved ejection fraction",
-            "target_audience": "cardiologists",
+            "therapeutic_area": "pulmonology",
+            "disease_state": "chronic obstructive pulmonary disease (COPD)",
+            "target_audience": "primary care clinicians and pulmonologists",
             "geographic_focus": "United States",
             "supporter_company": "",
             "supporter_products": [],

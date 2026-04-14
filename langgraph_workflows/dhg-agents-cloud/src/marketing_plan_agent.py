@@ -834,9 +834,9 @@ if __name__ == "__main__":
     
     async def test():
         test_state = {
-            "therapeutic_area": "cardiology",
-            "disease_state": "heart failure",
-            "target_audience": "cardiologists and primary care physicians",
+            "therapeutic_area": "pulmonology",
+            "disease_state": "chronic obstructive pulmonary disease (COPD)",
+            "target_audience": "primary care clinicians and pulmonologists",
             "practice_settings": ["Academic", "Community"],
             "geographic_focus": "United States",
             "estimated_reach": 500,

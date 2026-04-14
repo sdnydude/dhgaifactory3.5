@@ -730,29 +730,29 @@ if __name__ == "__main__":
     async def test():
         # Mock upstream data
         mock_research = {
-            "epidemiology": {"prevalence": {"us": "6.7 million Americans"}},
-            "treatment_landscape": {"current_standards": {"first_line": ["SGLT2i", "ARNi"]}},
-            "guidelines": {"major_guidelines": [{"society": "ACC/AHA", "year": 2022}]},
-            "literature_synthesis": {"evidence_gaps": ["Limited HFpEF data"]}
+            "epidemiology": {"prevalence": {"us": "16 million Americans"}},
+            "treatment_landscape": {"current_standards": {"first_line": ["LABA/LAMA", "LABA/LAMA/ICS triple therapy"]}},
+            "guidelines": {"major_guidelines": [{"society": "GOLD", "year": 2024}]},
+            "literature_synthesis": {"evidence_gaps": ["Limited data on group E phenotyping in primary care"]}
         }
-        
+
         mock_clinical = {
-            "standard_of_care": {"treatment_algorithm": {"first_line": ["SGLT2i"]}},
-            "real_world_practice": {"treatment_patterns": {"utilization_rates": {"SGLT2i": "23%"}}},
+            "standard_of_care": {"treatment_algorithm": {"first_line": ["LABA/LAMA"]}},
+            "real_world_practice": {"treatment_patterns": {"utilization_rates": {"triple therapy": "31%"}}},
             "practice_barriers": {
-                "clinician_barriers": {"knowledge_gaps": [{"barrier": "Unaware of HF indication"}]}
+                "clinician_barriers": {"knowledge_gaps": [{"barrier": "Unaware of GOLD group E criteria"}]}
             }
         }
-        
+
         test_state = {
             "research_report": mock_research,
             "clinical_practice_report": mock_clinical,
-            "therapeutic_area": "cardiology",
-            "disease_state": "heart failure with preserved ejection fraction",
-            "target_audience": "cardiologists",
-            "known_gaps": ["Underuse of SGLT2 inhibitors"],
-            "educational_priorities": ["Improve GDMT initiation"],
-            "outcome_goals": ["Reduce HF hospitalizations"],
+            "therapeutic_area": "pulmonology",
+            "disease_state": "chronic obstructive pulmonary disease (COPD)",
+            "target_audience": "primary care clinicians and pulmonologists",
+            "known_gaps": ["Underuse of triple therapy in GOLD group E patients"],
+            "educational_priorities": ["Improve GOLD group E identification and escalation"],
+            "outcome_goals": ["Reduce COPD exacerbations"],
             "messages": [],
             "errors": [],
             "total_tokens": 0,

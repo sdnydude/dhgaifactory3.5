@@ -988,38 +988,38 @@ if __name__ == "__main__":
             "objectives": [
                 {
                     "objective_id": "OBJ-001",
-                    "objective_text": "Initiate SGLT2 inhibitor therapy...",
+                    "objective_text": "Escalate to triple inhaled therapy in eligible GOLD group E patients...",
                     "moore_classification": {"level": "Level 5"},
                     "measurement": {"primary_method": "Commitment-to-change", "timing": "60 days"}
                 },
                 {
                     "objective_id": "OBJ-002",
-                    "objective_text": "Differentiate HFrEF and HFpEF...",
+                    "objective_text": "Differentiate eosinophilic from non-eosinophilic COPD phenotypes...",
                     "moore_classification": {"level": "Level 4"},
                     "measurement": {"primary_method": "Case assessment", "timing": "Post-activity"}
                 }
             ]
         }
-        
+
         mock_gaps = {
             "gaps": [
                 {
                     "gap_id": "GAP-001",
-                    "title": "SGLT2i Initiation Gap",
+                    "title": "Triple Therapy Escalation Gap",
                     "root_causes": {
                         "primary_barrier_type": "knowledge",
-                        "contributing_factors": ["Unaware of indication", "Concern about side effects"]
+                        "contributing_factors": ["Unaware of GOLD group E criteria", "Concern about ICS pneumonia risk"]
                     }
                 }
             ]
         }
-        
+
         test_state = {
             "learning_objectives_report": mock_objectives,
             "gap_analysis_report": mock_gaps,
-            "therapeutic_area": "cardiology",
-            "disease_state": "heart failure",
-            "target_audience": "cardiologists",
+            "therapeutic_area": "pulmonology",
+            "disease_state": "chronic obstructive pulmonary disease (COPD)",
+            "target_audience": "primary care clinicians and pulmonologists",
             "educational_format": "Live symposium",
             "duration_minutes": 180,
             "modality": "Hybrid",

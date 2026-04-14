@@ -83,7 +83,7 @@ BANNED_PATTERNS = [
 BANNED_PATTERNS_GUIDANCE = """
 === HIGH PRIORITY FORMATTING RULES ===
 NEVER use em dashes (—). Replace with:
-  - Use a comma instead: "The treatment — SGLT2 inhibitors — works" → "The treatment, SGLT2 inhibitors, works"
+  - Use a comma instead: "The treatment — first-line therapy — works" → "The treatment, first-line therapy, works"
   - Use parentheses: "The drug — approved in 2022 — reduces mortality" → "The drug (approved in 2022) reduces mortality"
   - Split into two sentences if needed
 
@@ -97,9 +97,10 @@ NEVER start a paragraph with: "Furthermore,", "Moreover,", "Additionally,"
 
 ALWAYS name specific studies - never use generic references:
   - WRONG: "Studies show..." or "Studies indicate..." or "Research suggests..."
-  - RIGHT: "The DELIVER trial showed..." or "Registry data from COMPASS-HF indicates..."
+  - RIGHT: name the actual trial, registry, or analysis relevant to the disease state being addressed (e.g., "The [TRIAL NAME] trial showed..." or "Registry data from [REGISTRY NAME] indicates...")
   - WRONG: "Population-level studies indicate..."
-  - RIGHT: "The Swedish Heart Failure Registry found..."
+  - RIGHT: cite the specific cohort, registry, or surveillance program by name
+  - Use trials and registries that genuinely exist and are relevant to the therapeutic area in the activity. Do not import examples from unrelated specialties.
 
 === CITATION FORMAT ===
 Use numbered inline references [1], [2], [3] etc. for every factual claim, statistic, or guideline mention.
@@ -1065,30 +1066,30 @@ if __name__ == "__main__":
     async def test():
         # Test input
         test_state = {
-            "therapeutic_area": "cardiology",
-            "disease_state": "heart failure with reduced ejection fraction",
-            "target_audience": "primary care physicians",
+            "therapeutic_area": "pulmonology",
+            "disease_state": "chronic obstructive pulmonary disease (COPD)",
+            "target_audience": "primary care physicians and pulmonologists",
             "geographic_focus": "United States",
-            "activity_title": "Optimizing HFrEF Management in Primary Care",
+            "activity_title": "Optimizing COPD Management in Primary Care",
             "accreditation_types": ["AMA PRA Category 1"],
             "gaps": [
                 {
-                    "gap_statement": "Underutilization of guideline-directed medical therapy",
-                    "evidence_summary": "Only 25% of eligible patients receive GDMT",
-                    "patient_impact": "Increased mortality and hospitalizations"
+                    "gap_statement": "Underutilization of triple inhaled therapy in eligible GOLD group E patients",
+                    "evidence_summary": "Only 31% of eligible patients receive triple therapy",
+                    "patient_impact": "Increased exacerbations and hospitalizations"
                 },
                 {
-                    "gap_statement": "Delayed referral for device therapy",
-                    "evidence_summary": "Average delay of 18 months for ICD evaluation",
-                    "patient_impact": "Preventable sudden cardiac death"
+                    "gap_statement": "Delayed referral for pulmonary rehabilitation",
+                    "evidence_summary": "Fewer than 4% of eligible patients are referred within 90 days of an exacerbation",
+                    "patient_impact": "Preventable functional decline and readmission"
                 }
             ],
-            "research_summary": "Heart failure affects 6.7 million Americans with mortality remaining high at 50% within 5 years.",
+            "research_summary": "COPD affects approximately 16 million diagnosed Americans and remains the fourth leading cause of death in the United States.",
             "clinical_barriers": ["Time constraints", "Complex guidelines", "Competing priorities"],
             "epidemiology": {
-                "prevalence": "6.7 million Americans",
-                "mortality": "50% 5-year mortality",
-                "cost": "$43.6 billion annually"
+                "prevalence": "16 million diagnosed Americans",
+                "mortality": "fourth leading cause of US death",
+                "cost": "approximately $50 billion annually"
             },
             "messages": [],
             "errors": []

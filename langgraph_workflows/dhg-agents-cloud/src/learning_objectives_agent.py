@@ -842,19 +842,19 @@ if __name__ == "__main__":
             "gaps": [
                 {
                     "gap_id": "GAP-001",
-                    "title": "Suboptimal SGLT2 Inhibitor Initiation",
+                    "title": "Underuse of Triple Therapy in GOLD Group E",
                     "root_causes": {"primary_barrier_type": "knowledge"},
-                    "evidence": {"practice_guideline_delta": "77%"}
+                    "evidence": {"practice_guideline_delta": "69%"}
                 },
                 {
                     "gap_id": "GAP-002",
-                    "title": "HFpEF Recognition Gap",
+                    "title": "Inadequate Inhaler Technique Counseling",
                     "root_causes": {"primary_barrier_type": "skill"},
                     "evidence": {"practice_guideline_delta": "45%"}
                 },
                 {
                     "gap_id": "GAP-003",
-                    "title": "Inadequate Dose Optimization",
+                    "title": "Delayed Pulmonary Rehabilitation Referral",
                     "root_causes": {"primary_barrier_type": "attitude"},
                     "evidence": {"practice_guideline_delta": "60%"}
                 }
@@ -864,15 +864,15 @@ if __name__ == "__main__":
                 "secondary_focus": ["GAP-002"]
             }
         }
-        
+
         test_state = {
             "gap_analysis_report": mock_gap_report,
-            "therapeutic_area": "cardiology",
-            "disease_state": "heart failure",
-            "target_audience": "cardiologists",
+            "therapeutic_area": "pulmonology",
+            "disease_state": "chronic obstructive pulmonary disease (COPD)",
+            "target_audience": "primary care clinicians and pulmonologists",
             "educational_format": "live symposium",
             "moore_level_target": "Level 5",
-            "outcome_goals": ["Improve GDMT initiation rates"],
+            "outcome_goals": ["Improve guideline-concordant COPD management"],
             "messages": [],
             "errors": [],
             "total_tokens": 0,
