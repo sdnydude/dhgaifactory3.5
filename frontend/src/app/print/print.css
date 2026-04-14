@@ -1,0 +1,7 @@
+@media print {
+  html, body { background: #ffffff !important; }
+  .no-print { display: none !important; }
+  a { color: #32374A; text-decoration: none; }
+}
+
+:root { --dhg-background: #ffffff; }
