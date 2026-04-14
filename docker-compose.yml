@@ -253,6 +253,21 @@ services:
       - dhg-network
     restart: unless-stopped
 
+  dhg-pdf-renderer:
+    build:
+      context: ./services/pdf-renderer
+      dockerfile: Dockerfile
+    container_name: dhg-pdf-renderer
+    restart: unless-stopped
+    shm_size: 2gb
+    environment:
+      - FRONTEND_INTERNAL_URL=http://dhg-frontend:3000
+    networks:
+      - dhg-network
+    volumes:
+      - dhg_exports:/exports
+    # no external port — only reachable from registry-api over the internal network
+
 networks:
   dhg-network:
     driver: bridge
@@ -261,4 +276,6 @@ volumes:
   postgres-data:
     driver: local
   ollama-data:
+    driver: local
+  dhg_exports:
     driver: local
