@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useCallback, useRef } from "react";
-import { RefreshCw, AlertCircle } from "lucide-react";
+import { RefreshCw, AlertCircle, Inbox, FileText } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ReviewPanel } from "./review-panel";
 import { ReflectionPanel } from "./reflection-panel";
@@ -41,19 +41,6 @@ function formatTimeAgo(dateStr: string): string {
   return `${Math.floor(diffHr / 24)} d`;
 }
 
-function formatIssueNumber(i: number): string {
-  return String(i + 1).padStart(2, "0");
-}
-
-function formatTodayMasthead(): string {
-  return new Date().toLocaleDateString("en-US", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-}
-
 export function InboxMasterDetail() {
   const {
     reviews,
@@ -86,6 +73,8 @@ export function InboxMasterDetail() {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load reviews");
+    } finally {
+      setLoading(false);
     }
   }, [setReviews, setLoading, setError]);
 
@@ -126,145 +115,104 @@ export function InboxMasterDetail() {
   };
 
   return (
-    <div className="flex h-full overflow-hidden bg-background">
+    <div className="flex flex-col h-full overflow-hidden bg-background">
+      {/* Standard page header — matches /monitoring pattern */}
+      <div className="flex items-center justify-between border-b px-6 py-4">
+        <h1 className="text-lg font-semibold">Inbox</h1>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground">
+            {reviews.length} pending {reviews.length === 1 ? "review" : "reviews"}
+          </span>
+          <button
+            onClick={fetchReviews}
+            disabled={loading}
+            aria-label="Refresh reviews"
+            className="h-8 w-8 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-1 overflow-hidden">
       {/* ====================================================================
-          MASTER — The index (left rail, journal TOC)
+          MASTER — The index (left rail)
           ==================================================================== */}
       <aside className="w-[22rem] shrink-0 flex flex-col border-r border-border">
-        {/* Masthead */}
-        <header className="px-7 pt-7 pb-5 border-b-[3px] border-double border-foreground/85">
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="font-mono-editorial small-caps text-[10px] text-muted-foreground">
-              Vol. I · № {reviews.length.toString().padStart(2, "0")}
-            </span>
-            <button
-              onClick={fetchReviews}
-              disabled={loading}
-              aria-label="Refresh reviews"
-              className="h-6 w-6 inline-flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <RefreshCw className={cn("h-3 w-3", loading && "animate-spin")} />
-            </button>
-          </div>
-          <h1
-            className="font-display italic font-semibold text-foreground leading-[0.9] mt-1.5"
-            style={{
-              fontSize: "2.7rem",
-              fontVariationSettings: '"SOFT" 80, "opsz" 144',
-              letterSpacing: "-0.02em",
-            }}
-          >
-            The&nbsp;Inbox
-          </h1>
-          <p className="font-serif-body italic text-[11px] text-muted-foreground mt-1.5 tracking-wide">
-            A Register of Manuscripts Awaiting Editorial Review
-          </p>
-          <p className="font-mono-editorial text-[9.5px] small-caps text-muted-foreground/80 mt-2">
-            {formatTodayMasthead()}
-          </p>
-        </header>
-
         {error && (
-          <div className="mx-5 mt-4 flex items-start gap-2 border border-destructive/40 bg-destructive/5 px-3 py-2 font-serif-body text-[11px] text-destructive">
+          <div className="mx-5 mt-4 flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
             <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
             <span>{error}</span>
           </div>
         )}
 
         {isDemo && (
-          <div className="mx-5 mt-4 border-l-2 border-[color:var(--color-dhg-orange)] pl-3 py-1.5 font-serif-body italic text-[11px] text-muted-foreground">
-            Specimen issue. Live manuscripts will supersede these entries as
-            agents surface review gates.
+          <div className="mx-5 mt-4 rounded-md border-l-2 border-[color:var(--color-dhg-orange)] bg-muted/40 pl-3 pr-2 py-1.5 text-xs text-muted-foreground">
+            Sample data. Real reviews will replace these as agents reach review gates.
           </div>
         )}
 
         <ScrollArea className="flex-1">
           {loading && reviews.length === 0 ? (
-            <div className="flex items-center justify-center py-16 font-serif-body italic text-sm text-muted-foreground">
-              <RefreshCw className="h-3 w-3 animate-spin mr-2" />
-              Assembling the issue…
+            <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
+              <RefreshCw className="h-3.5 w-3.5 animate-spin mr-2" />
+              Loading reviews…
             </div>
           ) : reviews.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
-              <div
-                className="font-display text-[2.8rem] text-muted-foreground/30 leading-none"
-                style={{ fontVariationSettings: '"SOFT" 100, "opsz" 144' }}
-              >
-                ❦
-              </div>
-              <p className="mt-3 font-serif-body italic text-sm text-muted-foreground">
-                The desk is clear.
-              </p>
-              <p className="mt-1 font-mono-editorial text-[9.5px] small-caps text-muted-foreground/70">
+              <Inbox className="h-10 w-10 text-muted-foreground/40" />
+              <p className="mt-3 text-sm font-medium text-foreground">
                 No pending reviews
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Reviews appear here when agents reach a human review gate.
               </p>
             </div>
           ) : (
-            <ol className="px-5 py-3">
+            <ul className="py-1">
               {reviews.map((review, i) => {
                 const isSelected = selectedReviewId === review.threadId;
                 return (
-                  <li
-                    key={review.threadId}
-                    className="issue-enter"
-                    style={{ animationDelay: `${i * 55}ms` }}
-                  >
+                  <li key={review.threadId}>
                     <button
                       onClick={() => selectReview(review.threadId)}
                       className={cn(
-                        "group relative w-full text-left py-4 pl-4 pr-2 border-t border-border transition-all",
-                        i === reviews.length - 1 && "border-b",
+                        "group relative w-full text-left px-5 py-3 border-b border-border transition-colors",
+                        i === 0 && "border-t",
                         isSelected
-                          ? "bg-[color:var(--color-dhg-orange)]/[0.04]"
-                          : "hover:bg-foreground/[0.025]",
+                          ? "bg-muted"
+                          : "hover:bg-muted/50",
                       )}
                     >
-                      {/* Orange selection rule */}
                       <span
                         aria-hidden
                         className={cn(
-                          "absolute left-0 top-0 bottom-0 w-[3px] bg-[color:var(--color-dhg-orange)] transition-all",
-                          isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-40",
+                          "absolute left-0 top-0 bottom-0 w-[3px] bg-[color:var(--color-dhg-orange)] transition-opacity",
+                          isSelected ? "opacity-100" : "opacity-0",
                         )}
                       />
 
                       <div className="flex items-baseline justify-between gap-3">
-                        <span
-                          className="font-display text-[10px] small-caps text-muted-foreground tabular-nums"
-                          style={{ fontVariationSettings: '"SOFT" 40, "opsz" 8' }}
-                        >
-                          № {formatIssueNumber(i)}
-                        </span>
-                        <span className="font-mono-editorial text-[9px] small-caps text-muted-foreground/70">
-                          {formatTimeAgo(review.createdAt)} ago
+                        <h3 className="text-sm font-medium text-foreground leading-tight truncate">
+                          {GRAPH_LABELS[review.graphId] ?? review.graphId}
+                        </h3>
+                        <span className="shrink-0 text-[10px] text-muted-foreground tabular-nums">
+                          {formatTimeAgo(review.createdAt)}
                         </span>
                       </div>
-                      <h3
-                        className="font-display italic text-[1.05rem] text-foreground mt-1 leading-tight"
-                        style={{ fontVariationSettings: '"SOFT" 60, "opsz" 36' }}
-                      >
-                        {GRAPH_LABELS[review.graphId] ?? review.graphId}
-                      </h3>
-                      <p className="font-serif-body text-[11.5px] text-muted-foreground mt-1 leading-snug">
+                      <p className="mt-1 text-xs text-muted-foreground truncate">
                         {review.currentStep}
                       </p>
-                      <p className="font-mono-editorial text-[9px] text-muted-foreground/60 mt-1.5">
-                        THREAD {review.threadId.slice(0, 8).toUpperCase()}
+                      <p className="mt-1 font-mono text-[10px] text-muted-foreground/70">
+                        {review.threadId.slice(0, 8)}
                       </p>
                     </button>
                   </li>
                 );
               })}
-            </ol>
+            </ul>
           )}
         </ScrollArea>
-
-        {/* Colophon footer */}
-        <footer className="px-7 py-3 border-t border-border">
-          <p className="font-mono-editorial text-[9px] small-caps text-muted-foreground/60 text-center">
-            Set in Fraunces · Source Serif · IBM Plex Mono
-          </p>
-        </footer>
       </aside>
 
       {/* ====================================================================
@@ -295,38 +243,27 @@ export function InboxMasterDetail() {
                 isLoading={actionLoading === selectedReview.threadId}
               />
             ) : (
-              <div className="py-24 text-center font-serif-body italic text-muted-foreground">
-                No manuscript available for this thread.
+              <div className="py-24 text-center text-sm text-muted-foreground">
+                No content available for this thread.
               </div>
             )}
           </div>
         ) : (
           <div className="flex h-full items-center justify-center">
-            <div className="text-center max-w-md px-8">
-              <div
-                className="font-display italic text-[6rem] text-foreground/10 leading-none"
-                style={{ fontVariationSettings: '"SOFT" 100, "opsz" 144' }}
-              >
-                ℵ
-              </div>
-              <p
-                className="mt-4 font-display italic text-2xl text-foreground"
-                style={{ fontVariationSettings: '"SOFT" 60, "opsz" 72' }}
-              >
-                Select a manuscript
+            <div className="text-center max-w-sm px-8">
+              <FileText className="mx-auto h-12 w-12 text-muted-foreground/30" />
+              <p className="mt-4 text-lg font-semibold text-foreground">
+                Select a review
               </p>
-              <p className="mt-3 font-serif-body text-[13px] text-muted-foreground leading-relaxed">
-                Each entry in the register represents a LangGraph agent awaiting
-                your editorial verdict. Manuscripts are collected on a thirty
-                second interval.
-              </p>
-              <p className="mt-6 font-mono-editorial small-caps text-[10px] text-muted-foreground/70">
-                — The editors
+              <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+                Choose a pending review from the list to see its content and
+                approve, revise, or reject it. The list refreshes every 30 seconds.
               </p>
             </div>
           </div>
         )}
       </main>
+      </div>
     </div>
   );
 }
