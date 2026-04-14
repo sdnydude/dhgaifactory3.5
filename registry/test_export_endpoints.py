@@ -107,6 +107,66 @@ async def test_sync_download_404_when_document_missing(monkeypatch: pytest.Monke
 
 
 @pytest.mark.asyncio
+async def test_bundle_enqueue_returns_job_id() -> None:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        projects = (
+            await c.get("/api/cme/export/projects?limit=1")
+        ).json()["projects"]
+        if not projects:
+            pytest.skip("no projects available")
+        pid = projects[0]["id"]
+
+        resp = await c.post(
+            "/api/cme/export/bundle",
+            json={
+                "project_id": pid,
+                "document_ids": None,
+                "include_manifest": True,
+                "include_intake": False,
+            },
+        )
+    assert resp.status_code == 202
+    body = resp.json()
+    assert body["scope"] == "project_bundle"
+    assert body["status"] == "pending"
+    assert body["project_id"] == pid
+
+
+@pytest.mark.asyncio
+async def test_bundle_rejects_doc_ids_outside_project() -> None:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        projects = (
+            await c.get("/api/cme/export/projects?limit=2")
+        ).json()["projects"]
+        if len(projects) < 2:
+            pytest.skip("need two projects")
+        pid_a = projects[0]["id"]
+        pid_b = projects[1]["id"]
+
+        docs_b = (
+            await c.get(f"/api/cme/export/projects/{pid_b}/documents")
+        ).json()["documents"]
+        if not docs_b:
+            pytest.skip("project B has no documents")
+
+        resp = await c.post(
+            "/api/cme/export/bundle",
+            json={
+                "project_id": pid_a,
+                "document_ids": [docs_b[0]["id"]],
+                "include_manifest": True,
+                "include_intake": False,
+            },
+        )
+    assert resp.status_code == 400
+    assert "document_ids" in resp.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
 async def test_sync_download_renderer_error_is_502(monkeypatch: pytest.MonkeyPatch) -> None:
     import httpx as _httpx
 

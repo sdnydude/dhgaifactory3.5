@@ -3,11 +3,19 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime, timezone
+from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, Header, HTTPException, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Response
+from fastapi.responses import FileResponse
+from sqlalchemy.orm import Session
 
-from export_schemas import DocumentPrintPayload
+from database import get_db
+from export_schemas import (
+    BundleJobCreate,
+    BundleJobResponse,
+    DocumentPrintPayload,
+)
 from export_service import (
     build_print_url,
     load_document_for_thread,
@@ -18,6 +26,7 @@ from export_signing import (
     PrintTokenInvalid,
     verify_print_token,
 )
+from models import CMEDocument, CMEProject, DownloadJob
 
 logger = logging.getLogger(__name__)
 
@@ -86,3 +95,108 @@ async def sync_download_document(thread_id: str) -> Response:
             "cache-control": "no-store",
         },
     )
+
+
+def _serialize_job(job: DownloadJob) -> BundleJobResponse:
+    selected = job.selected_document_ids
+    if selected is not None:
+        selected = [UUID(str(x)) for x in selected]
+    return BundleJobResponse(
+        id=job.id,
+        project_id=job.project_id,
+        scope=job.scope,
+        status=job.status,
+        selected_document_ids=selected,
+        created_at=job.created_at,
+        completed_at=job.completed_at,
+        artifact_bytes=job.artifact_bytes,
+        error=job.error,
+    )
+
+
+@router.post("/bundle", response_model=BundleJobResponse, status_code=202)
+def create_bundle_job(
+    body: BundleJobCreate,
+    db: Session = Depends(get_db),
+) -> BundleJobResponse:
+    project = db.query(CMEProject).filter(CMEProject.id == body.project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="project not found")
+
+    if body.document_ids is not None:
+        if not body.document_ids:
+            raise HTTPException(
+                status_code=400, detail="document_ids may not be empty list"
+            )
+        count = (
+            db.query(CMEDocument)
+            .filter(
+                CMEDocument.id.in_(body.document_ids),
+                CMEDocument.project_id == body.project_id,
+                CMEDocument.is_current.is_(True),
+            )
+            .count()
+        )
+        if count != len(body.document_ids):
+            raise HTTPException(
+                status_code=400,
+                detail="one or more document_ids do not belong to this project",
+            )
+
+    job = DownloadJob(
+        thread_id=project.pipeline_thread_id or "",
+        graph_id="bundle",
+        scope="project_bundle",
+        status="pending",
+        project_id=project.id,
+        selected_document_ids=(
+            [str(x) for x in body.document_ids] if body.document_ids else None
+        ),
+        created_by=None,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+    return _serialize_job(job)
+
+
+@router.get("/job/{job_id}", response_model=BundleJobResponse)
+def get_job(
+    job_id: UUID,
+    db: Session = Depends(get_db),
+) -> BundleJobResponse:
+    job = db.query(DownloadJob).filter(DownloadJob.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="job not found")
+    return _serialize_job(job)
+
+
+@router.get("/artifact/{job_id}")
+def stream_artifact(
+    job_id: UUID,
+    db: Session = Depends(get_db),
+) -> FileResponse:
+    job = db.query(DownloadJob).filter(DownloadJob.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="job not found")
+    if job.status != "succeeded" or not job.artifact_path:
+        raise HTTPException(status_code=409, detail="artifact not ready")
+    return FileResponse(
+        path=job.artifact_path,
+        media_type="application/zip",
+        filename=f"bundle-{job.id}.zip",
+    )
+
+
+@router.get("/jobs", response_model=list[BundleJobResponse])
+def list_jobs(
+    limit: int = 20,
+    db: Session = Depends(get_db),
+) -> list[BundleJobResponse]:
+    rows = (
+        db.query(DownloadJob)
+        .order_by(DownloadJob.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [_serialize_job(j) for j in rows]
