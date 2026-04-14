@@ -1,8 +1,12 @@
+import os
+import sys
 import time
 
 import pytest
 
-from registry.export_signing import (
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from export_signing import (
     PrintTokenPayload,
     sign_print_token,
     verify_print_token,

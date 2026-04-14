@@ -2887,3 +2887,51 @@ async def _generate_embedding_and_save(table_name: str, record_id, text_content:
         db.rollback()
     finally:
         db.close()
+
+
+async def fetch_latest_document_for_thread(thread_id: str) -> dict | None:
+    """Return the latest CMEDocument for a given pipeline thread, as dict.
+
+    Used by the /api/cme/export/* endpoints to hydrate the print route and
+    the sync download endpoint. Returns None if no project/document matches.
+
+    Note on field mapping (drift from Phase 1.9 plan):
+      plan `agent_source`  -> actual column `document_type`
+      plan `meta`          -> actual column `quality_details` (JSONB), used
+                              only to surface an optional `review_round`
+      plan `content`       -> actual column `content_text`
+
+    Phase 1 note: this function is async def for test monkey-patching, but the
+    body uses sync SessionLocal() — it blocks the event loop during the query.
+    Acceptable at current registry QPS; revisit when the registry moves to an
+    async session.
+    """
+    from sqlalchemy import select as _select
+    from database import SessionLocal as _SessionLocal
+    from models import CMEDocument as _CMEDocument, CMEProject as _CMEProject
+
+    with _SessionLocal() as session:
+        stmt = (
+            _select(_CMEDocument, _CMEProject)
+            .join(_CMEProject, _CMEDocument.project_id == _CMEProject.id)
+            .where(_CMEProject.pipeline_thread_id == thread_id)
+            .order_by(_CMEDocument.created_at.desc())
+            .limit(1)
+        )
+        row = session.execute(stmt).first()
+        if not row:
+            return None
+        doc, project = row
+        quality_details = doc.quality_details or {}
+        review_round = 0
+        if isinstance(quality_details, dict):
+            try:
+                review_round = int(quality_details.get("review_round", 0) or 0)
+            except (TypeError, ValueError):
+                review_round = 0
+        return {
+            "title": project.name,
+            "graph_label": doc.document_type or "CME Document",
+            "review_round": review_round,
+            "document_text": doc.content_text or "",
+        }
