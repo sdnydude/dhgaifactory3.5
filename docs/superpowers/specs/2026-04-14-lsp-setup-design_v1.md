@@ -204,18 +204,6 @@ Ran `npx pyright` against real code, not hypothetically:
 
 Total actionable signal on shipped config: ~11 signal on orchestrator + ~7 on registry + findings distributed across other langgraph agent files (24 in `agent.py`, 13 in `marketing_plan_agent.py`, 6 each in `needs_assessment_agent.py`, `curriculum_design_agent.py`, `research_protocol_agent.py`, `citation_checker_agent.py`, `learning_objectives_agent.py`).
 
-## Pyright LSP behavior notes (measured 2026-04-14)
-
-During Task 6 live verification, the LSP tool surfaced three pyright behaviors that aren't obvious from its documentation and that this spec has to encode correctly or the acceptance criteria become untestable:
-
-1. **`goToDefinition` does not navigate into third-party packages.** Probing `FastAPI` (usage site `api.py:210:7`) and `StateGraph` (usage site `orchestrator.py:1562:16`) both return "No definition found". Probing the same symbols at their `import` lines also returns nothing. This is not a venv problem, a stub problem, or a config problem: `hover` on the same symbols returns full class documentation (including docstrings, signatures, and embedded code examples), and pyright is actively type-checking both files (12 diagnostics on orchestrator.py, 9 on api.py), so the symbols resolve — pyright simply does not expose library-side file locations through the `textDocument/definition` request. This holds for symbols that live in a venv-installed package AND for symbols that resolve via user site-packages fallback (`fastapi` is served from `~/.local/lib/python3.12/site-packages/` in this environment because it's not in the configured venv — pyright finds it anyway).
-2. **`goToDefinition` works cleanly for project-internal code.** Probing `CMEPipelineState` at its usage site (`orchestrator.py:1562:27`) returns `orchestrator.py:115:7` where it's defined. Same request shape, same file, same pyright instance — the only variable is whether the target lives in workspace code or a wheel-installed library.
-3. **`goToImplementation` is not supported by pyright's LSP.** A `textDocument/implementation` request returns `Unhandled method textDocument/implementation` — it's not a fallback path when `goToDefinition` is empty.
-
-The operational rule that falls out of this: **use `hover` as the LSP probe for library symbols and `goToDefinition` / `findReferences` for project-internal symbols.** Both operations share the same pyright instance and the same type-resolution pipeline, so a successful `hover` on a library symbol is proof that pyright has resolved the symbol and loaded its documentation from the package source — which is what this spec actually needs to verify. The Task 6 acceptance criteria below encode this rule directly.
-
-typescript-language-server has no equivalent quirk: `goToDefinition` on a used project-internal symbol returns the correct cross-file location (verified on `ReviewPayloadWithVS` at `inboxApi.ts:16:12` → `frontend/src/components/review/types.ts:62:18`, resolving through the `@/components/review/types` tsconfig path alias). Probing *unused* import bindings returns the binding's own position — also a quirk, worth knowing but not a spec concern.
-
 ## Acceptance criteria
 
 - [x] `which pyright-langserver` returns a path (`~/.npm-global/bin/pyright-langserver`)
@@ -226,22 +214,10 @@ typescript-language-server has no equivalent quirk: `goToDefinition` on a used p
 - [x] `pyright` completes without configuration errors (3.81s full scan, 131 errors, all real)
 - [x] `pyright registry/api.py` surfaces real findings (2 of the original 4 survive; 2 are intentionally hidden by the SQLAlchemy cascade mute — documented trade)
 - [x] `pyright langgraph_workflows/dhg-agents-cloud/src/orchestrator.py` runs in under 3 seconds (0.9s) and surfaces the AsyncPostgresSaver bug at line 1794 (spec said 1795 — off-by-one, the bug is the `await` on the context-manager return, not the line literal)
-- [x] Claude Code's `LSP hover` returns full class documentation for the `fastapi.FastAPI` import in `registry/api.py:16:21` — verified 2026-04-14, returns class doc with docstring and example. (See "Pyright LSP behavior notes" above for why this is the correct probe shape for library symbols instead of `goToDefinition`.)
-- [x] Claude Code's `LSP hover` returns full class documentation for the `langgraph.graph.StateGraph` import in `orchestrator.py:36:29` — verified 2026-04-14, returns class doc, signature, reducer example, and v0.6 deprecation warning.
-- [x] Claude Code's `LSP goToDefinition` returns a project-internal location for a workspace Python symbol — verified on `CMEPipelineState` at `orchestrator.py:1562:27` → `orchestrator.py:115:7`.
-- [x] Claude Code's `LSP findReferences` returns multi-file references for a project-internal Python symbol — verified on `get_db` at `registry/database.py:45:5` → 136 references across 19 files.
-- [x] Claude Code's `LSP goToDefinition` returns a cross-file location for a project-internal TS symbol through a `@/…` tsconfig path alias — verified on `ReviewPayloadWithVS` at `frontend/src/lib/inboxApi.ts:16:12` → `frontend/src/components/review/types.ts:62:18`.
+- [ ] Claude Code's `LSP goToDefinition` returns a result when invoked on a symbol in `registry/api.py` imported from `fastapi` — **pending Claude Code restart** (PATH for `pyright-langserver` was added via `.bashrc` after this session launched)
+- [ ] Claude Code's `LSP goToDefinition` returns a result when invoked on a symbol in `orchestrator.py` imported from `langgraph` — **pending Claude Code restart**
 - [x] No Docker container has been restarted or rebuilt during implementation (`restartCount=0` on `dhg-registry-api`, only healthcheck exec events in the event log)
 - [x] No existing `.venv` has been modified during implementation (mtime on `langgraph_workflows/dhg-agents-cloud/.venv/bin/python` unchanged from before this work)
-
-### Task 6 post-mortem (why the original acceptance was wrong)
-
-The original Task 6 acceptance said "`LSP goToDefinition` returns a result when invoked on a symbol imported from fastapi / langgraph" and was marked pending a Claude Code restart. Two things were wrong about that framing:
-
-1. **A restart alone wouldn't have fixed PATH.** The installer instructions assumed `~/.bashrc` line `export PATH=~/.npm-global/bin:$PATH` would be picked up by a new Claude Code session. It isn't: `.bashrc` is only sourced by interactive bash shells, and Claude Code launches non-interactively. The Task 6 verification session had `~/.local/bin` on PATH but not `~/.npm-global/bin`, and `which pyright-langserver` inside the session returned nothing. Fix shipped during verification: symlinked `~/.npm-global/bin/pyright-langserver` and `~/.npm-global/bin/typescript-language-server` into `~/.local/bin/`, which is on PATH. Durable fix deferred to a follow-up (see "Follow-ups" below).
-2. **`goToDefinition` was the wrong LSP probe for library symbols.** Explained in "Pyright LSP behavior notes" above. Using it as an acceptance criterion encoded a false assumption about pyright's behavior, which is why the original criteria couldn't flip clean even after the PATH problem was resolved.
-
-Follow-up (not this spec's scope): either (a) move the `~/.npm-global/bin` export above the interactive-shell guard in `~/.bashrc`, or (b) move it into `~/.profile`, or (c) set `env.PATH` in `~/.claude/settings.json`. Option (c) is cleanest because the scope matches the need. The symlinks in `~/.local/bin/` are durable enough that no urgent action is required.
 
 ## Out of scope (deliberate)
 
@@ -264,8 +240,3 @@ rm -rf .pyright-stubs
 ```
 
 No state lives in Docker, no state lives in venvs. The full blast radius is three paths.
-
-## Version history
-
-- **v2 (2026-04-14, current):** Added "Pyright LSP behavior notes" and "Task 6 post-mortem" sections. Rewrote Task 6 acceptance criteria to use `hover` for library symbols (pyright's `goToDefinition` does not expose library source locations by design) and `goToDefinition` / `findReferences` for project-internal symbols. All Task 6 criteria verified live 2026-04-14; all `[ ]` checkboxes flipped to `[x]`. Documented PATH workaround (symlinks into `~/.local/bin`) and deferred the durable PATH fix to a follow-up.
-- **v1 (2026-04-14):** Initial design, committed as `4030b37 docs(spec): reconcile LSP setup spec with shipped config`. Task 6 acceptance used `goToDefinition` on fastapi/langgraph imports and was marked pending a Claude Code restart — an assumption that turned out to be doubly wrong (the PATH wasn't inherited even after restart, and `goToDefinition` on library symbols was the wrong probe shape regardless). Snapshot preserved at `2026-04-14-lsp-setup-design_v1.md`.
