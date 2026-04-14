@@ -456,24 +456,46 @@ async def initialize_pipeline(state: CMEPipelineState) -> dict:
 # Each wraps an agent graph, mapping pipeline state to agent state
 # =============================================================================
 
+# Single source of truth for the input shape each agent expects from intake.
+# Both single-invoke wrappers and parallel composers MUST use these helpers so
+# the field set never drifts again. (See: April 2026 disease_state drop bug.)
+
+def _build_research_input(intake: dict) -> dict:
+    """Build the research_agent input dict from flattened intake."""
+    return {
+        "therapeutic_area": intake.get("therapeutic_area", ""),
+        "disease_state": intake.get("disease_state", ""),
+        "target_audience": intake.get("target_audience", ""),
+        "geographic_focus": intake.get("geographic_focus", ""),
+        "supporter_company": intake.get("supporter_company", ""),
+        "supporter_products": intake.get("supporter_products", []),
+        "known_gaps": intake.get("known_gaps", []),
+        "competitor_products": intake.get("competitor_products", []),
+        "research_questions": intake.get("research_questions", []),
+    }
+
+
+def _build_clinical_input(intake: dict) -> dict:
+    """Build the clinical_practice_agent input dict from flattened intake."""
+    return {
+        "therapeutic_area": intake.get("therapeutic_area", ""),
+        "disease_state": intake.get("disease_state", ""),
+        "target_audience": intake.get("target_audience", ""),
+        "geographic_focus": intake.get("geographic_focus", ""),
+        "practice_settings": intake.get("practice_settings", []),
+        "known_gaps": intake.get("known_gaps", []),
+        "known_barriers": intake.get("known_barriers", []),
+    }
+
+
 @traceable(name="run_research_agent", run_type="chain", metadata={"agent": "research"})
 async def run_research_agent(state: CMEPipelineState) -> dict:
     """Run Research Agent and store output."""
     try:
         graph = get_agent_graph("research")
-        
+
         intake = state.get("intake_data", {})
-        agent_input = {
-            "therapeutic_area": intake.get("therapeutic_area", ""),
-            "disease_state": intake.get("disease_state", ""),
-            "target_audience": intake.get("target_audience", ""),
-            "geographic_focus": intake.get("geographic_focus", ""),
-            "supporter_company": intake.get("supporter_company", ""),
-            "supporter_products": intake.get("supporter_products", []),
-            "known_gaps": intake.get("known_gaps", []),
-            "competitor_products": intake.get("competitor_products", []),
-            "research_questions": intake.get("research_questions", []),
-        }
+        agent_input = _build_research_input(intake)
 
         result = await asyncio.wait_for(
             graph.ainvoke(agent_input),
@@ -507,17 +529,9 @@ async def run_clinical_agent(state: CMEPipelineState) -> dict:
     """Run Clinical Practice Agent and store output."""
     try:
         graph = get_agent_graph("clinical")
-        
+
         intake = state.get("intake_data", {})
-        agent_input = {
-            "therapeutic_area": intake.get("therapeutic_area", ""),
-            "disease_state": intake.get("disease_state", ""),
-            "target_audience": intake.get("target_audience", ""),
-            "geographic_focus": intake.get("geographic_focus", ""),
-            "practice_settings": intake.get("practice_settings", []),
-            "known_gaps": intake.get("known_gaps", []),
-            "known_barriers": intake.get("known_barriers", []),
-        }
+        agent_input = _build_clinical_input(intake)
 
         result = await asyncio.wait_for(
             graph.ainvoke(agent_input),
@@ -1292,17 +1306,9 @@ async def run_early_research_parallel(state: CMEPipelineState) -> dict:
         clinical_graph = get_agent_graph("clinical")
         
         intake = state.get("intake_data", {})
-        
-        research_input = {
-            "therapeutic_area": intake.get("therapeutic_area", ""),
-            "target_audience": intake.get("target_audience", ""),
-            "research_questions": intake.get("research_questions", []),
-        }
-        
-        clinical_input = {
-            "therapeutic_area": intake.get("therapeutic_area", ""),
-            "target_audience": intake.get("target_audience", ""),
-        }
+
+        research_input = _build_research_input(intake)
+        clinical_input = _build_clinical_input(intake)
         
         # Execute both in parallel
         research_task = asyncio.create_task(
