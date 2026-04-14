@@ -921,3 +921,29 @@ class DevChangelog(Base):
         Index("ix_dev_changelog_category", "category"),
         Index("ix_dev_changelog_window_start", "window_start"),
     )
+
+
+class DownloadJob(Base):
+    __tablename__ = "download_jobs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    thread_id = Column(Text, nullable=False)
+    graph_id = Column(Text, nullable=False)
+    scope = Column(Text, nullable=False)
+    status = Column(Text, nullable=False, default="pending")
+    artifact_path = Column(Text, nullable=True)
+    artifact_sha256 = Column(Text, nullable=True)
+    artifact_bytes = Column(BigInteger, nullable=True)
+    created_by = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    error = Column(Text, nullable=True)
+
+    __table_args__ = (
+        Index("ix_download_jobs_status_created_at", "status", "created_at"),
+        Index("ix_download_jobs_thread_scope_status", "thread_id", "scope", "status"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<DownloadJob id={self.id} scope={self.scope} status={self.status}>"
