@@ -2454,24 +2454,24 @@ git commit -m "feat(registry): bundle enqueue endpoint + job/artifact/jobs route
 
 ---
 
-### Task 2.8: Bundler reading from `cme_documents` (TDD)
+### Task 2.8: Bundler reading from `cme_documents` — MD-only (TDD)
 
 **Files:**
 - Create: `services/pdf-renderer/src/bundler.py`
+- Create: `services/pdf-renderer/src/db.py`
 - Create: `services/pdf-renderer/tests/test_bundler.py`
 
-`assemble_bundle(job)` reads the selected documents from `cme_documents` (already-authoritative store; Phase 1 proved this works). Renders MD from `content_text`, PDF via Playwright against the existing `/print/document/{id}` route. Atomic zip: write to `.tmp`, `os.replace` to final.
+`assemble_bundle(job)` reads the selected documents from `cme_documents` (authoritative store) and writes one `.md` file per document plus a `project.json` manifest and a `README.md` index. **MD-only in v2** — per-document PDF export already ships via Phase 1's `/api/cme/export/document/{thread_id}`, so bundles are an archival/handoff artifact where editable markdown is more useful than a stack of PDFs. PDF-in-bundle can be added later behind an `include_pdfs` flag if a pharma client asks.
 
-- [ ] **Step 1: Write failing test with mocked render**
+Atomic zip: write to `.tmp`, `os.replace` to final. No Playwright, no `/print` route, no signing dependency.
+
+- [ ] **Step 1: Write failing test**
 
 ```python
 # services/pdf-renderer/tests/test_bundler.py
-import hashlib
-import io
 import json
 import zipfile
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -2479,9 +2479,7 @@ from src.bundler import assemble_bundle
 
 
 @pytest.mark.asyncio
-async def test_assemble_bundle_writes_expected_structure(
-    tmp_path, monkeypatch
-):
+async def test_assemble_bundle_writes_md_and_manifest(tmp_path, monkeypatch):
     monkeypatch.setenv("EXPORTS_DIR", str(tmp_path))
 
     fake_docs = [
@@ -2505,8 +2503,6 @@ async def test_assemble_bundle_writes_expected_structure(
         id="job-1",
         project_id="proj-1",
         selected_document_ids=None,
-        include_manifest=True,
-        include_intake=False,
     )
 
     import src.bundler as bundler_mod
@@ -2517,14 +2513,7 @@ async def test_assemble_bundle_writes_expected_structure(
     monkeypatch.setattr(
         bundler_mod, "load_current_docs", MagicMock(return_value=fake_docs)
     )
-    monkeypatch.setattr(
-        bundler_mod,
-        "render_document_pdf",
-        AsyncMock(return_value=b"%PDF-1.4 fake\n%%EOF"),
-    )
-    monkeypatch.setattr(
-        bundler_mod, "update_job_artifact", MagicMock()
-    )
+    monkeypatch.setattr(bundler_mod, "update_job_artifact", MagicMock())
 
     await assemble_bundle(fake_job)
 
@@ -2533,15 +2522,16 @@ async def test_assemble_bundle_writes_expected_structure(
     with zipfile.ZipFile(final) as zf:
         names = set(zf.namelist())
         assert "README.md" in names
-        assert "04-metadata/project.json" in names
-        assert "01-documents/01-needs_assessment.md" in names
-        assert "01-documents/01-needs_assessment.pdf" in names
-        assert "01-documents/02-research.md" in names
-        assert "01-documents/02-research.pdf" in names
+        assert "metadata/project.json" in names
+        assert "documents/01-needs_assessment.md" in names
+        assert "documents/02-research.md" in names
+        # no PDFs in v2 bundles
+        assert not any(n.endswith(".pdf") for n in names)
 
-        meta = json.loads(zf.read("04-metadata/project.json"))
+        meta = json.loads(zf.read("metadata/project.json"))
         assert meta["project_id"] == "proj-1"
         assert meta["selection_mode"] == "all"
+        assert meta["document_count"] == 2
 ```
 
 - [ ] **Step 2: Run test — verify failure**
@@ -2550,20 +2540,45 @@ async def test_assemble_bundle_writes_expected_structure(
 cd services/pdf-renderer && python -m pytest tests/test_bundler.py -v
 ```
 
-- [ ] **Step 3: Implement `bundler.py`**
+Expected: `ModuleNotFoundError: src.bundler`.
+
+- [ ] **Step 3: Create `src/db.py` session_scope helper**
 
 ```python
-"""Project bundle assembler.
+# services/pdf-renderer/src/db.py
+from __future__ import annotations
 
-Reads from cme_documents (authoritative store; Phase 1 already uses this
-path via registry's fetch_latest_document_for_thread). Writes zip to a
-.tmp file then atomically renames. Uses EXPORTS_DIR env var for the base
-path (admin-configurable storage is deferred per spec §11).
+from contextlib import contextmanager
+
+from registry.database import SessionLocal
+
+
+@contextmanager
+def session_scope():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+```
+
+- [ ] **Step 4: Implement `bundler.py`**
+
+```python
+# services/pdf-renderer/src/bundler.py
+"""Project bundle assembler — MD-only v2.
+
+Reads current versions from cme_documents and writes a zip containing:
+  documents/NN-<type>.md    one markdown file per selected document
+  metadata/project.json     machine-readable manifest
+  README.md                 human-readable index with sha256 per entry
+
+Atomic write: stream to `<job_id>.zip.tmp`, then `os.replace` to the
+final path so a reader never sees a partial archive.
 """
 from __future__ import annotations
 
 import hashlib
-import io
 import json
 import logging
 import os
@@ -2571,9 +2586,6 @@ import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-
-from .renderer import RenderRequest, render_pdf
-from .signing import sign_token
 
 logger = logging.getLogger(__name__)
 
@@ -2590,7 +2602,9 @@ def load_project(project_id: Any) -> Any:
     from registry.models import CMEProject
 
     with session_scope() as db:
-        return db.query(CMEProject).filter(CMEProject.id == project_id).first()
+        return (
+            db.query(CMEProject).filter(CMEProject.id == project_id).first()
+        )
 
 
 def load_current_docs(
@@ -2612,25 +2626,16 @@ def load_current_docs(
         )
 
 
-async def render_document_pdf(document_id: Any) -> bytes:
-    frontend = os.getenv("FRONTEND_INTERNAL_URL", "http://dhg-frontend:3000")
-    token = sign_token(f"document:{document_id}")
-    url = f"{frontend}/print/document/{document_id}?token={token}"
-    return await render_pdf(
-        RenderRequest(
-            url=url,
-            wait_for_selectors=["[data-print-ready='true']"],
-            timeout_ms=30_000,
-        )
-    )
-
-
-def update_job_artifact(job_id: Any, path: Path, size: int, sha: str) -> None:
+def update_job_artifact(
+    job_id: Any, path: Path, size: int, sha: str
+) -> None:
     from .db import session_scope
     from registry.models import DownloadJob
 
     with session_scope() as db:
-        job = db.query(DownloadJob).filter(DownloadJob.id == job_id).first()
+        job = (
+            db.query(DownloadJob).filter(DownloadJob.id == job_id).first()
+        )
         if job is None:
             return
         job.artifact_path = str(path)
@@ -2639,15 +2644,16 @@ def update_job_artifact(job_id: Any, path: Path, size: int, sha: str) -> None:
         db.commit()
 
 
-def _manifest_text(
+def _readme_text(
     project: Any,
     entries: list[tuple[str, str]],
     selection_mode: str,
+    generated_at: str,
 ) -> str:
     lines = [
         f"# Bundle: {project.name}",
         "",
-        f"Generated: {datetime.now(timezone.utc).isoformat()}",
+        f"Generated: {generated_at}",
         f"Selection mode: {selection_mode}",
         "",
         "## Files",
@@ -2669,50 +2675,42 @@ async def assemble_bundle(job: Any) -> None:
         raise RuntimeError(f"project {job.project_id} not found")
 
     selected = (
-        list(job.selected_document_ids) if job.selected_document_ids else None
+        list(job.selected_document_ids)
+        if job.selected_document_ids
+        else None
     )
     docs = load_current_docs(job.project_id, selected)
     if not docs:
         raise RuntimeError("no documents matched the selection")
 
+    generated_at = datetime.now(timezone.utc).isoformat()
     entries: list[tuple[str, str]] = []
 
     with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zf:
         for i, doc in enumerate(docs, start=1):
-            prefix = f"{i:02d}-{doc.document_type}"
-            md_name = f"01-documents/{prefix}.md"
-            pdf_name = f"01-documents/{prefix}.pdf"
-
+            name = f"documents/{i:02d}-{doc.document_type}.md"
             md_bytes = (doc.content_text or "").encode("utf-8")
-            zf.writestr(md_name, md_bytes)
-            entries.append(
-                (md_name, hashlib.sha256(md_bytes).hexdigest())
-            )
-
-            pdf_bytes = await render_document_pdf(doc.id)
-            zf.writestr(pdf_name, pdf_bytes)
-            entries.append(
-                (pdf_name, hashlib.sha256(pdf_bytes).hexdigest())
-            )
+            zf.writestr(name, md_bytes)
+            entries.append((name, hashlib.sha256(md_bytes).hexdigest()))
 
         metadata = {
             "project_id": str(project.id),
             "project_name": project.name,
             "selection_mode": "subset" if selected else "all",
             "selected_document_ids": [str(x) for x in (selected or [])],
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": generated_at,
             "document_count": len(docs),
+            "bundle_format_version": 2,
         }
         meta_bytes = json.dumps(metadata, indent=2).encode("utf-8")
-        zf.writestr("04-metadata/project.json", meta_bytes)
+        zf.writestr("metadata/project.json", meta_bytes)
         entries.append(
-            (
-                "04-metadata/project.json",
-                hashlib.sha256(meta_bytes).hexdigest(),
-            )
+            ("metadata/project.json", hashlib.sha256(meta_bytes).hexdigest())
         )
 
-        readme = _manifest_text(project, entries, metadata["selection_mode"])
+        readme = _readme_text(
+            project, entries, metadata["selection_mode"], generated_at
+        )
         zf.writestr("README.md", readme.encode("utf-8"))
 
     os.replace(tmp, final)
@@ -2726,44 +2724,19 @@ async def assemble_bundle(job: Any) -> None:
     logger.info("bundle written", extra={"job_id": str(job.id), "size": size})
 ```
 
-- [ ] **Step 4: Create `src/db.py` session_scope helper**
-
-```python
-# services/pdf-renderer/src/db.py
-"""Sync SQLAlchemy session scope for the renderer worker.
-
-Uses registry's sync SessionLocal. Worker call sites must wrap these in
-asyncio.to_thread when invoked from the async worker loop.
-"""
-from __future__ import annotations
-
-from contextlib import contextmanager
-
-from registry.database import SessionLocal
-
-
-@contextmanager
-def session_scope():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-```
-
-- [ ] **Step 5: Run test**
+- [ ] **Step 5: Run test — verify pass**
 
 ```bash
 cd services/pdf-renderer && python -m pytest tests/test_bundler.py -v
 ```
 
-Expected: pass.
+Expected: pass. (The test patches `load_project`, `load_current_docs`, and `update_job_artifact` so it never touches the DB.)
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add services/pdf-renderer/src/bundler.py services/pdf-renderer/src/db.py services/pdf-renderer/tests/test_bundler.py
-git commit -m "feat(pdf-renderer): bundler reads from cme_documents + atomic zip writer"
+git commit -m "feat(pdf-renderer): md-only project bundler with atomic zip writer"
 ```
 
 ---
@@ -2856,21 +2829,20 @@ git commit -m "feat(pdf-renderer): Google Drive service account client + creds m
 
 ---
 
-### Task 2.10: Drive sync worker action (TDD with mocked Drive)
+### Task 2.10: Drive sync worker action — MD-only (TDD with mocked Drive)
 
 **Files:**
 - Create: `services/pdf-renderer/src/drive_sync.py`
 - Create: `services/pdf-renderer/tests/test_drive_sync.py`
 
-`sync_project_to_drive(job)` ensures a project folder exists, renders PDFs for each current document, diffs by MD5, uploads changed files via the service account, and writes `manifest.json`. All Drive calls wrapped in `asyncio.to_thread` because the Google SDK is sync-only.
+`sync_project_to_drive(job)` ensures a project folder exists, uploads one `.md` file per current document (Drive previews markdown natively), diffs by MD5 so unchanged documents aren't re-uploaded, and writes `manifest.json`. All Drive calls wrapped in `asyncio.to_thread` because the Google SDK is sync-only. **MD-only** to match the v2 bundler — PDF upload is deferred behind a later flag.
 
 - [ ] **Step 1: Failing test**
 
 ```python
 # services/pdf-renderer/tests/test_drive_sync.py
 import hashlib
-import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -2888,31 +2860,30 @@ async def test_drive_sync_creates_folder_and_uploads_changed_docs(
         name="Test Project",
         drive_folder_id=None,
     )
+    # Doc d-1 is unchanged — its stored md5 matches the md5 of its current content_text
+    unchanged_body = "# Needs\n\nUnchanged body."
     fake_doc_unchanged = MagicMock(
         id="d-1",
         document_type="needs_assessment",
+        content_text=unchanged_body,
         drive_file_id="existing-file-id",
-        drive_md5=hashlib.md5(b"pdf-A").hexdigest(),
+        drive_md5=hashlib.md5(unchanged_body.encode("utf-8")).hexdigest(),
     )
     fake_doc_new = MagicMock(
         id="d-2",
         document_type="research",
+        content_text="# Research\n\nNew body.",
         drive_file_id=None,
         drive_md5=None,
     )
 
     mock_drive = MagicMock()
     mock_drive.files().create().execute.side_effect = [
-        {"id": "folder-123"},  # project folder create
-        {"id": "file-new-id"},  # doc create
+        {"id": "folder-123"},   # project folder create
+        {"id": "file-new-id"},  # doc d-2 create
         {"id": "manifest-file-id"},  # manifest create
     ]
     mock_drive.files().list().execute.return_value = {"files": []}
-
-    pdf_calls = iter([b"pdf-A", b"pdf-B"])
-
-    async def fake_render(_doc_id):
-        return next(pdf_calls)
 
     import src.drive_sync as ds
 
@@ -2925,7 +2896,6 @@ async def test_drive_sync_creates_folder_and_uploads_changed_docs(
         "load_current_docs",
         MagicMock(return_value=[fake_doc_unchanged, fake_doc_new]),
     )
-    monkeypatch.setattr(ds, "render_document_pdf", fake_render)
     monkeypatch.setattr(ds, "persist_project_updates", MagicMock())
     monkeypatch.setattr(ds, "persist_document_sync", MagicMock())
 
@@ -2948,12 +2918,13 @@ cd services/pdf-renderer && python -m pytest tests/test_drive_sync.py -v
 - [ ] **Step 3: Implement `drive_sync.py`**
 
 ```python
-"""Google Drive sync for project documents.
+"""Google Drive sync for project documents — MD-only.
 
 Reconciliation model: manifest.json in the Drive project folder holds the
 desired state; we diff against it on each run and only upload documents
-whose MD5 has changed. All Google SDK calls are sync — wrapped with
-asyncio.to_thread.
+whose MD5 has changed. Upload format is markdown (.md) — Drive previews it
+natively and it matches the v2 bundler. All Google SDK calls are sync —
+wrapped with asyncio.to_thread.
 """
 from __future__ import annotations
 
@@ -2968,13 +2939,14 @@ from typing import Any
 
 from googleapiclient.http import MediaIoBaseUpload
 
-from .bundler import load_current_docs, load_project, render_document_pdf
+from .bundler import load_current_docs, load_project
 from .drive_client import build_drive_client
 
 logger = logging.getLogger(__name__)
 
 MANIFEST_NAME = "manifest.json"
 FOLDER_MIME = "application/vnd.google-apps.folder"
+MD_MIME = "text/markdown"
 
 
 def persist_project_updates(
@@ -3055,28 +3027,28 @@ async def sync_project_to_drive(job: Any) -> None:
     manifest_entries = []
 
     for i, doc in enumerate(docs, start=1):
-        pdf_name = f"{i:02d}-{doc.document_type}.pdf"
-        pdf_bytes = await render_document_pdf(doc.id)
-        pdf_md5 = hashlib.md5(pdf_bytes).hexdigest()
+        md_name = f"{i:02d}-{doc.document_type}.md"
+        md_bytes = (doc.content_text or "").encode("utf-8")
+        md_md5 = hashlib.md5(md_bytes).hexdigest()
 
         manifest_entries.append(
             {
                 "document_id": str(doc.id),
-                "name": pdf_name,
-                "md5": pdf_md5,
+                "name": md_name,
+                "md5": md_md5,
             }
         )
 
-        if doc.drive_md5 == pdf_md5 and doc.drive_file_id:
+        if doc.drive_md5 == md_md5 and doc.drive_file_id:
             continue
 
         media = MediaIoBaseUpload(
-            io.BytesIO(pdf_bytes),
-            mimetype="application/pdf",
+            io.BytesIO(md_bytes),
+            mimetype=MD_MIME,
             resumable=False,
         )
-        if pdf_name in existing_by_name:
-            file_id = existing_by_name[pdf_name]["id"]
+        if md_name in existing_by_name:
+            file_id = existing_by_name[md_name]["id"]
             await asyncio.to_thread(
                 lambda: drive.files()
                 .update(fileId=file_id, media_body=media)
@@ -3086,14 +3058,14 @@ async def sync_project_to_drive(job: Any) -> None:
             res = await asyncio.to_thread(
                 lambda: drive.files()
                 .create(
-                    body={"name": pdf_name, "parents": [folder_id]},
+                    body={"name": md_name, "parents": [folder_id]},
                     media_body=media,
                     fields="id",
                 )
                 .execute()
             )
             file_id = res["id"]
-        persist_document_sync(doc.id, file_id, pdf_md5)
+        persist_document_sync(doc.id, file_id, md_md5)
 
     manifest = {
         "project_id": str(project.id),
@@ -4287,7 +4259,7 @@ Open `/inbox`, click Files tab, expand a project, select 1+ docs, click Download
 unzip -l /tmp/bundle.zip
 ```
 
-Expected output: README.md, 01-documents/*.md + *.pdf, 04-metadata/project.json.
+Expected output: `README.md`, `documents/NN-<type>.md` entries (one per selected document), `metadata/project.json`. No `.pdf` files — v2 bundles are MD-only; per-document PDF export is still available via Phase 1's `/api/cme/export/document/{thread_id}`.
 
 - [ ] **Step 3: Tag**
 
