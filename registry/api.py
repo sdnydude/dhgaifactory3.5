@@ -224,6 +224,7 @@ from search_api import router as search_router
 from security_endpoints import router as security_router
 from frontend_specs_endpoints import router as frontend_specs_router
 from inference_endpoints import inference_router
+from dev_changelog_endpoints import router as dev_changelog_router
 
 # Include routers
 app.include_router(agent_router)
@@ -236,6 +237,7 @@ app.include_router(search_router)
 app.include_router(security_router)
 app.include_router(frontend_specs_router)
 app.include_router(inference_router)
+app.include_router(dev_changelog_router)
 
 # Add CORS middleware — locked to production origin + localhost for development
 ALLOWED_ORIGINS = [
