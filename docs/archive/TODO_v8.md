@@ -1,5 +1,5 @@
 # DHG AI Factory — Master Task List
-**Last Updated:** Apr 13, 2026 (v10)
+**Last Updated:** Apr 13, 2026
 
 ## System Status
 - **Containers:** 37 running, all healthy (0 unhealthy)
@@ -10,7 +10,7 @@
 - **Disk:** Root 12% (1.9TB), Data 4% (3.6TB)
 - **Observability:** Full stack operational — Prometheus (6/6 targets UP), Grafana, Loki+Promtail, Tempo+OTel, Alertmanager, cAdvisor, Node/Postgres exporters
 - **CI/CD:** GitHub Actions (lint, test, compose validation, doc drift checker)
-- **Tests:** 116 tests across 8 files (116 passing) — +4 real-DB integration tests for PUT /projects/{id} (replaced 4 mock success-path tests)
+- **Tests:** 112 tests across 8 files (112 passing) — +7 from archive/update coverage
 
 ---
 
@@ -39,33 +39,23 @@
 15. [ ] React Flow — visual LangGraph workflow editor
 16. [ ] Tremor — token usage and agent performance dashboards (currently using Recharts for basic monitoring)
 17. [ ] Refine — admin console with FastAPI data providers
-17a. [~] Dev Changelog (Admin/Reporting section) — editable agent-assisted development log at `/admin/reporting/dev-changelog`. Schema + 16-entry seed DONE (migration 007, verified). Design spec DONE (`docs/superpowers/specs/2026-04-13-dev-changelog-design.md`). First TanStack deployment in the product.
-    - **Build 1 IN PROGRESS** — 13 subtasks tracked via `TaskList` (IDs 1-13), dependency DAG wired. Execution waves:
-      - Wave 1 (parallel, no blockers): #1 install TanStack + shadcn table, #3 SQLAlchemy model, #7 route permissions, #10 editorial masthead component
-      - Wave 2: #2 DataTable wrapper (needs #1), #4 Pydantic schemas (needs #3), #8 page shell (needs #7)
-      - Wave 3: #5 backend endpoints (needs #4), #11 table with column defs (needs #2, #4)
-      - Wave 4: #6 backend tests (needs #5), #9 API client + Zustand store (needs #5)
-      - Wave 5: #12 view container (needs #8, #9, #10, #11)
-      - Wave 6: #13 e2e Playwright verify (needs #6, #12)
-    - Builds 2-5 queued: (2) detail slide-over + commit links, (3) inline edit + server-side ownership enforcement, (4) filters + saved views + timeline/kanban, (5) 3am nightly agent (BLOCKED on #21 Phase 1 Gate B so traces are visible before unattended runs).
+17a. [~] Dev Changelog (Admin/Reporting section) — editable agent-assisted development log at `/admin/reporting/dev-changelog`. Schema + 16-entry seed DONE (migration 007, verified). Design spec DONE (`docs/superpowers/specs/2026-04-13-dev-changelog-design.md`). Builds 1-5: (1) TanStack DataTable wrapper + backend endpoints + read-only view, (2) detail slide-over + commit links, (3) inline edit + ownership enforcement, (4) filters + timeline + kanban views, (5) 3am agent for nightly upserts. First TanStack deployment in the product.
 
 ## Phase 4: CME Pipeline End-to-End
 
 18. [x] ~~Orchestrator intake data passthrough fix~~ — DONE (Apr 11, `flatten_intake` aliases + 5 wrapper expansions; disease_state now reaches all agents)
-19. [~] End-to-end CME pipeline test (intake -> agents -> review -> output) — PARTIAL: NSCLC project ef4e5b53 verified topic-correct in DB (research 26K chars NSCLC, clinical 13K chars NSCLC, zero cardiology contamination). Still need Playwright walkthrough of the actual UI journey (#53).
+19. [ ] End-to-end CME pipeline test (intake -> agents -> review -> output)
 20. [ ] Human review implementation wired to frontend inbox with full feedback loop
-20a. [ ] **Auto-sync observability fix** (#51) — `cme_endpoints.py:1352` guard `if status in (...) and pipeline_thread_id` silently no-ops with no log when False. Curl-created projects sit in `intake` with NULL thread_id and look "stuck" because every poll skips silently. Add `else: logger.debug(...)` so the next investigation is a 30-second log read instead of a multi-hypothesis hunt. Discovered Apr 13 during NSCLC investigation; the journey itself (intake form → Save and Start) works correctly because `handleSave(true)` always wires thread_id before status flips.
-20b. [ ] **`/outputs` endpoint document_text passthrough** (#52) — `GET /api/cme/projects/{id}/outputs` returns AgentOutput records but doesn't surface the `document_text` column even though the DB has it. Discovered Apr 13 inspecting NSCLC research/clinical output via API.
 
 ## Phase 5: Hardening
 
 21. [~] LangGraph Telemetry Pipeline Repair (Phase 1) — Tempo→Prometheus span-metrics via `otel.digitalharmonyai.com` Cloudflare tunnel, new `dhg-langgraph-exporter` service, 6 alert rules. Plan dated 2026-04-12.
     - [x] Tasks 1–5: Cloudflare tunnel route, `tracing.py` swapped to OTLP/HTTP, CF Access headers passthrough, `pyproject.toml` deps, LangSmith shared TracerProvider fix (9 commits `c7b46e6..f236196`)
-    - [x] Task 6: Phase 1 Gate A — PASSED Apr 13. Root causes: (1) `CF_ACCESS_CLIENT_ID`/`SECRET` missing from LangGraph Cloud deployment — fixed via LangSmith New Revision `7477443f`. (2) Prometheus missing `--web.enable-remote-write-receiver` flag — fixed in `65d21fc`. Dashboards panel D1 wired in `8be7160`. Plan rewritten as v2 diagnostic ladder in `daf230a`.
-    - [ ] Tasks 7–13 (Phase 2): `dhg-langgraph-exporter` service (TDD scaffold, impl, Dockerfile), compose wiring, Prometheus scrape job, 6 alert rules, Phase 1 Gate B — see plan v2 §F
+    - [ ] Task 6: Phase 1 Gate A — explicit end-to-end span flow verification
+    - [ ] Tasks 7–13: `dhg-langgraph-exporter` service (TDD scaffold, impl, Dockerfile), compose wiring, Prometheus scrape job, 6 alert rules, Phase 1 Gate B
 22. [ ] Agent-level integration tests (beyond registry API tests)
 23. [ ] Performance benchmarks for full pipeline
-24. [x] ~~Verify Tempo trace ingestion from LangGraph agents end-to-end~~ — DONE via Phase 1 Gate A (Apr 13, see #21)
+24. [ ] Verify Tempo trace ingestion from LangGraph agents end-to-end
 25. [ ] CD — automated deploy on merge to master
 
 ## Phase 6: Security & Infrastructure
@@ -90,8 +80,6 @@
 
 ## Completed (April 2026)
 
-- [x] **Intake-edit-after-submit feature** (Apr 13) — backend PUT loosened to allow editing terminal/review states with `intake_version` bump (#46); 4 real-DB integration tests in `TestCMEProjectUpdateIntegration` replacing mock success-path tests after Pydantic 2 rejected MagicMock datetime fields (#47); frontend Edit button + edit page guards loosened to non-processing/non-archived (#48); stale-intake amber banner in `run-status-banner.tsx` triggered when `project.intake_version > run.intake_version_used` with rerun CTA (#49)
-- [x] **NSCLC fingerprint test** (Apr 13) — fresh project ef4e5b53 ran end-to-end through LangGraph Cloud, both research and clinical agents produced topic-correct NSCLC content (#28, #45). Confirms cardiology-scrub commit 627f1df + intake-drop fix 3a4e30d both working in production.
 - [x] CME Project edit + archive workflow (PUT/POST endpoints, edit route, archive dialog, archived filter, +7 tests)
 - [x] Section A schema narrowing: `therapeutic_area`, `disease_state` → `List[str]` (DB verified already in target shape)
 - [x] Intake form `useState`→`useEffect` bug fix (edit-mode seeding was running as lazy initializer)
@@ -190,6 +178,4 @@
 - v5: Apr 6, 2026 — test fixes complete, 61/61 passing, doc drift CI
 - v6: Apr 7, 2026 — saved as docs/archive/TODO_v6.md
 - v7: Apr 8, 2026 — saved as docs/archive/TODO_v7.md (Registry Agent, citation checker refactor, 17 graphs deployed to cloud)
-- v8: Apr 13, 2026 — saved as docs/archive/TODO_v8.md (Agents Library, Intake Prefill Agent, Edit/Archive workflow, dashboards redesign, orchestrator passthrough, inference platform API, 112 tests)
-- v9: Apr 13, 2026 — saved as docs/archive/TODO_v9.md (Dev Changelog Build 1 task DAG wired via TaskCreate, 13 subtasks IDs 1-13, Build 5 dependency on #21 Gate B made explicit; Phase 1 Gate A PASSED — CF_ACCESS secrets + Prometheus remote-write flag root-caused and fixed, plan v2 diagnostic ladder committed `daf230a`, dashboards panel D1 live)
-- v10: Apr 13, 2026 — current (intake-edit-after-submit feature complete: backend PUT loosened with intake_version bump, 4 real-DB integration tests replacing mocks, frontend gates loosened, stale-intake amber banner; NSCLC fingerprint test ef4e5b53 verified topic-correct end-to-end; auto-sync silent guard skip observability bug logged as #51; /outputs document_text passthrough bug logged as #52; Playwright journey verification queued as #53)
+- v8: Apr 13, 2026 — current (Agents Library, Intake Prefill Agent, Edit/Archive workflow, dashboards redesign, orchestrator passthrough, inference platform API, 112 tests)

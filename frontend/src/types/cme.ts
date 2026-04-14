@@ -127,6 +127,7 @@ export interface CMEProjectDetail {
   current_agent: string | null;
   progress_percent: number;
   intake: Record<string, unknown>;
+  intake_version: number;
   created_at: string;
   updated_at: string;
   outputs_available: string[];

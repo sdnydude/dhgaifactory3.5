@@ -1,5 +1,5 @@
 # DHG AI Factory — Master Task List
-**Last Updated:** Apr 13, 2026 (v10)
+**Last Updated:** Apr 13, 2026 (v9)
 
 ## System Status
 - **Containers:** 37 running, all healthy (0 unhealthy)
@@ -10,7 +10,7 @@
 - **Disk:** Root 12% (1.9TB), Data 4% (3.6TB)
 - **Observability:** Full stack operational — Prometheus (6/6 targets UP), Grafana, Loki+Promtail, Tempo+OTel, Alertmanager, cAdvisor, Node/Postgres exporters
 - **CI/CD:** GitHub Actions (lint, test, compose validation, doc drift checker)
-- **Tests:** 116 tests across 8 files (116 passing) — +4 real-DB integration tests for PUT /projects/{id} (replaced 4 mock success-path tests)
+- **Tests:** 112 tests across 8 files (112 passing) — +7 from archive/update coverage
 
 ---
 
@@ -52,10 +52,8 @@
 ## Phase 4: CME Pipeline End-to-End
 
 18. [x] ~~Orchestrator intake data passthrough fix~~ — DONE (Apr 11, `flatten_intake` aliases + 5 wrapper expansions; disease_state now reaches all agents)
-19. [~] End-to-end CME pipeline test (intake -> agents -> review -> output) — PARTIAL: NSCLC project ef4e5b53 verified topic-correct in DB (research 26K chars NSCLC, clinical 13K chars NSCLC, zero cardiology contamination). Still need Playwright walkthrough of the actual UI journey (#53).
+19. [ ] End-to-end CME pipeline test (intake -> agents -> review -> output)
 20. [ ] Human review implementation wired to frontend inbox with full feedback loop
-20a. [ ] **Auto-sync observability fix** (#51) — `cme_endpoints.py:1352` guard `if status in (...) and pipeline_thread_id` silently no-ops with no log when False. Curl-created projects sit in `intake` with NULL thread_id and look "stuck" because every poll skips silently. Add `else: logger.debug(...)` so the next investigation is a 30-second log read instead of a multi-hypothesis hunt. Discovered Apr 13 during NSCLC investigation; the journey itself (intake form → Save and Start) works correctly because `handleSave(true)` always wires thread_id before status flips.
-20b. [ ] **`/outputs` endpoint document_text passthrough** (#52) — `GET /api/cme/projects/{id}/outputs` returns AgentOutput records but doesn't surface the `document_text` column even though the DB has it. Discovered Apr 13 inspecting NSCLC research/clinical output via API.
 
 ## Phase 5: Hardening
 
@@ -90,8 +88,6 @@
 
 ## Completed (April 2026)
 
-- [x] **Intake-edit-after-submit feature** (Apr 13) — backend PUT loosened to allow editing terminal/review states with `intake_version` bump (#46); 4 real-DB integration tests in `TestCMEProjectUpdateIntegration` replacing mock success-path tests after Pydantic 2 rejected MagicMock datetime fields (#47); frontend Edit button + edit page guards loosened to non-processing/non-archived (#48); stale-intake amber banner in `run-status-banner.tsx` triggered when `project.intake_version > run.intake_version_used` with rerun CTA (#49)
-- [x] **NSCLC fingerprint test** (Apr 13) — fresh project ef4e5b53 ran end-to-end through LangGraph Cloud, both research and clinical agents produced topic-correct NSCLC content (#28, #45). Confirms cardiology-scrub commit 627f1df + intake-drop fix 3a4e30d both working in production.
 - [x] CME Project edit + archive workflow (PUT/POST endpoints, edit route, archive dialog, archived filter, +7 tests)
 - [x] Section A schema narrowing: `therapeutic_area`, `disease_state` → `List[str]` (DB verified already in target shape)
 - [x] Intake form `useState`→`useEffect` bug fix (edit-mode seeding was running as lazy initializer)
@@ -191,5 +187,4 @@
 - v6: Apr 7, 2026 — saved as docs/archive/TODO_v6.md
 - v7: Apr 8, 2026 — saved as docs/archive/TODO_v7.md (Registry Agent, citation checker refactor, 17 graphs deployed to cloud)
 - v8: Apr 13, 2026 — saved as docs/archive/TODO_v8.md (Agents Library, Intake Prefill Agent, Edit/Archive workflow, dashboards redesign, orchestrator passthrough, inference platform API, 112 tests)
-- v9: Apr 13, 2026 — saved as docs/archive/TODO_v9.md (Dev Changelog Build 1 task DAG wired via TaskCreate, 13 subtasks IDs 1-13, Build 5 dependency on #21 Gate B made explicit; Phase 1 Gate A PASSED — CF_ACCESS secrets + Prometheus remote-write flag root-caused and fixed, plan v2 diagnostic ladder committed `daf230a`, dashboards panel D1 live)
-- v10: Apr 13, 2026 — current (intake-edit-after-submit feature complete: backend PUT loosened with intake_version bump, 4 real-DB integration tests replacing mocks, frontend gates loosened, stale-intake amber banner; NSCLC fingerprint test ef4e5b53 verified topic-correct end-to-end; auto-sync silent guard skip observability bug logged as #51; /outputs document_text passthrough bug logged as #52; Playwright journey verification queued as #53)
+- v9: Apr 13, 2026 — current (Dev Changelog Build 1 task DAG wired via TaskCreate, 13 subtasks IDs 1-13, Build 5 dependency on #21 Gate B made explicit; Phase 1 Gate A PASSED — CF_ACCESS secrets + Prometheus remote-write flag root-caused and fixed, plan v2 diagnostic ladder committed `daf230a`, dashboards panel D1 live)

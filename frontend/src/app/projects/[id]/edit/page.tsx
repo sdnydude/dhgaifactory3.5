@@ -17,7 +17,10 @@ export default function EditProjectPage() {
 
   useEffect(() => {
     registryApi.getProject(projectId).then((project) => {
-      if (project.status !== CMEProjectStatus.INTAKE) {
+      if (
+        project.status === CMEProjectStatus.PROCESSING ||
+        project.status === CMEProjectStatus.ARCHIVED
+      ) {
         router.replace(`/projects/${projectId}`);
         return;
       }

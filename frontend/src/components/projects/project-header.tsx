@@ -44,7 +44,9 @@ export function ProjectHeader({ project }: { project: CMEProjectDetail }) {
   const { archiveProject } = useProjectsStore();
   const [archiving, setArchiving] = useState(false);
   const variant = STATUS_VARIANTS[project.status] ?? "outline";
-  const canEdit = project.status === CMEProjectStatus.INTAKE;
+  const canEdit =
+    project.status !== CMEProjectStatus.PROCESSING &&
+    project.status !== CMEProjectStatus.ARCHIVED;
   const canArchive = project.status !== CMEProjectStatus.ARCHIVED;
 
   async function handleArchive() {

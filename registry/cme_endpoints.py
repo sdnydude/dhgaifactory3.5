@@ -201,6 +201,7 @@ class CMEProjectDetail(BaseModel):
     current_agent: Optional[str]
     progress_percent: int
     intake: Dict[str, Any]
+    intake_version: int
     created_at: datetime
     updated_at: datetime
     outputs_available: List[str]
@@ -1123,6 +1124,7 @@ async def list_cme_projects(
                 current_agent=p.current_agent,
                 progress_percent=p.progress_percent or 0,
                 intake=p.intake,
+                intake_version=p.intake_version or 1,
                 created_at=p.created_at,
                 updated_at=p.updated_at,
                 outputs_available=list(p.outputs.keys()) if p.outputs else [],
@@ -1160,12 +1162,13 @@ async def get_cme_project(project_id: str, db: Session = Depends(get_db)):
             current_agent=p.current_agent,
             progress_percent=p.progress_percent or 0,
             intake=p.intake,
+            intake_version=p.intake_version or 1,
             created_at=p.created_at,
             updated_at=p.updated_at,
             outputs_available=list(p.outputs.keys()) if p.outputs else [],
             human_review_status=p.human_review_status
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -1179,22 +1182,31 @@ async def update_cme_project(
     intake: IntakeSubmission,
     db: Session = Depends(get_db),
 ):
-    """Update the intake data for a CME project. Only allowed while status is 'intake'."""
+    """Update the intake data for a CME project.
+
+    Allowed in any status except 'processing' (run in flight — would race with
+    the running pipeline) and 'archived' (read-only). For projects that have
+    already been run (complete/cancelled/failed), saving bumps intake_version
+    so the next /rerun starts from the new intake while existing run history
+    keeps its intake_version_used snapshot.
+    """
     start = time.time()
     try:
         project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
         if not project:
             raise HTTPException(status_code=404, detail="CME project not found")
 
-        if project.status != "intake":
+        if project.status in ("processing", "archived"):
             raise HTTPException(
                 status_code=409,
-                detail=f"Cannot edit: project status is '{project.status}'. Only 'intake' projects can be edited.",
+                detail=f"Cannot edit: project status is '{project.status}'. Cancel the run or unarchive the project first.",
             )
 
         intake_dict = intake.model_dump(mode="json")
         project.name = intake.section_a.project_name
         project.intake = intake_dict
+        if project.status != "intake":
+            project.intake_version = (project.intake_version or 1) + 1
 
         # Re-extract intake fields
         db.query(CMEIntakeField).filter(CMEIntakeField.project_id == project.id).delete()
@@ -1213,6 +1225,7 @@ async def update_cme_project(
             current_agent=project.current_agent,
             progress_percent=project.progress_percent or 0,
             intake=project.intake,
+            intake_version=project.intake_version or 1,
             created_at=project.created_at,
             updated_at=project.updated_at,
             outputs_available=list(project.outputs.keys()) if project.outputs else [],

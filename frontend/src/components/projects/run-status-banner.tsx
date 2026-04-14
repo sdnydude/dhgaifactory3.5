@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Ban, RotateCcw } from "lucide-react";
+import { AlertTriangle, Ban, FileWarning, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useProjectsStore } from "@/stores/projects-store";
 import type { CMEProjectDetail, PipelineRun } from "@/types/cme";
@@ -16,22 +16,58 @@ export function RunStatusBanner({ project }: { project: CMEProjectDetail }) {
   const { runsByProject, rerunPipeline } = useProjectsStore();
   const [rerunning, setRerunning] = useState(false);
 
-  // Only show for terminal failure states. Complete runs get their own
-  // success affordance elsewhere; processing runs don't need a banner.
+  const run = latestRun(runsByProject[project.id]);
+
+  // Stale-intake variant: project intake has been edited since the latest run.
+  // Suppress while a run is in flight (status would be processing) since the
+  // running pipeline is locked to its snapshot anyway.
+  const isProcessing = project.status === CMEProjectStatus.PROCESSING;
+  const intakeIsStale =
+    !isProcessing &&
+    run !== null &&
+    typeof run.intake_version_used === "number" &&
+    project.intake_version > run.intake_version_used;
+
   const terminalBad =
     project.status === CMEProjectStatus.FAILED ||
     project.status === CMEProjectStatus.CANCELLED;
-  if (!terminalBad) return null;
-
-  const run = latestRun(runsByProject[project.id]);
-  const isCancelled = project.status === CMEProjectStatus.CANCELLED;
-  const Icon = isCancelled ? Ban : AlertTriangle;
 
   async function handleRerun() {
     setRerunning(true);
     await rerunPipeline(project.id);
     setRerunning(false);
   }
+
+  if (intakeIsStale) {
+    return (
+      <div className="border-b px-6 py-2.5 flex items-start gap-3 bg-amber-500/10 border-amber-500/30">
+        <FileWarning className="h-4 w-4 mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+        <div className="flex-1 min-w-0 space-y-0.5">
+          <p className="text-xs font-medium">
+            Intake updated since last run
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Run #{run!.run_number} used intake v{run!.intake_version_used}; current intake is v{project.intake_version}. Rerun to apply the changes.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleRerun}
+          disabled={rerunning}
+          className="gap-1.5 shrink-0"
+        >
+          <RotateCcw className="h-3 w-3" />
+          {rerunning ? "Starting..." : "Rerun"}
+        </Button>
+      </div>
+    );
+  }
+
+  if (!terminalBad) return null;
+
+  const isCancelled = project.status === CMEProjectStatus.CANCELLED;
+  const Icon = isCancelled ? Ban : AlertTriangle;
 
   return (
     <div

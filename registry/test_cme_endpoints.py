@@ -89,19 +89,130 @@ class TestCMEProjectUpdate:
         response = client.put(f"/api/cme/projects/{fake_id}", json=self.VALID_INTAKE)
         assert response.status_code == 404
 
-    def test_update_non_intake_returns_409(self, client, mock_db):
-        """Cannot edit a project that has already started processing."""
-        fake_id = str(uuid.uuid4())
-        mock_project = MagicMock()
-        mock_project.status = "processing"
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_project
-        response = client.put(f"/api/cme/projects/{fake_id}", json=self.VALID_INTAKE)
-        assert response.status_code == 409
-
     def test_update_requires_valid_body(self, client):
         fake_id = str(uuid.uuid4())
         response = client.put(f"/api/cme/projects/{fake_id}", json={"bad": "data"})
         assert response.status_code == 422
+
+
+class TestCMEProjectUpdateIntegration:
+    """Integration tests for PUT /api/cme/projects/{id} against a real Postgres.
+
+    Skipped if the registry DB is not reachable. Each test creates and tears down
+    its own project row so it can be re-run safely.
+    """
+
+    VALID_INTAKE = TestCMEProjectUpdate.VALID_INTAKE
+
+    @pytest.fixture
+    def real_client(self):
+        import sys, os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
+        try:
+            from database import SessionLocal, get_db
+            from api import app
+        except Exception as e:
+            pytest.skip(f"registry api import failed: {e}")
+
+        try:
+            probe = SessionLocal()
+            probe.execute(__import__("sqlalchemy").text("SELECT 1"))
+            probe.close()
+        except Exception as e:
+            pytest.skip(f"registry DB not reachable: {e}")
+
+        def override_get_db():
+            db = SessionLocal()
+            try:
+                yield db
+            finally:
+                db.close()
+
+        app.dependency_overrides[get_db] = override_get_db
+        from fastapi.testclient import TestClient
+        with TestClient(app) as c:
+            yield c, SessionLocal
+        app.dependency_overrides.clear()
+
+    def _insert_project(self, SessionLocal, status, intake_version=1):
+        from models import CMEProject
+        db = SessionLocal()
+        try:
+            project = CMEProject(
+                name=f"pytest-edit-{uuid.uuid4().hex[:8]}",
+                status=status,
+                intake={"section_a": {"project_name": "old"}},
+                intake_version=intake_version,
+                outputs={},
+            )
+            db.add(project)
+            db.commit()
+            db.refresh(project)
+            return str(project.id)
+        finally:
+            db.close()
+
+    def _delete_project(self, SessionLocal, project_id):
+        from models import CMEProject, CMEIntakeField
+        db = SessionLocal()
+        try:
+            db.query(CMEIntakeField).filter(CMEIntakeField.project_id == project_id).delete()
+            db.query(CMEProject).filter(CMEProject.id == project_id).delete()
+            db.commit()
+        finally:
+            db.close()
+
+    def _read_intake_version(self, SessionLocal, project_id):
+        from models import CMEProject
+        db = SessionLocal()
+        try:
+            return db.query(CMEProject.intake_version).filter(CMEProject.id == project_id).scalar()
+        finally:
+            db.close()
+
+    def test_edit_complete_project_bumps_intake_version(self, real_client):
+        client, SessionLocal = real_client
+        project_id = self._insert_project(SessionLocal, status="complete", intake_version=1)
+        try:
+            response = client.put(f"/api/cme/projects/{project_id}", json=self.VALID_INTAKE)
+            assert response.status_code == 200, response.text
+            body = response.json()
+            assert body["intake_version"] == 2
+            assert body["name"] == self.VALID_INTAKE["section_a"]["project_name"]
+            assert self._read_intake_version(SessionLocal, project_id) == 2
+        finally:
+            self._delete_project(SessionLocal, project_id)
+
+    def test_edit_intake_status_does_not_bump_version(self, real_client):
+        client, SessionLocal = real_client
+        project_id = self._insert_project(SessionLocal, status="intake", intake_version=1)
+        try:
+            response = client.put(f"/api/cme/projects/{project_id}", json=self.VALID_INTAKE)
+            assert response.status_code == 200, response.text
+            assert response.json()["intake_version"] == 1
+            assert self._read_intake_version(SessionLocal, project_id) == 1
+        finally:
+            self._delete_project(SessionLocal, project_id)
+
+    def test_edit_processing_project_returns_409(self, real_client):
+        client, SessionLocal = real_client
+        project_id = self._insert_project(SessionLocal, status="processing")
+        try:
+            response = client.put(f"/api/cme/projects/{project_id}", json=self.VALID_INTAKE)
+            assert response.status_code == 409
+            assert self._read_intake_version(SessionLocal, project_id) == 1
+        finally:
+            self._delete_project(SessionLocal, project_id)
+
+    def test_edit_archived_project_returns_409(self, real_client):
+        client, SessionLocal = real_client
+        project_id = self._insert_project(SessionLocal, status="archived")
+        try:
+            response = client.put(f"/api/cme/projects/{project_id}", json=self.VALID_INTAKE)
+            assert response.status_code == 409
+            assert self._read_intake_version(SessionLocal, project_id) == 1
+        finally:
+            self._delete_project(SessionLocal, project_id)
 
 
 class TestCMEProjectArchive:
