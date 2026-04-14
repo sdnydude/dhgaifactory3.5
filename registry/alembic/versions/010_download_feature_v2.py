@@ -96,6 +96,11 @@ def downgrade() -> None:
     op.drop_column("cme_projects", "drive_last_synced_at")
     op.drop_column("cme_projects", "drive_folder_id")
 
+    # Remove rows that would violate the narrow v1 constraint before reinstating it.
+    # These are transient download jobs; losing them on downgrade is acceptable.
+    op.execute(
+        "DELETE FROM download_jobs WHERE scope IN ('project_bundle','drive_sync')"
+    )
     op.drop_constraint(
         "download_jobs_scope_check", "download_jobs", type_="check"
     )
