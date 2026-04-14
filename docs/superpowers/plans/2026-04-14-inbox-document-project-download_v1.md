@@ -1621,2405 +1621,830 @@ git commit -m "feat(registry): add DownloadJob model"
 
 ---
 
-### Task 2.3: Alembic migration `010_download_feature_v2`
-
-**Files:**
-- Create: `registry/alembic/versions/010_download_feature_v2.py`
-
-v2 adds `project_id` + `selected_document_ids` to `download_jobs`, widens the `scope` CHECK to `('document','project_bundle','drive_sync')`, and adds Drive tracking columns to `cme_projects` and `cme_documents`. Follow repo convention: short numeric revision ID (`"010"`), not long-form.
-
-- [ ] **Step 1: Write the migration**
-
-```python
-"""download feature v2
-
-Revision ID: 010
-Revises: 009
-Create Date: 2026-04-14
-"""
-from __future__ import annotations
-
-import sqlalchemy as sa
-from alembic import op
-from sqlalchemy.dialects import postgresql
-
-
-revision = "010"
-down_revision = "009"
-branch_labels = None
-depends_on = None
-
-
-def upgrade() -> None:
-    # download_jobs: add project_id + selected_document_ids
-    op.add_column(
-        "download_jobs",
-        sa.Column("project_id", postgresql.UUID(as_uuid=True), nullable=True),
-    )
-    op.add_column(
-        "download_jobs",
-        sa.Column("selected_document_ids", postgresql.JSONB, nullable=True),
-    )
-    op.create_foreign_key(
-        "fk_download_jobs_project",
-        "download_jobs",
-        "cme_projects",
-        ["project_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
-    op.create_index(
-        "ix_download_jobs_project_status",
-        "download_jobs",
-        ["project_id", "status"],
-    )
-
-    # Widen scope CHECK
-    op.drop_constraint(
-        "download_jobs_scope_check", "download_jobs", type_="check"
-    )
-    op.create_check_constraint(
-        "download_jobs_scope_check",
-        "download_jobs",
-        "scope IN ('document','project_bundle','drive_sync')",
-    )
-
-    # cme_projects: Drive tracking
-    op.add_column(
-        "cme_projects",
-        sa.Column("drive_folder_id", sa.Text(), nullable=True),
-    )
-    op.add_column(
-        "cme_projects",
-        sa.Column(
-            "drive_last_synced_at",
-            sa.DateTime(timezone=True),
-            nullable=True,
-        ),
-    )
-    op.add_column(
-        "cme_projects",
-        sa.Column("drive_sync_status", sa.Text(), nullable=True),
-    )
-
-    # cme_documents: Drive tracking
-    op.add_column(
-        "cme_documents",
-        sa.Column("drive_file_id", sa.Text(), nullable=True),
-    )
-    op.add_column(
-        "cme_documents",
-        sa.Column(
-            "drive_synced_at",
-            sa.DateTime(timezone=True),
-            nullable=True,
-        ),
-    )
-    op.add_column(
-        "cme_documents",
-        sa.Column("drive_md5", sa.Text(), nullable=True),
-    )
-
-
-def downgrade() -> None:
-    op.drop_column("cme_documents", "drive_md5")
-    op.drop_column("cme_documents", "drive_synced_at")
-    op.drop_column("cme_documents", "drive_file_id")
-    op.drop_column("cme_projects", "drive_sync_status")
-    op.drop_column("cme_projects", "drive_last_synced_at")
-    op.drop_column("cme_projects", "drive_folder_id")
-
-    op.drop_constraint(
-        "download_jobs_scope_check", "download_jobs", type_="check"
-    )
-    op.create_check_constraint(
-        "download_jobs_scope_check",
-        "download_jobs",
-        "scope IN ('document','project')",
-    )
-
-    op.drop_index(
-        "ix_download_jobs_project_status", table_name="download_jobs"
-    )
-    op.drop_constraint(
-        "fk_download_jobs_project", "download_jobs", type_="foreignkey"
-    )
-    op.drop_column("download_jobs", "selected_document_ids")
-    op.drop_column("download_jobs", "project_id")
-```
-
-- [ ] **Step 2: Rebuild registry-api and run the migration**
-
-```bash
-docker compose build registry-api
-docker compose up -d registry-api
-docker logs dhg-registry-api 2>&1 | grep -E "alembic|Running upgrade" | tail -20
-```
-
-Expected: log contains `Running upgrade 009 -> 010, download feature v2`.
-
-- [ ] **Step 3: Verify schema**
-
-```bash
-docker exec dhg-registry-db psql -U dhg -d dhg_registry -c "\d download_jobs" | grep -E "project_id|selected_document_ids|scope_check"
-docker exec dhg-registry-db psql -U dhg -d dhg_registry -c "\d cme_projects" | grep drive_
-docker exec dhg-registry-db psql -U dhg -d dhg_registry -c "\d cme_documents" | grep drive_
-```
-
-Expected: all new columns present; scope check allows `project_bundle` and `drive_sync`.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add registry/alembic/versions/010_download_feature_v2.py
-git commit -m "feat(registry): migration 010 — download_jobs v2 + Drive tracking columns"
-```
-
----
-
-### Task 2.4: SQLAlchemy model updates for v2 schema
-
-**Files:**
-- Modify: `registry/models.py`
-
-Adds the new columns to `DownloadJob`, `CMEProject`, `CMEDocument`. Follow existing conventions (`func.now()`, `Index` in `__table_args__`, `JSONB` import from `sqlalchemy.dialects.postgresql`).
-
-- [ ] **Step 1: Extend `DownloadJob`**
-
-In `registry/models.py`, modify the existing `DownloadJob` class (added in Task 2.2) to add two columns and one index. Add after the existing `error` column:
-
-```python
-    project_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("cme_projects.id", ondelete="SET NULL"),
-        nullable=True,
-    )
-    selected_document_ids = Column(JSONB, nullable=True)
-```
-
-And extend `__table_args__`:
-
-```python
-    __table_args__ = (
-        Index("ix_download_jobs_status_created_at", "status", "created_at"),
-        Index(
-            "ix_download_jobs_thread_scope_status",
-            "thread_id", "scope", "status",
-        ),
-        Index(
-            "ix_download_jobs_project_status",
-            "project_id", "status",
-        ),
-    )
-```
-
-If `JSONB` is not already imported in `models.py`, add:
-
-```python
-from sqlalchemy.dialects.postgresql import JSONB
-```
-
-- [ ] **Step 2: Extend `CMEProject`**
-
-In the existing `CMEProject` class, add three Drive columns (location: next to other metadata columns, before `relationships`):
-
-```python
-    drive_folder_id = Column(Text, nullable=True)
-    drive_last_synced_at = Column(DateTime(timezone=True), nullable=True)
-    drive_sync_status = Column(Text, nullable=True)
-```
-
-- [ ] **Step 3: Extend `CMEDocument`**
-
-In the existing `CMEDocument` class, add three Drive columns:
-
-```python
-    drive_file_id = Column(Text, nullable=True)
-    drive_synced_at = Column(DateTime(timezone=True), nullable=True)
-    drive_md5 = Column(Text, nullable=True)
-```
-
-- [ ] **Step 4: Syntax check on host**
-
-```bash
-python3 -c "import ast; ast.parse(open('registry/models.py').read()); print('OK')"
-```
-
-Expected: `OK`.
-
-- [ ] **Step 5: Rebuild + import check**
-
-```bash
-docker compose build registry-api
-docker compose up -d registry-api
-docker exec dhg-registry-api python -c "from models import DownloadJob, CMEProject, CMEDocument; print(DownloadJob.project_id, CMEProject.drive_folder_id, CMEDocument.drive_file_id)"
-```
-
-Expected: three Column references print with no ImportError.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add registry/models.py
-git commit -m "feat(registry): extend DownloadJob/CMEProject/CMEDocument for v2 (project_id, Drive fields)"
-```
-
----
-
-### Task 2.5: Pydantic schemas for v2 endpoints
-
-**Files:**
-- Modify: `registry/export_schemas.py`
-- Create: `registry/project_schemas.py`
-
-Adds bundle job request/response, project list + project documents response schemas. All use `ConfigDict(extra="forbid")` per the serializer-drift rule.
-
-- [ ] **Step 1: Extend `registry/export_schemas.py`**
-
-Add these classes near the existing `DownloadJobCreate`:
-
-```python
-from uuid import UUID
-
-class BundleJobCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    project_id: UUID
-    document_ids: list[UUID] | None = None  # None = all current docs
-    include_manifest: bool = True
-    include_intake: bool = False
-
-
-class BundleJobResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: UUID
-    project_id: UUID | None
-    scope: Literal["document", "project_bundle", "drive_sync"]
-    status: Literal["pending", "running", "succeeded", "failed"]
-    selected_document_ids: list[UUID] | None
-    created_at: datetime
-    completed_at: datetime | None
-    artifact_bytes: int | None
-    error: str | None
-```
-
-- [ ] **Step 2: Create `registry/project_schemas.py`**
-
-```python
-"""Pydantic schemas for project list + project documents endpoints.
-
-Serializer-drift rule: every field is enumerated explicitly; extra fields
-rejected at parse time. Response constructors in projects_endpoints.py
-must pass each field by name — never `**model.__dict__`.
-"""
-from __future__ import annotations
-
-from datetime import datetime
-from uuid import UUID
-
-from pydantic import BaseModel, ConfigDict
-
-
-class ProjectListItem(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: UUID
-    name: str
-    status: str
-    kind: str | None
-    document_count: int
-    last_activity_at: datetime | None
-    drive_folder_id: str | None
-
-
-class ProjectListResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    projects: list[ProjectListItem]
-    total: int
-    limit: int
-    offset: int
-
-
-class ProjectDocumentItem(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: UUID
-    document_type: str
-    title: str | None
-    word_count: int | None
-    version: int
-    is_current: bool
-    updated_at: datetime
-    drive_file_id: str | None
-
-
-class ProjectDocumentsResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    project_id: UUID
-    documents: list[ProjectDocumentItem]
-```
-
-- [ ] **Step 3: Syntax check**
-
-```bash
-python3 -c "import ast; ast.parse(open('registry/export_schemas.py').read()); ast.parse(open('registry/project_schemas.py').read()); print('OK')"
-```
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add registry/export_schemas.py registry/project_schemas.py
-git commit -m "feat(registry): Pydantic schemas for bundle jobs + project list/documents"
-```
-
----
-
-### Task 2.6: Project list + project documents endpoints (TDD)
-
-**Files:**
-- Create: `registry/projects_endpoints.py`
-- Create: `registry/test_projects_endpoints.py`
-- Modify: `registry/api.py` (wire the router)
-
-Adds `GET /api/cme/projects` and `GET /api/cme/projects/{project_id}/documents`. Read-only. Requires authenticated user (existing `require_user` dependency).
-
-- [ ] **Step 1: Write the failing tests**
-
-```python
-# registry/test_projects_endpoints.py
-import pytest
-from httpx import ASGITransport, AsyncClient
-
-from registry.api import app
-
-
-@pytest.mark.asyncio
-async def test_list_projects_returns_real_rows() -> None:
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        resp = await c.get(
-            "/api/cme/projects?limit=5",
-            headers={"Cf-Access-Jwt-Assertion": "dev-bypass"},
-        )
-    assert resp.status_code == 200
-    body = resp.json()
-    assert "projects" in body
-    assert isinstance(body["projects"], list)
-    assert body["limit"] == 5
-    if body["projects"]:
-        item = body["projects"][0]
-        for k in ("id", "name", "status", "document_count"):
-            assert k in item
-
-
-@pytest.mark.asyncio
-async def test_list_projects_search_filter() -> None:
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        resp = await c.get(
-            "/api/cme/projects?search=zzz_not_a_real_project",
-            headers={"Cf-Access-Jwt-Assertion": "dev-bypass"},
-        )
-    assert resp.status_code == 200
-    assert resp.json()["projects"] == []
-
-
-@pytest.mark.asyncio
-async def test_project_documents_returns_current_versions() -> None:
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        # Pick a project with known documents
-        list_resp = await c.get(
-            "/api/cme/projects?limit=1",
-            headers={"Cf-Access-Jwt-Assertion": "dev-bypass"},
-        )
-        projects = list_resp.json()["projects"]
-        if not projects:
-            pytest.skip("no projects in DB to exercise the endpoint")
-        pid = projects[0]["id"]
-
-        docs_resp = await c.get(
-            f"/api/cme/projects/{pid}/documents",
-            headers={"Cf-Access-Jwt-Assertion": "dev-bypass"},
-        )
-    assert docs_resp.status_code == 200
-    body = docs_resp.json()
-    assert body["project_id"] == pid
-    assert isinstance(body["documents"], list)
-    for d in body["documents"]:
-        assert d["is_current"] is True
-```
-
-- [ ] **Step 2: Run the tests — verify they fail**
-
-```bash
-docker exec dhg-registry-api python -m pytest registry/test_projects_endpoints.py -v
-```
-
-Expected: 404 for both endpoints (router not mounted yet).
-
-- [ ] **Step 3: Implement the endpoints**
-
-```python
-# registry/projects_endpoints.py
-"""Project list + project documents endpoints for the inbox Files tab."""
-from __future__ import annotations
-
-from uuid import UUID
-
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, or_
-from sqlalchemy.orm import Session
-
-from registry.auth import require_user
-from registry.database import get_db
-from registry.models import CMEDocument, CMEProject
-from registry.project_schemas import (
-    ProjectDocumentItem,
-    ProjectDocumentsResponse,
-    ProjectListItem,
-    ProjectListResponse,
-)
-
-router = APIRouter(prefix="/api/cme/projects", tags=["cme-projects"])
-
-
-@router.get("", response_model=ProjectListResponse)
-def list_projects(
-    search: str | None = Query(None),
-    status: str | None = Query(None),
-    limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db),
-    _user=Depends(require_user),
-) -> ProjectListResponse:
-    doc_count_sq = (
-        db.query(
-            CMEDocument.project_id.label("pid"),
-            func.count(CMEDocument.id).label("cnt"),
-            func.max(CMEDocument.updated_at).label("last_activity"),
-        )
-        .filter(CMEDocument.is_current.is_(True))
-        .group_by(CMEDocument.project_id)
-        .subquery()
-    )
-
-    q = db.query(
-        CMEProject,
-        func.coalesce(doc_count_sq.c.cnt, 0).label("cnt"),
-        doc_count_sq.c.last_activity,
-    ).outerjoin(doc_count_sq, CMEProject.id == doc_count_sq.c.pid)
-
-    if search:
-        term = f"%{search.strip()}%"
-        q = q.filter(CMEProject.name.ilike(term))
-    if status:
-        q = q.filter(CMEProject.status == status)
-
-    total = q.count()
-    rows = (
-        q.order_by(CMEProject.created_at.desc())
-        .limit(limit)
-        .offset(offset)
-        .all()
-    )
-
-    projects = [
-        ProjectListItem(
-            id=row[0].id,
-            name=row[0].name,
-            status=row[0].status,
-            kind=getattr(row[0], "kind", None),
-            document_count=int(row[1]),
-            last_activity_at=row[2],
-            drive_folder_id=row[0].drive_folder_id,
-        )
-        for row in rows
-    ]
-    return ProjectListResponse(
-        projects=projects, total=total, limit=limit, offset=offset
-    )
-
-
-@router.get("/{project_id}/documents", response_model=ProjectDocumentsResponse)
-def list_project_documents(
-    project_id: UUID,
-    db: Session = Depends(get_db),
-    _user=Depends(require_user),
-) -> ProjectDocumentsResponse:
-    project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="project not found")
-
-    docs = (
-        db.query(CMEDocument)
-        .filter(
-            CMEDocument.project_id == project_id,
-            CMEDocument.is_current.is_(True),
-        )
-        .order_by(CMEDocument.document_type, CMEDocument.version.desc())
-        .all()
-    )
-
-    items = [
-        ProjectDocumentItem(
-            id=d.id,
-            document_type=d.document_type,
-            title=d.title,
-            word_count=d.word_count,
-            version=d.version,
-            is_current=d.is_current,
-            updated_at=d.updated_at,
-            drive_file_id=d.drive_file_id,
-        )
-        for d in docs
-    ]
-    return ProjectDocumentsResponse(project_id=project_id, documents=items)
-```
-
-- [ ] **Step 4: Mount the router in `registry/api.py`**
-
-```python
-# near the other router imports
-from registry.projects_endpoints import router as projects_router
-
-# near other include_router calls
-app.include_router(projects_router)
-```
-
-- [ ] **Step 5: Rebuild + run tests**
-
-```bash
-docker compose build registry-api
-docker compose up -d registry-api
-docker exec dhg-registry-api python -m pytest registry/test_projects_endpoints.py -v
-```
-
-Expected: 3/3 pass.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add registry/projects_endpoints.py registry/test_projects_endpoints.py registry/api.py
-git commit -m "feat(registry): project list + project documents endpoints for Files tab"
-```
-
----
-
-### Task 2.7: Bundle enqueue endpoint + amended job/artifact endpoints (TDD)
+### Task 2.3: Enqueue endpoint with dedup + audit log (TDD)
 
 **Files:**
 - Modify: `registry/export_endpoints.py`
 - Modify: `registry/test_export_endpoints.py`
 
-Adds `POST /api/cme/export/bundle`, `GET /api/cme/export/job/{id}`, `GET /api/cme/export/artifact/{id}`, `GET /api/cme/export/jobs`. Bundle creation validates that every selected document_id belongs to the given project_id before inserting the row.
-
-- [ ] **Step 1: Write failing tests**
+- [ ] **Step 1: Write the failing test**
 
 ```python
 # append to registry/test_export_endpoints.py
-import pytest
-from httpx import ASGITransport, AsyncClient
-
-from registry.api import app
-
-
 @pytest.mark.asyncio
-async def test_bundle_enqueue_returns_job_id() -> None:
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        projects = (
-            await c.get(
-                "/api/cme/projects?limit=1",
-                headers={"Cf-Access-Jwt-Assertion": "dev-bypass"},
-            )
-        ).json()["projects"]
-        if not projects:
-            pytest.skip("no projects available")
-        pid = projects[0]["id"]
-
+async def test_enqueue_project_returns_job_id() -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         resp = await c.post(
-            "/api/cme/export/bundle",
-            json={
-                "project_id": pid,
-                "document_ids": None,
-                "include_manifest": True,
-                "include_intake": False,
-            },
+            "/api/cme/export/project/thread-abc",
+            json={"thread_id": "thread-abc", "graph_id": "grant_package"},
             headers={"Cf-Access-Jwt-Assertion": "dev-bypass"},
         )
     assert resp.status_code == 202
     body = resp.json()
-    assert body["scope"] == "project_bundle"
-    assert body["status"] == "pending"
-    assert body["project_id"] == pid
+    assert "id" in body
+    assert body["scope"] == "project"
+    assert body["status"] in ("pending", "running")
 
 
 @pytest.mark.asyncio
-async def test_bundle_rejects_doc_ids_outside_project() -> None:
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        projects = (
-            await c.get(
-                "/api/cme/projects?limit=2",
-                headers={"Cf-Access-Jwt-Assertion": "dev-bypass"},
-            )
-        ).json()["projects"]
-        if len(projects) < 2:
-            pytest.skip("need two projects")
-        pid_a = projects[0]["id"]
-        pid_b = projects[1]["id"]
-
-        docs_b = (
-            await c.get(
-                f"/api/cme/projects/{pid_b}/documents",
-                headers={"Cf-Access-Jwt-Assertion": "dev-bypass"},
-            )
-        ).json()["documents"]
-        if not docs_b:
-            pytest.skip("project B has no documents")
-
-        resp = await c.post(
-            "/api/cme/export/bundle",
-            json={
-                "project_id": pid_a,
-                "document_ids": [docs_b[0]["id"]],
-                "include_manifest": True,
-                "include_intake": False,
-            },
+async def test_enqueue_project_is_idempotent() -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        first = await c.post(
+            "/api/cme/export/project/thread-dedup",
+            json={"thread_id": "thread-dedup", "graph_id": "grant_package"},
             headers={"Cf-Access-Jwt-Assertion": "dev-bypass"},
         )
-    assert resp.status_code == 400
-    assert "document_ids" in resp.json()["detail"].lower()
+        second = await c.post(
+            "/api/cme/export/project/thread-dedup",
+            json={"thread_id": "thread-dedup", "graph_id": "grant_package"},
+            headers={"Cf-Access-Jwt-Assertion": "dev-bypass"},
+        )
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert first.json()["id"] == second.json()["id"]
 ```
 
-- [ ] **Step 2: Run tests — should fail 404/405**
+- [ ] **Step 2: Run — expect FAIL (404)**
 
 ```bash
-docker exec dhg-registry-api python -m pytest registry/test_export_endpoints.py::test_bundle_enqueue_returns_job_id registry/test_export_endpoints.py::test_bundle_rejects_doc_ids_outside_project -v
+docker exec dhg-registry-api pytest registry/test_export_endpoints.py -v
 ```
 
-- [ ] **Step 3: Implement endpoints**
-
-Append to `registry/export_endpoints.py`:
+- [ ] **Step 3: Implement the endpoint**
 
 ```python
-from uuid import UUID
-from fastapi import HTTPException
-from fastapi.responses import FileResponse
-from sqlalchemy.orm import Session
+# append to registry/export_endpoints.py
+from sqlalchemy import select, and_
+from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import Depends
 
-from registry.export_schemas import BundleJobCreate, BundleJobResponse
-from registry.models import CMEDocument, CMEProject, DownloadJob
-
-
-def _serialize_job(job: DownloadJob) -> BundleJobResponse:
-    return BundleJobResponse(
-        id=job.id,
-        project_id=job.project_id,
-        scope=job.scope,
-        status=job.status,
-        selected_document_ids=job.selected_document_ids,
-        created_at=job.created_at,
-        completed_at=job.completed_at,
-        artifact_bytes=job.artifact_bytes,
-        error=job.error,
-    )
+from database import get_async_db
+from models import DownloadJob
+from registry.export_schemas import DownloadJobCreate, DownloadJobResponse
+from registry.security_audit import record_audit_event  # existing helper
 
 
-@router.post("/bundle", response_model=BundleJobResponse, status_code=202)
-def create_bundle_job(
-    body: BundleJobCreate,
-    db: Session = Depends(get_db),
-    user=Depends(require_user),
-) -> BundleJobResponse:
-    project = (
-        db.query(CMEProject).filter(CMEProject.id == body.project_id).first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="project not found")
+@router.post(
+    "/project/{thread_id}",
+    response_model=DownloadJobResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def enqueue_project_download(
+    thread_id: str,
+    body: DownloadJobCreate,
+    session: AsyncSession = Depends(get_async_db),
+) -> DownloadJobResponse:
+    if body.thread_id != thread_id:
+        raise HTTPException(status_code=400, detail="thread_id mismatch")
 
-    if body.document_ids is not None:
-        if not body.document_ids:
-            raise HTTPException(
-                status_code=400, detail="document_ids may not be empty list"
+    # Dedup: return existing pending/running job if present
+    existing = await session.execute(
+        select(DownloadJob)
+        .where(
+            and_(
+                DownloadJob.thread_id == thread_id,
+                DownloadJob.scope == "project",
+                DownloadJob.status.in_(("pending", "running")),
             )
-        count = (
-            db.query(CMEDocument)
-            .filter(
-                CMEDocument.id.in_(body.document_ids),
-                CMEDocument.project_id == body.project_id,
-                CMEDocument.is_current.is_(True),
-            )
-            .count()
         )
-        if count != len(body.document_ids):
-            raise HTTPException(
-                status_code=400,
-                detail="one or more document_ids do not belong to this project",
-            )
+        .order_by(DownloadJob.created_at.desc())
+        .limit(1)
+    )
+    row = existing.scalar_one_or_none()
+    if row is not None:
+        return DownloadJobResponse.model_validate(row)
 
     job = DownloadJob(
-        thread_id=project.pipeline_thread_id or "",
-        graph_id="bundle",
-        scope="project_bundle",
+        thread_id=thread_id,
+        graph_id=body.graph_id,
+        scope="project",
         status="pending",
-        project_id=project.id,
-        selected_document_ids=(
-            [str(x) for x in body.document_ids] if body.document_ids else None
-        ),
-        created_by=getattr(user, "email", None),
     )
-    db.add(job)
-    db.commit()
-    db.refresh(job)
-    return _serialize_job(job)
-
-
-@router.get("/job/{job_id}", response_model=BundleJobResponse)
-def get_job(
-    job_id: UUID,
-    db: Session = Depends(get_db),
-    user=Depends(require_user),
-) -> BundleJobResponse:
-    job = db.query(DownloadJob).filter(DownloadJob.id == job_id).first()
-    if not job:
-        raise HTTPException(status_code=404, detail="job not found")
-    if job.created_by and job.created_by != getattr(user, "email", None):
-        if not getattr(user, "is_admin", False):
-            raise HTTPException(status_code=403, detail="forbidden")
-    return _serialize_job(job)
-
-
-@router.get("/artifact/{job_id}")
-def stream_artifact(
-    job_id: UUID,
-    db: Session = Depends(get_db),
-    user=Depends(require_user),
-) -> FileResponse:
-    job = db.query(DownloadJob).filter(DownloadJob.id == job_id).first()
-    if not job:
-        raise HTTPException(status_code=404, detail="job not found")
-    if job.created_by and job.created_by != getattr(user, "email", None):
-        if not getattr(user, "is_admin", False):
-            raise HTTPException(status_code=403, detail="forbidden")
-    if job.status != "succeeded" or not job.artifact_path:
-        raise HTTPException(status_code=409, detail="artifact not ready")
-    return FileResponse(
-        path=job.artifact_path,
-        media_type="application/zip",
-        filename=f"bundle-{job.id}.zip",
+    session.add(job)
+    await session.flush()
+    await record_audit_event(
+        session,
+        action="cme_export_enqueue",
+        resource_type="download_job",
+        resource_id=str(job.id),
+        metadata={"thread_id": thread_id, "graph_id": body.graph_id},
     )
-
-
-@router.get("/jobs", response_model=list[BundleJobResponse])
-def list_jobs(
-    limit: int = 20,
-    db: Session = Depends(get_db),
-    user=Depends(require_user),
-) -> list[BundleJobResponse]:
-    email = getattr(user, "email", None)
-    q = db.query(DownloadJob)
-    if email:
-        q = q.filter(DownloadJob.created_by == email)
-    rows = q.order_by(DownloadJob.created_at.desc()).limit(limit).all()
-    return [_serialize_job(j) for j in rows]
+    await session.commit()
+    await session.refresh(job)
+    return DownloadJobResponse.model_validate(job)
 ```
 
-- [ ] **Step 4: Rebuild + run tests**
+- [ ] **Step 4: Run — expect PASS**
 
 ```bash
-docker compose build registry-api && docker compose up -d registry-api
-docker exec dhg-registry-api python -m pytest registry/test_export_endpoints.py -v
+docker exec dhg-registry-api pytest registry/test_export_endpoints.py -v
 ```
 
-Expected: new tests pass; existing Phase 1 tests still pass.
+Expected: 4 passed (2 from Task 1.9, 2 new)
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add registry/export_endpoints.py registry/test_export_endpoints.py
-git commit -m "feat(registry): bundle enqueue endpoint + job/artifact/jobs routes"
+git commit -m "feat(export): enqueue project download with dedup + audit log"
 ```
 
 ---
 
-### Task 2.8: Bundler reading from `cme_documents` (TDD)
+### Task 2.4: Status, artifact stream, and list endpoints
 
 **Files:**
-- Create: `services/pdf-renderer/src/bundler.py`
-- Create: `services/pdf-renderer/tests/test_bundler.py`
+- Modify: `registry/export_endpoints.py`
+- Modify: `registry/test_export_endpoints.py`
 
-`assemble_bundle(job)` reads the selected documents from `cme_documents` (already-authoritative store; Phase 1 proved this works). Renders MD from `content_text`, PDF via Playwright against the existing `/print/document/{id}` route. Atomic zip: write to `.tmp`, `os.replace` to final.
-
-- [ ] **Step 1: Write failing test with mocked render**
+- [ ] **Step 1: Write tests**
 
 ```python
-# services/pdf-renderer/tests/test_bundler.py
-import hashlib
-import io
-import json
-import zipfile
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
-
-import pytest
-
-from src.bundler import assemble_bundle
+# append to registry/test_export_endpoints.py
+@pytest.mark.asyncio
+async def test_get_job_status() -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        created = await c.post(
+            "/api/cme/export/project/thread-status",
+            json={"thread_id": "thread-status", "graph_id": "grant_package"},
+            headers={"Cf-Access-Jwt-Assertion": "dev-bypass"},
+        )
+        job_id = created.json()["id"]
+        resp = await c.get(
+            f"/api/cme/export/job/{job_id}",
+            headers={"Cf-Access-Jwt-Assertion": "dev-bypass"},
+        )
+    assert resp.status_code == 200
+    assert resp.json()["id"] == job_id
 
 
 @pytest.mark.asyncio
-async def test_assemble_bundle_writes_expected_structure(
-    tmp_path, monkeypatch
-):
-    monkeypatch.setenv("EXPORTS_DIR", str(tmp_path))
-
-    fake_docs = [
-        MagicMock(
-            id="doc-1",
-            document_type="needs_assessment",
-            title="Needs",
-            content_text="# Needs\n\nBody.",
-        ),
-        MagicMock(
-            id="doc-2",
-            document_type="research",
-            title="Research",
-            content_text="# Research\n\nBody.",
-        ),
-    ]
-    fake_project = MagicMock(
-        id="proj-1", name="Test Project", pipeline_thread_id="t-1"
-    )
-    fake_job = MagicMock(
-        id="job-1",
-        project_id="proj-1",
-        selected_document_ids=None,
-        include_manifest=True,
-        include_intake=False,
-    )
-
-    import src.bundler as bundler_mod
-
-    monkeypatch.setattr(
-        bundler_mod, "load_project", MagicMock(return_value=fake_project)
-    )
-    monkeypatch.setattr(
-        bundler_mod, "load_current_docs", MagicMock(return_value=fake_docs)
-    )
-    monkeypatch.setattr(
-        bundler_mod,
-        "render_document_pdf",
-        AsyncMock(return_value=b"%PDF-1.4 fake\n%%EOF"),
-    )
-    monkeypatch.setattr(
-        bundler_mod, "update_job_artifact", MagicMock()
-    )
-
-    await assemble_bundle(fake_job)
-
-    final = tmp_path / "job-1.zip"
-    assert final.exists()
-    with zipfile.ZipFile(final) as zf:
-        names = set(zf.namelist())
-        assert "README.md" in names
-        assert "04-metadata/project.json" in names
-        assert "01-documents/01-needs_assessment.md" in names
-        assert "01-documents/01-needs_assessment.pdf" in names
-        assert "01-documents/02-research.md" in names
-        assert "01-documents/02-research.pdf" in names
-
-        meta = json.loads(zf.read("04-metadata/project.json"))
-        assert meta["project_id"] == "proj-1"
-        assert meta["selection_mode"] == "all"
-```
-
-- [ ] **Step 2: Run test — verify failure**
-
-```bash
-cd services/pdf-renderer && python -m pytest tests/test_bundler.py -v
-```
-
-- [ ] **Step 3: Implement `bundler.py`**
-
-```python
-"""Project bundle assembler.
-
-Reads from cme_documents (authoritative store; Phase 1 already uses this
-path via registry's fetch_latest_document_for_thread). Writes zip to a
-.tmp file then atomically renames. Uses EXPORTS_DIR env var for the base
-path (admin-configurable storage is deferred per spec §11).
-"""
-from __future__ import annotations
-
-import hashlib
-import io
-import json
-import logging
-import os
-import zipfile
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any
-
-from .renderer import RenderRequest, render_pdf
-from .signing import sign_token
-
-logger = logging.getLogger(__name__)
-
-
-def _exports_dir() -> Path:
-    base = os.getenv("EXPORTS_DIR", "/var/exports")
-    path = Path(base)
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
-def load_project(project_id: Any) -> Any:
-    from .db import session_scope
-    from registry.models import CMEProject
-
-    with session_scope() as db:
-        return db.query(CMEProject).filter(CMEProject.id == project_id).first()
-
-
-def load_current_docs(
-    project_id: Any, selected_ids: list[str] | None
-) -> list[Any]:
-    from .db import session_scope
-    from registry.models import CMEDocument
-
-    with session_scope() as db:
-        q = db.query(CMEDocument).filter(
-            CMEDocument.project_id == project_id,
-            CMEDocument.is_current.is_(True),
+async def test_artifact_404_while_pending() -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        created = await c.post(
+            "/api/cme/export/project/thread-pending",
+            json={"thread_id": "thread-pending", "graph_id": "grant_package"},
+            headers={"Cf-Access-Jwt-Assertion": "dev-bypass"},
         )
-        if selected_ids:
-            q = q.filter(CMEDocument.id.in_(selected_ids))
-        return (
-            q.order_by(CMEDocument.document_type, CMEDocument.version.desc())
-            .all()
+        job_id = created.json()["id"]
+        resp = await c.get(
+            f"/api/cme/export/artifact/{job_id}",
+            headers={"Cf-Access-Jwt-Assertion": "dev-bypass"},
         )
-
-
-async def render_document_pdf(document_id: Any) -> bytes:
-    frontend = os.getenv("FRONTEND_INTERNAL_URL", "http://dhg-frontend:3000")
-    token = sign_token(f"document:{document_id}")
-    url = f"{frontend}/print/document/{document_id}?token={token}"
-    return await render_pdf(
-        RenderRequest(
-            url=url,
-            wait_for_selectors=["[data-print-ready='true']"],
-            timeout_ms=30_000,
-        )
-    )
-
-
-def update_job_artifact(job_id: Any, path: Path, size: int, sha: str) -> None:
-    from .db import session_scope
-    from registry.models import DownloadJob
-
-    with session_scope() as db:
-        job = db.query(DownloadJob).filter(DownloadJob.id == job_id).first()
-        if job is None:
-            return
-        job.artifact_path = str(path)
-        job.artifact_bytes = size
-        job.artifact_sha256 = sha
-        db.commit()
-
-
-def _manifest_text(
-    project: Any,
-    entries: list[tuple[str, str]],
-    selection_mode: str,
-) -> str:
-    lines = [
-        f"# Bundle: {project.name}",
-        "",
-        f"Generated: {datetime.now(timezone.utc).isoformat()}",
-        f"Selection mode: {selection_mode}",
-        "",
-        "## Files",
-        "",
-    ]
-    for name, sha in entries:
-        lines.append(f"- `{name}` — sha256 `{sha}`")
-    lines.append("")
-    return "\n".join(lines)
-
-
-async def assemble_bundle(job: Any) -> None:
-    exports = _exports_dir()
-    tmp = exports / f"{job.id}.zip.tmp"
-    final = exports / f"{job.id}.zip"
-
-    project = load_project(job.project_id)
-    if project is None:
-        raise RuntimeError(f"project {job.project_id} not found")
-
-    selected = (
-        list(job.selected_document_ids) if job.selected_document_ids else None
-    )
-    docs = load_current_docs(job.project_id, selected)
-    if not docs:
-        raise RuntimeError("no documents matched the selection")
-
-    entries: list[tuple[str, str]] = []
-
-    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zf:
-        for i, doc in enumerate(docs, start=1):
-            prefix = f"{i:02d}-{doc.document_type}"
-            md_name = f"01-documents/{prefix}.md"
-            pdf_name = f"01-documents/{prefix}.pdf"
-
-            md_bytes = (doc.content_text or "").encode("utf-8")
-            zf.writestr(md_name, md_bytes)
-            entries.append(
-                (md_name, hashlib.sha256(md_bytes).hexdigest())
-            )
-
-            pdf_bytes = await render_document_pdf(doc.id)
-            zf.writestr(pdf_name, pdf_bytes)
-            entries.append(
-                (pdf_name, hashlib.sha256(pdf_bytes).hexdigest())
-            )
-
-        metadata = {
-            "project_id": str(project.id),
-            "project_name": project.name,
-            "selection_mode": "subset" if selected else "all",
-            "selected_document_ids": [str(x) for x in (selected or [])],
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "document_count": len(docs),
-        }
-        meta_bytes = json.dumps(metadata, indent=2).encode("utf-8")
-        zf.writestr("04-metadata/project.json", meta_bytes)
-        entries.append(
-            (
-                "04-metadata/project.json",
-                hashlib.sha256(meta_bytes).hexdigest(),
-            )
-        )
-
-        readme = _manifest_text(project, entries, metadata["selection_mode"])
-        zf.writestr("README.md", readme.encode("utf-8"))
-
-    os.replace(tmp, final)
-
-    size = final.stat().st_size
-    h = hashlib.sha256()
-    with final.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(65536), b""):
-            h.update(chunk)
-    update_job_artifact(job.id, final, size, h.hexdigest())
-    logger.info("bundle written", extra={"job_id": str(job.id), "size": size})
-```
-
-- [ ] **Step 4: Create `src/db.py` session_scope helper**
-
-```python
-# services/pdf-renderer/src/db.py
-"""Sync SQLAlchemy session scope for the renderer worker.
-
-Uses registry's sync SessionLocal. Worker call sites must wrap these in
-asyncio.to_thread when invoked from the async worker loop.
-"""
-from __future__ import annotations
-
-from contextlib import contextmanager
-
-from registry.database import SessionLocal
-
-
-@contextmanager
-def session_scope():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-```
-
-- [ ] **Step 5: Run test**
-
-```bash
-cd services/pdf-renderer && python -m pytest tests/test_bundler.py -v
-```
-
-Expected: pass.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add services/pdf-renderer/src/bundler.py services/pdf-renderer/src/db.py services/pdf-renderer/tests/test_bundler.py
-git commit -m "feat(pdf-renderer): bundler reads from cme_documents + atomic zip writer"
-```
-
----
-
-### Task 2.9: Google Drive client factory + requirements
-
-**Files:**
-- Modify: `services/pdf-renderer/requirements.txt`
-- Modify: `services/pdf-renderer/Dockerfile`
-- Create: `services/pdf-renderer/src/drive_client.py`
-
-Adds Google Drive SDK dependency, mounts the service account credentials file into the container, and provides a `build_drive_client()` factory.
-
-- [ ] **Step 1: Add dependency**
-
-Append to `services/pdf-renderer/requirements.txt`:
-
-```
-google-api-python-client==2.141.0
-google-auth==2.34.0
-```
-
-- [ ] **Step 2: Dockerfile credentials mount point**
-
-No Dockerfile change needed — credentials are mounted as a volume at runtime. Document the expected env var in a comment near the top:
-
-```dockerfile
-# Expects GOOGLE_APPLICATION_CREDENTIALS to point at a JSON keyfile mounted
-# via docker-compose volume (read-only). Service account must have Drive
-# write access to GOOGLE_DRIVE_ROOT_FOLDER_ID.
-```
-
-- [ ] **Step 3: Write `drive_client.py`**
-
-```python
-"""Google Drive service account client factory."""
-from __future__ import annotations
-
-import os
-
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-
-SCOPES = ["https://www.googleapis.com/auth/drive"]
-
-
-def build_drive_client():
-    creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-    if not creds_path:
-        raise RuntimeError(
-            "GOOGLE_APPLICATION_CREDENTIALS not set — Drive sync unavailable"
-        )
-    creds = service_account.Credentials.from_service_account_file(
-        creds_path, scopes=SCOPES
-    )
-    return build("drive", "v3", credentials=creds, cache_discovery=False)
-```
-
-- [ ] **Step 4: Compose volume mount**
-
-In `docker-compose.override.yml` `dhg-pdf-renderer` service, add:
-
-```yaml
-    volumes:
-      - dhg_exports:/var/exports:rw
-      - ./secrets/drive-service-account.json:/run/secrets/drive-sa.json:ro
-    environment:
-      - GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/drive-sa.json
-      - GOOGLE_DRIVE_ROOT_FOLDER_ID=${GOOGLE_DRIVE_ROOT_FOLDER_ID}
-```
-
-Add `secrets/drive-service-account.json` to `.gitignore` (create if missing) — the real key never enters git.
-
-- [ ] **Step 5: Rebuild and import check**
-
-```bash
-docker compose build dhg-pdf-renderer
-docker compose up -d dhg-pdf-renderer
-docker exec dhg-pdf-renderer python -c "from src.drive_client import SCOPES; print(SCOPES)"
-```
-
-Expected: `['https://www.googleapis.com/auth/drive']`.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add services/pdf-renderer/requirements.txt services/pdf-renderer/Dockerfile services/pdf-renderer/src/drive_client.py docker-compose.override.yml .gitignore
-git commit -m "feat(pdf-renderer): Google Drive service account client + creds mount"
-```
-
----
-
-### Task 2.10: Drive sync worker action (TDD with mocked Drive)
-
-**Files:**
-- Create: `services/pdf-renderer/src/drive_sync.py`
-- Create: `services/pdf-renderer/tests/test_drive_sync.py`
-
-`sync_project_to_drive(job)` ensures a project folder exists, renders PDFs for each current document, diffs by MD5, uploads changed files via the service account, and writes `manifest.json`. All Drive calls wrapped in `asyncio.to_thread` because the Google SDK is sync-only.
-
-- [ ] **Step 1: Failing test**
-
-```python
-# services/pdf-renderer/tests/test_drive_sync.py
-import hashlib
-import json
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
-
-from src.drive_sync import sync_project_to_drive
+    assert resp.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_drive_sync_creates_folder_and_uploads_changed_docs(
-    monkeypatch,
-):
-    monkeypatch.setenv("GOOGLE_DRIVE_ROOT_FOLDER_ID", "root-folder")
-
-    fake_project = MagicMock(
-        id="proj-1",
-        name="Test Project",
-        drive_folder_id=None,
-    )
-    fake_doc_unchanged = MagicMock(
-        id="d-1",
-        document_type="needs_assessment",
-        drive_file_id="existing-file-id",
-        drive_md5=hashlib.md5(b"pdf-A").hexdigest(),
-    )
-    fake_doc_new = MagicMock(
-        id="d-2",
-        document_type="research",
-        drive_file_id=None,
-        drive_md5=None,
-    )
-
-    mock_drive = MagicMock()
-    mock_drive.files().create().execute.side_effect = [
-        {"id": "folder-123"},  # project folder create
-        {"id": "file-new-id"},  # doc create
-        {"id": "manifest-file-id"},  # manifest create
-    ]
-    mock_drive.files().list().execute.return_value = {"files": []}
-
-    pdf_calls = iter([b"pdf-A", b"pdf-B"])
-
-    async def fake_render(_doc_id):
-        return next(pdf_calls)
-
-    import src.drive_sync as ds
-
-    monkeypatch.setattr(ds, "build_drive_client", lambda: mock_drive)
-    monkeypatch.setattr(
-        ds, "load_project", MagicMock(return_value=fake_project)
-    )
-    monkeypatch.setattr(
-        ds,
-        "load_current_docs",
-        MagicMock(return_value=[fake_doc_unchanged, fake_doc_new]),
-    )
-    monkeypatch.setattr(ds, "render_document_pdf", fake_render)
-    monkeypatch.setattr(ds, "persist_project_updates", MagicMock())
-    monkeypatch.setattr(ds, "persist_document_sync", MagicMock())
-
-    job = MagicMock(id="job-1", project_id="proj-1")
-
-    await sync_project_to_drive(job)
-
-    # Unchanged doc should not have been re-uploaded
-    ds.persist_document_sync.assert_called_once()
-    args = ds.persist_document_sync.call_args[0]
-    assert args[0] == "d-2"
+async def test_list_jobs_returns_recent() -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        resp = await c.get(
+            "/api/cme/export/jobs",
+            headers={"Cf-Access-Jwt-Assertion": "dev-bypass"},
+        )
+    assert resp.status_code == 200
+    assert "jobs" in resp.json()
 ```
 
-- [ ] **Step 2: Run — verify failure**
-
-```bash
-cd services/pdf-renderer && python -m pytest tests/test_drive_sync.py -v
-```
-
-- [ ] **Step 3: Implement `drive_sync.py`**
+- [ ] **Step 2: Implement the endpoints**
 
 ```python
-"""Google Drive sync for project documents.
-
-Reconciliation model: manifest.json in the Drive project folder holds the
-desired state; we diff against it on each run and only upload documents
-whose MD5 has changed. All Google SDK calls are sync — wrapped with
-asyncio.to_thread.
-"""
-from __future__ import annotations
-
-import asyncio
+# append to registry/export_endpoints.py
 import hashlib
-import io
-import json
-import logging
-import os
-from datetime import datetime, timezone
-from typing import Any
+from pathlib import Path
+from uuid import UUID
 
-from googleapiclient.http import MediaIoBaseUpload
-
-from .bundler import load_current_docs, load_project, render_document_pdf
-from .drive_client import build_drive_client
-
-logger = logging.getLogger(__name__)
-
-MANIFEST_NAME = "manifest.json"
-FOLDER_MIME = "application/vnd.google-apps.folder"
+from fastapi.responses import StreamingResponse
+from registry.export_schemas import DownloadJobListResponse
 
 
-def persist_project_updates(
-    project_id: Any, drive_folder_id: str, status: str
-) -> None:
-    from .db import session_scope
-    from registry.models import CMEProject
-
-    with session_scope() as db:
-        p = db.query(CMEProject).filter(CMEProject.id == project_id).first()
-        if p is None:
-            return
-        p.drive_folder_id = drive_folder_id
-        p.drive_last_synced_at = datetime.now(timezone.utc)
-        p.drive_sync_status = status
-        db.commit()
+@router.get("/job/{job_id}", response_model=DownloadJobResponse)
+async def get_job(
+    job_id: UUID,
+    session: AsyncSession = Depends(get_async_db),
+) -> DownloadJobResponse:
+    row = await session.get(DownloadJob, job_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    return DownloadJobResponse.model_validate(row)
 
 
-def persist_document_sync(
-    document_id: Any, drive_file_id: str, md5: str
-) -> None:
-    from .db import session_scope
-    from registry.models import CMEDocument
+@router.get("/artifact/{job_id}")
+async def get_artifact(
+    job_id: UUID,
+    session: AsyncSession = Depends(get_async_db),
+) -> StreamingResponse:
+    row = await session.get(DownloadJob, job_id)
+    if row is None or row.status != "succeeded" or not row.artifact_path:
+        raise HTTPException(status_code=404, detail="artifact not ready")
 
-    with session_scope() as db:
-        d = (
-            db.query(CMEDocument)
-            .filter(CMEDocument.id == document_id)
-            .first()
-        )
-        if d is None:
-            return
-        d.drive_file_id = drive_file_id
-        d.drive_md5 = md5
-        d.drive_synced_at = datetime.now(timezone.utc)
-        db.commit()
+    path = Path(row.artifact_path)
+    if not path.exists():
+        raise HTTPException(status_code=410, detail="artifact expired")
 
+    # Re-validate SHA-256 before streaming
+    hasher = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    if hasher.hexdigest() != row.artifact_sha256:
+        raise HTTPException(status_code=500, detail="artifact checksum mismatch")
 
-async def sync_project_to_drive(job: Any) -> None:
-    root_folder_id = os.getenv("GOOGLE_DRIVE_ROOT_FOLDER_ID")
-    if not root_folder_id:
-        raise RuntimeError("GOOGLE_DRIVE_ROOT_FOLDER_ID not configured")
+    safe_name = _sanitize_filename(f"project_{row.thread_id}")
+    stamp = row.completed_at.strftime("%Y-%m-%d") if row.completed_at else "undated"
+    filename = f"{safe_name}_{stamp}.zip"
 
-    drive = build_drive_client()
-    project = load_project(job.project_id)
-    if project is None:
-        raise RuntimeError(f"project {job.project_id} not found")
+    def iterfile():
+        with path.open("rb") as fh:
+            yield from iter(lambda: fh.read(1024 * 1024), b"")
 
-    folder_id = project.drive_folder_id
-    if not folder_id:
-        meta = await asyncio.to_thread(
-            lambda: drive.files()
-            .create(
-                body={
-                    "name": f"{project.name} ({project.id})",
-                    "mimeType": FOLDER_MIME,
-                    "parents": [root_folder_id],
-                },
-                fields="id",
-            )
-            .execute()
-        )
-        folder_id = meta["id"]
-
-    existing = await asyncio.to_thread(
-        lambda: drive.files()
-        .list(
-            q=f"'{folder_id}' in parents and trashed = false",
-            fields="files(id, name, md5Checksum)",
-        )
-        .execute()
-    )
-    existing_by_name = {
-        f["name"]: f for f in existing.get("files", [])
-    }
-
-    docs = load_current_docs(job.project_id, None)
-    manifest_entries = []
-
-    for i, doc in enumerate(docs, start=1):
-        pdf_name = f"{i:02d}-{doc.document_type}.pdf"
-        pdf_bytes = await render_document_pdf(doc.id)
-        pdf_md5 = hashlib.md5(pdf_bytes).hexdigest()
-
-        manifest_entries.append(
-            {
-                "document_id": str(doc.id),
-                "name": pdf_name,
-                "md5": pdf_md5,
-            }
-        )
-
-        if doc.drive_md5 == pdf_md5 and doc.drive_file_id:
-            continue
-
-        media = MediaIoBaseUpload(
-            io.BytesIO(pdf_bytes),
-            mimetype="application/pdf",
-            resumable=False,
-        )
-        if pdf_name in existing_by_name:
-            file_id = existing_by_name[pdf_name]["id"]
-            await asyncio.to_thread(
-                lambda: drive.files()
-                .update(fileId=file_id, media_body=media)
-                .execute()
-            )
-        else:
-            res = await asyncio.to_thread(
-                lambda: drive.files()
-                .create(
-                    body={"name": pdf_name, "parents": [folder_id]},
-                    media_body=media,
-                    fields="id",
-                )
-                .execute()
-            )
-            file_id = res["id"]
-        persist_document_sync(doc.id, file_id, pdf_md5)
-
-    manifest = {
-        "project_id": str(project.id),
-        "project_name": project.name,
-        "synced_at": datetime.now(timezone.utc).isoformat(),
-        "documents": manifest_entries,
-    }
-    manifest_bytes = json.dumps(manifest, indent=2).encode("utf-8")
-    manifest_media = MediaIoBaseUpload(
-        io.BytesIO(manifest_bytes),
-        mimetype="application/json",
-        resumable=False,
-    )
-    if MANIFEST_NAME in existing_by_name:
-        await asyncio.to_thread(
-            lambda: drive.files()
-            .update(
-                fileId=existing_by_name[MANIFEST_NAME]["id"],
-                media_body=manifest_media,
-            )
-            .execute()
-        )
-    else:
-        await asyncio.to_thread(
-            lambda: drive.files()
-            .create(
-                body={"name": MANIFEST_NAME, "parents": [folder_id]},
-                media_body=manifest_media,
-                fields="id",
-            )
-            .execute()
-        )
-
-    persist_project_updates(project.id, folder_id, "ok")
-    logger.info(
-        "drive sync done",
-        extra={
-            "project_id": str(project.id),
-            "document_count": len(docs),
-            "folder_id": folder_id,
+    return StreamingResponse(
+        iterfile(),
+        media_type="application/zip",
+        headers={
+            "content-disposition": f'attachment; filename="{filename}"',
+            "content-length": str(row.artifact_bytes or path.stat().st_size),
+            "cache-control": "no-store",
         },
     )
+
+
+@router.get("/jobs", response_model=DownloadJobListResponse)
+async def list_jobs(
+    limit: int = 50,
+    session: AsyncSession = Depends(get_async_db),
+) -> DownloadJobListResponse:
+    limit = max(1, min(limit, 200))
+    rows = (
+        await session.execute(
+            select(DownloadJob).order_by(DownloadJob.created_at.desc()).limit(limit)
+        )
+    ).scalars().all()
+    return DownloadJobListResponse(
+        jobs=[DownloadJobResponse.model_validate(r) for r in rows]
+    )
 ```
 
-- [ ] **Step 4: Run test — expect pass**
+- [ ] **Step 3: Run — expect PASS**
 
 ```bash
-cd services/pdf-renderer && python -m pytest tests/test_drive_sync.py -v
+docker exec dhg-registry-api pytest registry/test_export_endpoints.py -v
 ```
 
-- [ ] **Step 5: Commit**
+Expected: 7 passed
+
+- [ ] **Step 4: Commit**
 
 ```bash
-git add services/pdf-renderer/src/drive_sync.py services/pdf-renderer/tests/test_drive_sync.py
-git commit -m "feat(pdf-renderer): Drive sync with manifest.json reconciliation"
+git add registry/export_endpoints.py registry/test_export_endpoints.py
+git commit -m "feat(export): add job status, artifact stream, and list endpoints"
 ```
 
 ---
 
-### Task 2.11: Worker loop with `FOR UPDATE` + three scopes
+### Task 2.5: Worker loop in FastAPI lifespan (`SKIP LOCKED`)
 
 **Files:**
-- Create: `services/pdf-renderer/src/worker.py`
-- Modify: `services/pdf-renderer/src/main.py` (lifespan hook)
-- Create: `services/pdf-renderer/tests/test_worker_claim.py`
+- Create: `registry/export_worker.py`
+- Modify: `registry/api.py`
 
-Plain `FOR UPDATE` (no SKIP LOCKED — single-replica deployment). Dispatches based on `job.scope`.
-
-- [ ] **Step 1: Claim test**
+- [ ] **Step 1: Write the worker**
 
 ```python
-# services/pdf-renderer/tests/test_worker_claim.py
-from unittest.mock import MagicMock
-
-import pytest
-
-from src.worker import claim_next_job_sync
-
-
-def test_claim_ignores_non_pending(monkeypatch):
-    fake_db = MagicMock()
-    fake_result = MagicMock()
-    fake_result.fetchone.return_value = None
-    fake_db.execute.return_value = fake_result
-    job = claim_next_job_sync(fake_db)
-    assert job is None
-    # Verify SQL uses FOR UPDATE (not SKIP LOCKED)
-    sql = fake_db.execute.call_args[0][0].text
-    assert "FOR UPDATE" in sql
-    assert "SKIP LOCKED" not in sql
-```
-
-- [ ] **Step 2: Implement**
-
-```python
-"""Worker loop: claims pending download_jobs and dispatches by scope.
-
-Single-replica deployment — plain FOR UPDATE. If we ever run multiple
-renderer replicas, swap in SKIP LOCKED.
-"""
+# registry/export_worker.py
 from __future__ import annotations
 
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Any
 
 from sqlalchemy import text
 
-from .bundler import assemble_bundle
-from .db import session_scope
-from .drive_sync import sync_project_to_drive
+from database import async_session
+from models import DownloadJob
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger("dhg.export.worker")
 
-_CLAIM_SQL = text(
-    """
-    SELECT id, scope, project_id, thread_id, graph_id,
-           selected_document_ids, created_by
-      FROM download_jobs
-     WHERE status = 'pending'
-       AND scope IN ('project_bundle', 'drive_sync')
-     ORDER BY created_at
-     LIMIT 1
-     FOR UPDATE
-    """
-)
+POLL_INTERVAL_SECONDS = 2.0
 
 
-def claim_next_job_sync(db) -> Any | None:
-    result = db.execute(_CLAIM_SQL)
-    row = result.fetchone()
-    if row is None:
-        return None
-    db.execute(
-        text(
-            "UPDATE download_jobs SET status='running', started_at=now() "
-            "WHERE id=:id"
-        ),
-        {"id": row.id},
-    )
-    db.commit()
-    return row
+async def _claim_next_job() -> DownloadJob | None:
+    async with async_session() as session:
+        async with session.begin():
+            result = await session.execute(
+                text(
+                    """
+                    SELECT id FROM download_jobs
+                    WHERE status = 'pending'
+                    ORDER BY created_at ASC
+                    LIMIT 1
+                    FOR UPDATE SKIP LOCKED
+                    """
+                )
+            )
+            row = result.first()
+            if row is None:
+                return None
+            job = await session.get(DownloadJob, row[0])
+            job.status = "running"
+            job.started_at = datetime.now(timezone.utc)
+            return job
 
 
-def mark_completed_sync(db, job_id: Any) -> None:
-    db.execute(
-        text(
-            "UPDATE download_jobs SET status='succeeded', completed_at=now() "
-            "WHERE id=:id"
-        ),
-        {"id": job_id},
-    )
-    db.commit()
+async def _complete(job_id, *, status: str, **fields: object) -> None:
+    async with async_session() as session:
+        async with session.begin():
+            row = await session.get(DownloadJob, job_id)
+            if row is None:
+                return
+            row.status = status
+            row.completed_at = datetime.now(timezone.utc)
+            for k, v in fields.items():
+                setattr(row, k, v)
 
 
-def mark_failed_sync(db, job_id: Any, error: str) -> None:
-    db.execute(
-        text(
-            "UPDATE download_jobs "
-            "SET status='failed', completed_at=now(), error=:error "
-            "WHERE id=:id"
-        ),
-        {"id": job_id, "error": error[:2000]},
-    )
-    db.commit()
+async def _process(job: DownloadJob) -> None:
+    from registry.export_bundler import assemble_project_bundle
 
-
-async def _claim() -> Any | None:
-    def _inner():
-        with session_scope() as db:
-            return claim_next_job_sync(db)
-
-    return await asyncio.to_thread(_inner)
+    try:
+        result = await assemble_project_bundle(job.thread_id)
+        await _complete(
+            job.id,
+            status="succeeded",
+            artifact_path=str(result.path),
+            artifact_sha256=result.sha256,
+            artifact_bytes=result.bytes,
+        )
+    except Exception as exc:  # pragma: no cover - exercised in integration
+        log.exception("bundle failed for job %s", job.id)
+        await _complete(job.id, status="failed", error=str(exc)[:1000])
 
 
 async def run_worker(stop_event: asyncio.Event) -> None:
-    logger.info("worker loop started")
+    log.info("export worker started")
     while not stop_event.is_set():
-        job = await _claim()
+        try:
+            job = await _claim_next_job()
+        except Exception:
+            log.exception("worker claim loop error")
+            await asyncio.sleep(POLL_INTERVAL_SECONDS)
+            continue
         if job is None:
             try:
-                await asyncio.wait_for(stop_event.wait(), timeout=2.0)
+                await asyncio.wait_for(stop_event.wait(), timeout=POLL_INTERVAL_SECONDS)
             except asyncio.TimeoutError:
                 pass
             continue
-
-        logger.info(
-            "claimed job",
-            extra={"job_id": str(job.id), "scope": job.scope},
-        )
-        try:
-            if job.scope == "project_bundle":
-                await assemble_bundle(job)
-            elif job.scope == "drive_sync":
-                await sync_project_to_drive(job)
-            else:
-                raise RuntimeError(f"unsupported scope {job.scope}")
-
-            def _ok():
-                with session_scope() as db:
-                    mark_completed_sync(db, job.id)
-
-            await asyncio.to_thread(_ok)
-        except Exception as exc:
-            logger.exception("job failed", extra={"job_id": str(job.id)})
-
-            def _fail():
-                with session_scope() as db:
-                    mark_failed_sync(db, job.id, str(exc))
-
-            await asyncio.to_thread(_fail)
+        await _process(job)
+    log.info("export worker stopped")
 ```
 
-- [ ] **Step 3: Wire into FastAPI lifespan**
-
-In `services/pdf-renderer/src/main.py`:
+- [ ] **Step 2: Wire into the FastAPI `lifespan` in `api.py`**
 
 ```python
-from contextlib import asynccontextmanager
+# registry/api.py — inside the existing lifespan context manager
 import asyncio
-from fastapi import FastAPI
-from .worker import run_worker
+from contextlib import asynccontextmanager
 
+from registry.export_worker import run_worker
+
+_worker_stop = asyncio.Event()
 _worker_task: asyncio.Task | None = None
-_stop_event: asyncio.Event | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _worker_task, _stop_event
-    _stop_event = asyncio.Event()
-    _worker_task = asyncio.create_task(run_worker(_stop_event))
+    global _worker_task
+    _worker_stop.clear()
+    _worker_task = asyncio.create_task(run_worker(_worker_stop))
     try:
         yield
     finally:
-        _stop_event.set()
-        if _worker_task:
-            try:
-                await asyncio.wait_for(_worker_task, timeout=10.0)
-            except asyncio.TimeoutError:
-                _worker_task.cancel()
-
-
-app = FastAPI(lifespan=lifespan)
-# ... existing route registrations ...
+        _worker_stop.set()
+        if _worker_task is not None:
+            await _worker_task
 ```
 
-- [ ] **Step 4: Run tests**
+If a `lifespan` already exists, merge: start the task in the setup block and await it in the teardown block; do not replace existing lifespan logic.
+
+- [ ] **Step 3: Restart the API and tail logs**
 
 ```bash
-cd services/pdf-renderer && python -m pytest tests/test_worker_claim.py -v
+docker compose up -d dhg-registry-api
+docker logs -f dhg-registry-api | grep "export worker"
 ```
 
-- [ ] **Step 5: Rebuild + smoke**
-
-```bash
-docker compose build dhg-pdf-renderer
-docker compose up -d dhg-pdf-renderer
-docker logs dhg-pdf-renderer 2>&1 | grep "worker loop started"
-```
-
-Expected: log contains `worker loop started`.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add services/pdf-renderer/src/worker.py services/pdf-renderer/src/main.py services/pdf-renderer/tests/test_worker_claim.py
-git commit -m "feat(pdf-renderer): worker loop with FOR UPDATE + bundle/drive_sync dispatch"
-```
-
----
-
-### Task 2.12: Orchestrator `enqueue_drive_sync` + milestone call sites
-
-**Files:**
-- Create: `langgraph_workflows/dhg-agents-cloud/src/drive_sync_hook.py`
-- Modify: `langgraph_workflows/dhg-agents-cloud/src/orchestrator.py`
-
-Provides a helper that inserts a `drive_sync` row into `download_jobs`, with dedup (skip if an existing `pending`/`running` row for the same `project_id` exists). Wired to three milestone points: after each content-agent pass, after a human review decision resumes, after compliance passes.
-
-- [ ] **Step 1: Write the helper**
-
-```python
-"""Enqueue drive_sync jobs at pipeline milestones.
-
-Dedup: if a pending or running drive_sync job already exists for the
-project, do not insert another. This absorbs bursts of near-simultaneous
-milestones (e.g. parallel research + clinical finishing within ms of
-each other) into a single sync.
-"""
-from __future__ import annotations
-
-import logging
-import os
-from contextlib import contextmanager
-
-from sqlalchemy import text
-from sqlalchemy.orm import Session
-
-logger = logging.getLogger(__name__)
-
-
-def _db_session() -> Session:
-    from registry.database import SessionLocal
-
-    return SessionLocal()
-
-
-@contextmanager
-def _session():
-    db = _db_session()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-def enqueue_drive_sync(project_id: str) -> bool:
-    """Insert a drive_sync job row unless one is already pending/running.
-
-    Returns True if a new row was inserted.
-    """
-    if os.getenv("DRIVE_SYNC_DISABLED") == "1":
-        return False
-    with _session() as db:
-        existing = db.execute(
-            text(
-                "SELECT id FROM download_jobs "
-                "WHERE project_id = :pid AND scope = 'drive_sync' "
-                "  AND status IN ('pending', 'running') "
-                "LIMIT 1"
-            ),
-            {"pid": project_id},
-        ).first()
-        if existing:
-            logger.debug(
-                "drive_sync dedup",
-                extra={"project_id": project_id, "existing_id": str(existing.id)},
-            )
-            return False
-
-        db.execute(
-            text(
-                "INSERT INTO download_jobs "
-                "  (thread_id, graph_id, scope, status, project_id) "
-                "VALUES ('', 'drive_sync', 'drive_sync', 'pending', :pid)"
-            ),
-            {"pid": project_id},
-        )
-        db.commit()
-        logger.info(
-            "drive_sync enqueued", extra={"project_id": project_id}
-        )
-        return True
-```
-
-- [ ] **Step 2: Call sites in `orchestrator.py`**
-
-Identify the three milestone points. For each, import and call the helper with the project_id resolved from thread state. Example pattern:
-
-```python
-from .drive_sync_hook import enqueue_drive_sync
-
-# After a content agent node finishes:
-def _on_content_agent_complete(state):
-    project_id = state.get("project_id")
-    if project_id:
-        try:
-            enqueue_drive_sync(project_id)
-        except Exception:
-            logger.exception("drive_sync enqueue failed (non-fatal)")
-    return state
-```
-
-The exact insertion points are: the end of each agent sub-graph in `orchestrator.py`, the human-review resume handler, and the compliance-review finalization. Resolve `project_id` from `state["project_id"]` — orchestrator state already carries it.
-
-- [ ] **Step 3: Smoke test — manual enqueue via psql**
-
-```bash
-docker exec dhg-registry-db psql -U dhg -d dhg_registry -c \
-  "INSERT INTO download_jobs (thread_id, graph_id, scope, status, project_id) \
-   VALUES ('', 'drive_sync', 'drive_sync', 'pending', (SELECT id FROM cme_projects LIMIT 1));"
-sleep 3
-docker exec dhg-registry-db psql -U dhg -d dhg_registry -c \
-  "SELECT id, status, error FROM download_jobs WHERE scope='drive_sync' ORDER BY created_at DESC LIMIT 1;"
-```
-
-Expected: job transitions to `succeeded` (or `failed` with a clear error if Drive credentials aren't wired yet — acceptable at this checkpoint).
+Expected: `export worker started` on boot, `export worker stopped` on shutdown.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add langgraph_workflows/dhg-agents-cloud/src/drive_sync_hook.py langgraph_workflows/dhg-agents-cloud/src/orchestrator.py
-git commit -m "feat(orchestrator): enqueue_drive_sync helper + milestone call sites"
+git add registry/export_worker.py registry/api.py
+git commit -m "feat(export): background worker with SKIP LOCKED claim"
 ```
 
 ---
 
-### Task 2.13: Frontend `filesApi.ts` client
+### Task 2.6: Intake print route + IntakePrint component
 
 **Files:**
-- Create: `frontend/src/lib/filesApi.ts`
+- Create: `frontend/src/app/print/cme/project/[threadId]/intake/page.tsx`
+- Create: `frontend/src/components/print/intake-print.tsx`
+- Modify: `registry/export_service.py`
+- Modify: `registry/cme_endpoints.py`
 
-Typed fetch wrappers for the new project + bundle endpoints. Uses the existing `/api/registry` proxy route which forwards Cloudflare JWT.
-
-- [ ] **Step 1: Write the client**
+- [ ] **Step 1: Create the IntakePrint component**
 
 ```typescript
-// frontend/src/lib/filesApi.ts
-export interface ProjectListItem {
-  id: string;
-  name: string;
-  status: string;
-  kind: string | null;
-  document_count: number;
-  last_activity_at: string | null;
-  drive_folder_id: string | null;
+// frontend/src/components/print/intake-print.tsx
+import { PrintShell } from "./print-shell";
+
+export interface IntakePrintProps {
+  projectName: string;
+  generatedAt: string;
+  intake: Record<string, unknown>;
 }
 
-export interface ProjectListResponse {
-  projects: ProjectListItem[];
-  total: number;
-  limit: number;
-  offset: number;
+function renderValue(value: unknown): string {
+  if (value == null) return "—";
+  if (Array.isArray(value)) return value.map((v) => String(v)).join(", ");
+  if (typeof value === "object") return JSON.stringify(value, null, 2);
+  return String(value);
 }
 
-export interface ProjectDocumentItem {
-  id: string;
-  document_type: string;
-  title: string | null;
-  word_count: number | null;
-  version: number;
-  is_current: boolean;
-  updated_at: string;
-  drive_file_id: string | null;
-}
-
-export interface ProjectDocumentsResponse {
-  project_id: string;
-  documents: ProjectDocumentItem[];
-}
-
-export interface BundleJobResponse {
-  id: string;
-  project_id: string | null;
-  scope: "document" | "project_bundle" | "drive_sync";
-  status: "pending" | "running" | "succeeded" | "failed";
-  selected_document_ids: string[] | null;
-  created_at: string;
-  completed_at: string | null;
-  artifact_bytes: number | null;
-  error: string | null;
-}
-
-async function json<T>(res: Response): Promise<T> {
-  if (!res.ok) {
-    throw new Error(`${res.status} ${res.statusText}`);
-  }
-  return (await res.json()) as T;
-}
-
-export async function listProjects(params: {
-  search?: string;
-  status?: string;
-  limit?: number;
-  offset?: number;
-}): Promise<ProjectListResponse> {
-  const qs = new URLSearchParams();
-  if (params.search) qs.set("search", params.search);
-  if (params.status) qs.set("status", params.status);
-  qs.set("limit", String(params.limit ?? 50));
-  qs.set("offset", String(params.offset ?? 0));
-  return json<ProjectListResponse>(
-    await fetch(`/api/registry/api/cme/projects?${qs.toString()}`),
-  );
-}
-
-export async function listProjectDocuments(
-  projectId: string,
-): Promise<ProjectDocumentsResponse> {
-  return json<ProjectDocumentsResponse>(
-    await fetch(`/api/registry/api/cme/projects/${projectId}/documents`),
-  );
-}
-
-export async function createBundleJob(body: {
-  project_id: string;
-  document_ids: string[] | null;
-  include_manifest: boolean;
-  include_intake: boolean;
-}): Promise<BundleJobResponse> {
-  return json<BundleJobResponse>(
-    await fetch(`/api/registry/api/cme/export/bundle`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }),
-  );
-}
-
-export async function getJob(jobId: string): Promise<BundleJobResponse> {
-  return json<BundleJobResponse>(
-    await fetch(`/api/registry/api/cme/export/job/${jobId}`),
-  );
-}
-
-export async function listJobs(limit = 20): Promise<BundleJobResponse[]> {
-  return json<BundleJobResponse[]>(
-    await fetch(`/api/registry/api/cme/export/jobs?limit=${limit}`),
-  );
-}
-
-export function artifactUrl(jobId: string): string {
-  return `/api/registry/api/cme/export/artifact/${jobId}`;
-}
-```
-
-- [ ] **Step 2: Typecheck**
-
-```bash
-cd frontend && npx tsc --noEmit
-```
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add frontend/src/lib/filesApi.ts
-git commit -m "feat(frontend): filesApi client for projects + bundle jobs"
-```
-
----
-
-### Task 2.14: Files tab Zustand store
-
-**Files:**
-- Create: `frontend/src/stores/files-tab-store.ts`
-
-Holds project list, expanded-project set, selection set, search query, preview doc id. Persists only `expandedProjectIds` (selection + preview are ephemeral).
-
-- [ ] **Step 1: Write the store**
-
-```typescript
-import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
-import type {
-  ProjectDocumentItem,
-  ProjectListItem,
-} from "@/lib/filesApi";
-
-interface FilesTabState {
-  projects: ProjectListItem[];
-  documentsByProject: Record<string, ProjectDocumentItem[]>;
-  expandedProjectIds: string[];
-  selectedDocumentIds: string[];
-  selectedProjectId: string | null;
-  searchQuery: string;
-  previewDocumentId: string | null;
-
-  setProjects: (projects: ProjectListItem[]) => void;
-  setDocuments: (projectId: string, docs: ProjectDocumentItem[]) => void;
-  toggleProjectExpanded: (id: string) => void;
-  toggleDocumentSelected: (projectId: string, documentId: string) => void;
-  clearSelection: () => void;
-  setPreview: (documentId: string | null) => void;
-  setSearch: (q: string) => void;
-}
-
-export const useFilesTabStore = create<FilesTabState>()(
-  persist(
-    (set, get) => ({
-      projects: [],
-      documentsByProject: {},
-      expandedProjectIds: [],
-      selectedDocumentIds: [],
-      selectedProjectId: null,
-      searchQuery: "",
-      previewDocumentId: null,
-
-      setProjects: (projects) => set({ projects }),
-      setDocuments: (projectId, docs) =>
-        set((s) => ({
-          documentsByProject: { ...s.documentsByProject, [projectId]: docs },
-        })),
-      toggleProjectExpanded: (id) =>
-        set((s) => ({
-          expandedProjectIds: s.expandedProjectIds.includes(id)
-            ? s.expandedProjectIds.filter((x) => x !== id)
-            : [...s.expandedProjectIds, id],
-        })),
-      toggleDocumentSelected: (projectId, documentId) => {
-        const s = get();
-        const currentProject = s.selectedProjectId;
-        if (currentProject && currentProject !== projectId) {
-          set({
-            selectedDocumentIds: [documentId],
-            selectedProjectId: projectId,
-          });
-          return;
-        }
-        const selected = s.selectedDocumentIds.includes(documentId)
-          ? s.selectedDocumentIds.filter((x) => x !== documentId)
-          : [...s.selectedDocumentIds, documentId];
-        set({
-          selectedDocumentIds: selected,
-          selectedProjectId: selected.length ? projectId : null,
-        });
-      },
-      clearSelection: () =>
-        set({ selectedDocumentIds: [], selectedProjectId: null }),
-      setPreview: (documentId) => set({ previewDocumentId: documentId }),
-      setSearch: (q) => set({ searchQuery: q }),
-    }),
-    {
-      name: "files-tab-store",
-      storage: createJSONStorage(() => localStorage),
-      partialize: (s) => ({ expandedProjectIds: s.expandedProjectIds }),
-    },
-  ),
-);
-```
-
-- [ ] **Step 2: Typecheck**
-
-```bash
-cd frontend && npx tsc --noEmit
-```
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add frontend/src/stores/files-tab-store.ts
-git commit -m "feat(frontend): files-tab-store with selection + expansion state"
-```
-
----
-
-### Task 2.15: Files tab UI components
-
-**Files:**
-- Create: `frontend/src/components/inbox/files-tab.tsx`
-- Create: `frontend/src/components/inbox/files-tree.tsx`
-- Create: `frontend/src/components/inbox/files-selection-bar.tsx`
-
-Two-click interaction: row click previews, checkbox toggles selection. Selection bar at bottom shows count + Download button. Selection across projects is prevented.
-
-- [ ] **Step 1: `files-selection-bar.tsx`**
-
-```tsx
-"use client";
-
-import { useFilesTabStore } from "@/stores/files-tab-store";
-import { Button } from "@/components/ui/button";
-import { createBundleJob } from "@/lib/filesApi";
-import { useDownloadsStore } from "@/stores/downloads-store";
-
-export function FilesSelectionBar() {
-  const { selectedDocumentIds, selectedProjectId, clearSelection } =
-    useFilesTabStore();
-  const upsertJob = useDownloadsStore((s) => s.upsertJob);
-
-  async function onDownload() {
-    if (!selectedProjectId || selectedDocumentIds.length === 0) return;
-    const job = await createBundleJob({
-      project_id: selectedProjectId,
-      document_ids: selectedDocumentIds,
-      include_manifest: true,
-      include_intake: false,
-    });
-    upsertJob(job);
-    clearSelection();
-  }
-
-  if (selectedDocumentIds.length === 0) return null;
-
+export function IntakePrint({ projectName, generatedAt, intake }: IntakePrintProps) {
+  const sections = Object.entries(intake);
   return (
-    <div className="flex items-center justify-between border-t border-border bg-surface px-4 py-2">
-      <span className="text-sm text-text-secondary">
-        {selectedDocumentIds.length} selected
-      </span>
-      <Button size="sm" onClick={onDownload}>
-        Download zip
-      </Button>
-    </div>
-  );
-}
-```
-
-- [ ] **Step 2: `files-tree.tsx`**
-
-```tsx
-"use client";
-
-import { useEffect } from "react";
-import { ChevronRight, ChevronDown } from "lucide-react";
-import { Checkbox } from "@/components/ui/checkbox";
-import { useFilesTabStore } from "@/stores/files-tab-store";
-import { listProjectDocuments } from "@/lib/filesApi";
-
-export function FilesTree() {
-  const {
-    projects,
-    documentsByProject,
-    expandedProjectIds,
-    selectedDocumentIds,
-    toggleProjectExpanded,
-    toggleDocumentSelected,
-    setDocuments,
-    setPreview,
-  } = useFilesTabStore();
-
-  useEffect(() => {
-    expandedProjectIds.forEach(async (pid) => {
-      if (!documentsByProject[pid]) {
-        const res = await listProjectDocuments(pid);
-        setDocuments(pid, res.documents);
-      }
-    });
-  }, [expandedProjectIds, documentsByProject, setDocuments]);
-
-  return (
-    <ul className="flex-1 overflow-y-auto">
-      {projects.map((project) => {
-        const expanded = expandedProjectIds.includes(project.id);
-        const docs = documentsByProject[project.id] ?? [];
-        return (
-          <li key={project.id} className="border-b border-border">
-            <button
-              type="button"
-              onClick={() => toggleProjectExpanded(project.id)}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
-            >
-              {expanded ? (
-                <ChevronDown className="h-4 w-4" />
-              ) : (
-                <ChevronRight className="h-4 w-4" />
-              )}
-              <span className="flex-1 truncate">{project.name}</span>
-              <span className="text-xs text-text-secondary">
-                {project.document_count} docs
-              </span>
-            </button>
-            {expanded && (
-              <ul className="bg-background">
-                {docs.map((doc, i) => {
-                  const checked = selectedDocumentIds.includes(doc.id);
-                  return (
-                    <li
-                      key={doc.id}
-                      className="flex items-center gap-2 px-6 py-1.5 text-xs hover:bg-muted"
-                    >
-                      <Checkbox
-                        checked={checked}
-                        onCheckedChange={() =>
-                          toggleDocumentSelected(project.id, doc.id)
-                        }
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setPreview(doc.id)}
-                        className="flex-1 truncate text-left"
-                      >
-                        <span className="mr-2 text-text-secondary">
-                          {String(i + 1).padStart(2, "0")}
-                        </span>
-                        {doc.title ?? doc.document_type}
-                      </button>
-                      <span className="text-text-secondary">
-                        {doc.word_count ?? "—"}w
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-```
-
-- [ ] **Step 3: `files-tab.tsx`**
-
-```tsx
-"use client";
-
-import { useEffect } from "react";
-import { Input } from "@/components/ui/input";
-import { listProjects } from "@/lib/filesApi";
-import { useFilesTabStore } from "@/stores/files-tab-store";
-import { FilesTree } from "./files-tree";
-import { FilesSelectionBar } from "./files-selection-bar";
-
-export function FilesTab() {
-  const { searchQuery, setSearch, setProjects } = useFilesTabStore();
-
-  useEffect(() => {
-    const t = setTimeout(async () => {
-      const res = await listProjects({
-        search: searchQuery || undefined,
-        limit: 50,
-      });
-      setProjects(res.projects);
-    }, 200);
-    return () => clearTimeout(t);
-  }, [searchQuery, setProjects]);
-
-  return (
-    <div className="flex h-full flex-col">
-      <div className="border-b border-border p-2">
-        <Input
-          placeholder="Search projects..."
-          value={searchQuery}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+    <PrintShell title={projectName} subtitle="Project Intake" generatedAt={generatedAt}>
+      <div className="space-y-6 text-[#32374A]">
+        {sections.map(([section, fields]) => (
+          <section key={section}>
+            <h2 className="mb-2 border-b border-[#E4E4E7] pb-1 text-base font-semibold">
+              {section}
+            </h2>
+            <dl className="grid grid-cols-[180px_1fr] gap-x-4 gap-y-1 text-sm">
+              {Object.entries(fields as Record<string, unknown>).map(([k, v]) => (
+                <div key={k} className="contents">
+                  <dt className="text-[#71717A]">{k}</dt>
+                  <dd className="whitespace-pre-wrap">{renderValue(v)}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        ))}
       </div>
-      <FilesTree />
-      <FilesSelectionBar />
-    </div>
+    </PrintShell>
   );
 }
 ```
 
-- [ ] **Step 4: Typecheck**
+- [ ] **Step 2: Create the route**
+
+```typescript
+// frontend/src/app/print/cme/project/[threadId]/intake/page.tsx
+import { notFound } from "next/navigation";
+
+import { IntakePrint } from "@/components/print/intake-print";
+
+export const dynamic = "force-dynamic";
+
+interface Props {
+  params: Promise<{ threadId: string }>;
+  searchParams: Promise<{ t?: string }>;
+}
+
+async function fetchIntake(threadId: string, token: string) {
+  const registry = process.env.REGISTRY_INTERNAL_URL ?? "http://dhg-registry-api:8000";
+  const res = await fetch(
+    `${registry}/api/cme/export/internal/project/${threadId}/intake`,
+    { headers: { "X-Print-Token": token }, cache: "no-store" },
+  );
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`registry fetch failed: ${res.status}`);
+  return res.json() as Promise<{
+    project_name: string;
+    intake: Record<string, unknown>;
+  }>;
+}
+
+export default async function Page({ params, searchParams }: Props) {
+  const { threadId } = await params;
+  const { t } = await searchParams;
+  if (!t) notFound();
+  const data = await fetchIntake(threadId, t);
+  if (!data) notFound();
+  return (
+    <IntakePrint
+      projectName={data.project_name}
+      generatedAt={new Date().toISOString()}
+      intake={data.intake}
+    />
+  );
+}
+```
+
+- [ ] **Step 3: Add the internal endpoint on the registry**
+
+```python
+# registry/export_endpoints.py — append
+@router.get("/internal/project/{thread_id}/intake")
+async def internal_project_intake(
+    thread_id: str,
+    x_print_token: str | None = Header(default=None, alias="X-Print-Token"),
+    session: AsyncSession = Depends(get_async_db),
+) -> dict:
+    secret = os.environ.get("EXPORT_SIGNING_SECRET")
+    if not secret or not x_print_token:
+        raise HTTPException(status_code=401, detail="missing token")
+    try:
+        payload = verify_print_token(x_print_token, secret=secret)
+    except PrintTokenExpired:
+        raise HTTPException(status_code=401, detail="token expired")
+    except PrintTokenInvalid:
+        raise HTTPException(status_code=401, detail="invalid token")
+    if payload.subject != "cme_project_intake" or payload.resource_id != thread_id:
+        raise HTTPException(status_code=403, detail="scope mismatch")
+
+    from models import CMEProject
+    row = (
+        await session.execute(
+            select(CMEProject).where(CMEProject.pipeline_thread_id == thread_id).limit(1)
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="project not found")
+    return {"project_name": row.name, "intake": row.intake or {}}
+```
+
+- [ ] **Step 4: Commit**
 
 ```bash
-cd frontend && npx tsc --noEmit
+git add frontend/src/app/print/cme/project frontend/src/components/print/intake-print.tsx \
+        registry/export_endpoints.py
+git commit -m "feat(export): project intake print route + internal endpoint"
 ```
+
+---
+
+### Task 2.7: Bundler v1 + atomic zip writer
+
+**Files:**
+- Create: `registry/export_bundler.py`
+- Create: `registry/test_export_bundler.py`
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# registry/test_export_bundler.py
+import hashlib
+import os
+import zipfile
+from pathlib import Path
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
+from registry.export_bundler import BundleResult, assemble_project_bundle
+
+
+@pytest.mark.asyncio
+async def test_bundle_contains_required_members(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("EXPORTS_DIR", str(tmp_path))
+
+    fake_project = {
+        "name": "Diabetes Management",
+        "intake": {"audience": {"specialty": "Endocrinology"}},
+        "documents": [
+            {"slug": "needs-assessment", "thread_id": "t-1"},
+            {"slug": "grant-writer", "thread_id": "t-1"},
+        ],
+    }
+    with patch("registry.export_bundler.load_project_for_thread",
+               new=AsyncMock(return_value=fake_project)), \
+         patch("registry.export_bundler.render_via_renderer",
+               new=AsyncMock(return_value=b"%PDF-1.7\nfake")):
+        result: BundleResult = await assemble_project_bundle("t-1")
+
+    assert result.path.exists()
+    assert result.bytes > 0
+    assert hashlib.sha256(result.path.read_bytes()).hexdigest() == result.sha256
+
+    with zipfile.ZipFile(result.path) as zf:
+        names = set(zf.namelist())
+    assert "README.txt" in names
+    assert "intake.pdf" in names
+    assert "project.json" in names
+    assert any(n.startswith("documents/") and n.endswith(".pdf") for n in names)
+
+    # Ensure no .tmp artifact left behind
+    assert not any(p.suffix == ".tmp" for p in Path(tmp_path).iterdir())
+```
+
+- [ ] **Step 2: Run — expect FAIL**
+
+```bash
+docker exec dhg-registry-api pytest registry/test_export_bundler.py -v
+```
+
+- [ ] **Step 3: Implement the bundler**
+
+```python
+# registry/export_bundler.py
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+import os
+import zipfile
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from uuid import uuid4
+
+from registry.export_service import build_print_url, render_via_renderer
+
+log = logging.getLogger("dhg.export.bundler")
+
+
+@dataclass(frozen=True)
+class BundleResult:
+    path: Path
+    sha256: str
+    bytes: int
+
+
+def _exports_dir() -> Path:
+    path = Path(os.environ.get("EXPORTS_DIR", "/exports"))
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+async def load_project_for_thread(thread_id: str) -> dict | None:
+    """Thin shim so tests can patch it."""
+    from sqlalchemy import select
+
+    from database import async_session
+    from models import CMEProject, CMEDocument
+
+    async with async_session() as session:
+        project_row = (
+            await session.execute(
+                select(CMEProject).where(CMEProject.pipeline_thread_id == thread_id).limit(1)
+            )
+        ).scalar_one_or_none()
+        if project_row is None:
+            return None
+        document_rows = (
+            await session.execute(
+                select(CMEDocument)
+                .where(CMEDocument.project_id == project_row.id)
+                .order_by(CMEDocument.created_at.asc())
+            )
+        ).scalars().all()
+        return {
+            "name": project_row.name,
+            "intake": project_row.intake or {},
+            "documents": [
+                {
+                    "slug": (d.agent_source or "document").lower().replace("_", "-"),
+                    "thread_id": thread_id,
+                }
+                for d in document_rows
+            ],
+        }
+
+
+def _readme(project_name: str, generated_at: str, doc_count: int) -> str:
+    return (
+        "DHG AI Factory — CME Project Archive\n"
+        "====================================\n\n"
+        f"Project:       {project_name}\n"
+        f"Generated:     {generated_at}\n"
+        f"Documents:     {doc_count}\n"
+        f"Generator:     dhg-registry-api / export_bundler v1\n\n"
+        "Contents:\n"
+        "  - intake.pdf          — Project intake sections\n"
+        "  - documents/*.pdf     — Each CME document\n"
+        "  - project.json        — Canonical intake + metadata\n\n"
+        "AI-assisted output — verify against source material.\n"
+    )
+
+
+async def assemble_project_bundle(thread_id: str) -> BundleResult:
+    project = await load_project_for_thread(thread_id)
+    if project is None:
+        raise ValueError(f"project not found for thread {thread_id}")
+
+    generated_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    job_uid = uuid4().hex
+
+    # Render intake PDF
+    intake_url = build_print_url(
+        subject="cme_project_intake",
+        resource_id=thread_id,
+        path_prefix="/print/cme/project/",
+    ).replace(f"/print/cme/project/{thread_id}?", f"/print/cme/project/{thread_id}/intake?")
+    intake_pdf = await render_via_renderer(intake_url)
+
+    # Render each document PDF
+    document_pdfs: list[tuple[str, bytes]] = []
+    for i, doc in enumerate(project["documents"]):
+        url = build_print_url(
+            subject="cme_document",
+            resource_id=thread_id,
+            path_prefix="/print/cme/document/",
+        )
+        pdf = await render_via_renderer(url)
+        name = f"documents/{i:02d}_{doc['slug']}.pdf"
+        document_pdfs.append((name, pdf))
+
+    exports_dir = _exports_dir()
+    tmp_path = exports_dir / f"{job_uid}.zip.tmp"
+    final_path = exports_dir / f"{job_uid}.zip"
+
+    with zipfile.ZipFile(tmp_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(
+            "README.txt",
+            _readme(project["name"], generated_at, len(document_pdfs)),
+        )
+        zf.writestr("intake.pdf", intake_pdf)
+        for name, pdf in document_pdfs:
+            zf.writestr(name, pdf)
+        zf.writestr(
+            "project.json",
+            json.dumps(
+                {
+                    "name": project["name"],
+                    "thread_id": thread_id,
+                    "generated_at": generated_at,
+                    "intake": project["intake"],
+                    "document_count": len(document_pdfs),
+                },
+                indent=2,
+            ),
+        )
+
+    hasher = hashlib.sha256()
+    with tmp_path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    size = tmp_path.stat().st_size
+
+    os.replace(tmp_path, final_path)  # atomic rename
+    log.info("bundle written path=%s bytes=%d", final_path, size)
+
+    return BundleResult(path=final_path, sha256=hasher.hexdigest(), bytes=size)
+```
+
+- [ ] **Step 4: Run — expect PASS**
+
+```bash
+docker exec dhg-registry-api pytest registry/test_export_bundler.py -v
+```
+
+Expected: 1 passed
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/src/components/inbox/files-tab.tsx frontend/src/components/inbox/files-tree.tsx frontend/src/components/inbox/files-selection-bar.tsx
-git commit -m "feat(frontend): Files tab UI with project tree + multi-select + download bar"
+git add registry/export_bundler.py registry/test_export_bundler.py
+git commit -m "feat(export): bundler v1 with atomic zip writer"
 ```
 
 ---
 
-### Task 2.16: Wire Files tab into inbox left sidebar
-
-**Files:**
-- Modify: `frontend/src/components/review/inbox-master-detail.tsx`
-
-Adds shadcn `Tabs` (underline variant) above the existing review list. `Reviews` tab = existing content; `Files` tab = `<FilesTab />`.
-
-- [ ] **Step 1: Add tabs wrapper**
-
-Locate the left sidebar JSX in `inbox-master-detail.tsx`. Wrap its existing contents in a `Tabs` component:
-
-```tsx
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FilesTab } from "@/components/inbox/files-tab";
-
-// ...inside the left panel JSX:
-<Tabs defaultValue="reviews" className="flex h-full flex-col">
-  <TabsList className="rounded-none border-b border-border bg-transparent p-0">
-    <TabsTrigger
-      value="reviews"
-      className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary"
-    >
-      Reviews
-    </TabsTrigger>
-    <TabsTrigger
-      value="files"
-      className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary"
-    >
-      Files
-    </TabsTrigger>
-  </TabsList>
-  <TabsContent value="reviews" className="flex-1 overflow-hidden">
-    {/* existing reviews list content */}
-  </TabsContent>
-  <TabsContent value="files" className="flex-1 overflow-hidden">
-    <FilesTab />
-  </TabsContent>
-</Tabs>
-```
-
-- [ ] **Step 2: Verify shadcn `tabs` is installed**
-
-```bash
-cd frontend && ls src/components/ui/tabs.tsx 2>&1
-```
-
-If missing: `npx shadcn@latest add tabs`.
-
-- [ ] **Step 3: Typecheck + dev server smoke**
-
-```bash
-cd frontend && npx tsc --noEmit
-```
-
-Then open `/inbox` in the browser, verify the tabs render, click Files → tree loads projects from the real DB.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add frontend/src/components/review/inbox-master-detail.tsx frontend/src/components/ui/tabs.tsx
-git commit -m "feat(inbox): add Files tab to left sidebar with Reviews | Files underline tabs"
-```
-
----
-
-### Task 2.17: Downloads store + polling hook + tray
+### Task 2.8: Frontend downloads Zustand store
 
 **Files:**
 - Create: `frontend/src/stores/downloads-store.ts`
-- Create: `frontend/src/hooks/use-download-polling.ts`
-- Create: `frontend/src/components/downloads/downloads-tray.tsx`
-- Modify: `frontend/src/components/layout/app-shell.tsx` (mount tray)
 
-Zustand store holds recent jobs, polling hook polls `GET /jobs` every 3s only while at least one job is `pending`/`running`, tray is a shadcn `Sheet` listing rows with an appropriate action per scope.
-
-- [ ] **Step 1: Store**
+- [ ] **Step 1: Write the store**
 
 ```typescript
 // frontend/src/stores/downloads-store.ts
+"use client";
+
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import type { BundleJobResponse } from "@/lib/filesApi";
+
+export type DownloadStatus = "pending" | "running" | "succeeded" | "failed";
+
+export interface DownloadRecord {
+  jobId: string;
+  threadId: string;
+  projectName: string;
+  status: DownloadStatus;
+  createdAt: string;
+  completedAt?: string;
+  error?: string;
+}
 
 interface DownloadsState {
-  jobs: BundleJobResponse[];
+  records: DownloadRecord[];
   trayOpen: boolean;
-  setJobs: (jobs: BundleJobResponse[]) => void;
-  upsertJob: (job: BundleJobResponse) => void;
+  upsert: (record: DownloadRecord) => void;
+  remove: (jobId: string) => void;
+  setStatus: (jobId: string, status: DownloadStatus, fields?: Partial<DownloadRecord>) => void;
   openTray: () => void;
   closeTray: () => void;
   toggleTray: () => void;
@@ -4028,275 +2453,435 @@ interface DownloadsState {
 export const useDownloadsStore = create<DownloadsState>()(
   persist(
     (set) => ({
-      jobs: [],
+      records: [],
       trayOpen: false,
-      setJobs: (jobs) => set({ jobs }),
-      upsertJob: (job) =>
+      upsert: (record) =>
         set((s) => {
-          const idx = s.jobs.findIndex((j) => j.id === job.id);
-          if (idx === -1) return { jobs: [job, ...s.jobs] };
-          const next = [...s.jobs];
-          next[idx] = job;
-          return { jobs: next };
+          const existing = s.records.find((r) => r.jobId === record.jobId);
+          if (existing) {
+            return {
+              records: s.records.map((r) =>
+                r.jobId === record.jobId ? { ...r, ...record } : r,
+              ),
+            };
+          }
+          return { records: [record, ...s.records].slice(0, 50) };
         }),
+      remove: (jobId) =>
+        set((s) => ({ records: s.records.filter((r) => r.jobId !== jobId) })),
+      setStatus: (jobId, status, fields) =>
+        set((s) => ({
+          records: s.records.map((r) =>
+            r.jobId === jobId ? { ...r, status, ...(fields ?? {}) } : r,
+          ),
+        })),
       openTray: () => set({ trayOpen: true }),
       closeTray: () => set({ trayOpen: false }),
       toggleTray: () => set((s) => ({ trayOpen: !s.trayOpen })),
     }),
     {
-      name: "downloads-store",
+      name: "dhg.inbox.downloads",
       storage: createJSONStorage(() => localStorage),
-      partialize: (s) => ({ jobs: s.jobs }),
+      partialize: (state) => ({ records: state.records }),
     },
   ),
 );
 ```
 
-- [ ] **Step 2: Polling hook**
+- [ ] **Step 2: Commit**
+
+```bash
+git add frontend/src/stores/downloads-store.ts
+git commit -m "feat(frontend): persistent downloads store"
+```
+
+---
+
+### Task 2.9: Polling hook `useDownloadPolling`
+
+**Files:**
+- Create: `frontend/src/hooks/use-download-polling.ts`
+- Modify: `frontend/src/lib/exportApi.ts`
+
+- [ ] **Step 1: Extend `exportApi.ts`**
+
+```typescript
+// frontend/src/lib/exportApi.ts — append
+export interface DownloadJobResponse {
+  id: string;
+  thread_id: string;
+  graph_id: string;
+  scope: "document" | "project";
+  status: "pending" | "running" | "succeeded" | "failed";
+  artifact_bytes: number | null;
+  artifact_sha256: string | null;
+  created_at: string;
+  completed_at: string | null;
+  error: string | null;
+}
+
+export async function enqueueProject(threadId: string, graphId: string): Promise<DownloadJobResponse> {
+  const res = await fetch(`${BASE}/project/${encodeURIComponent(threadId)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ thread_id: threadId, graph_id: graphId }),
+  });
+  if (!res.ok) throw new Error(`enqueue failed: ${res.status}`);
+  return res.json();
+}
+
+export async function getJob(jobId: string): Promise<DownloadJobResponse> {
+  const res = await fetch(`${BASE}/job/${encodeURIComponent(jobId)}`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error(`job fetch failed: ${res.status}`);
+  return res.json();
+}
+
+export function artifactUrl(jobId: string): string {
+  return `${BASE}/artifact/${encodeURIComponent(jobId)}`;
+}
+```
+
+- [ ] **Step 2: Write the hook**
 
 ```typescript
 // frontend/src/hooks/use-download-polling.ts
 "use client";
+
 import { useEffect } from "react";
-import { listJobs } from "@/lib/filesApi";
+
+import { getJob } from "@/lib/exportApi";
 import { useDownloadsStore } from "@/stores/downloads-store";
 
-export function useDownloadPolling() {
-  const { jobs, setJobs } = useDownloadsStore();
+const POLL_MS = 2000;
+
+export function useDownloadPolling(): void {
+  const records = useDownloadsStore((s) => s.records);
+  const setStatus = useDownloadsStore((s) => s.setStatus);
+
   useEffect(() => {
-    const hasActive = jobs.some(
-      (j) => j.status === "pending" || j.status === "running",
-    );
-    if (!hasActive) return;
-    const id = window.setInterval(async () => {
-      const fresh = await listJobs(20);
-      setJobs(fresh);
-    }, 3000);
-    return () => window.clearInterval(id);
-  }, [jobs, setJobs]);
+    const active = records.filter((r) => r.status === "pending" || r.status === "running");
+    if (active.length === 0) return;
+
+    let cancelled = false;
+    let failureCount = 0;
+
+    const tick = async () => {
+      for (const record of active) {
+        try {
+          const job = await getJob(record.jobId);
+          if (cancelled) return;
+          setStatus(job.id, job.status, {
+            completedAt: job.completed_at ?? undefined,
+            error: job.error ?? undefined,
+          });
+          failureCount = 0;
+        } catch {
+          failureCount += 1;
+        }
+      }
+    };
+
+    const delay = Math.min(POLL_MS * 2 ** failureCount, 30_000);
+    const handle = setInterval(tick, delay);
+    void tick();
+    return () => {
+      cancelled = true;
+      clearInterval(handle);
+    };
+  }, [records, setStatus]);
 }
 ```
-
-- [ ] **Step 3: Tray component**
-
-```tsx
-// frontend/src/components/downloads/downloads-tray.tsx
-"use client";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import { Download, Cloud, FileArchive, AlertTriangle } from "lucide-react";
-import { useDownloadsStore } from "@/stores/downloads-store";
-import { useDownloadPolling } from "@/hooks/use-download-polling";
-import { artifactUrl, type BundleJobResponse } from "@/lib/filesApi";
-
-function Row({ job }: { job: BundleJobResponse }) {
-  const icon =
-    job.scope === "drive_sync" ? (
-      <Cloud className="h-4 w-4" />
-    ) : (
-      <FileArchive className="h-4 w-4" />
-    );
-  const statusLabel =
-    job.status === "succeeded" ? "Done" : job.status === "failed" ? "Failed" : job.status;
-
-  return (
-    <li className="flex items-center gap-3 border-b border-border px-4 py-3">
-      {icon}
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm">
-          {job.scope === "drive_sync" ? "Drive sync" : "Project bundle"}
-        </div>
-        <div className="text-xs text-text-secondary">
-          {statusLabel}
-          {job.error ? ` — ${job.error}` : ""}
-        </div>
-      </div>
-      {job.scope !== "drive_sync" && job.status === "succeeded" && (
-        <a
-          href={artifactUrl(job.id)}
-          className="text-xs text-primary hover:underline"
-          download
-        >
-          <Download className="mr-1 inline h-3 w-3" />
-          Download
-        </a>
-      )}
-      {job.status === "failed" && <AlertTriangle className="h-4 w-4 text-destructive" />}
-    </li>
-  );
-}
-
-export function DownloadsTray() {
-  const { trayOpen, closeTray, jobs } = useDownloadsStore();
-  useDownloadPolling();
-
-  return (
-    <Sheet open={trayOpen} onOpenChange={(o) => !o && closeTray()}>
-      <SheetContent side="right" className="w-96 p-0">
-        <SheetHeader className="border-b border-border px-4 py-3">
-          <SheetTitle>Downloads</SheetTitle>
-        </SheetHeader>
-        <ul className="divide-y divide-border">
-          {jobs.map((j) => (
-            <Row key={j.id} job={j} />
-          ))}
-          {jobs.length === 0 && (
-            <li className="px-4 py-6 text-center text-sm text-text-secondary">
-              No recent downloads
-            </li>
-          )}
-        </ul>
-      </SheetContent>
-    </Sheet>
-  );
-}
-```
-
-- [ ] **Step 4: Mount tray + trigger in `app-shell.tsx`**
-
-Add a `<DownloadsTray />` render at the top level of the shell, plus a button in the header that calls `toggleTray()`.
-
-- [ ] **Step 5: Typecheck**
-
-```bash
-cd frontend && npx tsc --noEmit
-```
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add frontend/src/stores/downloads-store.ts frontend/src/hooks/use-download-polling.ts frontend/src/components/downloads/downloads-tray.tsx frontend/src/components/layout/app-shell.tsx
-git commit -m "feat(frontend): downloads tray with polling + bundle/drive_sync rows"
-```
-
----
-
-### Task 2.18: End-to-end integration test
-
-**Files:**
-- Create: `frontend/e2e/inbox-files-tab-download.spec.ts`
-
-Playwright e2e: open `/inbox`, click Files tab, expand a project, check 2 documents, click Download zip, wait for job to complete via tray polling, download the artifact, assert it's a valid zip with the expected files.
-
-- [ ] **Step 1: Write the test**
-
-```typescript
-import { test, expect } from "@playwright/test";
-
-const REGISTRY_URL = process.env.REGISTRY_URL ?? "http://localhost:8011";
-
-test("files tab can select and download a project bundle", async ({
-  page,
-  request,
-}) => {
-  // Preflight: ensure the API has at least one project with documents
-  const listRes = await request.get(
-    `${REGISTRY_URL}/api/cme/projects?limit=1`,
-    { timeout: 15_000 },
-  );
-  expect(listRes.status()).toBe(200);
-  const projects = (await listRes.json()).projects;
-  test.skip(projects.length === 0, "no projects in DB");
-
-  await page.goto("/inbox");
-  await page.getByRole("tab", { name: /files/i }).click();
-
-  const firstProject = page.locator("button", { hasText: projects[0].name }).first();
-  await expect(firstProject).toBeVisible({ timeout: 10_000 });
-  await firstProject.click();
-
-  const checkboxes = page.getByRole("checkbox");
-  await expect(checkboxes.first()).toBeVisible();
-  const count = await checkboxes.count();
-  const picks = Math.min(2, count);
-  for (let i = 0; i < picks; i++) {
-    await checkboxes.nth(i).click();
-  }
-
-  await page.getByRole("button", { name: /download zip/i }).click();
-
-  // Tray should show a running then succeeded row
-  await expect(page.getByText(/project bundle/i).first()).toBeVisible({
-    timeout: 15_000,
-  });
-
-  const downloadLink = page.locator("a", { hasText: /download/i }).first();
-  await expect(downloadLink).toBeVisible({ timeout: 120_000 });
-
-  const [download] = await Promise.all([
-    page.waitForEvent("download"),
-    downloadLink.click(),
-  ]);
-  const path = await download.path();
-  expect(path).toBeTruthy();
-
-  const fs = await import("node:fs");
-  const buf = fs.readFileSync(path!);
-  // Zip magic number
-  expect(buf.subarray(0, 2).toString()).toBe("PK");
-  expect(buf.length).toBeGreaterThan(2048);
-});
-```
-
-- [ ] **Step 2: Run**
-
-```bash
-cd frontend && npx playwright test e2e/inbox-files-tab-download.spec.ts
-```
-
-Expected: pass end-to-end (or skipped if DB has no projects — acceptable at this checkpoint).
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add frontend/e2e/inbox-files-tab-download.spec.ts
-git commit -m "test(e2e): inbox Files tab selection + bundle download round-trip"
+git add frontend/src/hooks/use-download-polling.ts frontend/src/lib/exportApi.ts
+git commit -m "feat(frontend): polling hook + enqueue/getJob API client"
 ```
 
 ---
 
-### Task 2.19: Phase 2 v2 smoke + tag
+### Task 2.10: Downloads tray component
 
-**Files:** none (bookkeeping)
+**Files:**
+- Create: `frontend/src/components/review/downloads-tray.tsx`
 
-- [ ] **Step 1: Drive-sync smoke (manual trigger)**
+- [ ] **Step 1: Write the component**
 
-```bash
-docker exec dhg-registry-db psql -U dhg -d dhg_registry -c \
-  "INSERT INTO download_jobs (thread_id, graph_id, scope, status, project_id) \
-   VALUES ('', 'drive_sync', 'drive_sync', 'pending', (SELECT id FROM cme_projects LIMIT 1));"
-sleep 10
-docker exec dhg-registry-db psql -U dhg -d dhg_registry -c \
-  "SELECT id, status, completed_at, error FROM download_jobs \
-   WHERE scope='drive_sync' ORDER BY created_at DESC LIMIT 1;"
+```typescript
+// frontend/src/components/review/downloads-tray.tsx
+"use client";
+
+import { X, Download, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
+
+import { artifactUrl } from "@/lib/exportApi";
+import { useDownloadsStore, type DownloadRecord } from "@/stores/downloads-store";
+import { cn } from "@/lib/utils";
+
+function StatusIcon({ status }: { status: DownloadRecord["status"] }) {
+  if (status === "succeeded") return <CheckCircle2 className="h-4 w-4 text-emerald-600" />;
+  if (status === "failed") return <AlertCircle className="h-4 w-4 text-destructive" />;
+  return <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />;
+}
+
+export function DownloadsTray() {
+  const trayOpen = useDownloadsStore((s) => s.trayOpen);
+  const records = useDownloadsStore((s) => s.records);
+  const closeTray = useDownloadsStore((s) => s.closeTray);
+  const remove = useDownloadsStore((s) => s.remove);
+
+  if (!trayOpen) return null;
+
+  return (
+    <div className="fixed inset-y-0 right-0 z-40 flex w-96 flex-col border-l border-border bg-background shadow-xl">
+      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <h2 className="text-sm font-semibold">Downloads</h2>
+        <button
+          type="button"
+          onClick={closeTray}
+          aria-label="Close downloads tray"
+          className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-auto">
+        {records.length === 0 ? (
+          <div className="p-6 text-center text-xs text-muted-foreground">
+            No downloads yet.
+          </div>
+        ) : (
+          <ul className="divide-y divide-border">
+            {records.map((r) => (
+              <li key={r.jobId} className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {r.projectName}
+                    </p>
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">
+                      {new Date(r.createdAt).toLocaleString()}
+                    </p>
+                    {r.status === "failed" && r.error && (
+                      <p className="mt-1 text-[11px] text-destructive">{r.error}</p>
+                    )}
+                  </div>
+                  <StatusIcon status={r.status} />
+                </div>
+
+                <div className="mt-2 flex items-center gap-2">
+                  {r.status === "succeeded" && (
+                    <a
+                      href={artifactUrl(r.jobId)}
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-md border border-border",
+                        "bg-[color:var(--color-dhg-orange)] px-2.5 py-1 text-xs font-medium text-white",
+                      )}
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Save zip
+                    </a>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => remove(r.jobId)}
+                    className="text-[11px] text-muted-foreground hover:text-foreground"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
 ```
 
-Expected: status=`succeeded`. If Drive creds aren't yet provisioned on the host, expected: status=`failed` with a clear credentials error — this is acceptable only if credentials are scheduled for the next deploy window.
-
-- [ ] **Step 2: Bundle smoke (via UI)**
-
-Open `/inbox`, click Files tab, expand a project, select 1+ docs, click Download zip, wait for tray, download the zip, unzip it locally:
+- [ ] **Step 2: Commit**
 
 ```bash
-unzip -l /tmp/bundle.zip
+git add frontend/src/components/review/downloads-tray.tsx
+git commit -m "feat(inbox): downloads tray component"
 ```
 
-Expected output: README.md, 01-documents/*.md + *.pdf, 04-metadata/project.json.
+---
 
-- [ ] **Step 3: Tag**
+### Task 2.11: Full-project button in inbox header + tray mount
+
+**Files:**
+- Modify: `frontend/src/components/review/inbox-master-detail.tsx`
+
+- [ ] **Step 1: Import the tray, hook, store, and button wiring**
+
+```typescript
+// frontend/src/components/review/inbox-master-detail.tsx — additions
+import { Download } from "lucide-react";
+
+import { DownloadsTray } from "./downloads-tray";
+import { useDownloadsStore } from "@/stores/downloads-store";
+import { useDownloadPolling } from "@/hooks/use-download-polling";
+import { enqueueProject } from "@/lib/exportApi";
+```
+
+- [ ] **Step 2: Call the polling hook near the top of the component**
+
+```typescript
+// inside InboxMasterDetail()
+useDownloadPolling();
+
+const upsertDownload = useDownloadsStore((s) => s.upsert);
+const openTray = useDownloadsStore((s) => s.openTray);
+const trayOpen = useDownloadsStore((s) => s.trayOpen);
+const toggleTray = useDownloadsStore((s) => s.toggleTray);
+
+const handleDownloadProject = async () => {
+  if (!selectedReview) return;
+  try {
+    const job = await enqueueProject(selectedReview.threadId, selectedReview.graphId);
+    upsertDownload({
+      jobId: job.id,
+      threadId: selectedReview.threadId,
+      projectName: GRAPH_LABELS[selectedReview.graphId] ?? selectedReview.graphId,
+      status: job.status,
+      createdAt: job.created_at,
+    });
+    openTray();
+  } catch (err) {
+    console.error(err);
+  }
+};
+```
+
+- [ ] **Step 3: Add the button to the page header, next to the pending count**
+
+```typescript
+// in the existing header JSX, next to the refresh button:
+<button
+  type="button"
+  onClick={handleDownloadProject}
+  disabled={!selectedReview}
+  className="inline-flex items-center gap-1.5 rounded-md border border-[color:var(--color-dhg-orange)] bg-background px-2.5 py-1 text-xs text-[color:var(--color-dhg-orange)] hover:bg-[color:var(--color-dhg-orange)]/10 transition-colors disabled:opacity-50"
+>
+  <Download className="h-3.5 w-3.5" />
+  Full project
+</button>
+<button
+  type="button"
+  onClick={toggleTray}
+  aria-label="Open downloads tray"
+  className="h-8 w-8 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+>
+  <Download className="h-4 w-4" />
+</button>
+```
+
+- [ ] **Step 4: Mount the tray at the bottom of the returned JSX**
+
+```typescript
+// inside the outer wrapper div, as a sibling of the main flex container:
+<DownloadsTray />
+```
+
+- [ ] **Step 5: Commit**
 
 ```bash
-git tag phase2-v2-complete
-git log --oneline phase1-complete..phase2-v2-complete | head -30
+git add frontend/src/components/review/inbox-master-detail.tsx
+git commit -m "feat(inbox): add full-project download button, tray mount, polling"
 ```
 
-- [ ] **Step 4: Commit (if any bookkeeping files changed)**
+---
 
-Usually nothing to commit here — the tag is the artifact.
+### Task 2.12: End-to-end integration test (worker round-trip)
+
+**Files:**
+- Create: `registry/test_export_integration.py`
+
+- [ ] **Step 1: Write the test**
+
+```python
+# registry/test_export_integration.py
+import asyncio
+import hashlib
+import zipfile
+from unittest.mock import AsyncMock, patch
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+
+from api import app
+from registry.export_worker import _claim_next_job, _process
+
+
+@pytest.mark.asyncio
+async def test_enqueue_then_worker_produces_zip(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("EXPORTS_DIR", str(tmp_path))
+
+    fake_project = {
+        "name": "Integration Project",
+        "intake": {"audience": {"specialty": "Cardiology"}},
+        "documents": [{"slug": "needs-assessment", "thread_id": "t-int"}],
+    }
+    with patch("registry.export_bundler.load_project_for_thread",
+               new=AsyncMock(return_value=fake_project)), \
+         patch("registry.export_bundler.render_via_renderer",
+               new=AsyncMock(return_value=b"%PDF-1.7\nfake")):
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
+            enqueue = await c.post(
+                "/api/cme/export/project/t-int",
+                json={"thread_id": "t-int", "graph_id": "grant_package"},
+                headers={"Cf-Access-Jwt-Assertion": "dev-bypass"},
+            )
+            assert enqueue.status_code == 202
+            job_id = enqueue.json()["id"]
+
+            job = await _claim_next_job()
+            assert job is not None
+            await _process(job)
+
+            status = await c.get(
+                f"/api/cme/export/job/{job_id}",
+                headers={"Cf-Access-Jwt-Assertion": "dev-bypass"},
+            )
+            assert status.json()["status"] == "succeeded"
+
+            artifact = await c.get(
+                f"/api/cme/export/artifact/{job_id}",
+                headers={"Cf-Access-Jwt-Assertion": "dev-bypass"},
+            )
+            assert artifact.status_code == 200
+            assert artifact.headers["content-type"] == "application/zip"
+
+    sha = hashlib.sha256(artifact.content).hexdigest()
+    assert sha == status.json()["artifact_sha256"]
+
+    with zipfile.ZipFile(tmp_path / f"{job_id}.zip") as zf:
+        assert "README.txt" in zf.namelist()
+```
+
+- [ ] **Step 2: Run — expect PASS**
+
+```bash
+docker exec dhg-registry-api pytest registry/test_export_integration.py -v
+```
+
+Expected: 1 passed
+
+- [ ] **Step 3: Tag Phase 2 complete**
+
+```bash
+git add registry/test_export_integration.py
+git commit -m "test(export): end-to-end worker round-trip integration test"
+git tag phase2-complete
+```
 
 ---
 
