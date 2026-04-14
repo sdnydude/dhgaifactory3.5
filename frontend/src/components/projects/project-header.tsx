@@ -26,6 +26,7 @@ import {
 import { CMEProjectStatus } from "@/types/cme";
 import type { CMEProjectDetail } from "@/types/cme";
 import { useProjectsStore } from "@/stores/projects-store";
+import { ProjectActionsMenu } from "@/components/projects/project-actions-menu";
 
 const STATUS_VARIANTS: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   [CMEProjectStatus.PROCESSING]: "default",
@@ -43,7 +44,6 @@ export function ProjectHeader({ project }: { project: CMEProjectDetail }) {
   const { archiveProject } = useProjectsStore();
   const [archiving, setArchiving] = useState(false);
   const variant = STATUS_VARIANTS[project.status] ?? "outline";
-  const isFailed = project.status === CMEProjectStatus.FAILED;
   const canEdit = project.status === CMEProjectStatus.INTAKE;
   const canArchive = project.status !== CMEProjectStatus.ARCHIVED;
 
@@ -80,6 +80,7 @@ export function ProjectHeader({ project }: { project: CMEProjectDetail }) {
               </Button>
             </Link>
           )}
+          <ProjectActionsMenu project={project} />
           {canArchive && (
             <Dialog>
               <DialogTrigger
@@ -109,11 +110,6 @@ export function ProjectHeader({ project }: { project: CMEProjectDetail }) {
           <span className="text-xs text-muted-foreground">{project.progress_percent}%</span>
         </div>
       </div>
-      {isFailed && (
-        <p className="mt-1 text-xs text-destructive">
-          Pipeline failed — check the Activity tab for error details.
-        </p>
-      )}
     </div>
   );
 }

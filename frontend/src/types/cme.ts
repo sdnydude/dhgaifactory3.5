@@ -145,6 +145,49 @@ export interface ExecutionStatus {
   estimated_completion: string | null;
 }
 
+// =============================================================================
+// PIPELINE RUNS — mirrors registry/schemas.py PipelineRunRead
+// =============================================================================
+
+export type PipelineRunStatus =
+  | "processing"
+  | "success"
+  | "failed"
+  | "cancelled";
+
+export type PipelineRunTriggerReason =
+  | "initial"
+  | "manual"
+  | "retry"
+  | "auto";
+
+export interface PipelineRun {
+  run_id: string;
+  project_id: string;
+  run_number: number;
+  thread_id: string;
+  langgraph_run_id: string;
+  intake_version_used: number;
+  triggered_by: string | null;
+  trigger_reason: PipelineRunTriggerReason;
+  triggered_at: string;
+  completed_at: string | null;
+  status: PipelineRunStatus;
+  error_message: string | null;
+  final_agent: string | null;
+  reason: string | null;
+  duration_seconds: number | null;
+}
+
+export interface PipelineRunListResponse {
+  runs: PipelineRun[];
+  total: number;
+}
+
+export interface RerunRequest {
+  reason?: string;
+}
+
 export interface AgentOutput {
   agent_name: string;
   output_type: string;

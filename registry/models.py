@@ -366,12 +366,67 @@ class CMEProject(Base):
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     
+    # Run-tracking (added migration 008)
+    intake_version = Column(Integer, nullable=False, server_default="1")
+    current_run_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("cme_pipeline_runs.run_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
     # Relationships
     agent_outputs = relationship("CMEAgentOutput", back_populates="project", cascade="all, delete-orphan")
     review_assignments = relationship("CMEReviewAssignment", back_populates="project", cascade="all, delete-orphan")
     documents = relationship("CMEDocument", back_populates="project")
     intake_fields = relationship("CMEIntakeField", back_populates="project")
     source_references = relationship("CMESourceReference", back_populates="project")
+    pipeline_runs = relationship(
+        "CMEPipelineRun",
+        back_populates="project",
+        cascade="all, delete-orphan",
+        foreign_keys="CMEPipelineRun.project_id",
+        order_by="CMEPipelineRun.run_number.desc()",
+    )
+
+
+class CMEPipelineRun(Base):
+    """Individual pipeline execution runs for a CME project.
+
+    Each rerun creates a new row. run_number is monotonic per project.
+    current_run_id on cme_projects points at the active/latest row.
+    """
+    __tablename__ = "cme_pipeline_runs"
+
+    run_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("cme_projects.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    run_number = Column(Integer, nullable=False)
+    thread_id = Column(String(100), nullable=False)
+    langgraph_run_id = Column(String(100), nullable=False)
+    intake_version_used = Column(Integer, nullable=False, default=1)
+    triggered_by = Column(String(255), nullable=True)
+    trigger_reason = Column(String(32), nullable=False, default="manual")
+    triggered_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    status = Column(String(16), nullable=False, default="processing")
+    error_message = Column(Text, nullable=True)
+    final_agent = Column(String(100), nullable=True)
+    reason = Column(Text, nullable=True)
+
+    project = relationship(
+        "CMEProject",
+        back_populates="pipeline_runs",
+        foreign_keys=[project_id],
+    )
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "run_number", name="uq_cme_pipeline_runs_project_run_number"),
+        Index("ix_cme_pipeline_runs_project_run", "project_id", "run_number"),
+        Index("ix_cme_pipeline_runs_status", "status"),
+    )
 
 
 class CMEAgentOutput(Base):
@@ -824,3 +879,45 @@ class RoutingConfig(Base):
     fallback = Column(String(100))
     enabled = Column(Boolean, default=True)
     updated_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class DevChangelog(Base):
+    """Admin/Reporting dev changelog — agent-assisted editable development log.
+
+    Field ownership split (enforced at schema + endpoint layer, not DB):
+      agent-owned:  commits, commit_count, detected_status, window_start, window_end,
+                    sessions, detected_at, last_agent_run_at, source
+      human-owned:  declared_status, key_insight, notes, priority, locked
+    Display uses COALESCE(declared_status, detected_status).
+    locked=true causes the future nightly (3am) agent to skip the row entirely.
+    """
+    __tablename__ = "dev_changelog"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    slug = Column(String(255), nullable=False, unique=True)
+    epic = Column(String(500), nullable=False)
+    category = Column(String(50), nullable=False)  # feature|infra|fix|refactor|docs|debt
+    detected_status = Column(String(50), nullable=False)  # shipped|in_progress|backlog|abandoned
+    declared_status = Column(String(50), nullable=True)
+    window_start = Column(Date, nullable=False)
+    window_end = Column(Date, nullable=True)
+    commit_count = Column(Integer, nullable=False, default=0)
+    commits = Column(JSONB, nullable=False, default=list)  # [{sha, date, subject, author}]
+    sessions = Column(JSONB, nullable=False, default=list)  # [{session_id, chunk_idx, note}]
+    key_insight = Column(Text, nullable=True)
+    notes = Column(Text, nullable=True)
+    priority = Column(Integer, nullable=True)
+    locked = Column(Boolean, nullable=False, default=False)
+    source = Column(String(20), nullable=False, default="manual")  # manual|agent|mixed
+    detected_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    last_agent_run_at = Column(DateTime(timezone=True), nullable=True)
+    last_human_edit_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index("ix_dev_changelog_detected_status", "detected_status"),
+        Index("ix_dev_changelog_declared_status", "declared_status"),
+        Index("ix_dev_changelog_category", "category"),
+        Index("ix_dev_changelog_window_start", "window_start"),
+    )

@@ -3,6 +3,7 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DocumentsTab } from "./documents-tab";
 import { ActivityTab } from "./activity-tab";
+import { RunsTab } from "./runs-tab";
 import { ReviewsTab } from "./reviews-tab";
 import { SettingsTab } from "./settings-tab";
 import type { CMEProjectDetail, ExecutionStatus, AgentOutput } from "@/types/cme";
@@ -19,6 +20,7 @@ export function ProjectTabs({ project, pipelineStatus, outputs }: ProjectTabsPro
       <TabsList className="mx-4 mt-3 w-fit">
         <TabsTrigger value="documents">Documents</TabsTrigger>
         <TabsTrigger value="activity">Activity</TabsTrigger>
+        <TabsTrigger value="runs">Runs</TabsTrigger>
         <TabsTrigger value="reviews">Reviews</TabsTrigger>
         <TabsTrigger value="settings">Settings</TabsTrigger>
       </TabsList>
@@ -27,6 +29,9 @@ export function ProjectTabs({ project, pipelineStatus, outputs }: ProjectTabsPro
       </TabsContent>
       <TabsContent value="activity" className="flex-1 overflow-auto p-4">
         <ActivityTab status={pipelineStatus} />
+      </TabsContent>
+      <TabsContent value="runs" className="flex-1 overflow-auto p-4">
+        <RunsTab projectId={project.id} />
       </TabsContent>
       <TabsContent value="reviews" className="flex-1 overflow-auto p-4">
         <ReviewsTab project={project} />

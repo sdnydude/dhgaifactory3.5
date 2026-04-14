@@ -1,13 +1,23 @@
 "use client";
 
 import { create } from "zustand";
-import type { CMEProjectDetail, ExecutionStatus } from "@/types/cme";
+import type {
+  CMEProjectDetail,
+  ExecutionStatus,
+  PipelineRun,
+} from "@/types/cme";
 import * as registryApi from "@/lib/registryApi";
 
 interface ProjectsState {
   projects: CMEProjectDetail[];
   currentProject: CMEProjectDetail | null;
   pipelineStatus: ExecutionStatus | null;
+
+  // Pipeline run history (keyed by projectId so switching projects doesn't
+  // leak state across views).
+  runsByProject: Record<string, PipelineRun[]>;
+  runsLoading: boolean;
+
   loading: boolean;
   error: string | null;
 
@@ -15,13 +25,23 @@ interface ProjectsState {
   fetchProject: (id: string) => Promise<void>;
   fetchPipelineStatus: (id: string) => Promise<void>;
   archiveProject: (id: string) => Promise<void>;
+
+  fetchRuns: (projectId: string) => Promise<void>;
+  cancelRun: (projectId: string) => Promise<PipelineRun | null>;
+  rerunPipeline: (
+    projectId: string,
+    reason?: string,
+  ) => Promise<PipelineRun | null>;
+
   clearCurrent: () => void;
 }
 
-export const useProjectsStore = create<ProjectsState>((set) => ({
+export const useProjectsStore = create<ProjectsState>((set, get) => ({
   projects: [],
   currentProject: null,
   pipelineStatus: null,
+  runsByProject: {},
+  runsLoading: false,
   loading: false,
   error: null,
 
@@ -67,5 +87,49 @@ export const useProjectsStore = create<ProjectsState>((set) => ({
     }
   },
 
-  clearCurrent: () => set({ currentProject: null, pipelineStatus: null }),
+  fetchRuns: async (projectId: string) => {
+    set({ runsLoading: true, error: null });
+    try {
+      const response = await registryApi.listPipelineRuns(projectId);
+      set((s) => ({
+        runsByProject: { ...s.runsByProject, [projectId]: response.runs },
+        runsLoading: false,
+      }));
+    } catch (e) {
+      set({ error: (e as Error).message, runsLoading: false });
+    }
+  },
+
+  cancelRun: async (projectId: string) => {
+    try {
+      const run = await registryApi.cancelPipeline(projectId);
+      // Refresh the project detail and run history so the UI reflects the
+      // terminal state without a manual reload.
+      await Promise.all([
+        get().fetchProject(projectId),
+        get().fetchRuns(projectId),
+      ]);
+      return run;
+    } catch (e) {
+      set({ error: (e as Error).message });
+      return null;
+    }
+  },
+
+  rerunPipeline: async (projectId: string, reason?: string) => {
+    try {
+      const run = await registryApi.rerunPipeline(projectId, { reason });
+      await Promise.all([
+        get().fetchProject(projectId),
+        get().fetchRuns(projectId),
+      ]);
+      return run;
+    } catch (e) {
+      set({ error: (e as Error).message });
+      return null;
+    }
+  },
+
+  clearCurrent: () =>
+    set({ currentProject: null, pipelineStatus: null, runsLoading: false }),
 }));

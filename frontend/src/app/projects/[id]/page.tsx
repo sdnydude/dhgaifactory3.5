@@ -7,6 +7,7 @@ import { ProjectHeader } from "@/components/projects/project-header";
 import { PipelineNav } from "@/components/projects/pipeline-nav";
 import { ProjectTabs } from "@/components/projects/project-tabs";
 import { StepContent } from "@/components/projects/step-content";
+import { RunStatusBanner } from "@/components/projects/run-status-banner";
 import { PIPELINE_STEPS } from "@/types/cme";
 import { CMEProjectStatus } from "@/types/cme";
 import type { AgentOutput, ExecutionStatus } from "@/types/cme";
@@ -16,7 +17,7 @@ import * as registryApi from "@/lib/registryApi";
 export default function ProjectDetailPage() {
   const params = useParams();
   const projectId = params.id as string;
-  const { currentProject, pipelineStatus, fetchProject, fetchPipelineStatus, clearCurrent } = useProjectsStore();
+  const { currentProject, pipelineStatus, fetchProject, fetchPipelineStatus, fetchRuns, clearCurrent } = useProjectsStore();
   const [outputs, setOutputs] = useState<AgentOutput[]>([]);
   const [selectedStep, setSelectedStep] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval>>(undefined);
@@ -24,13 +25,14 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     fetchProject(projectId);
     fetchPipelineStatus(projectId);
+    fetchRuns(projectId);
     registryApi.listOutputs(projectId).then(setOutputs).catch(() => {});
 
     return () => {
       clearCurrent();
       clearInterval(intervalRef.current);
     };
-  }, [projectId, fetchProject, fetchPipelineStatus, clearCurrent]);
+  }, [projectId, fetchProject, fetchPipelineStatus, fetchRuns, clearCurrent]);
 
   useEffect(() => {
     if (
@@ -81,6 +83,7 @@ export default function ProjectDetailPage() {
   return (
     <div className="flex flex-col h-full">
       <ProjectHeader project={currentProject} />
+      <RunStatusBanner project={currentProject} />
       <div className="flex-1 flex overflow-hidden">
         <PipelineNav
           pipelineStatus={pipelineStatus}

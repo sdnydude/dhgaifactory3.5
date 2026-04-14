@@ -361,3 +361,44 @@ class ResearchRequestListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+# =============================================================================
+# CME PIPELINE RUN SCHEMAS (migration 008)
+# =============================================================================
+
+PipelineRunStatus = Literal["processing", "success", "failed", "cancelled"]
+PipelineRunTriggerReason = Literal["initial", "manual", "retry", "auto"]
+
+
+class PipelineRunRead(BaseModel):
+    """A single pipeline execution run for a CME project."""
+    run_id: UUID
+    project_id: UUID
+    run_number: int
+    thread_id: str
+    langgraph_run_id: str
+    intake_version_used: int
+    triggered_by: Optional[str] = None
+    trigger_reason: PipelineRunTriggerReason
+    triggered_at: datetime
+    completed_at: Optional[datetime] = None
+    status: PipelineRunStatus
+    error_message: Optional[str] = None
+    final_agent: Optional[str] = None
+    reason: Optional[str] = None
+    duration_seconds: Optional[float] = None
+
+    class Config:
+        from_attributes = True
+
+
+class RerunRequest(BaseModel):
+    """Payload for POST /api/cme/projects/{id}/rerun"""
+    reason: Optional[str] = Field(None, max_length=500)
+
+
+class PipelineRunListResponse(BaseModel):
+    """Response for GET /api/cme/projects/{id}/runs"""
+    runs: List[PipelineRunRead]
+    total: int

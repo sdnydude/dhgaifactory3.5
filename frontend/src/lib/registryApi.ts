@@ -9,6 +9,9 @@ import type {
   HybridSearchRequest,
   PrefillResponse,
   SectionA,
+  PipelineRun,
+  PipelineRunListResponse,
+  RerunRequest,
 } from "@/types/cme";
 
 const BASE_URL = "/api/registry";
@@ -119,10 +122,28 @@ export async function resumePipeline(
 
 export async function cancelPipeline(
   projectId: string,
-): Promise<{ message: string }> {
-  return apiFetch<{ message: string }>(
+): Promise<PipelineRun> {
+  return apiFetch<PipelineRun>(
     `/api/cme/projects/${projectId}/cancel`,
     { method: "POST" },
+  );
+}
+
+export async function rerunPipeline(
+  projectId: string,
+  body: RerunRequest = {},
+): Promise<PipelineRun> {
+  return apiFetch<PipelineRun>(
+    `/api/cme/projects/${projectId}/rerun`,
+    { method: "POST", body: JSON.stringify(body) },
+  );
+}
+
+export async function listPipelineRuns(
+  projectId: string,
+): Promise<PipelineRunListResponse> {
+  return apiFetch<PipelineRunListResponse>(
+    `/api/cme/projects/${projectId}/runs`,
   );
 }
 

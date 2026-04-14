@@ -23,7 +23,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from database import get_db
 from models import (
     CMEProject, CMEAgentOutput, CMEReviewerConfig, CMEReviewAssignment,
-    CMEDocument, CMEIntakeField, CMESourceReference,
+    CMEDocument, CMEIntakeField, CMESourceReference, CMEPipelineRun,
+)
+from schemas import (
+    PipelineRunRead, RerunRequest, PipelineRunListResponse,
 )
 
 # Import metrics from main API
@@ -261,11 +264,11 @@ class AgentOutput(BaseModel):
 LANGGRAPH_CLOUD_URL = "https://dhg-agents-526554f2bb905517adab9bd53427c745.us.langgraph.app"
 
 
-async def trigger_langgraph_pipeline(project_id: str, intake_data: dict) -> str:
+async def trigger_langgraph_pipeline(project_id: str, intake_data: dict) -> dict:
     """
     Trigger the LangGraph CME pipeline via the LangGraph Cloud REST API.
     Creates a thread, then starts a run with the needs_package assistant.
-    Returns the thread_id for tracking.
+    Returns {"thread_id": ..., "run_id": ...} for tracking.
     """
     langgraph_url = os.getenv("LANGGRAPH_API_URL", LANGGRAPH_CLOUD_URL)
     langchain_api_key = os.getenv("LANGCHAIN_API_KEY", "")
@@ -273,7 +276,6 @@ async def trigger_langgraph_pipeline(project_id: str, intake_data: dict) -> str:
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            # 1. Create a thread with project metadata
             thread_resp = await client.post(
                 f"{langgraph_url}/threads",
                 json={"metadata": {"graph_id": "needs_package", "project_id": project_id}},
@@ -282,7 +284,6 @@ async def trigger_langgraph_pipeline(project_id: str, intake_data: dict) -> str:
             thread_resp.raise_for_status()
             thread_id = thread_resp.json()["thread_id"]
 
-            # 2. Start a background run on the thread
             run_resp = await client.post(
                 f"{langgraph_url}/threads/{thread_id}/runs",
                 json={
@@ -295,11 +296,41 @@ async def trigger_langgraph_pipeline(project_id: str, intake_data: dict) -> str:
                 headers=headers,
             )
             run_resp.raise_for_status()
-            logger.info(f"LangGraph pipeline started: thread={thread_id}, project={project_id}")
-            return thread_id
+            run_id = run_resp.json()["run_id"]
+            logger.info(
+                f"LangGraph pipeline started: thread={thread_id}, run={run_id}, project={project_id}"
+            )
+            return {"thread_id": thread_id, "run_id": run_id}
     except Exception as e:
         logger.error(f"Failed to start LangGraph pipeline for project {project_id}: {e}")
         raise
+
+
+async def cancel_langgraph_run(thread_id: str, run_id: str) -> bool:
+    """
+    Cancel a running LangGraph run via the Cloud API.
+    Tolerates 404 (run already finished). Returns True if cancel succeeded or
+    the run was already gone; False on other failures.
+    """
+    langgraph_url = os.getenv("LANGGRAPH_API_URL", LANGGRAPH_CLOUD_URL)
+    langchain_api_key = os.getenv("LANGCHAIN_API_KEY", "")
+    headers = {"x-api-key": langchain_api_key}
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(
+                f"{langgraph_url}/threads/{thread_id}/runs/{run_id}/cancel",
+                headers=headers,
+            )
+            if resp.status_code == 404:
+                logger.info(f"LangGraph run already finished: thread={thread_id}, run={run_id}")
+                return True
+            resp.raise_for_status()
+            logger.info(f"LangGraph run cancelled: thread={thread_id}, run={run_id}")
+            return True
+    except Exception as e:
+        logger.error(f"Failed to cancel LangGraph run thread={thread_id} run={run_id}: {e}")
+        return False
 
 
 async def trigger_intake_prefill(payload: dict) -> dict:
@@ -1235,16 +1266,37 @@ async def start_cme_pipeline(
                 detail=f"Cannot start pipeline: project status is {project.status}"
             )
         
-        # Update project status
         now = datetime.utcnow()
         project.status = "processing"
         project.started_at = now
-        project.current_agent = "research"  # First agent
-        
-        # Trigger LangGraph pipeline in background
-        thread_id = await trigger_langgraph_pipeline(str(project.id), project.intake)
-        project.pipeline_thread_id = thread_id
-        
+        project.current_agent = "research"
+
+        lg = await trigger_langgraph_pipeline(str(project.id), project.intake)
+        project.pipeline_thread_id = lg["thread_id"]
+
+        # Determine next run_number (should be 1 for a fresh start, but handle
+        # edge case where a failed project is being retried via /start).
+        last_run_number = (
+            db.query(func.max(CMEPipelineRun.run_number))
+            .filter(CMEPipelineRun.project_id == project.id)
+            .scalar()
+            or 0
+        )
+        run = CMEPipelineRun(
+            run_id=uuid.uuid4(),
+            project_id=project.id,
+            run_number=last_run_number + 1,
+            thread_id=lg["thread_id"],
+            langgraph_run_id=lg["run_id"],
+            intake_version_used=project.intake_version or 1,
+            trigger_reason="initial" if last_run_number == 0 else "retry",
+            triggered_at=now,
+            status="processing",
+        )
+        db.add(run)
+        db.flush()
+        project.current_run_id = run.run_id
+
         db.commit()
         db.refresh(project)
         
@@ -1346,17 +1398,177 @@ async def resume_cme_pipeline(project_id: str, db: Session = Depends(get_db)):
     return {"status": "resumed", "project_id": str(project.id)}
 
 
-@router.post("/projects/{project_id}/cancel")
+@router.post("/projects/{project_id}/cancel", response_model=PipelineRunRead)
 async def cancel_cme_pipeline(project_id: str, db: Session = Depends(get_db)):
-    """Cancel pipeline execution"""
+    """Cancel the active pipeline run.
+
+    Calls LangGraph Cloud to cancel the underlying run, then marks the
+    pipeline_runs row and project as cancelled. Tolerates a missing/finished
+    run on the Cloud side (still marks the DB rows cancelled).
+    """
     project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="CME project not found")
-    
+
+    if project.status not in ("processing", "review"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot cancel: project status is {project.status}",
+        )
+
+    run: Optional[CMEPipelineRun] = None
+    if project.current_run_id:
+        run = db.query(CMEPipelineRun).filter(
+            CMEPipelineRun.run_id == project.current_run_id
+        ).first()
+
+    if run is None:
+        raise HTTPException(
+            status_code=409,
+            detail="No active pipeline run associated with this project",
+        )
+
+    await cancel_langgraph_run(run.thread_id, run.langgraph_run_id)
+
+    now = datetime.utcnow()
+    run.status = "cancelled"
+    run.completed_at = now
+    run.final_agent = project.current_agent
     project.status = "cancelled"
+    project.completed_at = now
+
     db.commit()
-    
-    return {"status": "cancelled", "project_id": str(project.id)}
+    db.refresh(run)
+
+    registry_write_operations.labels(operation="cancel_cme_pipeline").inc()
+    return _pipeline_run_to_read(run)
+
+
+@router.post("/projects/{project_id}/rerun", response_model=PipelineRunRead)
+async def rerun_cme_pipeline(
+    project_id: str,
+    body: RerunRequest,
+    db: Session = Depends(get_db),
+):
+    """Rerun the pipeline for a project using its current intake.
+
+    Allowed when the project is in a terminal state (complete, failed,
+    cancelled) OR in review. Creates a new pipeline_runs row with
+    run_number = max+1, points current_run_id at it, and flips the project
+    status back to processing.
+    """
+    start = time.time()
+    project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="CME project not found")
+
+    if project.status not in ("complete", "failed", "cancelled", "review"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot rerun: project status is {project.status}",
+        )
+
+    # If re-running from a review state, cancel the in-flight run first so
+    # we don't leave an orphan running on the Cloud.
+    if project.status == "review" and project.current_run_id:
+        prev = db.query(CMEPipelineRun).filter(
+            CMEPipelineRun.run_id == project.current_run_id
+        ).first()
+        if prev and prev.status == "processing":
+            await cancel_langgraph_run(prev.thread_id, prev.langgraph_run_id)
+            prev.status = "cancelled"
+            prev.completed_at = datetime.utcnow()
+            prev.reason = "superseded by rerun"
+
+    try:
+        lg = await trigger_langgraph_pipeline(str(project.id), project.intake)
+    except Exception as e:
+        registry_errors.labels(error_type="rerun_cme_pipeline").inc()
+        raise HTTPException(status_code=502, detail=f"LangGraph trigger failed: {e}")
+
+    last_run_number = (
+        db.query(func.max(CMEPipelineRun.run_number))
+        .filter(CMEPipelineRun.project_id == project.id)
+        .scalar()
+        or 0
+    )
+    now = datetime.utcnow()
+    run = CMEPipelineRun(
+        run_id=uuid.uuid4(),
+        project_id=project.id,
+        run_number=last_run_number + 1,
+        thread_id=lg["thread_id"],
+        langgraph_run_id=lg["run_id"],
+        intake_version_used=project.intake_version or 1,
+        trigger_reason="manual",
+        triggered_at=now,
+        status="processing",
+        reason=body.reason,
+    )
+    db.add(run)
+    db.flush()
+
+    project.status = "processing"
+    project.started_at = now
+    project.completed_at = None
+    project.current_agent = "research"
+    project.pipeline_thread_id = lg["thread_id"]
+    project.current_run_id = run.run_id
+    project.agents_completed = []
+    project.errors = []
+
+    db.commit()
+    db.refresh(run)
+
+    registry_write_operations.labels(operation="rerun_cme_pipeline").inc()
+    registry_write_latency.observe((time.time() - start) * 1000)
+    return _pipeline_run_to_read(run)
+
+
+@router.get("/projects/{project_id}/runs", response_model=PipelineRunListResponse)
+async def list_cme_pipeline_runs(project_id: str, db: Session = Depends(get_db)):
+    """List all pipeline runs for a project, newest first."""
+    project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="CME project not found")
+
+    runs = (
+        db.query(CMEPipelineRun)
+        .filter(CMEPipelineRun.project_id == project_id)
+        .order_by(CMEPipelineRun.run_number.desc())
+        .all()
+    )
+
+    registry_read_operations.labels(operation="list_cme_pipeline_runs").inc()
+    return PipelineRunListResponse(
+        runs=[_pipeline_run_to_read(r) for r in runs],
+        total=len(runs),
+    )
+
+
+def _pipeline_run_to_read(run: CMEPipelineRun) -> PipelineRunRead:
+    """Convert a CMEPipelineRun ORM row to a PipelineRunRead, including
+    derived duration_seconds."""
+    duration: Optional[float] = None
+    if run.completed_at and run.triggered_at:
+        duration = (run.completed_at - run.triggered_at).total_seconds()
+    return PipelineRunRead(
+        run_id=run.run_id,
+        project_id=run.project_id,
+        run_number=run.run_number,
+        thread_id=run.thread_id,
+        langgraph_run_id=run.langgraph_run_id,
+        intake_version_used=run.intake_version_used,
+        triggered_by=run.triggered_by,
+        trigger_reason=run.trigger_reason,
+        triggered_at=run.triggered_at,
+        completed_at=run.completed_at,
+        status=run.status,
+        error_message=run.error_message,
+        final_agent=run.final_agent,
+        reason=run.reason,
+        duration_seconds=duration,
+    )
 
 
 # =============================================================================
