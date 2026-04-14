@@ -1951,7 +1951,7 @@ class ProjectDocumentItem(BaseModel):
     word_count: int | None
     version: int
     is_current: bool
-    updated_at: datetime
+    created_at: datetime
     drive_file_id: str | None
 
 
@@ -1984,7 +1984,9 @@ git commit -m "feat(registry): Pydantic schemas for bundle jobs + project list/d
 - Create: `registry/test_projects_endpoints.py`
 - Modify: `registry/api.py` (wire the router)
 
-Adds `GET /api/cme/projects` and `GET /api/cme/projects/{project_id}/documents`. Read-only. Requires authenticated user (existing `require_user` dependency).
+Adds `GET /api/cme/export/projects` and `GET /api/cme/export/projects/{project_id}/documents`. Read-only. Requires authenticated user (existing `require_user` dependency).
+
+**Route namespace note:** `/api/cme/projects` already exists in `cme_endpoints.py` (CME admin projects list, returning `List[CMEProjectDetail]`, consumed by the frontend CME admin page and `use-badge-polling`). The Files tab needs a different schema shape (paginated `{projects, total, limit, offset}` with aggregates), so it slots under the existing Phase 1 `/api/cme/export/*` namespace alongside `POST /api/cme/export/bundle`. The Files tab is semantically the "export browser." Do NOT mount this router at `/api/cme/projects` — that would shadow the existing admin endpoint and break the frontend.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -2002,7 +2004,7 @@ async def test_list_projects_returns_real_rows() -> None:
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
         resp = await c.get(
-            "/api/cme/projects?limit=5",
+            "/api/cme/export/projects?limit=5",
             headers={"Cf-Access-Jwt-Assertion": "dev-bypass"},
         )
     assert resp.status_code == 200
@@ -2022,7 +2024,7 @@ async def test_list_projects_search_filter() -> None:
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
         resp = await c.get(
-            "/api/cme/projects?search=zzz_not_a_real_project",
+            "/api/cme/export/projects?search=zzz_not_a_real_project",
             headers={"Cf-Access-Jwt-Assertion": "dev-bypass"},
         )
     assert resp.status_code == 200
@@ -2036,7 +2038,7 @@ async def test_project_documents_returns_current_versions() -> None:
     ) as c:
         # Pick a project with known documents
         list_resp = await c.get(
-            "/api/cme/projects?limit=1",
+            "/api/cme/export/projects?limit=1",
             headers={"Cf-Access-Jwt-Assertion": "dev-bypass"},
         )
         projects = list_resp.json()["projects"]
@@ -2045,7 +2047,7 @@ async def test_project_documents_returns_current_versions() -> None:
         pid = projects[0]["id"]
 
         docs_resp = await c.get(
-            f"/api/cme/projects/{pid}/documents",
+            f"/api/cme/export/projects/{pid}/documents",
             headers={"Cf-Access-Jwt-Assertion": "dev-bypass"},
         )
     assert docs_resp.status_code == 200
@@ -2087,7 +2089,7 @@ from registry.project_schemas import (
     ProjectListResponse,
 )
 
-router = APIRouter(prefix="/api/cme/projects", tags=["cme-projects"])
+router = APIRouter(prefix="/api/cme/export/projects", tags=["cme-export"])
 
 
 @router.get("", response_model=ProjectListResponse)
@@ -2103,7 +2105,7 @@ def list_projects(
         db.query(
             CMEDocument.project_id.label("pid"),
             func.count(CMEDocument.id).label("cnt"),
-            func.max(CMEDocument.updated_at).label("last_activity"),
+            func.max(CMEDocument.created_at).label("last_activity"),
         )
         .filter(CMEDocument.is_current.is_(True))
         .group_by(CMEDocument.project_id)
@@ -2175,7 +2177,7 @@ def list_project_documents(
             word_count=d.word_count,
             version=d.version,
             is_current=d.is_current,
-            updated_at=d.updated_at,
+            created_at=d.created_at,
             drive_file_id=d.drive_file_id,
         )
         for d in docs
@@ -2237,7 +2239,7 @@ async def test_bundle_enqueue_returns_job_id() -> None:
     ) as c:
         projects = (
             await c.get(
-                "/api/cme/projects?limit=1",
+                "/api/cme/export/projects?limit=1",
                 headers={"Cf-Access-Jwt-Assertion": "dev-bypass"},
             )
         ).json()["projects"]
@@ -2269,7 +2271,7 @@ async def test_bundle_rejects_doc_ids_outside_project() -> None:
     ) as c:
         projects = (
             await c.get(
-                "/api/cme/projects?limit=2",
+                "/api/cme/export/projects?limit=2",
                 headers={"Cf-Access-Jwt-Assertion": "dev-bypass"},
             )
         ).json()["projects"]
@@ -2280,7 +2282,7 @@ async def test_bundle_rejects_doc_ids_outside_project() -> None:
 
         docs_b = (
             await c.get(
-                f"/api/cme/projects/{pid_b}/documents",
+                f"/api/cme/export/projects/{pid_b}/documents",
                 headers={"Cf-Access-Jwt-Assertion": "dev-bypass"},
             )
         ).json()["documents"]
@@ -3526,7 +3528,7 @@ export interface ProjectDocumentItem {
   word_count: number | null;
   version: number;
   is_current: boolean;
-  updated_at: string;
+  created_at: string;
   drive_file_id: string | null;
 }
 
@@ -3566,7 +3568,7 @@ export async function listProjects(params: {
   qs.set("limit", String(params.limit ?? 50));
   qs.set("offset", String(params.offset ?? 0));
   return json<ProjectListResponse>(
-    await fetch(`/api/registry/api/cme/projects?${qs.toString()}`),
+    await fetch(`/api/registry/api/cme/export/projects?${qs.toString()}`),
   );
 }
 
@@ -3574,7 +3576,7 @@ export async function listProjectDocuments(
   projectId: string,
 ): Promise<ProjectDocumentsResponse> {
   return json<ProjectDocumentsResponse>(
-    await fetch(`/api/registry/api/cme/projects/${projectId}/documents`),
+    await fetch(`/api/registry/api/cme/export/projects/${projectId}/documents`),
   );
 }
 
@@ -4195,7 +4197,7 @@ test("files tab can select and download a project bundle", async ({
 }) => {
   // Preflight: ensure the API has at least one project with documents
   const listRes = await request.get(
-    `${REGISTRY_URL}/api/cme/projects?limit=1`,
+    `${REGISTRY_URL}/api/cme/export/projects?limit=1`,
     { timeout: 15_000 },
   );
   expect(listRes.status()).toBe(200);
