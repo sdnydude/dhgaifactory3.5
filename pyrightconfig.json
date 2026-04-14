@@ -1,0 +1,39 @@
+{
+  "include": [
+    "langgraph_workflows/dhg-agents-cloud/src",
+    "langgraph_workflows/dhg-agents-cloud/tests",
+    "registry"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    "**/.venv",
+    "**/node_modules",
+    ".pyright-stubs",
+    "website",
+    "langgraph-dev",
+    "agents",
+    "docs/archive",
+    "langgraph_workflows/dhg-agents-cloud/src/dhg-audio-agent",
+    "registry/alembic/versions"
+  ],
+  "venvPath": "langgraph_workflows/dhg-agents-cloud",
+  "venv": ".venv",
+  "pythonVersion": "3.12",
+  "executionEnvironments": [
+    {
+      "root": "langgraph_workflows/dhg-agents-cloud",
+      "extraPaths": ["langgraph_workflows/dhg-agents-cloud/src"]
+    },
+    {
+      "root": "registry",
+      "extraPaths": ["registry", ".pyright-stubs/registry"],
+      "reportAttributeAccessIssue": "none",
+      "reportArgumentType": "none",
+      "reportGeneralTypeIssues": "none"
+    }
+  ],
+  "reportMissingImports": "error",
+  "reportOptionalMemberAccess": "none",
+  "reportGeneralTypeIssues": "error",
+  "typeCheckingMode": "basic"
+}

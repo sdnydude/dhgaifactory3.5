@@ -82,3 +82,6 @@ swincoming/
 
 # Superpowers writing-plans scratch (session-local, not a repo artifact)
 /whats-next.md
+
+# Pyright container site-packages snapshots (regeneratable via docker cp)
+.pyright-stubs/
