@@ -20,6 +20,7 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
   { path: "/studio", label: "Studio", section: "observe", roles: ["admin", "operations"] },
   // Manage section
   { path: "/admin", label: "Admin Console", section: "manage", roles: ["admin"] },
+  { path: "/admin/reporting", label: "Reporting", section: "manage", roles: ["admin"] },
 ];
 
 export const SECTION_LABELS: Record<string, string> = {
