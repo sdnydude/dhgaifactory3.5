@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useAppStore } from "@/stores/app-store";
+import { listPendingReviews } from "@/lib/inboxApi";
 
 export function useBadgePolling(intervalMs = 30_000) {
   const setBadgeCounts = useAppStore((s) => s.setBadgeCounts);
@@ -11,22 +12,18 @@ export function useBadgePolling(intervalMs = 30_000) {
 
     const poll = async () => {
       try {
-        const [inboxRes, projectsRes] = await Promise.all([
-          fetch("/api/langgraph/threads/search", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ status: "interrupted", limit: 100 }),
-          }),
+        // Inbox badge reuses the same helper the /inbox page uses, so
+        // the count cannot drift from the list. listPendingReviews
+        // filters out zombie interrupted threads that have no real
+        // review payload.
+        const [inboxReviews, projectsRes] = await Promise.all([
+          listPendingReviews().catch(() => []),
           fetch("/api/registry/api/cme/projects?status=processing"),
         ]);
 
         if (!active) return;
 
-        let inboxCount = 0;
-        if (inboxRes.ok) {
-          const data = await inboxRes.json();
-          inboxCount = Array.isArray(data) ? data.length : 0;
-        }
+        const inboxCount = inboxReviews.length;
 
         let processingCount = 0;
         if (projectsRes.ok) {

@@ -28,32 +28,59 @@ export async function listPendingReviews(): Promise<PendingReview[]> {
   const reviews: PendingReview[] = [];
 
   for (const thread of threads) {
-    const state = await client.threads.getState(thread.thread_id);
-    const values = state.values as Record<string, unknown> | null;
-    const tasks = state.tasks ?? [];
-
     let payload: ReviewPayloadWithVS | null = null;
-    for (const task of tasks) {
-      if (task.interrupts) {
-        for (const interrupt of task.interrupts) {
-          const val = interrupt.value as ReviewPayloadWithVS;
-          if (val && val.document) {
-            payload = val;
+    let currentStep = "unknown";
+    let status = "awaiting_review";
+    let hasInterrupt = false;
+
+    try {
+      const state = await client.threads.getState(thread.thread_id);
+      const values = state.values as Record<string, unknown> | null;
+      const tasks = state.tasks ?? [];
+      const topInterrupts =
+        (state as unknown as { interrupts?: unknown[] }).interrupts ?? [];
+
+      for (const task of tasks) {
+        if (task.interrupts && task.interrupts.length > 0) {
+          hasInterrupt = true;
+          for (const interrupt of task.interrupts) {
+            const val = interrupt.value as ReviewPayloadWithVS;
+            if (val && val.document) {
+              payload = val;
+            }
           }
         }
       }
+
+      if (topInterrupts.length > 0) {
+        hasInterrupt = true;
+      }
+
+      currentStep = (values?.current_step as string) ?? "unknown";
+      status = (values?.status as string) ?? "awaiting_review";
+    } catch {
+      // getState can fail for individual threads (missing checkpoint,
+      // schema mismatch). Skip silently — a thread we can't introspect
+      // also can't be resumed by a human review decision.
+      continue;
     }
 
-    if (payload || tasks.some((t) => t.interrupts?.length)) {
-      reviews.push({
-        threadId: thread.thread_id,
-        graphId: (thread.metadata?.graph_id as string) ?? "unknown",
-        createdAt: thread.created_at,
-        payload,
-        currentStep: (values?.current_step as string) ?? "unknown",
-        status: (values?.status as string) ?? "awaiting_review",
-      });
+    // Drop zombie threads: LangGraph marks a run as "interrupted" when
+    // it halts for any reason (error, crash, pre-review stop). Only
+    // threads with an actual interrupt payload are resumable by a
+    // human decision, so only those belong in the review inbox.
+    if (!hasInterrupt) {
+      continue;
     }
+
+    reviews.push({
+      threadId: thread.thread_id,
+      graphId: (thread.metadata?.graph_id as string) ?? "unknown",
+      createdAt: thread.created_at,
+      payload,
+      currentStep,
+      status,
+    });
   }
 
   return reviews;
