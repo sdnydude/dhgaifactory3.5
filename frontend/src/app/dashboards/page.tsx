@@ -426,7 +426,7 @@ export default function DashboardsPage() {
   void tick;
 
   return (
-    <div className="mc-root">
+    <div className="mc-root h-full overflow-y-auto">
       {/* =================== HEADER =================== */}
       <header className="border-b border-[color:var(--mc-frame)] px-6 py-4 mc-grid-bg">
         <div className="flex items-baseline justify-between gap-6">
