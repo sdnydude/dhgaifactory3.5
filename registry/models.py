@@ -374,6 +374,11 @@ class CMEProject(Base):
         nullable=True,
     )
 
+    # Google Drive sync (added migration 010)
+    drive_folder_id = Column(Text, nullable=True)
+    drive_last_synced_at = Column(DateTime(timezone=True), nullable=True)
+    drive_sync_status = Column(Text, nullable=True)
+
     # Relationships
     agent_outputs = relationship("CMEAgentOutput", back_populates="project", cascade="all, delete-orphan")
     review_assignments = relationship("CMEReviewAssignment", back_populates="project", cascade="all, delete-orphan")
@@ -576,6 +581,11 @@ class CMEDocument(Base):
     created_by = Column(String(255), nullable=False, default="system")
     retention_until = Column(DateTime(timezone=True), nullable=False)
     is_archived = Column(Boolean, nullable=False, default=False)
+
+    # Google Drive sync (added migration 010)
+    drive_file_id = Column(Text, nullable=True)
+    drive_synced_at = Column(DateTime(timezone=True), nullable=True)
+    drive_md5 = Column(Text, nullable=True)
 
     # Immutable — no updated_at
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -939,10 +949,23 @@ class DownloadJob(Base):
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     error = Column(Text, nullable=True)
+    project_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("cme_projects.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    selected_document_ids = Column(JSONB, nullable=True)
 
     __table_args__ = (
         Index("ix_download_jobs_status_created_at", "status", "created_at"),
-        Index("ix_download_jobs_thread_scope_status", "thread_id", "scope", "status"),
+        Index(
+            "ix_download_jobs_thread_scope_status",
+            "thread_id", "scope", "status",
+        ),
+        Index(
+            "ix_download_jobs_project_status",
+            "project_id", "status",
+        ),
     )
 
     def __repr__(self) -> str:
