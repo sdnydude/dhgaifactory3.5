@@ -32,7 +32,7 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
   }
 }
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (pathname.startsWith("/print/")) {
@@ -45,7 +45,7 @@ export function middleware(request: NextRequest) {
       return new NextResponse("missing token", { status: 401 });
     }
     try {
-      const payload = verifyPrintToken(token, secret);
+      const payload = await verifyPrintToken(token, secret);
       const match = PRINT_SUBJECT_BY_PREFIX.find((m) => pathname.startsWith(m.prefix));
       if (!match || match.subject !== payload.subject) {
         return new NextResponse("subject mismatch", { status: 403 });

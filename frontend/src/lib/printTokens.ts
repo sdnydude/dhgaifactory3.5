@@ -1,5 +1,3 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
-
 export class PrintTokenInvalid extends Error {}
 export class PrintTokenExpired extends Error {}
 
@@ -15,31 +13,65 @@ export interface PrintTokenPayload {
   expires_at: number;
 }
 
-function b64urlDecode(input: string): Buffer {
+function b64urlToBytes(input: string): Uint8Array {
   const pad = "=".repeat((4 - (input.length % 4)) % 4);
-  return Buffer.from(input + pad, "base64url");
+  const b64 = (input + pad).replace(/-/g, "+").replace(/_/g, "/");
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
 }
 
-function b64urlEncode(buf: Buffer): string {
-  return buf.toString("base64url");
+function bytesToB64url(buf: ArrayBuffer): string {
+  const u8 = new Uint8Array(buf);
+  let bin = "";
+  for (let i = 0; i < u8.length; i++) bin += String.fromCharCode(u8[i]);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-export function verifyPrintToken(token: string, secret: string): PrintTokenPayload {
+function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+  return diff === 0;
+}
+
+export async function verifyPrintToken(
+  token: string,
+  secret: string,
+): Promise<PrintTokenPayload> {
   const dot = token.lastIndexOf(".");
   if (dot < 0) throw new PrintTokenInvalid("malformed token");
   const body = token.slice(0, dot);
   const sig = token.slice(dot + 1);
 
-  const expected = b64urlEncode(createHmac("sha256", secret).update(body).digest());
-  const a = Buffer.from(expected);
-  const b = Buffer.from(sig);
-  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const macBuf = await crypto.subtle.sign("HMAC", key, enc.encode(body));
+  const expected = bytesToB64url(macBuf);
+
+  let sigBytes: Uint8Array;
+  let expBytes: Uint8Array;
+  try {
+    sigBytes = b64urlToBytes(sig);
+    expBytes = b64urlToBytes(expected);
+  } catch {
+    throw new PrintTokenInvalid("bad signature encoding");
+  }
+  if (!constantTimeEqual(expBytes, sigBytes)) {
     throw new PrintTokenInvalid("bad signature");
   }
 
   let payload: PrintTokenPayload;
   try {
-    payload = JSON.parse(b64urlDecode(body).toString("utf-8"));
+    const json = new TextDecoder().decode(b64urlToBytes(body));
+    payload = JSON.parse(json);
   } catch {
     throw new PrintTokenInvalid("bad payload");
   }
