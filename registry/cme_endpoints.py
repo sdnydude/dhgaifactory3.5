@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 import httpx
 import logging
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("uvicorn.error")
 
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -1356,6 +1356,13 @@ async def get_cme_pipeline_status(project_id: str, db: Session = Depends(get_db)
                     await _sync_project_from_thread(project, thread_data, db)
             except Exception as sync_err:
                 logger.warning(f"Cloud sync failed during status poll: {sync_err}")
+        else:
+            # Explicit log so the next investigation can tell "guard skipped"
+            # apart from "guard ran but no-op". Silent skips here cost ~2h on Apr 13.
+            logger.info(
+                "auto-sync skipped for %s: status=%s thread_id=%s",
+                project_id, project.status, project.pipeline_thread_id,
+            )
 
         registry_read_operations.labels(operation="get_cme_pipeline_status").inc()
         registry_read_latency.observe((time.time() - start) * 1000)
