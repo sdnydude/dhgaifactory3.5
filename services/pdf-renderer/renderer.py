@@ -23,7 +23,7 @@ async def render_pdf(request: RenderRequest) -> bytes:
                 extra_http_headers=request.extra_http_headers
             )
             page = await context.new_page()
-            await page.goto(request.url, wait_until="networkidle", timeout=request.timeout_ms)
+            await page.goto(request.url, wait_until="domcontentloaded", timeout=request.timeout_ms)
             for selector in request.wait_for_selectors:
                 await page.wait_for_selector(selector, timeout=request.timeout_ms)
             # Wait for any element declaring it is still loading to finish
