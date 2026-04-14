@@ -42,6 +42,8 @@ postgres-data/
 .pytest_cache/
 .coverage
 htmlcov/
+frontend/test-results/
+frontend/playwright-report/
 
 # Frontend / Node
 node_modules/
