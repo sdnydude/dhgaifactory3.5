@@ -1,5 +1,5 @@
 # DHG AI Factory — Master Task List
-**Last Updated:** Apr 14, 2026 (v13)
+**Last Updated:** Apr 13, 2026 (v12)
 
 ## System Status
 - **Containers:** 37 running, all healthy (0 unhealthy)
@@ -39,18 +39,15 @@
 15. [ ] React Flow — visual LangGraph workflow editor
 16. [ ] Tremor — token usage and agent performance dashboards (currently using Recharts for basic monitoring)
 17. [ ] Refine — admin console with FastAPI data providers
-17a. [~] Dev Changelog (Admin/Reporting section) — editable agent-assisted development log at `/admin/reporting/dev-changelog`. First TanStack deployment in the product. Builds 1-4 functionally landed and committed Apr 14 in `51503b3` (backend + migration + seed + tests), `ef7ae2a` (frontend + TanStack + filter rail + detail slide-over + editorial form), `29ad09e` (design spec).
-    - **Build 1 core DONE** — `/api/dev-changelog` live (list + detail + PATCH), 16-row seed verified in DB, TanStack table with 9 column defs (slug, epic, category chip, window, commits, COALESCE display status, override, priority, locked), Zustand store, /admin/reporting/dev-changelog route gated to admin role.
-    - **Build 2 DONE de facto** — detail slide-over (`dev-changelog-detail-sheet.tsx`) with agent-detected metadata grid + commits list linking to `github.com/sdnydude/dhgaifactory3.5/commit/{sha}`.
-    - **Build 3 DONE de facto** — inline edit via `EditorialForm` component (declared_status / priority / key_insight / notes / locked) with dirty-state + save/discard. Server-side ownership enforcement via `DevChangelogPatch.model_config = ConfigDict(extra='forbid')` — Pydantic rejects agent-owned fields at validation time before the handler runs.
-    - **Build 4 PARTIAL** — filter rail (`dev-changelog-filter-rail.tsx`) DONE with faceted status/category/window/debounced-search + live counts. Timeline/kanban view modes declared in store but only table view renders. Saved views NOT implemented.
-    - **Build 5 NOT STARTED** — nightly 3am agent, blocked on #21 Phase 1 Gate B per design.
-    - **Known gaps to address before calling #17a closed:**
-      - [ ] **Editorial masthead** — view header is plain shadcn `<h1>`, not the Fraunces/triple-line border-top editorial treatment the spec calls for (the "hybridize with inbox editorial aesthetic" Build 1 #10). View container is `frontend/src/components/reporting/dev-changelog-view.tsx:51-62`.
-      - [ ] **Real-DB tests replacing mocks** — `test_dev_changelog_endpoints.py` uses `mock_db.query.return_value.filter...` chains. Violates the pattern established in #47/#52 after Pydantic 2 rejected MagicMock datetime fields (`feedback_serializer_drift.md`). Pattern to follow: `TestCMEOutputsRealDB` in `test_cme_endpoints.py`.
-      - [ ] **Playwright e2e spec** — 9 verification PNGs taken during builds, no committed test file. Verification is not reproducible in CI.
-      - [ ] **Build 4 remainder** — timeline view, kanban view, saved views.
-      - [ ] **Endpoint prefix normalization** — `/api/dev-changelog` vs `/api/v1/security`, `/api/v1/cme`, etc. elsewhere. Low risk while no external client hardcodes it; growing cost over time.
+17a. [~] Dev Changelog (Admin/Reporting section) — editable agent-assisted development log at `/admin/reporting/dev-changelog`. Schema + 16-entry seed DONE (migration 007, verified). Design spec DONE (`docs/superpowers/specs/2026-04-13-dev-changelog-design.md`). First TanStack deployment in the product.
+    - **Build 1 IN PROGRESS** — 13 subtasks tracked via `TaskList` (IDs 1-13), dependency DAG wired. Execution waves:
+      - Wave 1 (parallel, no blockers): #1 install TanStack + shadcn table, #3 SQLAlchemy model, #7 route permissions, #10 editorial masthead component
+      - Wave 2: #2 DataTable wrapper (needs #1), #4 Pydantic schemas (needs #3), #8 page shell (needs #7)
+      - Wave 3: #5 backend endpoints (needs #4), #11 table with column defs (needs #2, #4)
+      - Wave 4: #6 backend tests (needs #5), #9 API client + Zustand store (needs #5)
+      - Wave 5: #12 view container (needs #8, #9, #10, #11)
+      - Wave 6: #13 e2e Playwright verify (needs #6, #12)
+    - Builds 2-5 queued: (2) detail slide-over + commit links, (3) inline edit + server-side ownership enforcement, (4) filters + saved views + timeline/kanban, (5) 3am nightly agent (BLOCKED on #21 Phase 1 Gate B so traces are visible before unattended runs).
 
 ## Phase 4: CME Pipeline End-to-End
 
@@ -200,5 +197,4 @@
 - v9: Apr 13, 2026 — saved as docs/archive/TODO_v9.md (Dev Changelog Build 1 task DAG wired via TaskCreate, 13 subtasks IDs 1-13, Build 5 dependency on #21 Gate B made explicit; Phase 1 Gate A PASSED — CF_ACCESS secrets + Prometheus remote-write flag root-caused and fixed, plan v2 diagnostic ladder committed `daf230a`, dashboards panel D1 live)
 - v10: Apr 13, 2026 — saved as docs/archive/TODO_v10.md (intake-edit-after-submit feature complete: backend PUT loosened with intake_version bump, 4 real-DB integration tests replacing mocks, frontend gates loosened, stale-intake amber banner; NSCLC fingerprint test ef4e5b53 verified topic-correct end-to-end; auto-sync silent guard skip observability bug logged as #51; /outputs document_text passthrough bug logged as #52; Playwright journey verification queued as #53)
 - v11: Apr 13, 2026 — saved as docs/archive/TODO_v11.md (#51 auto-sync observability + silent logger root-caused and fixed — switched module logger to `uvicorn.error` to surface 12 previously-invisible log calls; #52 /outputs document_text passthrough fixed in 3 places — Pydantic schema, both endpoint constructors, frontend interface — with 3 new real-DB tests, verified live; #53 Playwright E2E intake journey walked end-to-end through real UI, project 66c96439 created via Save & Start with prefill returning 20 PubMed publications, status flipped intake→processing; serializer-drift heuristic saved to memory as `feedback_serializer_drift.md`; tests now 119/119 across 8 files)
-- v12: Apr 13, 2026 — saved as docs/archive/TODO_v12.md (code review of #52 caught that wire-fix alone was operationally a no-op — `step-content.tsx` extracts prose via per-agent `DOCUMENT_KEYS` map and never read `output.document_text`. Frontend wiring landed: `extractDocument()` now prefers `output.document_text` with `>10` char guard. Commit `1ec1cb3` pushed to origin/master alongside `0cecce0` intake-edit feature and `d601018` observability fix. Phase 4 down to a single open item — #20 Human review feedback loop.)
-- v13: Apr 14, 2026 — current (Dev Changelog Builds 1-4 functionally landed in 3 commits: `51503b3` backend API + migration 007 + 16-row seed + 6 tests, `ef7ae2a` frontend view with first-in-product TanStack deployment + filter rail + detail slide-over + editorial form + Zustand store, `29ad09e` design spec. `@tanstack/react-table@8.21.3` added. Dev Changelog work surfaced during status-update review after a session disconnect — full code review confirmed functionally working but short of declared spec in 5 specific ways (editorial masthead, real-DB tests, Playwright e2e spec, timeline/kanban/saved-views, prefix normalization) — all logged as gaps under #17a. Also this session: `31f259d` chore gitignore adds `.claude/` `.superpowers/` `.playwright-mcp/` and root `*.png` after 20 items of untracked noise had been accumulating; `dba1f11` fix dashboards mission-control scroll on short viewports. Five commits local, nothing pushed — waiting on explicit approval for the push.)
+- v12: Apr 13, 2026 — current (code review of #52 caught that wire-fix alone was operationally a no-op — `step-content.tsx` extracts prose via per-agent `DOCUMENT_KEYS` map and never read `output.document_text`. Frontend wiring landed: `extractDocument()` now prefers `output.document_text` with `>10` char guard, falls back to existing key map. `tsc --noEmit` clean. Commit `1ec1cb3` pushed to origin/master alongside `0cecce0` intake-edit feature and `d601018` observability fix. Three Phase 4 tickets closed in this session: #19, #51, #52. Phase 4 now down to a single open item — #20 Human review feedback loop. GitHub flagged 21 Dependabot alerts on default branch — standing, not from this push.)
