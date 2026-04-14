@@ -29,6 +29,29 @@ class DownloadJobCreate(BaseModel):
     graph_id: str
 
 
+class BundleJobCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: UUID
+    document_ids: list[UUID] | None = None  # None = all current docs
+    include_manifest: bool = True
+    include_intake: bool = False
+
+
+class BundleJobResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    project_id: UUID | None
+    scope: Literal["document", "project_bundle", "drive_sync"]
+    status: Literal["pending", "running", "succeeded", "failed"]
+    selected_document_ids: list[UUID] | None
+    created_at: datetime
+    completed_at: datetime | None
+    artifact_bytes: int | None
+    error: str | None
+
+
 class DownloadJobResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra="forbid")
 
