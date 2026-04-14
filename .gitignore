@@ -65,3 +65,12 @@ out/
 # Backup files
 *.bak
 swincoming/
+
+# Claude Code / agent state
+.claude/scheduled_tasks.lock
+.claude/worktrees/
+.superpowers/
+.playwright-mcp/
+
+# Loose verification screenshots in repo root (nested PNGs under docs/ are fine)
+/*.png
