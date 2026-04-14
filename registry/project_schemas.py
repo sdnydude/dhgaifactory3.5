@@ -42,7 +42,7 @@ class ProjectDocumentItem(BaseModel):
     word_count: int | None
     version: int
     is_current: bool
-    updated_at: datetime
+    created_at: datetime
     drive_file_id: str | None
 
 
