@@ -1,12 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import { Download } from "lucide-react";
 import { DocumentViewer } from "./document-viewer";
 import { CommentsSidebar } from "./comments-sidebar";
 import { MetricsBar } from "./metrics-bar";
 import { DecisionBar } from "./decision-bar";
 import { useAnnotations } from "./use-annotations";
 import { VSAlternatives } from "./vs-alternatives";
+import { Button } from "@/components/ui/button";
+import { useReviewStore } from "@/stores/review-store";
+import { downloadDocument } from "@/lib/exportApi";
 import type { ReviewPayloadWithVS, ResumeValue, DocumentSection } from "./types";
 
 interface ReviewPanelProps {
@@ -26,6 +30,24 @@ export function ReviewPanel({ payload, onSubmit, isLoading }: ReviewPanelProps) 
   const documents = buildDocumentSections(payload.document);
   const [activeDocIndex, setActiveDocIndex] = useState(0);
   const activeDoc = documents[activeDocIndex];
+  const selectedThreadId = useReviewStore((s) => s.selectedReviewId);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  const handleDownload = async () => {
+    const threadId = selectedThreadId;
+    if (!threadId) return;
+    setDownloading(true);
+    setDownloadError(null);
+    try {
+      await downloadDocument(threadId, payload.project_name ?? "document");
+    } catch (err) {
+      console.error("Document download failed", err);
+      setDownloadError(err instanceof Error ? err.message : "Download failed");
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const {
     comments,
@@ -57,9 +79,31 @@ export function ReviewPanel({ payload, onSubmit, isLoading }: ReviewPanelProps) 
           <span className="font-mono-editorial small-caps text-[10px] text-muted-foreground">
             Manuscript for review
           </span>
-          <span className="font-mono-editorial small-caps text-[10px] text-muted-foreground tabular-nums">
-            Round {payload.review_round + 1} of III
-          </span>
+          <div className="flex items-center gap-4">
+            <span className="font-mono-editorial small-caps text-[10px] text-muted-foreground tabular-nums">
+              Round {payload.review_round + 1} of III
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleDownload}
+              disabled={downloading || !selectedThreadId}
+              aria-label="Download document"
+              className="no-print h-7 gap-1.5 text-[11px]"
+            >
+              <Download className="h-3.5 w-3.5" aria-hidden />
+              {downloading ? "Preparing…" : "Document"}
+            </Button>
+            {downloadError && (
+              <span
+                role="alert"
+                className="no-print font-mono-editorial text-[10px] text-destructive"
+              >
+                {downloadError}
+              </span>
+            )}
+          </div>
         </div>
         <p
           className="font-display italic text-foreground/60 text-sm"
