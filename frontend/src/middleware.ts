@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { verifyPrintToken, PrintTokenInvalid, PrintTokenExpired } from "@/lib/printTokens";
 
 // Route access by role — mirrors lib/permissions.ts
 // Duplicated here because middleware runs in Edge Runtime and can't import from src/lib
@@ -14,6 +15,13 @@ const ROUTE_ROLES: Record<string, string[]> = {
   "/admin": ["admin"],
 };
 
+const PRINT_SUBJECT_BY_PREFIX: Array<{ prefix: string; subject: string }> = [
+  { prefix: "/print/cme/document/", subject: "cme_document" },
+  { prefix: "/print/cme/project/", subject: "cme_project_intake" },
+  { prefix: "/print/cme/quality/", subject: "cme_quality" },
+  { prefix: "/print/cme/review-history/", subject: "cme_review_history" },
+];
+
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
   try {
     const parts = token.split(".");
@@ -26,6 +34,37 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  if (pathname.startsWith("/print/")) {
+    const secret = process.env.EXPORT_SIGNING_SECRET;
+    if (!secret) {
+      return new NextResponse("print disabled", { status: 503 });
+    }
+    const token = request.nextUrl.searchParams.get("t");
+    if (!token) {
+      return new NextResponse("missing token", { status: 401 });
+    }
+    try {
+      const payload = verifyPrintToken(token, secret);
+      const match = PRINT_SUBJECT_BY_PREFIX.find((m) => pathname.startsWith(m.prefix));
+      if (!match || match.subject !== payload.subject) {
+        return new NextResponse("subject mismatch", { status: 403 });
+      }
+      const tail = pathname.slice(match.prefix.length).split("/")[0];
+      if (tail !== payload.resource_id) {
+        return new NextResponse("resource mismatch", { status: 403 });
+      }
+      return NextResponse.next();
+    } catch (err) {
+      if (err instanceof PrintTokenExpired) {
+        return new NextResponse("expired", { status: 401 });
+      }
+      if (err instanceof PrintTokenInvalid) {
+        return new NextResponse("invalid", { status: 401 });
+      }
+      throw err;
+    }
+  }
 
   // Skip API routes, static files, and the root redirect
   if (
