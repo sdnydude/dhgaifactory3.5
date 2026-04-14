@@ -195,6 +195,7 @@ export interface AgentOutput {
   content: Record<string, unknown>;
   created_at: string;
   quality_score: number | null;
+  document_text: string | null;
 }
 
 // =============================================================================

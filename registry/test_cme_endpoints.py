@@ -288,6 +288,114 @@ class TestCMEProjectOutputs:
         assert response.status_code == 404
 
 
+class TestCMEOutputsRealDB:
+    """Real-DB integration tests for /outputs document_text passthrough.
+
+    Skipped if the registry DB is not reachable.
+    """
+
+    @pytest.fixture
+    def real_client(self):
+        import sys, os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
+        try:
+            from database import SessionLocal, get_db
+            from api import app
+        except Exception as e:
+            pytest.skip(f"registry api import failed: {e}")
+
+        try:
+            probe = SessionLocal()
+            probe.execute(__import__("sqlalchemy").text("SELECT 1"))
+            probe.close()
+        except Exception as e:
+            pytest.skip(f"registry DB not reachable: {e}")
+
+        def override_get_db():
+            db = SessionLocal()
+            try:
+                yield db
+            finally:
+                db.close()
+
+        app.dependency_overrides[get_db] = override_get_db
+        from fastapi.testclient import TestClient
+        with TestClient(app) as c:
+            yield c, SessionLocal
+        app.dependency_overrides.clear()
+
+    def _seed(self, SessionLocal, document_text):
+        from models import CMEProject, CMEAgentOutput
+        db = SessionLocal()
+        try:
+            project = CMEProject(
+                name=f"pytest-outputs-{uuid.uuid4().hex[:8]}",
+                status="complete",
+                intake={"section_a": {"project_name": "x"}},
+                intake_version=1,
+                outputs={},
+            )
+            db.add(project)
+            db.flush()
+            output = CMEAgentOutput(
+                project_id=project.id,
+                agent_name="research",
+                output_type="document",
+                content={"summary": "test"},
+                quality_score=0.9,
+                document_text=document_text,
+            )
+            db.add(output)
+            db.commit()
+            return str(project.id)
+        finally:
+            db.close()
+
+    def _cleanup(self, SessionLocal, project_id):
+        from models import CMEProject, CMEAgentOutput
+        db = SessionLocal()
+        try:
+            db.query(CMEAgentOutput).filter(CMEAgentOutput.project_id == project_id).delete()
+            db.query(CMEProject).filter(CMEProject.id == project_id).delete()
+            db.commit()
+        finally:
+            db.close()
+
+    def test_list_outputs_includes_document_text(self, real_client):
+        client, SessionLocal = real_client
+        sample = "This is the extracted prose body of a research agent output."
+        project_id = self._seed(SessionLocal, document_text=sample)
+        try:
+            response = client.get(f"/api/cme/projects/{project_id}/outputs")
+            assert response.status_code == 200, response.text
+            body = response.json()
+            assert isinstance(body, list) and len(body) == 1
+            assert body[0]["document_text"] == sample
+        finally:
+            self._cleanup(SessionLocal, project_id)
+
+    def test_get_output_by_agent_includes_document_text(self, real_client):
+        client, SessionLocal = real_client
+        sample = "Single-agent fetch document body."
+        project_id = self._seed(SessionLocal, document_text=sample)
+        try:
+            response = client.get(f"/api/cme/projects/{project_id}/outputs/research")
+            assert response.status_code == 200, response.text
+            assert response.json()["document_text"] == sample
+        finally:
+            self._cleanup(SessionLocal, project_id)
+
+    def test_outputs_null_document_text_serializes_as_null(self, real_client):
+        client, SessionLocal = real_client
+        project_id = self._seed(SessionLocal, document_text=None)
+        try:
+            response = client.get(f"/api/cme/projects/{project_id}/outputs")
+            assert response.status_code == 200, response.text
+            assert response.json()[0]["document_text"] is None
+        finally:
+            self._cleanup(SessionLocal, project_id)
+
+
 class TestCMEWebhooks:
     def test_agent_complete_webhook_requires_body(self, client):
         response = client.post("/api/cme/webhook/agent-complete")

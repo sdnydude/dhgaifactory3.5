@@ -21,7 +21,9 @@ const DOCUMENT_KEYS: Record<string, string> = {
   compliance: "compliance_report",
 };
 
-function extractDocument(agentName: string, content: Record<string, unknown>): string | null {
+function extractDocument(agentName: string, output: AgentOutput): string | null {
+  if (output.document_text && output.document_text.length > 10) return output.document_text;
+  const content = output.content;
   const key = DOCUMENT_KEYS[agentName];
   if (key && typeof content[key] === "string") return content[key] as string;
   for (const k of Object.keys(content)) {
@@ -82,7 +84,7 @@ export function StepContent({ stepId, stepLabel, status, output }: StepContentPr
     );
   }
 
-  const doc = extractDocument(stepId, output.content);
+  const doc = extractDocument(stepId, output);
   const wordCount = typeof output.content.word_count === "number" ? output.content.word_count : null;
 
   return (

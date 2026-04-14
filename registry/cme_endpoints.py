@@ -226,6 +226,7 @@ class AgentOutput(BaseModel):
     content: Dict[str, Any]
     created_at: datetime
     quality_score: Optional[float]
+    document_text: Optional[str] = None
 
 
 # =============================================================================
@@ -1611,7 +1612,8 @@ async def list_cme_outputs(project_id: str, db: Session = Depends(get_db)):
             output_type=o.output_type,
             content=o.content,
             created_at=o.created_at,
-            quality_score=o.quality_score
+            quality_score=o.quality_score,
+            document_text=o.document_text,
         )
         for o in outputs
     ]
@@ -1641,7 +1643,8 @@ async def get_cme_agent_output(
         output_type=output.output_type,
         content=output.content,
         created_at=output.created_at,
-        quality_score=output.quality_score
+        quality_score=output.quality_score,
+        document_text=output.document_text,
     )
 
 
