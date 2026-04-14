@@ -74,3 +74,9 @@ swincoming/
 
 # Loose verification screenshots in repo root (nested PNGs under docs/ are fine)
 /*.png
+
+# CodeGraph semantic index (regeneratable via `codegraph sync`)
+.codegraph/
+
+# Superpowers writing-plans scratch (session-local, not a repo artifact)
+/whats-next.md
