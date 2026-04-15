@@ -642,7 +642,7 @@ export const AGENT_CATALOG: AgentCatalogEntry[] = [
     category: "recipe",
     pipelineOrder: 12,
     upstream: ["curriculum_package"],
-    downstream: ["full_pipeline"],
+    downstream: [],
     inputs: ["all_upstream_outputs", "intake_form"],
     outputs: ["grant_package_output", "prose_quality_pass_2", "compliance_result"],
     deepDocs: {
@@ -666,44 +666,6 @@ export const AGENT_CATALOG: AgentCatalogEntry[] = [
       inputSchema:
         "all_upstream_outputs: object (required) -- Combined needs + curriculum package state\n" +
         "intake_form: object (required)",
-    },
-  },
-  {
-    graphId: "full_pipeline",
-    name: "Full Pipeline",
-    icon: "\uD83D\uDE80", // rocket
-    description: "Complete end-to-end pipeline with 3-way human review routing (approved/revision/rejected).",
-    category: "recipe",
-    pipelineOrder: 13,
-    upstream: [],
-    downstream: [],
-    inputs: ["intake_form"],
-    outputs: ["grant_package_output", "compliance_result", "human_review_decision"],
-    deepDocs: {
-      executionFlow:
-        "1. Execute needs_package recipe (agents 2-6 + prose QA pass 1)\n" +
-        "2. Human Review Gate 1: approve to continue or request revision\n" +
-        "3. Execute curriculum_package recipe (agents 7-9 in parallel)\n" +
-        "4. Human Review Gate 2: approve to continue or request revision\n" +
-        "5. Execute grant_package recipe (agent 10 + prose QA pass 2 + compliance)\n" +
-        "6. Human Review Gate 3: 3-way routing\n" +
-        "   - Approved: mark complete, store final outputs\n" +
-        "   - Revision: route back to specified agent with notes\n" +
-        "   - Rejected: mark cancelled with reason",
-      qualityCriteria:
-        "- All 11 content agents executed successfully\n" +
-        "- Both prose quality passes passed\n" +
-        "- Compliance review passed\n" +
-        "- All human review gates cleared\n" +
-        "- Final package submission-ready",
-      errorHandling:
-        "- Human review timeout: escalate via notification\n" +
-        "- Revision requested: re-run from specified agent forward\n" +
-        "- Rejected: archive state with reason, no further processing",
-      inputSchema:
-        "intake_form: object (required) -- Full CME intake form\n" +
-        "project_id: string\n" +
-        "project_name: string",
     },
   },
 ];

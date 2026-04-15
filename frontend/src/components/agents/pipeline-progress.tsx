@@ -42,19 +42,6 @@ const RECIPE_STEPS: Record<string, Step[]> = {
     { key: "compliance", label: "Compliance" },
     { key: "human_review", label: "Human Review" },
   ],
-  full_pipeline: [
-    { key: "initialize", label: "Initialize" },
-    { key: "early_research", label: "Research + Clinical" },
-    { key: "gap_analysis", label: "Gap Analysis" },
-    { key: "learning_objectives", label: "Learning Objectives" },
-    { key: "needs_assessment", label: "Needs Assessment" },
-    { key: "prose_quality", label: "Prose QA (1)" },
-    { key: "design_phase", label: "Curriculum + Protocol + Marketing" },
-    { key: "grant_writer", label: "Grant Writer" },
-    { key: "prose_quality_2", label: "Prose QA (2)" },
-    { key: "compliance", label: "Compliance" },
-    { key: "human_review", label: "Human Review" },
-  ],
 };
 
 const OUTPUT_MAP: Record<string, string> = {

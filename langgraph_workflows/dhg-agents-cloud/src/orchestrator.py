@@ -7,7 +7,6 @@ Recipes:
 - needs_graph: Research → Gap → LO → Needs Assessment
 - curriculum_graph: Needs → Curriculum + Protocol + Marketing
 - grant_graph: All 11 agents + Prose QA
-- full_graph: Complete pipeline with Quality Gates + Human Review
 
 LangGraph Cloud Ready:
 - Each recipe is a compiled graph exported at module level
@@ -1732,76 +1731,6 @@ def create_grant_package_graph():
 
 
 # =============================================================================
-# RECIPE 4: FULL PIPELINE WITH HUMAN REVIEW ROUTING
-# Same as Grant Package but with human review routing
-# =============================================================================
-
-def create_full_pipeline_graph():
-    """Create the Full Pipeline recipe with interrupt-based human review routing."""
-
-    workflow = StateGraph(CMEPipelineState)
-
-    workflow.add_node("initialize", initialize_pipeline)
-    workflow.add_node("early_research", run_early_research_parallel)
-    workflow.add_node("gap_analysis", run_gap_analysis_agent)
-    workflow.add_node("learning_objectives", run_learning_objectives_agent)
-    workflow.add_node("needs_assessment", run_needs_assessment_agent)
-    workflow.add_node("prose_quality_1", run_prose_quality_pass_1)
-    workflow.add_node("design_phase", run_design_phase_parallel)
-    workflow.add_node("grant_writer", run_grant_writer_agent)
-    workflow.add_node("prose_quality_2", run_prose_quality_pass_2)
-    workflow.add_node("compliance", run_compliance_agent)
-    workflow.add_node("complete", mark_complete)
-    workflow.add_node("failed", mark_failed)
-
-    workflow.set_entry_point("initialize")
-    workflow.add_edge("initialize", "early_research")
-    workflow.add_edge("early_research", "gap_analysis")
-    workflow.add_edge("gap_analysis", "learning_objectives")
-    workflow.add_edge("learning_objectives", "needs_assessment")
-    workflow.add_edge("needs_assessment", "prose_quality_1")
-
-    workflow.add_conditional_edges(
-        "prose_quality_1",
-        route_after_prose_quality_1,
-        {
-            "continue": "design_phase",
-            "retry_needs": "needs_assessment",
-            "human_intervention": "design_phase" if SKIP_HUMAN_REVIEW else "human_review"
-        }
-    )
-
-    workflow.add_edge("design_phase", "grant_writer")
-    workflow.add_edge("grant_writer", "prose_quality_2")
-
-    workflow.add_conditional_edges(
-        "prose_quality_2",
-        route_after_prose_quality_2,
-        {
-            "continue": "compliance",
-            "retry_grant": "grant_writer",
-            "human_intervention": "compliance" if SKIP_HUMAN_REVIEW else "human_review"
-        }
-    )
-
-    workflow.add_conditional_edges(
-        "compliance",
-        route_after_compliance,
-        {
-            "continue": REVIEW_ENTRY_NODE,
-            "revision_required": "grant_writer"
-        }
-    )
-
-    _add_review_nodes_and_edges(workflow, revision_target="grant_writer")
-
-    workflow.add_edge("complete", END)
-    workflow.add_edge("failed", END)
-
-    return workflow.compile()
-
-
-# =============================================================================
 # CHECKPOINTER FACTORY
 # =============================================================================
 
@@ -1827,7 +1756,6 @@ async def get_checkpointer():
 needs_graph = create_needs_package_graph()
 curriculum_graph = create_curriculum_package_graph()
 grant_graph = create_grant_package_graph()
-full_graph = create_full_pipeline_graph()
 
 
 # =============================================================================
@@ -2039,8 +1967,6 @@ async def _run_pipeline_inner(
             graph = await create_checkpointed_grant_graph()
         else:
             graph = grant_graph
-    elif recipe == "full":
-        graph = full_graph  # Add checkpointed version if needed
     else:
         raise ValueError(f"Unknown recipe: {recipe}")
     
@@ -2067,10 +1993,7 @@ if __name__ == "__main__":
     
     print("\n=== GRANT PACKAGE GRAPH ===")
     print(grant_graph.get_graph().draw_mermaid())
-    
-    print("\n=== FULL PIPELINE GRAPH ===")
-    print(full_graph.get_graph().draw_mermaid())
-    
+
     print("\n" + "=" * 60)
     print("All graphs compiled successfully!")
     print("=" * 60)

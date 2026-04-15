@@ -93,11 +93,4 @@ export const GRAPHS: GraphInfo[] = [
       "Full 11 agents, Prose QA 2 passes, Compliance gate, Human Review",
     category: "orchestrator",
   },
-  {
-    id: "full_pipeline",
-    label: "Full Pipeline",
-    description:
-      "Complete grant pipeline with 3-way human review routing",
-    category: "orchestrator",
-  },
 ];

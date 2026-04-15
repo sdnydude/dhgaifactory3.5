@@ -18,7 +18,6 @@ const GRAPH_LABELS: Record<string, string> = {
   needs_package: "Needs Package",
   curriculum_package: "Curriculum Package",
   grant_package: "Grant Package",
-  full_pipeline: "Full Pipeline",
   needs_assessment: "Needs Assessment",
   research: "Research",
   clinical_practice: "Clinical Practice",

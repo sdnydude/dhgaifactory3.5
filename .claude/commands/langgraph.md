@@ -45,11 +45,10 @@ langgraph_workflows/dhg-agents-cloud/src/
 - `prose_quality_agent.py` — Prose quality review and scoring
 - `compliance_review_agent.py` — ACCME/regulatory compliance check
 
-**The 4 orchestrators (in `orchestrator.py`):**
+**The 3 orchestrators (in `orchestrator.py`):**
 - `needs_graph` — Research → Gap → LO → Needs Assessment
 - `curriculum_graph` — Needs → Curriculum + Protocol + Marketing (parallel)
-- `grant_graph` — All 11 agents + Prose QA
-- `full_graph` — Complete pipeline with Quality Gates + Human Review
+- `grant_graph` — All 11 agents + Prose QA + Compliance
 
 **Stack:** ChatAnthropic (Claude Sonnet), TypedDict state, `@traceable` decorators, asyncio patterns, conditional edges with retry loops, optional PostgresSaver checkpointing.
 
@@ -680,7 +679,7 @@ asyncio.run(test())
 
 **Debug a failing node:** Read the node function first. Check that errors are being appended (not overwritten). Check that the routing function handles the error case and eventually reaches END or a human intervention node. Add temporary logging via `logger.info(f"state at {node_name}: {state}")`.
 
-**Add a new orchestrator recipe:** Define a new `async def build_new_recipe_graph()` function in `orchestrator.py`. Compose existing wrapper nodes. Export the compiled graph at module level (`new_recipe_graph = ...`). Follow the existing `needs_graph`, `curriculum_graph`, `grant_graph`, `full_graph` pattern.
+**Add a new orchestrator recipe:** Define a new `async def build_new_recipe_graph()` function in `orchestrator.py`. Compose existing wrapper nodes. Export the compiled graph at module level (`new_recipe_graph = ...`). Follow the existing `needs_graph`, `curriculum_graph`, `grant_graph` pattern.
 
 **Add retry logic to an existing node:** Add `retry_count: int` to the state TypedDict if not present. Increment in the error path of the node. Create a routing function that checks `retry_count` against `MAX_RETRIES`. Wire with `add_conditional_edges`.
 

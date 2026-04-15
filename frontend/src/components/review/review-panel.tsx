@@ -23,7 +23,6 @@ const RECIPE_LABELS: Record<string, string> = {
   needs_package: "The Needs Package",
   curriculum_package: "The Curriculum Package",
   grant_package: "The Grant Package",
-  full_pipeline: "The Full Pipeline",
 };
 
 export function ReviewPanel({ payload, onSubmit, isLoading }: ReviewPanelProps) {

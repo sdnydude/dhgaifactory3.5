@@ -40,12 +40,19 @@ async function proxyRequest(
 
   try {
     const response = await fetch(url.toString(), fetchOptions);
-    const responseContentType = response.headers.get("content-type") || "";
-    const body = await response.text();
+    const body = await response.arrayBuffer();
+
+    const outHeaders: Record<string, string> = {
+      "content-type": response.headers.get("content-type") || "application/octet-stream",
+    };
+    const disposition = response.headers.get("content-disposition");
+    if (disposition) outHeaders["content-disposition"] = disposition;
+    const cacheControl = response.headers.get("cache-control");
+    if (cacheControl) outHeaders["cache-control"] = cacheControl;
 
     return new NextResponse(body, {
       status: response.status,
-      headers: { "content-type": responseContentType },
+      headers: outHeaders,
     });
   } catch {
     return NextResponse.json(

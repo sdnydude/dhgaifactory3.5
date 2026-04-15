@@ -8,7 +8,6 @@ const GRAPH_DESCRIPTIONS: Record<string, string> = {
   needs_package: "Research → Gap → LO → Needs → Prose QA → Review",
   curriculum_package: "Needs + Curriculum + Protocol + Marketing → Review",
   grant_package: "Full 11 agents + Prose QA (2 passes) + Compliance",
-  full_pipeline: "Complete pipeline with 3-way human review routing",
   research: "Literature review, PubMed, Perplexity research",
   clinical_practice: "Standard-of-care and barrier analysis",
   gap_analysis: "Evidence-based practice gap identification",
@@ -22,7 +21,7 @@ const GRAPH_DESCRIPTIONS: Record<string, string> = {
   compliance_review: "ACCME verification and compliance gate",
 };
 
-const RECIPE_GRAPHS = ["needs_package", "curriculum_package", "grant_package", "full_pipeline"];
+const RECIPE_GRAPHS = ["needs_package", "curriculum_package", "grant_package"];
 
 interface AssistantsRegistryProps {
   assistants: AssistantInfo[];

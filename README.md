@@ -16,12 +16,12 @@ Digital Harmony Group's AI Factory — a LangGraph-based orchestration platform 
               |                     |                      |
      ┌────────┴─────────┐  ┌───────┴────────┐  ┌─────────┴──────────┐
      | Orchestrator      |  | Content Agents |  | Quality Gates      |
-     | Recipes (4)       |  | (9 agents)     |  | (2 agents)         |
+     | Recipes (3)       |  | (9 agents)     |  | (2 agents)         |
      |                   |  |                |  |                    |
      | needs_package     |  | research       |  | prose_quality      |
      | curriculum_package|  | clinical_pract |  | compliance_review  |
      | grant_package     |  | gap_analysis   |  |                    |
-     | full_pipeline     |  | learning_obj   |  └────────────────────┘
+     |                   |  | learning_obj   |  └────────────────────┘
      └───────────────────┘  | curriculum_des |
                             | research_proto |
                             | marketing_plan |
@@ -45,7 +45,7 @@ Digital Harmony Group's AI Factory — a LangGraph-based orchestration platform 
      └────────────────────────────────────────────────────────┘
 ```
 
-## 15 LangGraph Graphs
+## 14 LangGraph Graphs
 
 **11 Individual Agents** — each with TypedDict state, Claude Sonnet LLM, dual tracing (LangSmith + OTel), 5-minute async timeouts, and quality gate retry loops:
 
@@ -63,14 +63,13 @@ Digital Harmony Group's AI Factory — a LangGraph-based orchestration platform 
 | Prose Quality | De-AI-ification scoring, banned pattern detection |
 | Compliance Review | ACCME standards verification |
 
-**4 Orchestrator Composition Graphs** — parallel execution via asyncio.gather, conditional quality gates, human-in-the-loop review:
+**3 Orchestrator Composition Graphs** — parallel execution via asyncio.gather, conditional quality gates, human-in-the-loop review:
 
 | Recipe | Pipeline |
 |--------|----------|
 | needs_package | Research + Clinical parallel -> Gap -> LO -> Needs -> Prose QA -> Human Review |
 | curriculum_package | Needs Package + Curriculum + Protocol + Marketing parallel -> Human Review |
 | grant_package | Full 11 agents, Prose QA 2 passes, Compliance gate, Human Review |
-| full_pipeline | Grant package with 3-way human review routing (approved/revision/rejected) |
 
 ---
 

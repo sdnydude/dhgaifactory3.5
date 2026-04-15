@@ -8,7 +8,7 @@
 
 ## Overview
 
-The LLManager Review Inbox is where human reviewers approve, revise, or reject documents produced by the LangGraph agent pipeline. When an orchestrator recipe (needs_package, curriculum_package, grant_package, or full_pipeline) reaches a human review gate, the LangGraph thread is **interrupted** — it pauses execution and waits for a human decision.
+The LLManager Review Inbox is where human reviewers approve, revise, or reject documents produced by the LangGraph agent pipeline. When an orchestrator recipe (needs_package, curriculum_package, or grant_package) reaches a human review gate, the LangGraph thread is **interrupted** — it pauses execution and waits for a human decision.
 
 The inbox queries LangGraph for all interrupted threads and presents them in a master-detail layout with AI-assisted quality assessment.
 
@@ -171,7 +171,6 @@ All 15 registered graphs can produce review items. The master list shows human-f
 | needs_package | Needs Package |
 | curriculum_package | Curriculum Package |
 | grant_package | Grant Package |
-| full_pipeline | Full Pipeline |
 | needs_assessment | Needs Assessment |
 | research | Research |
 | clinical_practice | Clinical Practice |
