@@ -66,6 +66,7 @@ All agents have dual tracing: LangSmith (@traceable) + OpenTelemetry (@traced_no
 | dhg-session-logger | 8009 | Session tracking with Ollama embeddings |
 | dhg-logo-maker | 8012 | Logo generation |
 | dhg-audio-agent | 8101 | Audio processing agent |
+| dhg-pdf-renderer | — (internal) | Playwright-based PDF renderer + md-only project bundler + Google Drive sync worker. No external port — only reachable from dhg-registry-api over `dhgaifactory35_dhg-network`. Shared `dhg_exports` volume (read-write in renderer, read-only in registry-api). Worker loop claims `download_jobs` rows with `FOR UPDATE SKIP LOCKED` and dispatches on `scope` ∈ {document, project_bundle, drive_sync}. |
 
 ### Observability Stack
 
@@ -102,6 +103,30 @@ Human-in-the-loop review workflow at /inbox. Master-detail layout: left sidebar 
 - API: frontend/src/lib/inboxApi.ts (queries LangGraph SDK for interrupted threads, resumes with decisions)
 - AI Reflection: quality signals (prose score, banned patterns, ACCME compliance) + approve/revise recommendation
 - Auto-refreshes every 30s
+
+### Inbox Document & Project Download (Added April 2026, active on branch `lsp-setup`)
+
+Two-layer export feature — Phase 1 ships synchronous single-document PDF download, Phase 2 v2 ships asynchronous multi-document project bundles + Google Drive sync (md-only). Plan: `docs/superpowers/plans/2026-04-14-inbox-document-project-download.md`.
+
+**Phase 1 — Single-document sync (DONE):**
+- `dhg-pdf-renderer` sibling service — Playwright render helper waits for `[data-chart-ready]` before calling `page.pdf()`
+- HMAC-signed print tokens — `registry/export_signing.py` (mint) + `frontend/src/lib/printTokens.ts` Edge-Runtime verifier
+- `/print/cme/document` Next.js print route with middleware bypass for `/print/*` gated on HMAC token
+- `/api/cme/export/document` registry endpoint — mints token, calls pdf-renderer `/render-sync`, streams PDF back
+- `exportApi.ts` frontend client + download button in review panel masthead
+- Playwright E2E at `frontend/e2e/inbox-document-download.spec.ts`
+
+**Phase 2 v2 — Async project bundles + Drive sync (13/19 tasks, in progress):**
+- `download_jobs` v2 schema (migrations 009+010) with `project_id`/`scope`/`drive_file_id`/`drive_folder_id`/`drive_mime_type`/`selected_document_ids`; `scope` CHECK constraint ∈ {document, project_bundle, drive_sync}
+- Endpoints under `/api/cme/export/`: `projects` + `projects/{id}/documents` + `bundle` (enqueue) + `job/{id}` + `jobs` + `artifact/{id}`
+- md-only project bundler (`services/pdf-renderer/bundler.py`) — atomic zip writer, manifest.json, deferred PDF-in-bundle to Phase 3
+- Google Drive service-account client (`services/pdf-renderer/drive_client.py`) + drive sync action (`drive_sync.py`) with `manifest.json` reconciliation
+- Worker loop (`services/pdf-renderer/worker.py`) — `FOR UPDATE SKIP LOCKED` row claim, three-scope dispatch, lifespan-optional boot
+- Orchestrator hook: `langgraph_workflows/dhg-agents-cloud/src/drive_sync.py` exposes `enqueue_drive_sync` helper; recipe milestone call sites wire project-state snapshots to Drive
+- Frontend client `frontend/src/lib/filesApi.ts` with `credentials: "include"` for Cloudflare JWT pass-through
+- **Remaining:** Files tab Zustand store, Files tab UI components, sidebar wiring, downloads tray + polling hook, E2E integration test, Phase 2 smoke + tag (Tasks 2.14–2.19)
+
+**Critical fix landed for the feature to work through the proxy:** `frontend/src/app/api/registry/[...path]/route.ts` was text-decoding upstream bodies, corrupting PDF/zip binaries on roundtrip. Fixed in `b736357` by preserving `arrayBuffer()` for binary content types.
 
 ### Additional Stacks (running independently)
 
@@ -182,6 +207,16 @@ The frontend stack (decided Feb 2026, implemented March–April 2026):
 | Frontend auth | frontend/src/middleware.ts, frontend/src/lib/permissions.ts |
 | Review components | frontend/src/components/review/ |
 | Inbox API | frontend/src/lib/inboxApi.ts |
+| PDF renderer service | services/pdf-renderer/ (main.py, renderer.py, bundler.py, drive_client.py, drive_sync.py, worker.py, db.py) |
+| Export signing module | registry/export_signing.py |
+| Print token verifier (frontend) | frontend/src/lib/printTokens.ts |
+| Print route | frontend/src/app/print/cme/document/ |
+| Export endpoints | registry/export_endpoints.py, registry/export_service.py |
+| Bundle/project schemas | registry/export_schemas.py, registry/project_schemas.py |
+| Files API client | frontend/src/lib/filesApi.ts |
+| Orchestrator Drive hook | langgraph_workflows/dhg-agents-cloud/src/drive_sync.py |
+| Inbox download plan | docs/superpowers/plans/2026-04-14-inbox-document-project-download.md |
+| medkb v2 design | docs/superpowers/plans/2026-04-15-medkb-phase1.md (untracked draft) |
 | Environment vars | .env (secrets — never expose) |
 
 ---
