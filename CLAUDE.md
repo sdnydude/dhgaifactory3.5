@@ -175,6 +175,7 @@ The frontend stack (decided Feb 2026, implemented March–April 2026):
 | Agent architecture docs | DHG-CME-12-Agent-Docs/ |
 | Current priorities | docs/TODO.md |
 | CI/CD | .github/workflows/ci.yml |
+| Pyright config (LSP + local typecheck) | pyrightconfig.json |
 | Auth module | registry/auth.py |
 | Security API | registry/security_endpoints.py |
 | Security schemas | registry/security_schemas.py |
@@ -209,7 +210,15 @@ curl -s http://localhost:9090/-/healthy   # Prometheus
 # Single service rebuild
 docker compose build --no-cache <service>
 docker compose up -d <service>
+
+# Local type-check quality gates (run before committing)
+npx pyright                              # Python, uses pyrightconfig.json
+npm --prefix frontend run typecheck      # TypeScript, uses frontend/tsconfig.json
 ```
+
+**Claude Code LSP tool usage notes:**
+- For workspace (project-internal) symbols, use `LSP goToDefinition` / `findReferences` / `hover` freely.
+- For library symbols (fastapi, langgraph, pydantic, etc.), use `LSP hover` — pyright's `goToDefinition` does NOT navigate into third-party packages by design. A successful `hover` is proof the symbol is resolved. See `docs/superpowers/specs/2026-04-14-lsp-setup-design.md` § "Pyright LSP behavior notes" for the full measured rationale.
 
 ---
 
@@ -261,4 +270,5 @@ Use semantic tokens, not raw hex values, in code.
 | Database | PostgreSQL 15 + pgvector |
 | Container runtime | Docker Engine 29.1.5 |
 | Frontend (target) | Next.js, shadcn/ui, assistant-ui, CopilotKit, Refine, React Flow |
+| Type checking / LSP | pyright 1.1.x (Python, via `pyrightconfig.json`), typescript-language-server (TS, via `frontend/tsconfig.json`) — both available to Claude Code's LSP tool |
 | Secrets | Infisical (when stable), .env (current) |
