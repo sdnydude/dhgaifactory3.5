@@ -2,7 +2,7 @@
 Tests for the Recipe-Based Orchestrator (orchestrator.py).
 
 Covers:
-- Recipe graph construction (needs_graph, curriculum_graph, grant_graph, full_graph)
+- Recipe graph construction (needs_graph, curriculum_graph, grant_graph)
 - Routing functions (route_after_prose_quality_1/2, route_after_compliance, route_after_human_review)
 - Helper functions (create_error_record, create_initial_state, should_retry)
 - PipelineStatus and ErrorCategory enums
@@ -362,31 +362,6 @@ class TestGrantPackageGraph:
         nodes = set(orch.grant_graph.get_graph().nodes.keys())
         agent_nodes = nodes - {"__start__", "__end__"}
         assert len(agent_nodes) == 13
-
-
-class TestFullPipelineGraph:
-    """Tests for create_full_pipeline_graph / full_graph."""
-
-    def test_compiles_without_error(self):
-        graph = orch.create_full_pipeline_graph()
-        assert graph is not None
-
-    def test_module_level_full_graph_exists(self):
-        assert orch.full_graph is not None
-
-    def test_has_same_nodes_as_grant_graph(self):
-        """Full pipeline has the same nodes as grant pipeline."""
-        full_nodes = set(orch.full_graph.get_graph().nodes.keys())
-        grant_nodes = set(orch.grant_graph.get_graph().nodes.keys())
-        assert full_nodes == grant_nodes
-
-    def test_full_graph_has_human_review_routing(self):
-        """Full graph should have 3-way routing from human_review."""
-        graph_repr = orch.full_graph.get_graph()
-        hr_targets = sorted([e[1] for e in graph_repr.edges if e[0] == "human_review"])
-        assert "complete" in hr_targets
-        assert "process_feedback" in hr_targets
-        assert "failed" in hr_targets
 
 
 # ============================================================================

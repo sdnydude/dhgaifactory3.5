@@ -135,7 +135,7 @@ complete
 **Confirmed:** 2026-02-04
 
 **Key Implementation Details:**
-- 4 composable recipes: needs_graph, curriculum_graph, grant_graph, full_graph
+- 3 composable recipes: needs_graph, curriculum_graph, grant_graph
 - Parallel execution using asyncio.gather for fan-out/fan-in
 - PostgresSaver checkpointing (optional, with fallback)
 - LangSmith tracing on all agent wrapper nodes

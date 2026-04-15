@@ -126,14 +126,6 @@ const runtime = new CopilotRuntime({
       description:
         "Full 11-agent pipeline with Prose QA passes, Compliance gate, and Human Review",
     }),
-    full_pipeline: new LangGraphAgent({
-      deploymentUrl: langGraphUrl,
-      langsmithApiKey: langSmithApiKey,
-      graphId: "full_pipeline",
-      agentId: "full_pipeline",
-      description:
-        "Complete pipeline with 3-way human review routing (approved/revision/rejected)",
-    }),
   },
 });
 

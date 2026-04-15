@@ -40,14 +40,13 @@ There are TWO agent systems. The CURRENT system is LangGraph. The LEGACY system 
 
 All agents have dual tracing: LangSmith (@traceable) + OpenTelemetry (@traced_node) decorators on every graph node (85 total across 9 content agents + orchestrator).
 
-**4 Orchestrator Composition Graphs (in orchestrator.py, 1889 lines):**
+**3 Orchestrator Composition Graphs (in orchestrator.py):**
 
 | Recipe | Export | Pattern |
 |--------|--------|---------|
 | needs_package | needs_graph | Research + Clinical parallel → Gap → LO → Needs → Prose QA Pass 1 → Human Review |
 | curriculum_package | curriculum_graph | Needs Package + Curriculum + Protocol + Marketing parallel → Human Review |
 | grant_package | grant_graph | Full 11 agents, Prose QA 2 passes, Compliance gate, Human Review |
-| full_pipeline | full_graph | Same as grant but with 3-way human review routing (approved/revision/rejected) |
 
 **Architecture patterns across all agents:** Each agent has its own TypedDict state, ChatAnthropic (Claude Sonnet) with @traceable LangSmith decorators on every node, asyncio.wait_for with 5-minute timeout, standardized error records. Parallel execution via asyncio.gather with return_exceptions=True. Quality gates use conditional edges with retry loops (up to 3 iterations before human escalation).
 
