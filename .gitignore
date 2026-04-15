@@ -1,6 +1,7 @@
 # Environment
 .env
 docker-compose.secrets.yml
+secrets/drive-service-account.json
 
 # Python
 __pycache__/
