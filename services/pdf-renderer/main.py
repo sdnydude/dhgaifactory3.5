@@ -1,13 +1,40 @@
 from __future__ import annotations
 
+import asyncio
+import logging
+from contextlib import asynccontextmanager
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from renderer import RenderRequest, render_pdf
+from worker import run_worker
 
-app = FastAPI(title="dhg-pdf-renderer", version="0.1.0")
+logger = logging.getLogger(__name__)
+
+_worker_task: asyncio.Task | None = None
+_stop_event: asyncio.Event | None = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global _worker_task, _stop_event
+    _stop_event = asyncio.Event()
+    _worker_task = asyncio.create_task(run_worker(_stop_event))
+    try:
+        yield
+    finally:
+        _stop_event.set()
+        if _worker_task is not None:
+            try:
+                await asyncio.wait_for(_worker_task, timeout=10.0)
+            except asyncio.TimeoutError:
+                logger.warning("worker task did not stop within 10s; cancelling")
+                _worker_task.cancel()
+
+
+app = FastAPI(title="dhg-pdf-renderer", version="0.1.0", lifespan=lifespan)
 
 
 class RenderSyncBody(BaseModel):
