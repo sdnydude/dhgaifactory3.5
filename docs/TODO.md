@@ -88,6 +88,9 @@
 35. [ ] XMP Metadata (Visuals Agent)
 36. [x] ~~RAGFlow configuration~~ — DECOMMISSIONED (zero usage, removed)
 37. [ ] `/ship` command implementation and testing
+38. [ ] **pdf-renderer: fix `test_renderer.py::test_render_about_blank_returns_pdf_bytes`** — pre-existing failure. AsyncMock chain returns an AsyncMock instead of bytes because `playwright.async_api` is stubbed in conftest; the test asserts `len(pdf) > 1024` which fails. Either stub the full `page.pdf()` chain to return real bytes, or gate the test on Playwright actually being installed.
+39. [ ] **pdf-renderer: wire application logger output through uvicorn** — worker/bundler/drive_sync use `logging.getLogger(__name__)` at INFO level but uvicorn's default log config suppresses non-uvicorn loggers, so `worker loop started` and `drive sync done` never appear in `docker logs`. Add a logging config dict in `main.py` or a LOG_LEVEL env-driven setup so live debugging of the worker loop is possible.
+40. [ ] **pdf-renderer: upgrade base image to Python 3.11+** — `mcr.microsoft.com/playwright/python:v1.48.0-jammy` ships Python 3.10.12. `google-api-core` fires a FutureWarning on every boot about 3.10 EOL (2026-10-04). Upgrade when Playwright publishes a 3.11+ image, or pin an alternate base.
 
 ---
 
