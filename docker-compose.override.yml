@@ -67,6 +67,7 @@ services:
       - LANGGRAPH_API_URL=${LANGGRAPH_API_URL:-https://dhg-agents-526554f2bb905517adab9bd53427c745.us.langgraph.app}
       - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
       - EXPORT_SIGNING_SECRET=${EXPORT_SIGNING_SECRET}
+      - REGISTRY_WEBHOOK_SECRET=${REGISTRY_WEBHOOK_SECRET}
       - PDF_RENDERER_URL=http://dhg-pdf-renderer:8014
       - FRONTEND_INTERNAL_URL=http://dhg-frontend:3000
       - EXPORTS_DIR=/exports

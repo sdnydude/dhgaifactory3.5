@@ -51,6 +51,10 @@ import logging
 # OpenTelemetry tracing (dual-export with LangSmith)
 from tracing import get_tracer, traced_node
 
+# Drive sync hook — enqueues drive_sync jobs at pipeline milestones via the
+# registry webhook (fire-and-forget; never raises).
+from drive_sync_hook import enqueue_drive_sync
+
 _tracer = get_tracer("orchestrator")
 
 # Configure logging
@@ -1097,6 +1101,11 @@ async def human_review_node(state: CMEPipelineState) -> dict:
         pipeline_status="awaiting_review",
         current_step="human_review_pending",
     )
+    # Milestone: package ready for review → enqueue Drive sync
+    await enqueue_drive_sync(
+        state.get("project_id", ""),
+        milestone=f"review_ready:{state.get('current_step', 'unknown')}",
+    )
 
     resume_value = interrupt(review_payload)
 
@@ -1178,6 +1187,11 @@ async def auto_approve_node(state: CMEPipelineState) -> dict:
         project_id=state.get("project_id", ""),
         pipeline_status="auto_approved",
         current_step="human_review_auto_approved",
+    )
+    # Milestone: package auto-approved → enqueue Drive sync
+    await enqueue_drive_sync(
+        state.get("project_id", ""),
+        milestone=f"auto_approved:{state.get('current_step', 'unknown')}",
     )
 
     return {
@@ -1264,6 +1278,11 @@ async def mark_complete(state: CMEPipelineState) -> dict:
         project_id=state.get("project_id", ""),
         pipeline_status="complete",
         current_step="complete",
+    )
+    # Milestone: pipeline terminal → final Drive sync
+    await enqueue_drive_sync(
+        state.get("project_id", ""),
+        milestone="complete",
     )
     return {
         "status": PipelineStatus.COMPLETE.value,

@@ -227,6 +227,7 @@ from inference_endpoints import inference_router
 from dev_changelog_endpoints import router as dev_changelog_router
 from export_endpoints import router as export_router
 from projects_endpoints import router as projects_router
+from webhook_endpoints import router as webhook_router
 
 # Include routers
 app.include_router(agent_router)
@@ -242,6 +243,7 @@ app.include_router(inference_router)
 app.include_router(dev_changelog_router)
 app.include_router(export_router)
 app.include_router(projects_router)
+app.include_router(webhook_router)
 
 # Add CORS middleware — locked to production origin + localhost for development
 ALLOWED_ORIGINS = [
