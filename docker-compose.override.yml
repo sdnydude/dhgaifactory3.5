@@ -314,6 +314,16 @@ services:
       ollama:
         condition: service_started
 
+  dhg-pdf-renderer:
+    environment:
+      - DATABASE_URL=postgresql://dhg:weenie64@registry-db:5432/dhg_registry
+      - EXPORTS_DIR=/exports
+    volumes:
+      - ./registry:/app/registry:ro
+    depends_on:
+      registry-db:
+        condition: service_healthy
+
 volumes:
   prometheus_data:
   loki_data:

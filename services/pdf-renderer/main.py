@@ -9,21 +9,9 @@ from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from renderer import RenderRequest, render_pdf
+from worker import run_worker
 
 logger = logging.getLogger(__name__)
-
-try:
-    from worker import run_worker
-
-    _worker_available = True
-except ImportError as exc:  # pragma: no cover - environment gate
-    logger.warning(
-        "worker loop unavailable: %s. /render-sync will still serve. "
-        "Wire sqlalchemy/pgvector/psycopg2 + registry package before enabling.",
-        exc,
-    )
-    _worker_available = False
-    run_worker = None  # type: ignore[assignment]
 
 _worker_task: asyncio.Task | None = None
 _stop_event: asyncio.Event | None = None
@@ -32,11 +20,7 @@ _stop_event: asyncio.Event | None = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _worker_task, _stop_event
-    if not _worker_available:
-        yield
-        return
     _stop_event = asyncio.Event()
-    assert run_worker is not None
     _worker_task = asyncio.create_task(run_worker(_stop_event))
     try:
         yield
