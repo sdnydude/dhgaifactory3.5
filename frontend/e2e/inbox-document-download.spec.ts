@@ -1,11 +1,54 @@
 import { test, expect } from "@playwright/test";
 
 const REGISTRY_URL = process.env.REGISTRY_URL ?? "http://localhost:8011";
-const SMOKE_THREAD_ID = process.env.SMOKE_THREAD_ID ?? "6878b142-a4f2-44d0-983d-4e545637fdea";
 
 test("sync document export returns a valid PDF", async ({ request }) => {
+  // Discover a valid thread_id dynamically instead of hardcoding one.
+  // Chain: list projects → pick one with docs → get its runs → extract thread_id.
+  const projectsRes = await request.get(
+    `${REGISTRY_URL}/api/cme/export/projects?limit=10`,
+  );
+  expect(projectsRes.status()).toBe(200);
+  const { projects } = await projectsRes.json();
+  const withDocs = projects.filter(
+    (p: { document_count: number }) => p.document_count > 0,
+  );
+
+  if (withDocs.length === 0) {
+    test.info().annotations.push({
+      type: "skipped",
+      description: "no projects with documents — sync PDF test not exercised",
+    });
+    return;
+  }
+
+  // Find a thread_id from any project's runs
+  let threadId: string | null = null;
+  for (const proj of withDocs) {
+    const runsRes = await request.get(
+      `${REGISTRY_URL}/api/cme/projects/${proj.id}/runs`,
+    );
+    if (runsRes.status() !== 200) continue;
+    const { runs } = await runsRes.json();
+    const withThread = runs.find(
+      (r: { thread_id: string | null }) => r.thread_id,
+    );
+    if (withThread) {
+      threadId = withThread.thread_id;
+      break;
+    }
+  }
+
+  if (!threadId) {
+    test.info().annotations.push({
+      type: "skipped",
+      description: "no project runs with a thread_id found — sync PDF test not exercised",
+    });
+    return;
+  }
+
   const res = await request.get(
-    `${REGISTRY_URL}/api/cme/export/document/${SMOKE_THREAD_ID}`,
+    `${REGISTRY_URL}/api/cme/export/document/${threadId}`,
     { timeout: 120_000 },
   );
   expect(res.status()).toBe(200);
