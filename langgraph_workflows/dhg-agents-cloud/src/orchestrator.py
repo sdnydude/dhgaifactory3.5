@@ -1694,7 +1694,14 @@ def create_needs_package_graph():
 # =============================================================================
 
 def create_curriculum_package_graph():
-    """Create the Curriculum Package recipe with parallel execution and interrupt-based review."""
+    """Create the Curriculum Package recipe with parallel execution and interrupt-based review.
+
+    Two review points when SKIP_HUMAN_REVIEW is false:
+      1. human_review_pq1 — escalation after prose_quality_1 max retries.
+         Approved → design_phase (continue pipeline), Revision → needs_assessment.
+      2. human_review — final review after design_phase.
+         Approved → complete, Revision → process_feedback → design_phase.
+    """
 
     workflow = StateGraph(CMEPipelineState)
 
@@ -1715,19 +1722,62 @@ def create_curriculum_package_graph():
     workflow.add_edge("learning_objectives", "needs_assessment")
     workflow.add_edge("needs_assessment", "prose_quality_1")
 
-    workflow.add_conditional_edges(
-        "prose_quality_1",
-        route_after_prose_quality_1,
-        {
-            "continue": "design_phase",
-            "retry_needs": "needs_assessment",
-            "human_intervention": "design_phase" if SKIP_HUMAN_REVIEW else "human_review"
-        }
-    )
+    if SKIP_HUMAN_REVIEW:
+        workflow.add_conditional_edges(
+            "prose_quality_1",
+            route_after_prose_quality_1,
+            {
+                "continue": "design_phase",
+                "retry_needs": "needs_assessment",
+                "human_intervention": "design_phase"
+            }
+        )
+        workflow.add_edge("design_phase", "auto_approve")
+        workflow.add_node("auto_approve", auto_approve_node)
+        workflow.add_edge("auto_approve", "complete")
+    else:
+        # PQ1 escalation review — approved continues to design_phase, not complete
+        workflow.add_node("human_review_pq1", human_review_node)
+        workflow.add_conditional_edges(
+            "prose_quality_1",
+            route_after_prose_quality_1,
+            {
+                "continue": "design_phase",
+                "retry_needs": "needs_assessment",
+                "human_intervention": "human_review_pq1"
+            }
+        )
+        workflow.add_conditional_edges(
+            "human_review_pq1",
+            route_after_human_review_interrupt,
+            {
+                "approved": "design_phase",
+                "revision": "needs_assessment",
+                "rejected": "failed"
+            }
+        )
 
-    workflow.add_edge("design_phase", REVIEW_ENTRY_NODE)
-
-    _add_review_nodes_and_edges(workflow, revision_target="design_phase")
+        # Final review after design_phase
+        workflow.add_edge("design_phase", "human_review")
+        workflow.add_node("human_review", human_review_node)
+        workflow.add_node("process_feedback", process_review_feedback)
+        workflow.add_conditional_edges(
+            "human_review",
+            route_after_human_review_interrupt,
+            {
+                "approved": "complete",
+                "revision": "process_feedback",
+                "rejected": "failed"
+            }
+        )
+        workflow.add_conditional_edges(
+            "process_feedback",
+            route_after_review_feedback,
+            {
+                "continue": "design_phase",
+                "max_rounds_exceeded": "failed",
+            }
+        )
 
     workflow.add_edge("complete", END)
     workflow.add_edge("failed", END)
@@ -1741,7 +1791,16 @@ def create_curriculum_package_graph():
 # =============================================================================
 
 def create_grant_package_graph():
-    """Create the Grant Package recipe with interrupt-based review."""
+    """Create the Grant Package recipe with interrupt-based review.
+
+    Three review points when SKIP_HUMAN_REVIEW is false:
+      1. human_review_pq1 — escalation after prose_quality_1 max retries.
+         Approved → design_phase, Revision → needs_assessment.
+      2. human_review_pq2 — escalation after prose_quality_2 max retries.
+         Approved → compliance, Revision → grant_writer.
+      3. human_review — final review after compliance.
+         Approved → complete, Revision → process_feedback → grant_writer.
+    """
 
     workflow = StateGraph(CMEPipelineState)
 
@@ -1765,39 +1824,111 @@ def create_grant_package_graph():
     workflow.add_edge("learning_objectives", "needs_assessment")
     workflow.add_edge("needs_assessment", "prose_quality_1")
 
-    workflow.add_conditional_edges(
-        "prose_quality_1",
-        route_after_prose_quality_1,
-        {
-            "continue": "design_phase",
-            "retry_needs": "needs_assessment",
-            "human_intervention": "design_phase" if SKIP_HUMAN_REVIEW else "human_review"
-        }
-    )
+    if SKIP_HUMAN_REVIEW:
+        workflow.add_conditional_edges(
+            "prose_quality_1",
+            route_after_prose_quality_1,
+            {
+                "continue": "design_phase",
+                "retry_needs": "needs_assessment",
+                "human_intervention": "design_phase"
+            }
+        )
+        workflow.add_edge("design_phase", "grant_writer")
+        workflow.add_edge("grant_writer", "prose_quality_2")
+        workflow.add_conditional_edges(
+            "prose_quality_2",
+            route_after_prose_quality_2,
+            {
+                "continue": "compliance",
+                "retry_grant": "grant_writer",
+                "human_intervention": "compliance"
+            }
+        )
+        workflow.add_conditional_edges(
+            "compliance",
+            route_after_compliance,
+            {
+                "continue": "auto_approve",
+                "revision_required": "grant_writer"
+            }
+        )
+        workflow.add_node("auto_approve", auto_approve_node)
+        workflow.add_edge("auto_approve", "complete")
+    else:
+        # Review point 1: PQ1 escalation — approved continues to design_phase
+        workflow.add_node("human_review_pq1", human_review_node)
+        workflow.add_conditional_edges(
+            "prose_quality_1",
+            route_after_prose_quality_1,
+            {
+                "continue": "design_phase",
+                "retry_needs": "needs_assessment",
+                "human_intervention": "human_review_pq1"
+            }
+        )
+        workflow.add_conditional_edges(
+            "human_review_pq1",
+            route_after_human_review_interrupt,
+            {
+                "approved": "design_phase",
+                "revision": "needs_assessment",
+                "rejected": "failed"
+            }
+        )
 
-    workflow.add_edge("design_phase", "grant_writer")
-    workflow.add_edge("grant_writer", "prose_quality_2")
+        workflow.add_edge("design_phase", "grant_writer")
+        workflow.add_edge("grant_writer", "prose_quality_2")
 
-    workflow.add_conditional_edges(
-        "prose_quality_2",
-        route_after_prose_quality_2,
-        {
-            "continue": "compliance",
-            "retry_grant": "grant_writer",
-            "human_intervention": "compliance" if SKIP_HUMAN_REVIEW else "human_review"
-        }
-    )
+        # Review point 2: PQ2 escalation — approved continues to compliance
+        workflow.add_node("human_review_pq2", human_review_node)
+        workflow.add_conditional_edges(
+            "prose_quality_2",
+            route_after_prose_quality_2,
+            {
+                "continue": "compliance",
+                "retry_grant": "grant_writer",
+                "human_intervention": "human_review_pq2"
+            }
+        )
+        workflow.add_conditional_edges(
+            "human_review_pq2",
+            route_after_human_review_interrupt,
+            {
+                "approved": "compliance",
+                "revision": "grant_writer",
+                "rejected": "failed"
+            }
+        )
 
-    workflow.add_conditional_edges(
-        "compliance",
-        route_after_compliance,
-        {
-            "continue": REVIEW_ENTRY_NODE,
-            "revision_required": "grant_writer"
-        }
-    )
-
-    _add_review_nodes_and_edges(workflow, revision_target="grant_writer")
+        # Review point 3: Final review after compliance — approved completes
+        workflow.add_conditional_edges(
+            "compliance",
+            route_after_compliance,
+            {
+                "continue": "human_review",
+                "revision_required": "grant_writer"
+            }
+        )
+        workflow.add_node("human_review", human_review_node)
+        workflow.add_node("process_feedback", process_review_feedback)
+        workflow.add_conditional_edges(
+            "human_review",
+            route_after_human_review_interrupt,
+            {
+                "approved": "complete",
+                "revision": "process_feedback",
+                "rejected": "failed"
+            }
+        )
+        workflow.add_conditional_edges(
+            "process_feedback",
+            route_after_review_feedback,
+            {
+                "continue": "grant_writer",
+                "max_rounds_exceeded": "failed",
+            }
+        )
 
     workflow.add_edge("complete", END)
     workflow.add_edge("failed", END)
@@ -1901,39 +2032,111 @@ async def create_checkpointed_grant_graph():
     workflow.add_edge("learning_objectives", "needs_assessment")
     workflow.add_edge("needs_assessment", "prose_quality_1")
 
-    workflow.add_conditional_edges(
-        "prose_quality_1",
-        route_after_prose_quality_1,
-        {
-            "continue": "design_phase",
-            "retry_needs": "needs_assessment",
-            "human_intervention": "design_phase" if SKIP_HUMAN_REVIEW else "human_review"
-        }
-    )
+    if SKIP_HUMAN_REVIEW:
+        workflow.add_conditional_edges(
+            "prose_quality_1",
+            route_after_prose_quality_1,
+            {
+                "continue": "design_phase",
+                "retry_needs": "needs_assessment",
+                "human_intervention": "design_phase"
+            }
+        )
+        workflow.add_edge("design_phase", "grant_writer")
+        workflow.add_edge("grant_writer", "prose_quality_2")
+        workflow.add_conditional_edges(
+            "prose_quality_2",
+            route_after_prose_quality_2,
+            {
+                "continue": "compliance",
+                "retry_grant": "grant_writer",
+                "human_intervention": "compliance"
+            }
+        )
+        workflow.add_conditional_edges(
+            "compliance",
+            route_after_compliance,
+            {
+                "continue": "auto_approve",
+                "revision_required": "grant_writer"
+            }
+        )
+        workflow.add_node("auto_approve", auto_approve_node)
+        workflow.add_edge("auto_approve", "complete")
+    else:
+        # Review point 1: PQ1 escalation — approved continues to design_phase
+        workflow.add_node("human_review_pq1", human_review_node)
+        workflow.add_conditional_edges(
+            "prose_quality_1",
+            route_after_prose_quality_1,
+            {
+                "continue": "design_phase",
+                "retry_needs": "needs_assessment",
+                "human_intervention": "human_review_pq1"
+            }
+        )
+        workflow.add_conditional_edges(
+            "human_review_pq1",
+            route_after_human_review_interrupt,
+            {
+                "approved": "design_phase",
+                "revision": "needs_assessment",
+                "rejected": "failed"
+            }
+        )
 
-    workflow.add_edge("design_phase", "grant_writer")
-    workflow.add_edge("grant_writer", "prose_quality_2")
+        workflow.add_edge("design_phase", "grant_writer")
+        workflow.add_edge("grant_writer", "prose_quality_2")
 
-    workflow.add_conditional_edges(
-        "prose_quality_2",
-        route_after_prose_quality_2,
-        {
-            "continue": "compliance",
-            "retry_grant": "grant_writer",
-            "human_intervention": "compliance" if SKIP_HUMAN_REVIEW else "human_review"
-        }
-    )
+        # Review point 2: PQ2 escalation — approved continues to compliance
+        workflow.add_node("human_review_pq2", human_review_node)
+        workflow.add_conditional_edges(
+            "prose_quality_2",
+            route_after_prose_quality_2,
+            {
+                "continue": "compliance",
+                "retry_grant": "grant_writer",
+                "human_intervention": "human_review_pq2"
+            }
+        )
+        workflow.add_conditional_edges(
+            "human_review_pq2",
+            route_after_human_review_interrupt,
+            {
+                "approved": "compliance",
+                "revision": "grant_writer",
+                "rejected": "failed"
+            }
+        )
 
-    workflow.add_conditional_edges(
-        "compliance",
-        route_after_compliance,
-        {
-            "continue": REVIEW_ENTRY_NODE,
-            "revision_required": "grant_writer"
-        }
-    )
-
-    _add_review_nodes_and_edges(workflow, revision_target="grant_writer")
+        # Review point 3: Final review after compliance — approved completes
+        workflow.add_conditional_edges(
+            "compliance",
+            route_after_compliance,
+            {
+                "continue": "human_review",
+                "revision_required": "grant_writer"
+            }
+        )
+        workflow.add_node("human_review", human_review_node)
+        workflow.add_node("process_feedback", process_review_feedback)
+        workflow.add_conditional_edges(
+            "human_review",
+            route_after_human_review_interrupt,
+            {
+                "approved": "complete",
+                "revision": "process_feedback",
+                "rejected": "failed"
+            }
+        )
+        workflow.add_conditional_edges(
+            "process_feedback",
+            route_after_review_feedback,
+            {
+                "continue": "grant_writer",
+                "max_rounds_exceeded": "failed",
+            }
+        )
 
     workflow.add_edge("complete", END)
     workflow.add_edge("failed", END)

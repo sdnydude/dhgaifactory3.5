@@ -92,10 +92,9 @@ export async function resumeThread(
   resumeValue: ResumeValue,
 ) {
   const client = createClient();
-  return client.runs.stream(threadId, graphId, {
+  return client.runs.create(threadId, graphId, {
     input: null,
     command: { resume: resumeValue },
-    streamMode: "messages-tuple",
   });
 }
 
