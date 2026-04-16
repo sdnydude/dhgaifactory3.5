@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useCallback, useRef } from "react";
-import { RefreshCw, AlertCircle, Inbox, FileText } from "lucide-react";
+import { useEffect, useCallback, useRef, useState } from "react";
+import { RefreshCw, AlertCircle, Inbox, FileText, FolderTree } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ReviewPanel } from "./review-panel";
 import { ReflectionPanel } from "./reflection-panel";
@@ -10,6 +10,10 @@ import { listPendingReviews, resumeThread } from "@/lib/inboxApi";
 import type { ResumeValue } from "./types";
 import { cn } from "@/lib/utils";
 import { DEMO_REVIEWS, isDemoReview } from "./demo-reviews";
+import { FilesTab } from "@/components/inbox/files-tab";
+import { DownloadsTray } from "@/components/downloads/downloads-tray";
+
+type InboxTab = "reviews" | "files";
 
 const GRAPH_LABELS: Record<string, string> = {
   needs_package: "Needs Package",
@@ -56,6 +60,7 @@ export function InboxMasterDetail() {
   } = useReviewStore();
 
   const demoDismissedRef = useRef(false);
+  const [activeTab, setActiveTab] = useState<InboxTab>("reviews");
 
   const fetchReviews = useCallback(async () => {
     setLoading(true);
@@ -119,17 +124,21 @@ export function InboxMasterDetail() {
       <div className="flex items-center justify-between border-b px-6 py-4">
         <h1 className="text-lg font-semibold">Inbox</h1>
         <div className="flex items-center gap-3">
-          <span className="text-xs text-muted-foreground">
-            {reviews.length} pending {reviews.length === 1 ? "review" : "reviews"}
-          </span>
-          <button
-            onClick={fetchReviews}
-            disabled={loading}
-            aria-label="Refresh reviews"
-            className="h-8 w-8 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-          >
-            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-          </button>
+          {activeTab === "reviews" && (
+            <>
+              <span className="text-xs text-muted-foreground">
+                {reviews.length} pending {reviews.length === 1 ? "review" : "reviews"}
+              </span>
+              <button
+                onClick={fetchReviews}
+                disabled={loading}
+                aria-label="Refresh reviews"
+                className="h-8 w-8 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              >
+                <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -138,6 +147,42 @@ export function InboxMasterDetail() {
           MASTER — The index (left rail)
           ==================================================================== */}
       <aside className="w-[22rem] shrink-0 flex flex-col border-r border-border">
+        {/* Tab switcher — Reviews / Files */}
+        <div role="tablist" aria-label="Inbox sections" className="flex border-b border-border">
+          <button
+            role="tab"
+            aria-selected={activeTab === "reviews"}
+            onClick={() => setActiveTab("reviews")}
+            className={cn(
+              "flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-medium transition-colors border-b-2",
+              activeTab === "reviews"
+                ? "border-[color:var(--color-dhg-orange)] text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Inbox className="h-3.5 w-3.5" />
+            Reviews
+          </button>
+          <button
+            role="tab"
+            aria-selected={activeTab === "files"}
+            onClick={() => setActiveTab("files")}
+            className={cn(
+              "flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-medium transition-colors border-b-2",
+              activeTab === "files"
+                ? "border-[color:var(--color-dhg-orange)] text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <FolderTree className="h-3.5 w-3.5" />
+            Files
+          </button>
+        </div>
+
+        {activeTab === "files" ? (
+          <FilesTab />
+        ) : (
+          <>
         {error && (
           <div className="mx-5 mt-4 flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
             <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
@@ -212,13 +257,28 @@ export function InboxMasterDetail() {
             </ul>
           )}
         </ScrollArea>
+          </>
+        )}
       </aside>
 
       {/* ====================================================================
           DETAIL — The manuscript under review
           ==================================================================== */}
       <main className="flex-1 overflow-auto">
-        {selectedReview ? (
+        {activeTab === "files" ? (
+          <div className="flex h-full items-center justify-center">
+            <div className="text-center max-w-sm px-8">
+              <FolderTree className="mx-auto h-12 w-12 text-muted-foreground/30" />
+              <p className="mt-4 text-lg font-semibold text-foreground">
+                Files
+              </p>
+              <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+                Browse projects in the sidebar, select documents, and enqueue a
+                bundle download. Job status will surface in the downloads tray.
+              </p>
+            </div>
+          </div>
+        ) : selectedReview ? (
           <div className="mx-auto max-w-[78rem] px-10 py-10">
             {/* Publisher's Note (AI reflection) */}
             {selectedReview.payload && (
@@ -263,6 +323,8 @@ export function InboxMasterDetail() {
         )}
       </main>
       </div>
+
+      <DownloadsTray />
     </div>
   );
 }

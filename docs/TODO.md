@@ -1,5 +1,5 @@
 # DHG AI Factory — Master Task List
-**Last Updated:** Apr 15, 2026 (v15)
+**Last Updated:** Apr 15, 2026 (v16)
 
 ## System Status
 - **Containers:** 37 running + 1 new sibling service `dhg-pdf-renderer` (internal-only on `dhg-network`, Playwright renderer + md-only bundler + Google Drive sync worker)
@@ -86,13 +86,11 @@ Plan: `docs/superpowers/plans/2026-04-14-inbox-document-project-download.md` (5 
 
 41. [x] ~~**Phase 1 — Single Document Download (sync path)**~~ — DONE Apr 14, Tasks 1.1–1.12 (commit range `e4ec07d..db0d76d`). `services/pdf-renderer/` scaffolded with Playwright render helper (wait-for-`[data-chart-ready]`), `/render-sync` endpoint, Dockerfile, compose wiring, `dhg_exports` volume. HMAC-signed print tokens (`registry/export_signing.py` + Edge-Runtime TS verifier `frontend/src/lib/printTokens.ts`). `/print/cme/document` Next.js print route with middleware bypass for `/print/*`. `/api/cme/export/document` registry endpoint with internal fetch helper. `exportApi.ts` frontend client, download button in review masthead, Playwright E2E `frontend/e2e/inbox-document-download.spec.ts`.
 
-42. [~] **Phase 2 v2 — Full Project Download + Google Drive Sync (md-only)** — IN PROGRESS 13/19. Tasks 2.1–2.13 landed (commit range `ef5126e..ef6a70b`).
-    - **Landed:** migration 009 (`download_jobs`) + migration 010 (v2 schema with `project_id`/`scope`/`drive_file_id`/`drive_folder_id`/`drive_mime_type`/`selected_document_ids` + CHECK constraint on scope with downgrade row-drain); extended `DownloadJob`/`CMEProject`/`CMEDocument` SQLAlchemy models; Pydantic bundle/project schemas (`bundle_schemas.py`, `project_schemas.py`); endpoints `/api/cme/export/projects` + `/projects/{id}/documents` + `/bundle` + `/job/{id}` + `/jobs` + `/artifact/{id}`; md-only project bundler with atomic zip writer (PDF-in-bundle deferred to Phase 3); Google Drive service-account client factory (`services/pdf-renderer/drive_client.py`); Drive sync worker action with `manifest.json` reconciliation; worker loop with `FOR UPDATE SKIP LOCKED` + three scopes (document / project_bundle / drive_sync); orchestrator `enqueue_drive_sync` + milestone call sites; `frontend/src/lib/filesApi.ts` frontend client with `credentials: "include"`.
-    - **Remaining Tasks 2.14–2.19:**
-      - [ ] Task 2.14: Files tab Zustand store (`frontend/src/stores/files-tab-store.ts`) — projects, expanded set, selection set, search query, preview doc id; persists `expandedProjectIds` only.
-      - [ ] Task 2.15: Files tab UI components (`components/files/files-tab.tsx`, project-row, document-row, bundle-action-bar, empty-state, skeleton).
-      - [ ] Task 2.16: Wire Files tab into inbox left sidebar alongside Review tab (tab switcher in `inbox-master-detail.tsx`).
-      - [ ] Task 2.17: Downloads store + polling hook + downloads tray (`stores/downloads-store.ts`, `use-download-polling.ts`, `components/downloads/downloads-tray.tsx`).
+42. [~] **Phase 2 v2 — Full Project Download + Google Drive Sync (md-only)** — IN PROGRESS 16/19. Tasks 2.1–2.15 + 2.17a landed (commit range `ef5126e..8df689e`).
+    - **Landed:** migration 009 (`download_jobs`) + migration 010 (v2 schema with `project_id`/`scope`/`drive_file_id`/`drive_folder_id`/`drive_mime_type`/`selected_document_ids` + CHECK constraint on scope with downgrade row-drain); extended `DownloadJob`/`CMEProject`/`CMEDocument` SQLAlchemy models; Pydantic bundle/project schemas (`bundle_schemas.py`, `project_schemas.py`); endpoints `/api/cme/export/projects` + `/projects/{id}/documents` + `/bundle` + `/job/{id}` + `/jobs` + `/artifact/{id}`; md-only project bundler with atomic zip writer (PDF-in-bundle deferred to Phase 3); Google Drive service-account client factory (`services/pdf-renderer/drive_client.py`); Drive sync worker action with `manifest.json` reconciliation; worker loop with `FOR UPDATE SKIP LOCKED` + three scopes (document / project_bundle / drive_sync); orchestrator `enqueue_drive_sync` + milestone call sites; `frontend/src/lib/filesApi.ts` frontend client with `credentials: "include"`; **Task 2.14** files-tab Zustand store (`frontend/src/stores/files-tab-store.ts`, `1bb841d`); **Task 2.15** Files tab UI — `components/inbox/files-tab.tsx` + `files-tree.tsx` (project tree + multi-select) + `files-selection-bar.tsx` (download bar) (`8df689e`); **Task 2.17a** downloads store + polling hook (`stores/downloads-store.ts`, `hooks/use-download-polling.ts`, `7607bbb`).
+    - **Remaining Tasks 2.16, 2.17b, 2.18, 2.19:**
+      - [ ] Task 2.16: Wire Files tab into inbox left sidebar alongside Review tab (tab switcher in `components/review/inbox-master-detail.tsx` — note: lives under `review/`, not `inbox/`).
+      - [ ] Task 2.17b: Downloads tray UI component (`components/downloads/downloads-tray.tsx`) — directory does not yet exist; consume existing `downloads-store.ts` + `use-download-polling.ts` from 2.17a.
       - [ ] Task 2.18: End-to-end integration test — select project → select subset → enqueue → poll → download artifact → open zip → verify manifest + md files.
       - [ ] Task 2.19: Phase 2 v2 smoke + tag.
 
