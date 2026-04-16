@@ -428,6 +428,8 @@ NODE_TO_AGENT = {
     "prose_quality_2": "prose_quality_2",
     "compliance": "compliance",
     "human_review": "human_review",
+    "human_review_pq1": "human_review",
+    "human_review_pq2": "human_review",
     "auto_approve": "auto_approve",
     "process_feedback": "processing_feedback",
     "complete": "complete",

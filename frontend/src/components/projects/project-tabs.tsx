@@ -16,10 +16,10 @@ interface ProjectTabsProps {
 
 export function ProjectTabs({ project, pipelineStatus, outputs }: ProjectTabsProps) {
   return (
-    <Tabs defaultValue="documents" className="flex flex-col h-full">
+    <Tabs defaultValue="activity" className="flex flex-col h-full">
       <TabsList className="mx-4 mt-3 w-fit">
-        <TabsTrigger value="documents">Documents</TabsTrigger>
         <TabsTrigger value="activity">Activity</TabsTrigger>
+        <TabsTrigger value="documents">Documents</TabsTrigger>
         <TabsTrigger value="runs">Runs</TabsTrigger>
         <TabsTrigger value="reviews">Reviews</TabsTrigger>
         <TabsTrigger value="settings">Settings</TabsTrigger>
