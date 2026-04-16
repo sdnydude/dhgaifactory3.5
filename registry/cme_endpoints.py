@@ -412,6 +412,28 @@ THREAD_STATUS_MAP = {
     "error": "failed",
 }
 
+# Maps LangGraph node names (from thread state `next`) to display-friendly
+# agent names used in current_agent. This lets us show "running research"
+# while the node is executing, not just after it completes.
+NODE_TO_AGENT = {
+    "initialize": "initializing",
+    "early_research": "research",
+    "gap_analysis": "gap_analysis",
+    "learning_objectives": "learning_objectives",
+    "needs_assessment": "needs_assessment",
+    "prose_quality": "prose_quality",
+    "prose_quality_1": "prose_quality_1",
+    "design_phase": "design_phase",
+    "grant_writer": "grant_writer",
+    "prose_quality_2": "prose_quality_2",
+    "compliance": "compliance",
+    "human_review": "human_review",
+    "auto_approve": "auto_approve",
+    "process_feedback": "processing_feedback",
+    "complete": "complete",
+    "failed": "failed",
+}
+
 # Maps state key → (short agent name, document title for cme_documents)
 AGENT_OUTPUT_META = {
     "research_output": ("research", "Research & Literature Review"),
@@ -796,7 +818,17 @@ async def _sync_project_from_thread(project: "CMEProject", thread_data: Dict[str
 
     old_status = project.status
     project.status = new_status
-    project.current_agent = values.get("current_step", project.current_agent)
+
+    # Derive current_agent from the thread's active node (`next`), which
+    # reflects what's running RIGHT NOW.  Fall back to `current_step` (only
+    # set on completion) for backward compatibility.
+    next_nodes = thread_state.get("next") or []
+    if next_nodes:
+        active_node = next_nodes[0]
+        project.current_agent = NODE_TO_AGENT.get(active_node, active_node)
+    else:
+        project.current_agent = values.get("current_step", project.current_agent)
+
     project.human_review_status = values.get("human_review_status", project.human_review_status)
     project.human_review_notes = values.get("human_review_notes", project.human_review_notes)
 
