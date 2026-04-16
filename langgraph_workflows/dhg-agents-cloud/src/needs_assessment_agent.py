@@ -184,7 +184,7 @@ COLD_OPEN_SYSTEM_PROMPT = """You are a senior medical writer creating a cold ope
 
 COLD OPEN REQUIREMENTS:
 - 50-100 words exactly
-- Named composite character with age (e.g., "Maria Chen, 58")
+- Named composite character with age
 - One humanizing detail that makes them real
 - Present tense for immediacy
 - The turn: connect individual to population at the end
@@ -238,7 +238,8 @@ class NeedsAssessmentState(TypedDict):
     geographic_focus: Optional[str]
     activity_title: str
     accreditation_types: List[str]
-    
+    intake_data: Dict[str, Any]  # Full flattened intake — includes character_mode, character_* fields
+
     # From upstream agents
     gaps: List[Dict[str, Any]]  # From Gap Analysis Agent
     research_summary: str  # From Research Agent
@@ -349,26 +350,50 @@ llm = NeedsAssessmentLLM()
 @traceable(name="create_character_node", run_type="chain")
 @traced_node("needs_assessment_agent", "create_character_node")
 async def create_character_node(state: NeedsAssessmentState) -> dict:
-    """Create the cold open character based on gap analysis."""
+    """Create the cold open character — guided from intake or auto-generated from gaps."""
 
+    intake = state.get("intake_data") or {}
+    character_mode = intake.get("character_mode", "auto")
+
+    # ── Guided mode: user provided character attributes via intake form ──
+    if character_mode == "guided":
+        guided_name = intake.get("character_name", "")
+        guided_age = intake.get("character_age")
+        guided_detail = intake.get("character_presenting_complaint", "")
+        if intake.get("character_clinical_history"):
+            guided_detail = f"{guided_detail}; {intake['character_clinical_history']}" if guided_detail else intake["character_clinical_history"]
+
+        char_type = "patient"
+        if intake.get("character_occupation") and any(
+            kw in (intake.get("character_occupation") or "").lower()
+            for kw in ("doctor", "physician", "nurse", "clinician", "pharmacist", "provider")
+        ):
+            char_type = "clinician"
+
+        return {
+            "character_name": guided_name,
+            "character_age": guided_age or 55,
+            "character_type": char_type,
+            "character_humanizing_detail": guided_detail,
+            "character_appearances": 0,
+            "errors": []
+        }
+
+    # ── Auto mode: generate character from gap analysis via LLM ──
     gaps = state.get("gaps", [])
     therapeutic_area = state.get("therapeutic_area", "")
     disease_state = state.get("disease_state", "")
-    
-    # Determine character type based on gaps
-    # Patient-centered if gaps affect patient outcomes
-    # Clinician-centered if gaps are about decision-making
+
     patient_keywords = ["diagnosis", "treatment", "outcomes", "mortality", "morbidity"]
     clinician_keywords = ["awareness", "knowledge", "guideline", "prescribing"]
-    
+
     gap_text = " ".join([g.get("gap_statement", "") for g in gaps])
-    
+
     patient_score = sum(1 for k in patient_keywords if k in gap_text.lower())
     clinician_score = sum(1 for k in clinician_keywords if k in gap_text.lower())
-    
+
     character_type = "patient" if patient_score >= clinician_score else "clinician"
-    
-    # Generate character details with LLM
+
     prompt = f"""Create a composite character for a CME needs assessment about {disease_state} in {therapeutic_area}.
 
 Character type: {character_type}
@@ -404,13 +429,12 @@ Return ONLY the JSON, no other text."""
 
         prev_dists = state.get("vs_distributions", {})
 
-        # Parse JSON from response
         match = re.search(r'\{[\s\S]*\}', result["content"])
         if match:
             data = json.loads(match.group())
             return {
-                "character_name": data.get("name", "Maria Chen"),
-                "character_age": data.get("age", 58),
+                "character_name": data.get("name", f"Patient with {disease_state}"),
+                "character_age": data.get("age", 55),
                 "character_type": character_type,
                 "character_humanizing_detail": data.get("humanizing_detail", ""),
                 "character_appearances": 0,
@@ -421,12 +445,20 @@ Return ONLY the JSON, no other text."""
                 "vs_used": state.get("vs_used", False) or (vs_result is not None),
                 "errors": []
             }
+        return {
+            "character_name": f"Patient with {disease_state or 'this condition'}",
+            "character_age": 55,
+            "character_type": character_type,
+            "character_humanizing_detail": "seeks answers after months of worsening symptoms",
+            "character_appearances": 0,
+            "errors": ["Character JSON parsing failed, using dynamic fallback"]
+        }
     except Exception as e:
         return {
-            "character_name": "Maria Chen",
-            "character_age": 58,
+            "character_name": f"Patient with {disease_state or 'this condition'}",
+            "character_age": 55,
             "character_type": "patient",
-            "character_humanizing_detail": "visits her doctor for the third time this year",
+            "character_humanizing_detail": "seeks answers after months of worsening symptoms",
             "character_appearances": 0,
             "errors": [f"Character creation fallback: {str(e)}"]
         }
@@ -436,7 +468,7 @@ Return ONLY the JSON, no other text."""
 async def generate_cold_open_node(state: NeedsAssessmentState) -> dict:
     """Generate the cold open narrative."""
     
-    character_name = state.get("character_name", "Maria Chen")
+    character_name = state.get("character_name", "the patient")
     character_age = state.get("character_age", 58)
     character_type = state.get("character_type", "patient")
     character_detail = state.get("character_humanizing_detail", "")
@@ -508,7 +540,7 @@ async def generate_disease_overview_node(state: NeedsAssessmentState) -> dict:
     
     disease_state = state.get("disease_state", "")
     therapeutic_area = state.get("therapeutic_area", "")
-    character_name = state.get("character_name", "Maria Chen")
+    character_name = state.get("character_name", "the patient")
     epidemiology = state.get("epidemiology", {})
     research_summary = state.get("research_summary", "")
     
@@ -655,7 +687,7 @@ async def generate_practice_gaps_node(state: NeedsAssessmentState) -> dict:
     """Generate Practice Gaps section (300-400 words)."""
     
     gaps = state.get("gaps", [])
-    character_name = state.get("character_name", "Maria Chen")
+    character_name = state.get("character_name", "the patient")
     disease_state = state.get("disease_state", "")
     
     system = f"""You are a senior medical writer creating a practice gaps section for a CME grant.
@@ -783,7 +815,7 @@ Write 125-200 words explaining how each barrier perpetuates the practice gaps.""
 async def generate_educational_rationale_node(state: NeedsAssessmentState) -> dict:
     """Generate Educational Rationale section (200-300 words)."""
     
-    character_name = state.get("character_name", "Maria Chen")
+    character_name = state.get("character_name", "the patient")
     disease_state = state.get("disease_state", "")
     gaps = state.get("gaps", [])
     
@@ -891,7 +923,7 @@ Write 125-200 words."""
 async def generate_conclusion_node(state: NeedsAssessmentState) -> dict:
     """Generate Conclusion section (200-300 words)."""
     
-    character_name = state.get("character_name", "Maria Chen")
+    character_name = state.get("character_name", "the patient")
     disease_state = state.get("disease_state", "")
     
     system = f"""You are a senior medical writer creating a conclusion for a CME needs assessment.

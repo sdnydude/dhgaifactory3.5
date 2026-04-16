@@ -5,7 +5,7 @@ Uses /api/v2/ prefix for CME-specific endpoints
 """
 import time
 import uuid
-from typing import List, Optional, Dict, Any
+from typing import List, Literal, Optional, Dict, Any
 from datetime import datetime
 from enum import Enum
 from fastapi import APIRouter, HTTPException, Depends, status, BackgroundTasks
@@ -148,11 +148,24 @@ class SectionI_Compliance(BaseModel):
     commercial_support_acknowledgment: bool = True
 
 
+class CharacterConfig(BaseModel):
+    """Cold open character configuration: auto-generate or provide guided attributes."""
+    mode: Literal["auto", "guided"] = "auto"
+    name: Optional[str] = Field(None, max_length=100, description="Character name")
+    age: Optional[int] = Field(None, ge=1, le=120, description="Character age")
+    gender: Optional[str] = Field(None, description="Male, Female, Non-binary, Not specified")
+    ethnicity: Optional[str] = Field(None, max_length=100, description="e.g., Nigerian-American")
+    occupation: Optional[str] = Field(None, max_length=200, description="e.g., Long-haul truck driver")
+    presenting_complaint: Optional[str] = Field(None, max_length=1000, description="What brought them in")
+    clinical_history: Optional[str] = Field(None, max_length=2000, description="Prior diagnoses, treatments, timeline")
+
+
 class SectionJ_Additional(BaseModel):
-    """Section J: Additional Information (3 fields)"""
+    """Section J: Additional Information (3 fields + character config)"""
     special_instructions: Optional[str] = None
     reference_materials: Optional[List[str]] = None
     internal_notes: Optional[str] = None
+    character: Optional[CharacterConfig] = None
 
 
 # =============================================================================

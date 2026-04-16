@@ -18,7 +18,7 @@ services:
       - VS_ENGINE_URL=http://dhg-vs-engine:8000
       - SKIP_HUMAN_REVIEW=${SKIP_HUMAN_REVIEW:-false}
       - PYTHONPATH=/app/src
-    restart: unless-stopped
+    restart: "no"
     volumes:
       - ./src:/app/src
       - ./langgraph.json:/app/langgraph.json
