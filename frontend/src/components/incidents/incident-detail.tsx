@@ -14,6 +14,7 @@ import type {
 } from "@/lib/incidentsApi";
 import { SEVERITY_COLORS, STATUS_COLORS } from "@/lib/incidentsApi";
 import { useIncidentsStore } from "@/stores/incidents-store";
+import { PostmortemForm } from "./postmortem-form";
 
 interface IncidentDetailPanelProps {
   incident: IncidentDetail | null;
@@ -262,6 +263,11 @@ export function IncidentDetailPanel({
                   </Badge>
                 ))}
               </div>
+            )}
+
+            {/* Postmortem Form — show on resolved incidents without a postmortem */}
+            {incident.status === "resolved" && !pm && (
+              <PostmortemForm incidentId={incident.id} />
             )}
           </TabsContent>
 

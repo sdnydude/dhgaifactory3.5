@@ -315,6 +315,27 @@ services:
       ollama:
         condition: service_started
 
+  dhg-remediator:
+    build:
+      context: ./services/remediator
+      dockerfile: Dockerfile
+    container_name: dhg-remediator
+    environment:
+      - REGISTRY_URL=http://dhg-registry-api:8000
+      - POLL_INTERVAL=30
+      - COOLDOWN_SECONDS=600
+      - REMEDIATOR_DRY_RUN=${REMEDIATOR_DRY_RUN:-false}
+      - LOG_LEVEL=INFO
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      registry-api:
+        condition: service_healthy
+    mem_limit: 128m
+    networks:
+      - dhg-network
+    restart: unless-stopped
+
   dhg-pdf-renderer:
     environment:
       - DATABASE_URL=postgresql://dhg:weenie64@registry-db:5432/dhg_registry

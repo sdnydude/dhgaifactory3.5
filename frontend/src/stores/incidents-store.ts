@@ -33,6 +33,7 @@ interface IncidentsState {
   selectIncident: (id: string | null) => Promise<void>;
   mitigateIncident: (id: string) => Promise<void>;
   resolveIncident: (id: string) => Promise<void>;
+  createPostmortem: (id: string, body: Record<string, unknown>) => Promise<void>;
   setFilterStatus: (status: string | null) => void;
   setFilterSeverity: (severity: string | null) => void;
   setFilterCategory: (category: string | null) => void;
@@ -132,6 +133,18 @@ export const useIncidentsStore = create<IncidentsState>((set, get) => ({
     try {
       const now = new Date().toISOString();
       await api.updateIncident(id, { resolved_at: now });
+      const detail = await api.getIncident(id);
+      set({ selectedIncident: detail, actionLoading: false });
+      get().fetchAll();
+    } catch (e) {
+      set({ error: (e as Error).message, actionLoading: false });
+    }
+  },
+
+  createPostmortem: async (id, body) => {
+    set({ actionLoading: true });
+    try {
+      await api.createPostmortem(id, body);
       const detail = await api.getIncident(id);
       set({ selectedIncident: detail, actionLoading: false });
       get().fetchAll();
