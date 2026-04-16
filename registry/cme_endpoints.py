@@ -269,7 +269,8 @@ LANGGRAPH_CLOUD_URL = "https://dhg-agents-526554f2bb905517adab9bd53427c745.us.la
 async def trigger_langgraph_pipeline(project_id: str, intake_data: dict) -> dict:
     """
     Trigger the LangGraph CME pipeline via the LangGraph Cloud REST API.
-    Creates a thread, then starts a run with the needs_package assistant.
+    Creates a thread, then starts a run with the grant_package assistant
+    (full 11-agent pipeline with 2 prose QA passes + compliance gate).
     Returns {"thread_id": ..., "run_id": ...} for tracking.
     """
     langgraph_url = os.getenv("LANGGRAPH_API_URL", LANGGRAPH_CLOUD_URL)
@@ -280,7 +281,7 @@ async def trigger_langgraph_pipeline(project_id: str, intake_data: dict) -> dict
         async with httpx.AsyncClient(timeout=30.0) as client:
             thread_resp = await client.post(
                 f"{langgraph_url}/threads",
-                json={"metadata": {"graph_id": "needs_package", "project_id": project_id}},
+                json={"metadata": {"graph_id": "grant_package", "project_id": project_id}},
                 headers=headers,
             )
             thread_resp.raise_for_status()
@@ -289,7 +290,7 @@ async def trigger_langgraph_pipeline(project_id: str, intake_data: dict) -> dict
             run_resp = await client.post(
                 f"{langgraph_url}/threads/{thread_id}/runs",
                 json={
-                    "assistant_id": "needs_package",
+                    "assistant_id": "grant_package",
                     "input": {
                         "intake_data": intake_data,
                         "project_id": project_id,
