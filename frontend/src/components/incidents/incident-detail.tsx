@@ -15,6 +15,7 @@ import type {
 import { SEVERITY_COLORS, STATUS_COLORS } from "@/lib/incidentsApi";
 import { useIncidentsStore } from "@/stores/incidents-store";
 import { PostmortemForm } from "./postmortem-form";
+import { SnapshotDashboard } from "./snapshot-dashboard";
 
 interface IncidentDetailPanelProps {
   incident: IncidentDetail | null;
@@ -267,7 +268,7 @@ export function IncidentDetailPanel({
 
             {/* Postmortem Form — show on resolved incidents without a postmortem */}
             {incident.status === "resolved" && !pm && (
-              <PostmortemForm incidentId={incident.id} />
+              <PostmortemForm incident={incident} />
             )}
           </TabsContent>
 
@@ -413,14 +414,9 @@ export function IncidentDetailPanel({
           {/* Snapshot tab */}
           {incident.system_snapshot && (
             <TabsContent value="snapshot" className="mt-4">
-              <div className="rounded-lg border bg-card p-4">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-                  System Snapshot at Detection
-                </h3>
-                <pre className="rounded bg-muted p-3 text-[11px] font-mono overflow-x-auto max-h-96 whitespace-pre-wrap">
-                  {JSON.stringify(incident.system_snapshot, null, 2)}
-                </pre>
-              </div>
+              <SnapshotDashboard
+                snapshot={incident.system_snapshot as Record<string, unknown>}
+              />
             </TabsContent>
           )}
         </Tabs>

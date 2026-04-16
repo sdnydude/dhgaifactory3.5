@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { FileText } from "lucide-react";
 import { useIncidentsStore } from "@/stores/incidents-store";
+import type { IncidentDetail } from "@/lib/incidentsApi";
 
 interface PostmortemFormProps {
-  incidentId: string;
+  incident: IncidentDetail;
 }
 
 const FIELDS = [
@@ -20,17 +21,58 @@ const FIELDS = [
 
 type FormData = Record<(typeof FIELDS)[number]["key"], string>;
 
-const EMPTY_FORM: FormData = {
-  summary: "",
-  root_cause_analysis: "",
-  impact_analysis: "",
-  resolution_details: "",
-  prevention_measures: "",
-  lessons_learned: "",
-};
+function formatTs(ts: string | null): string {
+  if (!ts) return "N/A";
+  return new Date(ts).toLocaleString();
+}
 
-export function PostmortemForm({ incidentId }: PostmortemFormProps) {
-  const [form, setForm] = useState<FormData>({ ...EMPTY_FORM });
+function buildPrefill(incident: IncidentDetail): FormData {
+  // Summary: structured overview from incident metadata
+  const svcList = incident.affected_services.length > 0
+    ? incident.affected_services.join(", ")
+    : "N/A";
+  const summaryParts = [
+    `${incident.severity.toUpperCase()} ${incident.category} incident: ${incident.title}`,
+    `Affected services: ${svcList}`,
+    `Detected: ${formatTs(incident.detected_at)}`,
+    incident.mitigated_at ? `Mitigated: ${formatTs(incident.mitigated_at)}` : null,
+    incident.resolved_at ? `Resolved: ${formatTs(incident.resolved_at)}` : null,
+  ].filter(Boolean);
+
+  // Root cause: direct from incident fields
+  const rcParts: string[] = [];
+  if (incident.root_cause_category) {
+    rcParts.push(`Category: ${incident.root_cause_category}`);
+  }
+  if (incident.root_cause) {
+    rcParts.push(incident.root_cause);
+  }
+
+  // Resolution details: built from actions log
+  const actions = incident.actions ?? [];
+  const resolutionActions = actions.filter(
+    (a) => a.action_type !== "diagnostic",
+  );
+  const resParts = resolutionActions.map(
+    (a) =>
+      `- [${a.action_type}] ${a.description}${a.result ? ` — Result: ${a.result}` : ""}`,
+  );
+
+  return {
+    summary: summaryParts.join("\n"),
+    root_cause_analysis: rcParts.join("\n\n") || "",
+    impact_analysis: incident.impact_summary ?? "",
+    resolution_details: resParts.length > 0
+      ? resParts.join("\n")
+      : "",
+    prevention_measures: incident.prevention ?? "",
+    lessons_learned: "",
+  };
+}
+
+export function PostmortemForm({ incident }: PostmortemFormProps) {
+  const prefill = useMemo(() => buildPrefill(incident), [incident]);
+  const [form, setForm] = useState<FormData>(prefill);
   const [expanded, setExpanded] = useState(false);
   const actionLoading = useIncidentsStore((s) => s.actionLoading);
   const submitPostmortem = useIncidentsStore((s) => s.createPostmortem);
@@ -43,8 +85,7 @@ export function PostmortemForm({ incidentId }: PostmortemFormProps) {
       if (v.trim()) body[k] = v.trim();
     }
     if (Object.keys(body).length === 0) return;
-    await submitPostmortem(incidentId, body);
-    setForm({ ...EMPTY_FORM });
+    await submitPostmortem(incident.id, body);
     setExpanded(false);
   };
 
@@ -104,7 +145,7 @@ export function PostmortemForm({ incidentId }: PostmortemFormProps) {
           variant="ghost"
           disabled={actionLoading}
           onClick={() => {
-            setForm({ ...EMPTY_FORM });
+            setForm(prefill);
             setExpanded(false);
           }}
           className="text-xs"
