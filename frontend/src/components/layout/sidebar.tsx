@@ -43,9 +43,10 @@ const ROUTE_ICONS: Record<string, typeof FolderKanban> = {
   "/admin": Settings,
 };
 
-const BADGE_KEYS: Record<string, "inbox" | "processing" | null> = {
+const BADGE_KEYS: Record<string, "inbox" | "processing" | "incidents" | null> = {
   "/projects": "processing",
   "/inbox": "inbox",
+  "/monitoring": "incidents",
 };
 
 function NavLink({

@@ -970,3 +970,171 @@ class DownloadJob(Base):
 
     def __repr__(self) -> str:
         return f"<DownloadJob id={self.id} scope={self.scope} status={self.status}>"
+
+
+# =============================================================================
+# INCIDENT MANAGEMENT
+# =============================================================================
+
+
+class Incident(Base):
+    """Structured incident record with timeline, correlation, and SLA tracking."""
+    __tablename__ = "incidents"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title = Column(Text, nullable=False)
+    severity = Column(String(20), nullable=False)  # critical, high, medium, low
+    status = Column(String(20), nullable=False, server_default="active")  # active, mitigated, resolved, postmortem
+    category = Column(String(30), nullable=False)  # infrastructure, pipeline, data, integration, security, performance
+    root_cause = Column(Text, nullable=True)
+    root_cause_category = Column(String(30), nullable=True)
+    impact_summary = Column(Text, nullable=True)
+    prevention = Column(Text, nullable=True)
+    trigger_rule = Column(String(50), nullable=True)
+    affected_services = Column(ARRAY(Text), nullable=False, server_default="{}")
+    affected_project_ids = Column(ARRAY(UUID(as_uuid=True)), nullable=True)
+    tags = Column(ARRAY(Text), nullable=False, server_default="{}")
+    parent_incident_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("incidents.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    pipeline_run_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("cme_pipeline_runs.run_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    system_snapshot = Column(JSONB, nullable=True)
+    created_by = Column(String(255), nullable=True)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    detected_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    mitigated_at = Column(DateTime(timezone=True), nullable=True)
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    events = relationship("IncidentEvent", back_populates="incident", cascade="all, delete-orphan", order_by="IncidentEvent.timestamp.desc()")
+    actions = relationship("IncidentAction", back_populates="incident", cascade="all, delete-orphan", order_by="IncidentAction.performed_at.desc()")
+    postmortem = relationship("IncidentPostmortem", back_populates="incident", uselist=False, cascade="all, delete-orphan")
+    children = relationship("Incident", foreign_keys=[parent_incident_id], lazy="selectin")
+    pipeline_run = relationship("CMEPipelineRun", foreign_keys=[pipeline_run_id])
+
+    __table_args__ = (
+        Index("ix_incidents_status", "status"),
+        Index("ix_incidents_severity", "severity"),
+        Index("ix_incidents_created_at", "created_at"),
+        Index("ix_incidents_trigger_rule", "trigger_rule"),
+        Index("ix_incidents_parent", "parent_incident_id"),
+        Index("ix_incidents_affected_services", "affected_services", postgresql_using="gin"),
+        Index("ix_incidents_tags", "tags", postgresql_using="gin"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<Incident id={self.id} severity={self.severity} status={self.status} title={self.title!r}>"
+
+
+class IncidentEvent(Base):
+    """Timeline event within an incident."""
+    __tablename__ = "incident_events"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    incident_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("incidents.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    timestamp = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    event_type = Column(String(30), nullable=False)  # symptom, diagnosis, escalation, action, resolution, notification
+    source = Column(String(100), nullable=True)
+    description = Column(Text, nullable=False)
+    evidence = Column(JSONB, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    incident = relationship("Incident", back_populates="events")
+
+    __table_args__ = (
+        Index("ix_incident_events_incident_id", "incident_id"),
+        Index("ix_incident_events_timestamp", "timestamp"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<IncidentEvent id={self.id} type={self.event_type}>"
+
+
+class IncidentAction(Base):
+    """Remediation action taken during an incident."""
+    __tablename__ = "incident_actions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    incident_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("incidents.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    action_type = Column(String(30), nullable=False)  # diagnostic, mitigation, fix, prevention, auto_remediation
+    description = Column(Text, nullable=False)
+    command = Column(Text, nullable=True)
+    result = Column(Text, nullable=True)
+    performed_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    performed_by = Column(String(255), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    incident = relationship("Incident", back_populates="actions")
+
+    __table_args__ = (
+        Index("ix_incident_actions_incident_id", "incident_id"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<IncidentAction id={self.id} type={self.action_type}>"
+
+
+class IncidentRunbook(Base):
+    """Deterministic trigger rule with remediation steps."""
+    __tablename__ = "incident_runbooks"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    trigger_rule = Column(String(50), nullable=False, unique=True)
+    title = Column(Text, nullable=False)
+    description = Column(Text, nullable=True)
+    severity = Column(String(20), nullable=False)
+    remediation_mode = Column(String(20), nullable=False, server_default="none")  # auto, approval, none
+    steps = Column(JSONB, nullable=False, server_default="[]")
+    container_allowlist = Column(ARRAY(Text), nullable=False, server_default="{}")
+    enabled = Column(Boolean, nullable=False, server_default="true")
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    def __repr__(self) -> str:
+        return f"<IncidentRunbook trigger={self.trigger_rule} mode={self.remediation_mode}>"
+
+
+class IncidentPostmortem(Base):
+    """Structured post-mortem linked 1:1 to an incident."""
+    __tablename__ = "incident_postmortems"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    incident_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("incidents.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    summary = Column(Text, nullable=True)
+    timeline_markdown = Column(Text, nullable=True)
+    root_cause_analysis = Column(Text, nullable=True)
+    impact_analysis = Column(Text, nullable=True)
+    resolution_details = Column(Text, nullable=True)
+    prevention_measures = Column(Text, nullable=True)
+    lessons_learned = Column(Text, nullable=True)
+    sla_metrics = Column(JSONB, nullable=True)
+    generated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    last_edited_at = Column(DateTime(timezone=True), nullable=True)
+    edited_by = Column(String(255), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    incident = relationship("Incident", back_populates="postmortem")
+
+    def __repr__(self) -> str:
+        return f"<IncidentPostmortem id={self.id} incident_id={self.incident_id}>"

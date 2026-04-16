@@ -228,6 +228,7 @@ from dev_changelog_endpoints import router as dev_changelog_router
 from export_endpoints import router as export_router
 from projects_endpoints import router as projects_router
 from webhook_endpoints import router as webhook_router
+from incident_endpoints import router as incident_router
 
 # Include routers
 app.include_router(agent_router)
@@ -244,6 +245,7 @@ app.include_router(dev_changelog_router)
 app.include_router(export_router)
 app.include_router(projects_router)
 app.include_router(webhook_router)
+app.include_router(incident_router)
 
 # Add CORS middleware — locked to production origin + localhost for development
 ALLOWED_ORIGINS = [
@@ -302,16 +304,72 @@ class AlertmanagerPayload(BaseModel):
     alerts: List[AlertmanagerAlert]
 
 
+# Map Prometheus alertname → incident trigger rule + category
+ALERT_TRIGGER_MAP: dict = {
+    "ContainerCrashLoop": {"trigger": "T2", "category": "infrastructure"},
+    "HostMemoryHigh": {"trigger": "T3", "category": "infrastructure"},
+    "HostSwapHigh": {"trigger": "T4", "category": "infrastructure"},
+    "RootDiskHigh": {"trigger": "T5", "category": "infrastructure"},
+    "DataDiskHigh": {"trigger": "T6", "category": "infrastructure"},
+    "RegistryApiDown": {"trigger": "T8", "category": "infrastructure"},
+    "PrometheusTargetDown": {"trigger": "T8", "category": "infrastructure"},
+    "PostgresConnectionsHigh": {"trigger": "T9", "category": "data"},
+    "ZombieProcessesHigh": {"trigger": "T12", "category": "infrastructure"},
+    "ContainerMemoryLeak": {"trigger": "T13", "category": "infrastructure"},
+    "ContainerHighCPU": {"trigger": "T1", "category": "infrastructure"},
+    "ContainerHighMemory": {"trigger": "T13", "category": "infrastructure"},
+}
+
+
 @app.post("/webhooks/alertmanager")
-async def alertmanager_webhook(payload: AlertmanagerPayload):
-    """Receive and log Alertmanager webhook notifications."""
+async def alertmanager_webhook(
+    payload: AlertmanagerPayload,
+    db: Session = Depends(get_db),
+):
+    """Receive Alertmanager webhooks and auto-create incidents for firing alerts."""
     logger.info(f"Alertmanager webhook: status={payload.status}, alerts={len(payload.alerts)}")
+
+    created = 0
+    skipped = 0
+
     for alert in payload.alerts:
-        logger.info(
-            f"  Alert: {alert.labels.get('alertname', 'unknown')} "
-            f"status={alert.status} severity={alert.labels.get('severity', 'unknown')}"
-        )
-    return {"status": "received", "alerts_processed": len(payload.alerts)}
+        alertname = alert.labels.get("alertname", "unknown")
+        severity = alert.labels.get("severity", "medium")
+        service = alert.labels.get("name") or alert.labels.get("job") or "unknown"
+        summary = alert.annotations.get("summary", alertname)
+
+        logger.info(f"  Alert: {alertname} status={alert.status} severity={severity}")
+
+        # Only create incidents for firing alerts (not resolved)
+        if alert.status != "firing":
+            skipped += 1
+            continue
+
+        # Only auto-create for critical/high
+        if severity not in ("critical", "high"):
+            skipped += 1
+            continue
+
+        mapping = ALERT_TRIGGER_MAP.get(alertname, {})
+        trigger_rule = mapping.get("trigger")
+        category = mapping.get("category", "infrastructure")
+
+        try:
+            from incident_service import create_incident as create_inc
+            create_inc(
+                db,
+                title=f"[{alertname}] {summary}",
+                severity=severity,
+                category=category,
+                trigger_rule=trigger_rule,
+                affected_services=[service],
+                created_by="alertmanager",
+            )
+            created += 1
+        except Exception as exc:
+            logger.error(f"Failed to create incident for alert {alertname}: {exc}")
+
+    return {"status": "received", "alerts_processed": len(payload.alerts), "incidents_created": created, "skipped": skipped}
 
 
 # ============================================================================

@@ -9,6 +9,7 @@ interface AppState {
   badgeCounts: {
     inbox: number;
     processing: number;
+    incidents: number;
   };
 
   toggleSidebar: () => void;
@@ -24,6 +25,7 @@ export const useAppStore = create<AppState>()(
       badgeCounts: {
         inbox: 0,
         processing: 0,
+        incidents: 0,
       },
 
       toggleSidebar: () =>

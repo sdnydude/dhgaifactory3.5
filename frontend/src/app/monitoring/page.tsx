@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { AlertTriangle } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatsCards } from "@/components/monitoring/stats-cards";
 import { DailyChart } from "@/components/monitoring/daily-chart";
@@ -87,6 +89,23 @@ export default function MonitoringPage() {
           <span className="text-sm text-destructive">{error}</span>
         </div>
       )}
+
+      {/* Incident Records link */}
+      <div className="mx-6 mt-3">
+        <Link
+          href="/monitoring/incidents"
+          className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3 shadow-sm transition-colors hover:bg-muted/50"
+        >
+          <AlertTriangle className="h-5 w-5 text-dhg-orange shrink-0" />
+          <div className="flex-1 min-w-0">
+            <span className="text-sm font-medium">Incident Records</span>
+            <p className="text-xs text-muted-foreground">
+              Structured incident capture, automated triggers, SLA tracking
+            </p>
+          </div>
+          <span className="text-xs text-muted-foreground">&rarr;</span>
+        </Link>
+      </div>
 
       {/* Tab Navigation */}
       <Tabs defaultValue="overview" className="flex flex-col flex-1 overflow-hidden">
