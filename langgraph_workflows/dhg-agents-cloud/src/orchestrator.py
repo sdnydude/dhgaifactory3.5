@@ -386,7 +386,7 @@ def flatten_intake(intake: Dict[str, Any]) -> Dict[str, Any]:
     flat["follow_up_timeline"] = _str(f, "follow_up_timeline")
     flat["outcome_goals"] = list(flat["primary_outcomes"])  # gap_analysis / learning_objectives alias
     moore_list = flat["moore_levels_target"]
-    flat["moore_level_target"] = moore_list[0] if moore_list else ""  # singular alias
+    flat["moore_level_target"] = f"Level {moore_list[0]}" if moore_list else "Level 5"  # singular alias
 
     # --- Section G: Content Requirements ---
     g = _section(intake, "section_g")
@@ -423,6 +423,20 @@ def flatten_intake(intake: Dict[str, Any]) -> Dict[str, Any]:
     flat["special_instructions"] = _str(j, "special_instructions")
     flat["reference_materials"] = _list(j, "reference_materials")
     flat["internal_notes"] = _str(j, "internal_notes")
+
+    # --- Character Config (nested in Section J) ---
+    char = j.get("character") if isinstance(j, dict) else None
+    if isinstance(char, dict) and char.get("mode") == "guided":
+        flat["character_mode"] = "guided"
+        flat["character_name"] = char.get("name") or ""
+        flat["character_age"] = char.get("age")
+        flat["character_gender"] = char.get("gender") or ""
+        flat["character_ethnicity"] = char.get("ethnicity") or ""
+        flat["character_occupation"] = char.get("occupation") or ""
+        flat["character_presenting_complaint"] = char.get("presenting_complaint") or ""
+        flat["character_clinical_history"] = char.get("clinical_history") or ""
+    else:
+        flat["character_mode"] = "auto"
 
     return flat
 
@@ -616,14 +630,14 @@ async def run_learning_objectives_agent(state: CMEPipelineState) -> dict:
         
         intake = state.get("intake_data", {})
         agent_input = {
-            "gap_analysis_output": state.get("gap_analysis_output", {}),
-            "needs_assessment_output": state.get("needs_assessment_output", {}),
+            "gap_analysis_report": state.get("gap_analysis_output", {}),
+            "needs_assessment_document": (state.get("needs_assessment_output") or {}).get("needs_assessment_document", ""),
             "target_audience": intake.get("target_audience", ""),
             "disease_state": intake.get("disease_state", ""),
             "therapeutic_area": intake.get("therapeutic_area", ""),
             "educational_format": intake.get("educational_format", ""),
             "outcome_goals": intake.get("outcome_goals", []),
-            "moore_level_target": intake.get("moore_level_target", ""),
+            "moore_level_target": str(intake.get("moore_level_target", "Level 5")),
         }
 
         result = await asyncio.wait_for(

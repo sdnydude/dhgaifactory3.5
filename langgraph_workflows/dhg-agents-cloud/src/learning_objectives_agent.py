@@ -216,7 +216,7 @@ When citing, mentally track what each number refers to (e.g. [1] = Smith et al. 
 async def plan_distribution_node(state: LearningObjectivesState) -> dict:
     """Plan objective distribution based on target Moore level."""
     
-    target_level = state.get("moore_level_target", "Level 5")
+    target_level = str(state.get("moore_level_target", "Level 5"))
     gap_report = state.get("gap_analysis_report", {})
     gaps = gap_report.get("gaps", [])
     audience = state.get("target_audience", "")
