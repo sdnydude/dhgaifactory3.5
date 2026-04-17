@@ -13,7 +13,6 @@ from sqlalchemy import (
     Index,
     Integer,
     Numeric,
-    String,
     Text,
     UniqueConstraint,
     event,
@@ -29,16 +28,8 @@ class Base(DeclarativeBase):
 
 @event.listens_for(Base, "init", propagate=True)
 def _apply_column_defaults(
-    target: Base, args: tuple, kwargs: dict  # type: ignore[type-arg]
+    target: Base, args: tuple, kwargs: dict  # type: ignore[type-arg]  # noqa: ARG001
 ) -> None:
-    """Apply Python-side column defaults at object instantiation.
-
-    SQLAlchemy's ``mapped_column(default=...)`` is a DML-level default — it
-    fires at INSERT time, not at ``__init__`` time.  This listener fills in
-    scalar and callable column defaults so that model instances reflect their
-    expected defaults before any DB round-trip, which is the behaviour the
-    test suite (and application code) depends on.
-    """
     for col in target.__table__.columns:
         if col.name not in kwargs and col.default is not None:
             if col.default.is_scalar:
