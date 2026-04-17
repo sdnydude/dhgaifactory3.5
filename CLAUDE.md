@@ -104,7 +104,7 @@ Human-in-the-loop review workflow at /inbox. Master-detail layout: left sidebar 
 - AI Reflection: quality signals (prose score, banned patterns, ACCME compliance) + approve/revise recommendation
 - Auto-refreshes every 30s
 
-### Inbox Document & Project Download (Added April 2026, active on branch `lsp-setup`)
+### Inbox Document & Project Download (Added April 2026, merged to master Apr 16, tagged `phase2v2`)
 
 Two-layer export feature — Phase 1 ships synchronous single-document PDF download, Phase 2 v2 ships asynchronous multi-document project bundles + Google Drive sync (md-only). Plan: `docs/superpowers/plans/2026-04-14-inbox-document-project-download.md`.
 
@@ -116,7 +116,7 @@ Two-layer export feature — Phase 1 ships synchronous single-document PDF downl
 - `exportApi.ts` frontend client + download button in review panel masthead
 - Playwright E2E at `frontend/e2e/inbox-document-download.spec.ts`
 
-**Phase 2 v2 — Async project bundles + Drive sync (13/19 tasks, in progress):**
+**Phase 2 v2 — Async project bundles + Drive sync (DONE Apr 16, 19/19 tasks, tagged `phase2v2`):**
 - `download_jobs` v2 schema (migrations 009+010) with `project_id`/`scope`/`drive_file_id`/`drive_folder_id`/`drive_mime_type`/`selected_document_ids`; `scope` CHECK constraint ∈ {document, project_bundle, drive_sync}
 - Endpoints under `/api/cme/export/`: `projects` + `projects/{id}/documents` + `bundle` (enqueue) + `job/{id}` + `jobs` + `artifact/{id}`
 - md-only project bundler (`services/pdf-renderer/bundler.py`) — atomic zip writer, manifest.json, deferred PDF-in-bundle to Phase 3
@@ -124,7 +124,11 @@ Two-layer export feature — Phase 1 ships synchronous single-document PDF downl
 - Worker loop (`services/pdf-renderer/worker.py`) — `FOR UPDATE SKIP LOCKED` row claim, three-scope dispatch, lifespan-optional boot
 - Orchestrator hook: `langgraph_workflows/dhg-agents-cloud/src/drive_sync.py` exposes `enqueue_drive_sync` helper; recipe milestone call sites wire project-state snapshots to Drive
 - Frontend client `frontend/src/lib/filesApi.ts` with `credentials: "include"` for Cloudflare JWT pass-through
-- **Remaining:** Files tab Zustand store, Files tab UI components, sidebar wiring, downloads tray + polling hook, E2E integration test, Phase 2 smoke + tag (Tasks 2.14–2.19)
+- Files tab Zustand store (`frontend/src/stores/files-tab-store.ts`, `1bb841d`) — projects, expanded set, selection set, preview id; persists `expandedProjectIds`
+- Downloads store + `use-download-polling` hook + downloads tray (`7607bbb` + `f68aaca`, components/downloads/downloads-tray.tsx)
+- Files tab wired into inbox master-detail as a tab switcher alongside Review tab (`f68aaca`, Tasks 2.16 + 2.17b)
+- 5-test E2E suite (`7108b3e`, Task 2.18): list projects, list docs, full bundle round-trip with zip+manifest verification, 404/409 error cases
+- Phase 2 closed out and tagged `phase2v2` at `bf711ca`, Apr 16 (Task 2.19)
 
 **Critical fix landed for the feature to work through the proxy:** `frontend/src/app/api/registry/[...path]/route.ts` was text-decoding upstream bodies, corrupting PDF/zip binaries on roundtrip. Fixed in `b736357` by preserving `arrayBuffer()` for binary content types.
 
