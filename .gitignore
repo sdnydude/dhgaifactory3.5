@@ -87,3 +87,12 @@ swincoming/
 
 # Pyright container site-packages snapshots (regeneratable via docker cp)
 .pyright-stubs/
+
+# planning-with-files skill ephemeral output (repo root only; condensed
+# outcomes already live in docs/TODO.md, commits, and docs/resolved-issues.md)
+/task_plan.md
+/task_plan_*.md
+/findings.md
+/findings_*.md
+/progress.md
+/progress_*.md
