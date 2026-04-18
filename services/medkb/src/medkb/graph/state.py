@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TypedDict
+from typing import Any, TypedDict
 
 from medkb.retriever.protocol import RetrievedChunk
 
@@ -48,6 +48,8 @@ class RAGState(TypedDict, total=False):
     redaction_count: int
     nodes_visited: list[str]
     error: str
+
+    _retrievers: list[Any]
 
 
 def make_initial_state(
