@@ -4,16 +4,20 @@ import logging
 import time
 import uuid
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from medkb.auth import resolve_caller
 from medkb.config import Settings
 from medkb.db import get_engine
 from medkb.graph.builder import build_rag_graph
 from medkb.graph.state import RAGConfig, make_initial_state
 from medkb.metrics import QUERY_LATENCY, QUERY_REQUESTS, QUERY_ERRORS
 from medkb.retriever.pgvector import PgVectorRetriever
-from medkb.schemas import QueryDebug, QueryRequest, QueryResponse
+from medkb.schemas import (
+    QueryDebug, QueryRequest, QueryResponse,
+    RetrieveRequest, RetrieveResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,8 +57,9 @@ def _get_retrievers(corpora: list[str]) -> list:
 
 
 @router.post("/query", response_model=QueryResponse)
-async def query(body: QueryRequest):
+async def query(body: QueryRequest, request: Request):
     run_id = f"medkb-{uuid.uuid4().hex[:12]}"
+    caller_id = resolve_caller(request)
     start = time.monotonic()
 
     config = RAGConfig(
@@ -81,7 +86,7 @@ async def query(body: QueryRequest):
         query=body.query,
         config=config,
         run_id=run_id,
-        caller_id="anonymous",
+        caller_id=caller_id,
     )
     state["_retrievers"] = _get_retrievers(body.corpora)
 
@@ -92,7 +97,7 @@ async def query(body: QueryRequest):
         QUERY_REQUESTS.labels(
             strategy=result["config"]["strategy"],
             corpus=",".join(body.corpora),
-            caller="anonymous",
+            caller=caller_id,
             outcome="success",
         ).inc()
         QUERY_LATENCY.labels(
@@ -134,3 +139,46 @@ async def query(body: QueryRequest):
             error_type=type(exc).__name__,
         ).inc()
         raise
+
+
+@router.post("/retrieve", response_model=RetrieveResponse)
+async def retrieve(body: RetrieveRequest, request: Request):
+    run_id = f"medkb-{uuid.uuid4().hex[:12]}"
+    caller_id = resolve_caller(request)
+    start = time.monotonic()
+
+    config = RAGConfig(
+        strategy="regular",
+        corpora=body.corpora,
+        k=body.k,
+        hybrid_weight_dense=body.hybrid_weight_dense,
+        generate_answer=False,
+        include_citations=False,
+        metadata_filters=body.metadata_filters or {},
+        max_total_tokens=50000,
+    )
+
+    state = make_initial_state(
+        query=body.query, config=config,
+        run_id=run_id, caller_id=caller_id,
+    )
+    state["_retrievers"] = _get_retrievers(body.corpora)
+
+    result = await _graph.ainvoke(state)
+    elapsed_ms = int((time.monotonic() - start) * 1000)
+
+    return RetrieveResponse(
+        run_id=run_id,
+        chunks=[
+            {
+                "chunk_id": c.chunk_id,
+                "text": c.text,
+                "section": c.section,
+                "score": c.raw_score,
+                "source": c.retriever_source,
+                "metadata": c.metadata,
+            }
+            for c in result.get("retrieved_chunks", [])
+        ],
+        latency_ms=elapsed_ms,
+    )
