@@ -296,7 +296,7 @@ services:
     image: redis:7-alpine
     container_name: dhg-medkb-cache
     ports:
-      - "6380:6379"
+      - "6381:6379"
     networks:
       - dhg-network
     command: redis-server --maxmemory 4gb --maxmemory-policy allkeys-lru
@@ -354,7 +354,8 @@ services:
 
 networks:
   dhg-network:
-    driver: bridge
+    external: true
+    name: dhgaifactory35_dhg-network
 
 volumes:
   postgres-data:
