@@ -11,17 +11,11 @@ from medkb.retriever.protocol import RetrievedChunk
 logger = logging.getLogger(__name__)
 
 
-class PgVectorRetriever:
-    name: str = "pgvector"
+class BM25Retriever:
+    name: str = "bm25"
 
-    def __init__(
-        self,
-        *,
-        session_factory: Callable,
-        embed_fn: Callable,
-    ):
+    def __init__(self, *, session_factory: Callable):
         self._session_factory = session_factory
-        self._embed_fn = embed_fn
 
     async def retrieve(
         self,
@@ -31,13 +25,8 @@ class PgVectorRetriever:
         filters: dict | None = None,
         corpus_ids: list[str] | None = None,
     ) -> list[RetrievedChunk]:
-        query_embedding = await self._embed_fn(query)
-
         corpus_filter = ""
-        params: dict[str, Any] = {
-            "embedding": str(query_embedding),
-            "k": k,
-        }
+        params: dict[str, Any] = {"query": query, "k": k}
 
         if corpus_ids:
             corpus_filter = "AND cor.name = ANY(:corpus_names)"
@@ -46,15 +35,12 @@ class PgVectorRetriever:
         sql = text(f"""
             SELECT c.id, c.document_id, c.corpus_id, c.chunk_text, c.section,
                    c.metadata,
-                   CASE WHEN c.active_version = 1
-                        THEN c.embedding_v1 <=> CAST(:embedding AS vector)
-                        ELSE c.embedding_v2 <=> CAST(:embedding AS vector)
-                   END AS distance
+                   ts_rank_cd(c.tsv, plainto_tsquery('english', :query)) AS rank
             FROM medkb.chunks c
             JOIN medkb.corpora cor ON cor.id = c.corpus_id
-            WHERE c.embedding_v1 IS NOT NULL
+            WHERE c.tsv @@ plainto_tsquery('english', :query)
               {corpus_filter}
-            ORDER BY distance ASC
+            ORDER BY rank DESC
             LIMIT :k
         """)
 
@@ -72,7 +58,7 @@ class PgVectorRetriever:
                 section=row.section,
                 metadata=row.metadata_ if hasattr(row, "metadata_") else (row.metadata or {}),
                 retriever_source=self.name,
-                raw_score=1.0 - (row.distance or 0.0),
+                raw_score=float(row.rank),
             )
             for row in rows
         ]

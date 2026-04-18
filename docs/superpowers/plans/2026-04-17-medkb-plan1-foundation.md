@@ -4,7 +4,7 @@
 
 **Goal:** Stand up medkb as a working RAG service — four Docker containers, dense + sparse + hybrid retrieval, LLM generation with citations, and the CRAG quality loop — all observable end-to-end in Tempo, Prometheus, and LangSmith.
 
-**Architecture:** A new `services/medkb/` directory houses a FastAPI service with a LangGraph StateGraph that scales from fast retrieve-and-generate (`strategy=regular`) to corrective RAG with document grading and query rewriting (`strategy=crag`). Retrieval is abstracted behind a Python `Protocol` with pluggable implementations (pgvector dense, BM25 sparse, hybrid RRF fusion). Separate Postgres instance on :5433 and Redis cache on :6380, both on the existing `dhgaifactory35_dhg-network`. Instrumented with OTel spans to Tempo, Prometheus metrics on `/metrics`, and LangSmith `@traceable` on every graph node.
+**Architecture:** A new `services/medkb/` directory houses a FastAPI service with a LangGraph StateGraph that scales from fast retrieve-and-generate (`strategy=regular`) to corrective RAG with document grading and query rewriting (`strategy=crag`). Retrieval is abstracted behind a Python `Protocol` with pluggable implementations (pgvector dense, BM25 sparse, hybrid RRF fusion). Separate Postgres instance on :5435 and Redis cache on :6381, both on the existing `dhgaifactory35_dhg-network`. Instrumented with OTel spans to Tempo, Prometheus metrics on `/metrics`, and LangSmith `@traceable` on every graph node.
 
 **Tech Stack:**
 - Python 3.12, FastAPI 0.115, SQLAlchemy 2.0 (asyncpg), Pydantic 2.9
@@ -14,6 +14,21 @@
 - pytest + pytest-asyncio + httpx AsyncClient
 
 **Spec:** `docs/superpowers/specs/2026-04-17-medkb-rag-as-a-service-design.md`
+
+### Plan Reconciliation (2026-04-18)
+
+Tasks 0.1–1.13 were implemented on `feature/medkb-phase0` (32 commits, 32 tests passing) and merged to master. The implementation drifted from the plan in 6 areas. All drifts are intentional improvements; the plan text below is updated to match implemented code:
+
+| # | Drift | Plan originally said | Implementation (correct) |
+|---|-------|---------------------|--------------------------|
+| D1 | **Port remapping** | DB :5433, Redis :6380 | DB :5435, Redis :6381 (5433/6380 occupied by dhg-transcribe-*) |
+| D2 | **Network declaration** | `dhg-network` (assumed auto-created) | `dhg-network: external: true, name: dhgaifactory35_dhg-network` |
+| D3 | **LangChain pins relaxed** | Exact pins (`langchain-core==0.3.28`) | Range pins (`langchain-core>=0.3.33,<0.4.0`) — avoids dependency deadlocks |
+| D4 | **`_retrievers` field in RAGState** | Not in original state spec | Added to `graph/state.py` — runtime-injected retriever list, avoids global state |
+| D5 | **Metrics side-effect import** | Not mentioned in `main.py` scaffold | `import medkb.metrics  # noqa: F401` in main.py — registers counters at startup |
+| D6 | **ORM event listener for defaults** | Not in models.py spec | `@event.listens_for(Base, "init", propagate=True)` applies column defaults on `__init__` |
+
+All remaining tasks (0.14–3.12) use the corrected values.
 
 **Phase map:**
 
@@ -100,8 +115,8 @@ services/medkb/
 ```
 
 Docker Compose additions to repo-root `docker-compose.yml`:
-- `dhg-medkb-db` (pgvector:pg15, port 5433)
-- `dhg-medkb-cache` (redis:7-alpine, port 6380)
+- `dhg-medkb-db` (pgvector:pg15, port 5435)
+- `dhg-medkb-cache` (redis:7-alpine, port 6381)
 - `dhg-medkb-api` (FastAPI, port 8015)
 - `dhg-medkb-ingestor` (worker, no port — Phase 5 activates it, stub in Phase 0)
 
@@ -138,12 +153,12 @@ prometheus-client==0.21.1
 opentelemetry-api==1.29.0
 opentelemetry-sdk==1.29.0
 opentelemetry-exporter-otlp-proto-http==1.29.0
-langchain-core==0.3.28
-langchain-anthropic==0.3.6
-langchain-ollama==0.3.0
-langchain-community==0.3.14
-langgraph==0.3.0
-langsmith==0.2.10
+langchain-core>=0.3.33,<0.4.0
+langchain-anthropic>=0.3.6,<0.4.0
+langchain-ollama>=0.3.0,<0.4.0
+langchain-community>=0.3.14,<0.4.0
+langgraph>=0.3.0,<0.4.0
+langsmith>=0.2.10,<1.0.0
 tiktoken==0.8.0
 ```
 
@@ -188,8 +203,8 @@ from medkb.config import Settings
 
 def test_settings_defaults():
     s = Settings(
-        medkb_db_url="postgresql+asyncpg://u:p@localhost:5433/medkb",
-        medkb_redis_url="redis://localhost:6380/0",
+        medkb_db_url="postgresql+asyncpg://u:p@localhost:5435/medkb",
+        medkb_redis_url="redis://localhost:6381/0",
     )
     assert s.service_name == "dhg-medkb"
     assert s.api_port == 8015
@@ -656,7 +671,7 @@ git commit -m "feat(medkb): SQLAlchemy ORM models for all medkb tables"
 ```sql
 -- services/medkb/migrations/001_initial_schema.sql
 -- medkb initial schema — Phase 0
--- Run against dhg-medkb-db (port 5433), NOT the registry DB.
+-- Run against dhg-medkb-db (port 5435), NOT the registry DB.
 
 CREATE SCHEMA IF NOT EXISTS medkb;
 
@@ -1465,7 +1480,7 @@ Insert before the `networks:` block at the bottom of `docker-compose.yml`:
     image: pgvector/pgvector:pg15
     container_name: dhg-medkb-db
     ports:
-      - "5433:5432"
+      - "5435:5432"
     volumes:
       - medkb_db_data:/var/lib/postgresql/data
     networks:
@@ -1485,7 +1500,7 @@ Insert before the `networks:` block at the bottom of `docker-compose.yml`:
     image: redis:7-alpine
     container_name: dhg-medkb-cache
     ports:
-      - "6380:6379"
+      - "6381:6379"
     networks:
       - dhg-network
     command: redis-server --maxmemory 4gb --maxmemory-policy allkeys-lru
@@ -5018,8 +5033,8 @@ git commit -m "refactor(medkb): shared test fixtures in conftest.py"
 Add these rows to the Infrastructure Services table:
 
 ```
-| dhg-medkb-db | 5433 | PostgreSQL 15 + pgvector (medkb knowledge store, SEPARATE from registry) |
-| dhg-medkb-cache | 6380 | Redis 7 (query + embedding cache, 4GB LRU) |
+| dhg-medkb-db | 5435 | PostgreSQL 15 + pgvector (medkb knowledge store, SEPARATE from registry) |
+| dhg-medkb-cache | 6381 | Redis 7 (query + embedding cache, 4GB LRU) |
 | dhg-medkb-api | 8015 | FastAPI RAG service with LangGraph (dense + hybrid + CRAG) |
 | dhg-medkb-ingestor | — (internal) | Ingestion worker (stub — activates Phase 5) |
 ```
@@ -5036,7 +5051,7 @@ Add these rows to the Infrastructure Services table:
 
 - [ ] **Step 3: Add to Port Map in Known Issues or Build Commands**
 
-Note port 8015 for medkb-api, 5433 for medkb-db, 6380 for medkb-cache.
+Note port 8015 for medkb-api, 5435 for medkb-db, 6381 for medkb-cache.
 
 - [ ] **Step 4: Commit**
 

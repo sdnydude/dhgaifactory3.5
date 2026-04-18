@@ -8,7 +8,10 @@ import uvicorn
 from fastapi import FastAPI
 
 from medkb.config import Settings
+from medkb.db import close_db, init_db
+from medkb.endpoints.corpora import router as corpora_router
 from medkb.endpoints.health import router as health_router
+from medkb.endpoints.query import router as query_router
 import medkb.metrics  # noqa: F401 — registers all Prometheus metrics with the default registry
 from medkb.tracing import init_tracing
 
@@ -21,8 +24,10 @@ settings = Settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_tracing(settings.otel_endpoint)
+    init_db(settings.medkb_db_url)
     logger.info("medkb starting: port=%d", settings.api_port)
     yield
+    await close_db()
     logger.info("medkb shutting down")
 
 
@@ -33,6 +38,8 @@ app = FastAPI(
 )
 
 app.include_router(health_router)
+app.include_router(corpora_router)
+app.include_router(query_router)
 
 
 if __name__ == "__main__":

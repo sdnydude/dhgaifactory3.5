@@ -1,0 +1,188 @@
+from __future__ import annotations
+
+import logging
+import time
+import uuid
+
+from fastapi import APIRouter, Request
+from sqlalchemy.ext.asyncio import async_sessionmaker
+
+from medkb.auth import resolve_caller
+from medkb.config import Settings
+from medkb.db import get_engine
+from medkb.graph.builder import build_rag_graph
+from medkb.graph.state import RAGConfig, make_initial_state
+from medkb.metrics import QUERY_LATENCY, QUERY_REQUESTS, QUERY_ERRORS
+from medkb.retriever.registry import build_default_retriever, build_dense_only_retriever
+from medkb.schemas import (
+    QueryDebug, QueryRequest, QueryResponse,
+    RetrieveRequest, RetrieveResponse,
+)
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/v1")
+
+settings = Settings()
+_graph = build_rag_graph()
+
+
+def _get_retrievers(corpora: list[str], *, hybrid_weight_dense: float = 0.7) -> list:
+    try:
+        engine = get_engine()
+    except RuntimeError:
+        return []
+
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def embed_fn(text: str) -> list[float]:
+        import httpx
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{settings.ollama_url}/api/embeddings",
+                json={"model": settings.embedding_model, "prompt": text},
+                timeout=30.0,
+            )
+            resp.raise_for_status()
+            return resp.json()["embedding"]
+
+    async def session_ctx_factory():
+        return session_factory()
+
+    retriever = build_default_retriever(
+        session_factory=session_ctx_factory,
+        embed_fn=embed_fn,
+        hybrid_weight_dense=hybrid_weight_dense,
+    )
+    return [retriever]
+
+
+@router.post("/query", response_model=QueryResponse)
+async def query(body: QueryRequest, request: Request):
+    run_id = f"medkb-{uuid.uuid4().hex[:12]}"
+    caller_id = resolve_caller(request)
+    start = time.monotonic()
+
+    config = RAGConfig(
+        strategy=body.strategy,
+        corpora=body.corpora,
+        k=body.k,
+        rerank=body.rerank,
+        hybrid_weight_dense=body.hybrid_weight_dense,
+        classifier_model=body.classifier_model or settings.default_classifier_model,
+        generation_model=body.generation_model or settings.default_generation_model,
+        grader_model=body.grader_model or settings.default_grader_model,
+        groundedness_model=body.groundedness_model or settings.default_groundedness_model,
+        rewriter_model=body.rewriter_model or settings.default_rewriter_model,
+        generate_answer=body.generate_answer,
+        include_citations=body.include_citations,
+        max_retries=body.max_retries,
+        groundedness_threshold=body.groundedness_threshold,
+        max_total_tokens=body.max_total_tokens,
+        metadata_filters=body.metadata_filters or {},
+        trace_tags=body.trace_tags,
+    )
+
+    state = make_initial_state(
+        query=body.query,
+        config=config,
+        run_id=run_id,
+        caller_id=caller_id,
+    )
+    state["_retrievers"] = _get_retrievers(
+        body.corpora,
+        hybrid_weight_dense=body.hybrid_weight_dense,
+    )
+
+    try:
+        result = await _graph.ainvoke(state)
+        elapsed_ms = int((time.monotonic() - start) * 1000)
+
+        QUERY_REQUESTS.labels(
+            strategy=result["config"]["strategy"],
+            corpus=",".join(body.corpora),
+            caller=caller_id,
+            outcome="success",
+        ).inc()
+        QUERY_LATENCY.labels(
+            strategy=result["config"]["strategy"],
+            corpus=",".join(body.corpora),
+            cache_hit="false",
+        ).observe(elapsed_ms / 1000)
+
+        return QueryResponse(
+            run_id=run_id,
+            answer=result.get("answer") or None,
+            citations=result.get("citations", []),
+            retrieved_chunks=[
+                {
+                    "chunk_id": c.chunk_id,
+                    "text": c.text,
+                    "section": c.section,
+                    "score": c.raw_score,
+                    "source": c.retriever_source,
+                }
+                for c in result.get("retrieved_chunks", [])
+            ],
+            strategy_used=result["config"]["strategy"],
+            groundedness_score=result.get("groundedness_score"),
+            latency_ms=elapsed_ms,
+            tokens_used=result.get("tokens_used", 0),
+            budget_exceeded=False,
+            debug=QueryDebug(
+                loops=0,
+                rewrites=result.get("rewrite_count", 0),
+                nodes_visited=result.get("nodes_visited", []),
+                redaction_count=result.get("redaction_count", 0),
+            ),
+        )
+    except Exception as exc:
+        QUERY_ERRORS.labels(
+            strategy=body.strategy,
+            corpus=",".join(body.corpora),
+            error_type=type(exc).__name__,
+        ).inc()
+        raise
+
+
+@router.post("/retrieve", response_model=RetrieveResponse)
+async def retrieve(body: RetrieveRequest, request: Request):
+    run_id = f"medkb-{uuid.uuid4().hex[:12]}"
+    caller_id = resolve_caller(request)
+    start = time.monotonic()
+
+    config = RAGConfig(
+        strategy="regular",
+        corpora=body.corpora,
+        k=body.k,
+        hybrid_weight_dense=body.hybrid_weight_dense,
+        generate_answer=False,
+        include_citations=False,
+        metadata_filters=body.metadata_filters or {},
+        max_total_tokens=50000,
+    )
+
+    state = make_initial_state(
+        query=body.query, config=config,
+        run_id=run_id, caller_id=caller_id,
+    )
+    state["_retrievers"] = _get_retrievers(body.corpora)
+
+    result = await _graph.ainvoke(state)
+    elapsed_ms = int((time.monotonic() - start) * 1000)
+
+    return RetrieveResponse(
+        run_id=run_id,
+        chunks=[
+            {
+                "chunk_id": c.chunk_id,
+                "text": c.text,
+                "section": c.section,
+                "score": c.raw_score,
+                "source": c.retriever_source,
+                "metadata": c.metadata,
+            }
+            for c in result.get("retrieved_chunks", [])
+        ],
+        latency_ms=elapsed_ms,
+    )
