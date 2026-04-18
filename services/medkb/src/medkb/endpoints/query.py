@@ -13,7 +13,7 @@ from medkb.db import get_engine
 from medkb.graph.builder import build_rag_graph
 from medkb.graph.state import RAGConfig, make_initial_state
 from medkb.metrics import QUERY_LATENCY, QUERY_REQUESTS, QUERY_ERRORS
-from medkb.retriever.pgvector import PgVectorRetriever
+from medkb.retriever.registry import build_default_retriever, build_dense_only_retriever
 from medkb.schemas import (
     QueryDebug, QueryRequest, QueryResponse,
     RetrieveRequest, RetrieveResponse,
@@ -27,7 +27,7 @@ settings = Settings()
 _graph = build_rag_graph()
 
 
-def _get_retrievers(corpora: list[str]) -> list:
+def _get_retrievers(corpora: list[str], *, hybrid_weight_dense: float = 0.7) -> list:
     try:
         engine = get_engine()
     except RuntimeError:
@@ -49,9 +49,10 @@ def _get_retrievers(corpora: list[str]) -> list:
     async def session_ctx_factory():
         return session_factory()
 
-    retriever = PgVectorRetriever(
+    retriever = build_default_retriever(
         session_factory=session_ctx_factory,
         embed_fn=embed_fn,
+        hybrid_weight_dense=hybrid_weight_dense,
     )
     return [retriever]
 
@@ -88,7 +89,10 @@ async def query(body: QueryRequest, request: Request):
         run_id=run_id,
         caller_id=caller_id,
     )
-    state["_retrievers"] = _get_retrievers(body.corpora)
+    state["_retrievers"] = _get_retrievers(
+        body.corpora,
+        hybrid_weight_dense=body.hybrid_weight_dense,
+    )
 
     try:
         result = await _graph.ainvoke(state)
