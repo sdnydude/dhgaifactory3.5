@@ -34,6 +34,7 @@ async def test_regular_strategy_visits_expected_nodes():
     assert "analyze_query" in visited
     assert "retrieve_fan" in visited
     assert "rerank_results" in visited
+    assert "generate" in visited
     assert "format_cite" in visited
     assert "emit_feedback" in visited
     assert len(result["retrieved_chunks"]) == 1
