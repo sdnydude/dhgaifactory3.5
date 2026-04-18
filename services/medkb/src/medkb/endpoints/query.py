@@ -5,11 +5,14 @@ import time
 import uuid
 
 from fastapi import APIRouter
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from medkb.config import Settings
+from medkb.db import get_engine
 from medkb.graph.builder import build_rag_graph
 from medkb.graph.state import RAGConfig, make_initial_state
 from medkb.metrics import QUERY_LATENCY, QUERY_REQUESTS, QUERY_ERRORS
+from medkb.retriever.pgvector import PgVectorRetriever
 from medkb.schemas import QueryDebug, QueryRequest, QueryResponse
 
 logger = logging.getLogger(__name__)
@@ -21,7 +24,32 @@ _graph = build_rag_graph()
 
 
 def _get_retrievers(corpora: list[str]) -> list:
-    return []
+    try:
+        engine = get_engine()
+    except RuntimeError:
+        return []
+
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def embed_fn(text: str) -> list[float]:
+        import httpx
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{settings.ollama_url}/api/embeddings",
+                json={"model": settings.embedding_model, "prompt": text},
+                timeout=30.0,
+            )
+            resp.raise_for_status()
+            return resp.json()["embedding"]
+
+    async def session_ctx_factory():
+        return session_factory()
+
+    retriever = PgVectorRetriever(
+        session_factory=session_ctx_factory,
+        embed_fn=embed_fn,
+    )
+    return [retriever]
 
 
 @router.post("/query", response_model=QueryResponse)
