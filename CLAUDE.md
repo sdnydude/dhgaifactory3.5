@@ -67,6 +67,10 @@ All agents have dual tracing: LangSmith (@traceable) + OpenTelemetry (@traced_no
 | dhg-logo-maker | 8012 | Logo generation |
 | dhg-audio-agent | 8101 | Audio processing agent |
 | dhg-pdf-renderer | — (internal) | Playwright-based PDF renderer + md-only project bundler + Google Drive sync worker. No external port — only reachable from dhg-registry-api over `dhgaifactory35_dhg-network`. Shared `dhg_exports` volume (read-write in renderer, read-only in registry-api). Worker loop claims `download_jobs` rows with `FOR UPDATE SKIP LOCKED` and dispatches on `scope` ∈ {document, project_bundle, drive_sync}. |
+| dhg-medkb-db | 5435 | PostgreSQL 15 + pgvector (medkb knowledge store, SEPARATE from registry) |
+| dhg-medkb-cache | 6381 | Redis 7 (query + embedding cache, 4GB LRU) |
+| dhg-medkb-api | 8015 | FastAPI RAG service with LangGraph (dense + hybrid + CRAG) |
+| dhg-medkb-ingestor | — (internal) | Ingestion worker (stub — activates Phase 5) |
 
 ### Observability Stack
 
@@ -221,6 +225,11 @@ The frontend stack (decided Feb 2026, implemented March–April 2026):
 | Orchestrator Drive hook | langgraph_workflows/dhg-agents-cloud/src/drive_sync.py |
 | Inbox download plan | docs/superpowers/plans/2026-04-14-inbox-document-project-download.md |
 | medkb v2 design | docs/superpowers/plans/2026-04-15-medkb-phase1.md (untracked draft) |
+| medkb service | services/medkb/src/medkb/ (main.py, config.py, graph/, retriever/, endpoints/) |
+| medkb tests | services/medkb/tests/ |
+| medkb migrations | services/medkb/migrations/ |
+| medkb design spec | docs/superpowers/specs/2026-04-17-medkb-rag-as-a-service-design.md |
+| medkb Plan 1 | docs/superpowers/plans/2026-04-17-medkb-plan1-foundation.md |
 | Environment vars | .env (secrets — never expose) |
 
 ---

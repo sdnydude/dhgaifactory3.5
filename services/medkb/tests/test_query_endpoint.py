@@ -1,16 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, patch
-from httpx import ASGITransport, AsyncClient
 
-from medkb.main import app
 from medkb.retriever.protocol import RetrievedChunk
-
-
-@pytest.fixture
-async def client():
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as c:
-        yield c
 
 
 @pytest.mark.asyncio
