@@ -276,7 +276,7 @@ services:
     image: pgvector/pgvector:pg15
     container_name: dhg-medkb-db
     ports:
-      - "5433:5432"
+      - "5435:5432"
     volumes:
       - medkb_db_data:/var/lib/postgresql/data
     networks:
