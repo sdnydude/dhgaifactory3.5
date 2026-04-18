@@ -40,17 +40,18 @@ class PgVectorRetriever:
         }
 
         if corpus_ids:
-            corpus_filter = "AND c.corpus_id = ANY(:corpus_ids)"
-            params["corpus_ids"] = corpus_ids
+            corpus_filter = "AND cor.name = ANY(:corpus_names)"
+            params["corpus_names"] = corpus_ids
 
         sql = text(f"""
             SELECT c.id, c.document_id, c.corpus_id, c.chunk_text, c.section,
                    c.metadata,
                    CASE WHEN c.active_version = 1
-                        THEN c.embedding_v1 <=> :embedding::vector
-                        ELSE c.embedding_v2 <=> :embedding::vector
+                        THEN c.embedding_v1 <=> CAST(:embedding AS vector)
+                        ELSE c.embedding_v2 <=> CAST(:embedding AS vector)
                    END AS distance
             FROM medkb.chunks c
+            JOIN medkb.corpora cor ON cor.id = c.corpus_id
             WHERE c.embedding_v1 IS NOT NULL
               {corpus_filter}
             ORDER BY distance ASC
