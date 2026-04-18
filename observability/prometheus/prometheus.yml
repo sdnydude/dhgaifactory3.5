@@ -66,6 +66,13 @@ scrape_configs:
     metrics_path: /metrics
     scrape_interval: 15s
 
+  # medkb RAG-as-a-Service
+  - job_name: 'medkb'
+    static_configs:
+      - targets: ['dhg-medkb-api:8015']
+    metrics_path: /metrics
+    scrape_interval: 15s
+
   # Docker Service Discovery — auto-discovers containers with
   # prometheus.io/scrape=true label. Add these Docker labels to any
   # service to opt in:
