@@ -36,6 +36,15 @@ graph LR
         Cache[(dhg-medkb-cache<br/>Redis :6380)]
     end
 
+    subgraph "DHG Platform Services"
+        RegistryDB[(dhg-registry-db<br/>PostgreSQL :5432<br/>64 tables)]
+        RegistryAPI[dhg-registry-api :8011]
+        VSEngine[dhg-vs-engine :8013]
+        SessionLog[dhg-session-logger :8009]
+        Transcribe[Transcribe Pipeline :8200]
+        AudioAgent[dhg-audio-agent :8101]
+    end
+
     subgraph "External Dependencies"
         Ollama[dhg-ollama :11434]
         Anthropic[Anthropic API]
@@ -64,8 +73,15 @@ graph LR
     API -->|external retrievers| CT
     API -->|external retrievers| NPI
 
+    API -->|Pattern A: read-only SQL| RegistryDB
+    API -->|Pattern C: HTTP| VSEngine
+    API -->|Pattern C: HTTP| SessionLog
+    API -->|Pattern C: HTTP| Transcribe
+    API -->|Pattern C: HTTP| AudioAgent
+
     Worker --> DB
     Worker --> Ollama
+    Worker -->|Pattern B: sync + embed| RegistryDB
 
     API -->|@traced_node| Tempo
     API -->|metrics| Prometheus
@@ -73,7 +89,7 @@ graph LR
     API -->|@traceable + feedback| LangSmith
 ```
 
-All DHG services already on `dhgaifactory35_dhg-network` (registry, agents, Ollama, observability) are reachable directly by hostname.
+All DHG services on `dhgaifactory35_dhg-network` (registry, agents, Ollama, VS Engine, Session Logger, observability) are reachable directly by hostname. medkb treats the registry database and platform services as first-class data sources — see "DHG Source Inventory" below.
 
 ---
 
@@ -199,6 +215,26 @@ classDiagram
         BAAI/bge-reranker-base
     }
 
+    class RegistrySQLRetriever {
+        Pattern A — Live SQL
+        Read-only connection to registry DB
+    }
+
+    class RegistryEmbeddingRetriever {
+        Pattern B — Synced embeddings
+        Watermark-based periodic sync
+    }
+
+    class VSEngineRetriever {
+        Pattern C — Service API
+        HTTP to dhg-vs-engine :8013
+    }
+
+    class SessionLoggerRetriever {
+        Pattern C — Service API
+        HTTP to dhg-session-logger :8009
+    }
+
     Retriever <|.. PgVectorRetriever
     Retriever <|.. BM25Retriever
     Retriever <|.. HybridRetriever
@@ -209,6 +245,10 @@ classDiagram
     Retriever <|.. ParentDocumentWrapper
     Retriever <|.. EnsembleRetriever
     Retriever <|.. CrossEncoderReranker
+    Retriever <|.. RegistrySQLRetriever
+    Retriever <|.. RegistryEmbeddingRetriever
+    Retriever <|.. VSEngineRetriever
+    Retriever <|.. SessionLoggerRetriever
 
     HybridRetriever o-- PgVectorRetriever
     HybridRetriever o-- BM25Retriever
@@ -452,7 +492,7 @@ gantt
     section Retrieval
     Phase 3 Hybrid + CRAG      :p3, after p2, 10d
     Phase 4 External retrievers :p4, after p3, 7d
-    Phase 5 Ingestion worker    :p5, after p4, 10d
+    Phase 5 Ingestion + registry :p5, after p4, 10d
 
     section Quality
     Phase 6 SRAG + feedback    :p6, after p5, 14d
@@ -465,6 +505,60 @@ gantt
 ```
 
 **Sequencing rule:** every phase must produce visible value and pass a regression check before the next starts.
+
+---
+
+## DHG source inventory
+
+medkb is the single retrieval plane for **all** DHG knowledge — not just externally ingested documents. The registry database and running DHG services are first-class data sources, accessible through three integration patterns.
+
+```mermaid
+flowchart LR
+    subgraph "Pattern A — Live SQL"
+        RegDB[(dhg-registry-db :5432)]
+        SQLRet[RegistrySQLRetriever]
+        RegDB -->|read-only role| SQLRet
+    end
+
+    subgraph "Pattern B — Sync + Embed"
+        RegDB2[(dhg-registry-db :5432)]
+        Sync[RegistrySyncIngestor]
+        MedKBDB[(medkb chunks table)]
+        EmbRet[RegistryEmbeddingRetriever]
+        RegDB2 -->|watermark sync| Sync
+        Sync -->|embed via Ollama| MedKBDB
+        MedKBDB --> EmbRet
+    end
+
+    subgraph "Pattern C — Service API"
+        VS[dhg-vs-engine :8013]
+        SL[dhg-session-logger :8009]
+        TP[Transcribe :8200]
+        AA[dhg-audio-agent :8101]
+        VSRet[VSEngineRetriever]
+        SLRet[SessionLoggerRetriever]
+        VS --> VSRet
+        SL --> SLRet
+    end
+
+    SQLRet --> Graph[Tunable RAG Graph]
+    EmbRet --> Graph
+    VSRet --> Graph
+    SLRet --> Graph
+```
+
+| Source | Pattern | What it provides | Why this pattern |
+|--------|---------|------------------|-----------------|
+| **dhg-registry-db** (64 tables) | A + B | Project metadata, document content, session history, agent configs | A for structured lookups (freshness); B for semantic search (embeddings) |
+| **dhg-vs-engine** (:8013) | C | Verbalized Sampling alternatives and scores | Service has its own query logic; wrap, don't duplicate |
+| **dhg-session-logger** (:8009) | C | Session transcripts with Ollama embeddings | Same — service already indexes its own data |
+| **Transcribe pipeline** (:8200) | C | Audio transcription results | High-volume output; query on demand, don't bulk-sync |
+| **dhg-audio-agent** (:8101) | C | Audio processing results | Low-volume; API wrapper sufficient |
+| **PubMed** (MCP) | External retriever | Medical literature | MCP tool wrapper, same as other external retrievers |
+| **ClinicalTrials.gov** (MCP) | External retriever | Clinical trial data | MCP tool wrapper |
+| **NPI Registry** (MCP) | External retriever | Provider verification | MCP tool wrapper |
+
+**Security:** Pattern A uses a dedicated `medkb_reader` Postgres role with SELECT-only grants. Pattern B inherits medkb's service identity. Pattern C calls stay within `dhgaifactory35_dhg-network`.
 
 ---
 
@@ -484,6 +578,8 @@ gantt
 | 10 | Token budget enforcement | No runaway LLM spend in agentic mode |
 | 11 | Weekly → monthly dataset snapshots | Immutable baselines enable regression attribution |
 | 12 | Rule-based strategy classifier v1 | LLM classifier adds latency + failure mode; defer to Phase 7+ |
+| 13 | Registry uses both Pattern A (SQL) and B (embeddings) | Freshness from live SQL + semantic search from synced embeddings — not either/or |
+| 14 | DHG services accessed via Pattern C (HTTP wrappers) | Each service owns its data; medkb wraps, never duplicates |
 
 ---
 

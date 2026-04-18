@@ -36,7 +36,7 @@ It runs a tunable LangGraph that scales from fast retrieve-and-generate to full 
 | 2 | Generation + citations |
 | 3 | Hybrid (BM25+dense+RRF) + CRAG (grade + rewrite) |
 | 4 | External retrievers (PubMed, ClinicalTrials, NPI) |
-| 5 | Ingestion worker + cross-encoder rerank (optional) |
+| 5 | Ingestion worker + registry/service integration + cross-encoder rerank (optional) |
 | 6 | SRAG + inline RAGAS feedback + nightly golden dataset curation |
 | 7 | Agentic strategy + rule-based auto-strategy classifier (LLM-based deferred) |
 | 8 | First consumer migration (`research_agent` → medkb via dual-write) |
@@ -90,7 +90,7 @@ It runs a tunable LangGraph that scales from fast retrieve-and-generate to full 
 
 ### 1b. Service boundaries
 
-medkb is **one service, four containers**, on the existing `dhgaifactory35_dhg-network`. It consumes: Ollama (embeddings + local LLMs), Anthropic API (Claude generation), external MCP tools (PubMed, ClinicalTrials, NPI). It is consumed by: LangGraph agents, Next.js frontend, Node-RED flows. It writes feedback into LangSmith. Everything else is internal to medkb.
+medkb is **one service, four containers**, on the existing `dhgaifactory35_dhg-network`. It consumes: Ollama (embeddings + local LLMs), Anthropic API (Claude generation), external MCP tools (PubMed, ClinicalTrials, NPI), `dhg-registry-db` (read-only SQL + periodic sync for embeddings), and DHG platform services (`dhg-vs-engine`, `dhg-session-logger`, Transcribe pipeline, `dhg-audio-agent`) via HTTP wrappers (see §6d). It is consumed by: LangGraph agents, Next.js frontend, Node-RED flows. It writes feedback into LangSmith. Everything else is internal to medkb.
 
 ### 1c. What this spec does NOT cover
 
@@ -575,6 +575,10 @@ class Retriever(Protocol):
 | `ParentDocumentWrapper` | Retrieves small chunks, returns parent document context (uses `parent_chunk_id`). |
 | `EnsembleRetriever` | Weighted combination of N retrievers via RRF. |
 | `CrossEncoderReranker` | Phase 5. Optional post-retrieval rerank with `BAAI/bge-reranker-base` in a `dhg-medkb-reranker` container. Gated by `rerank=true`. |
+| `RegistrySQLRetriever` | **Pattern A — Live SQL.** Reads `dhg-registry-db` tables directly via read-only connection string. Freshness guaranteed, zero duplication. Used for structured lookups (projects, documents, sessions, agents, users). Returns structured rows as `RetrievedChunk` with `retriever_source="registry_sql"`. |
+| `RegistryEmbeddingRetriever` | **Pattern B — Synced embeddings.** A `RegistrySyncIngestor` periodically reads registry tables, chunks text fields, embeds via Ollama, and writes to medkb's own `chunks` table under a `registry_*` corpus. Enables semantic search over registry content that Pattern A cannot provide. |
+| `VSEngineRetriever` | **Pattern C — Service API.** Calls `dhg-vs-engine` at `:8013` over HTTP. Returns VS alternatives/scores as `RetrievedChunk`. Circuit-breaker protected. |
+| `SessionLoggerRetriever` | **Pattern C — Service API.** Calls `dhg-session-logger` at `:8009`. Returns session transcripts/summaries. Circuit-breaker protected. |
 
 Composition is just Python:
 
@@ -601,8 +605,104 @@ RETRIEVER_REGISTRY = {
     "dhg_internal":        lambda: HybridRetriever(PgVectorRetriever(), BM25Retriever()),
     "cme_grants":          lambda: HybridRetriever(PgVectorRetriever(), BM25Retriever()),
     "adhd_coach":          lambda: PgVectorRetriever(),  # dense-only for small corpus
+    "registry_projects":   RegistrySQLRetriever,
+    "registry_documents":  RegistrySQLRetriever,
+    "registry_sessions":   lambda: RegistryEmbeddingRetriever(corpus="registry_sessions"),
+    "registry_agents":     lambda: RegistryEmbeddingRetriever(corpus="registry_agents"),
+    "vs_alternatives":     VSEngineRetriever,
+    "session_transcripts": SessionLoggerRetriever,
 }
 ```
+
+### 6d. External data source integration
+
+medkb is not limited to its own ingested corpora. It can pull live data from the registry database and other DHG services, making the entire platform's knowledge surface available for retrieval.
+
+**Three integration patterns:**
+
+| Pattern | Mechanism | Pros | Cons | Used for |
+|---------|-----------|------|------|----------|
+| **A — Live SQL** | `RegistrySQLRetriever` reads `dhg-registry-db` via read-only connection string | Freshness guaranteed, zero duplication, zero storage overhead | No semantic search — SQL WHERE only | Structured lookups: projects, documents, agent configs, RBAC roles |
+| **B — Sync with Embeddings** | `RegistrySyncIngestor` periodically reads registry tables, chunks text fields, embeds, writes to medkb chunks under `registry_*` corpora | Semantic search over registry content | Staleness window (sync interval), duplication of text | Session summaries, agent descriptions, project narratives |
+| **C — Service API** | HTTP wrapper calling another DHG service's existing API | Uses service's own search/filter logic, no data duplication | Adds network hop + circuit-breaker overhead | VS Engine alternatives, Session Logger transcripts, Transcribe pipeline outputs |
+
+**Pattern A — Live SQL details:**
+
+```python
+class RegistrySQLRetriever:
+    """Reads dhg-registry-db tables directly. Read-only connection."""
+
+    def __init__(self, table: str, text_columns: list[str], filter_columns: list[str]):
+        self.pool = create_async_engine(
+            os.getenv("REGISTRY_DB_READ_URL"),  # read-only connection string
+            pool_size=3,
+            max_overflow=2,
+        )
+
+    async def retrieve(self, query: str, *, k: int, filters: dict | None = None, corpus_ids: list[str] | None = None) -> list[RetrievedChunk]:
+        # Translate filters to SQL WHERE clauses
+        # Text-match on text_columns via ILIKE or tsvector
+        # Return rows as RetrievedChunk with retriever_source="registry_sql"
+        ...
+```
+
+The read-only connection string (`REGISTRY_DB_READ_URL`) connects to `dhg-registry-db:5432` — the same Postgres instance the registry API uses, but with a read-only role (`medkb_reader`) that has SELECT-only grants. This ensures medkb can never accidentally mutate registry data.
+
+**Pattern B — Sync Ingestor details:**
+
+```python
+class RegistrySyncIngestor:
+    """Periodically reads registry tables, chunks, embeds, and writes to medkb corpora."""
+
+    SYNC_TABLES = {
+        "registry_sessions": {"table": "sessions", "text_cols": ["summary", "transcript"], "chunk_by": "paragraph"},
+        "registry_agents": {"table": "agent_configs", "text_cols": ["description", "system_prompt"], "chunk_by": "section"},
+    }
+
+    async def sync(self, corpus_name: str):
+        config = self.SYNC_TABLES[corpus_name]
+        # 1. Read rows with updated_at > last_sync_watermark
+        # 2. Chunk text columns using appropriate chunker
+        # 3. Embed via Ollama
+        # 4. Upsert into medkb chunks table under the registry_* corpus
+        # 5. Update watermark
+        ...
+```
+
+The sync runs on a configurable interval (default: 15 minutes) via the `dhg-medkb-ingestor` worker. Watermark-based — only processes rows changed since last sync, not full-table scans.
+
+**Pattern C — Service API details:**
+
+```python
+class VSEngineRetriever:
+    """Calls dhg-vs-engine over HTTP. Circuit-breaker protected."""
+
+    def __init__(self):
+        self.base_url = "http://dhg-vs-engine:8013"
+        self.breaker = CircuitBreaker(fail_max=5, reset_timeout=60)
+
+    @self.breaker
+    async def retrieve(self, query: str, *, k: int, **kwargs) -> list[RetrievedChunk]:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(f"{self.base_url}/v1/sample", json={"prompt": query, "n": k})
+            resp.raise_for_status()
+            return [RetrievedChunk(text=alt["text"], retriever_source="vs_engine", ...) for alt in resp.json()["alternatives"]]
+```
+
+**Full DHG source inventory for medkb:**
+
+| Source | Pattern | Corpus name | What it provides |
+|--------|---------|-------------|------------------|
+| **dhg-registry-db** (64 tables) | A (SQL) + B (embeddings) | `registry_projects`, `registry_documents`, `registry_sessions`, `registry_agents` | Project metadata, document content, session history, agent configurations |
+| **dhg-vs-engine** (:8013) | C (API) | `vs_alternatives` | Verbalized Sampling alternatives and scores |
+| **dhg-session-logger** (:8009) | C (API) | `session_transcripts` | Session transcripts with Ollama embeddings |
+| **Transcribe pipeline** (:8200) | C (API) | `transcribe_outputs` | Audio transcription results |
+| **dhg-audio-agent** (:8101) | C (API) | `audio_analyses` | Audio processing results |
+| **PubMed** (MCP) | External retriever | `pubmed` | Medical literature |
+| **ClinicalTrials.gov** (MCP) | External retriever | `clinical_trials` | Clinical trial data |
+| **NPI Registry** (MCP) | External retriever | `npi` | Provider verification |
+
+**Security:** Pattern A uses a dedicated read-only Postgres role. Pattern B's sync ingestor inherits medkb's own service identity. Pattern C service calls stay within `dhgaifactory35_dhg-network` — no external exposure.
 
 ---
 
@@ -1384,7 +1484,7 @@ Every LLM call writes a cost row: `(run_id, caller, corpus, model, node, tokens_
 | **2 — Generation + citations** | `generate` + `format_cite` nodes; Claude via `init_chat_model()` | 20 reference queries return answer + citations |
 | **3 — Hybrid + CRAG** | `BM25Retriever` + `HybridRetriever` (RRF) + `grade_docs` + `rewrite_query` | Hybrid beats dense-only on retrieval relevance eval by >10% |
 | **4 — External retrievers** | PubMed + ClinicalTrials + NPI wrappers; circuit breakers live | Multi-corpus query fanning out to external sources with graceful degradation |
-| **5 — Ingestion worker** | `dhg-medkb-ingestor` container, batch API, cron crawlers, cross-encoder rerank (optional) | Full sample corpus ingested without blocking queries |
+| **5 — Ingestion worker + registry integration** | `dhg-medkb-ingestor` container, batch API, cron crawlers, cross-encoder rerank (optional), `RegistrySQLRetriever` (Pattern A), `RegistrySyncIngestor` (Pattern B), `VSEngineRetriever` + `SessionLoggerRetriever` (Pattern C). Read-only Postgres role for registry. | Full sample corpus ingested; registry tables queryable via SQL + semantic search; VS Engine and Session Logger accessible via circuit-breaker-protected API calls |
 | **6 — SRAG + feedback loop** | `check_grounded` + inline LangSmith feedback + nightly golden dataset curation + eval-gated CI | First weekly golden dataset published; baseline metrics locked |
 | **7 — Agentic + auto-classifier** | Agentic strategy with tool fan-out; rule-based classifier (LLM classifier deferred) | Rule classifier picks correct strategy ≥85% on reference queries |
 | **8 — First consumer migration** | Migrate `research_agent` → medkb via dual-write per §12 | No regression in CME grant output quality over 30 days |
