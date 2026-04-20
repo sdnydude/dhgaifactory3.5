@@ -71,12 +71,13 @@ All agents have dual tracing: LangSmith (@traceable) + OpenTelemetry (@traced_no
 | dhg-medkb-cache | 6381 | Redis 7 (query + embedding cache, 4GB LRU) |
 | dhg-medkb-api | 8015 | FastAPI RAG service with LangGraph (dense + hybrid + CRAG) |
 | dhg-medkb-ingestor | — (internal) | Ingestion worker (stub — activates Phase 5) |
+| dhg-remediator | — (internal) | Incident remediation sidecar. Polls registry for active incidents, matches runbooks, executes steps (auto/approval/none modes). Docker socket mounted read-only. Safety: hard-blocked commands, container allowlist, rate limiting, dry-run mode. |
 
 ### Observability Stack
 
 | Service | Port | Status |
 |---------|------|--------|
-| dhg-prometheus | 9090 | 6 scrape targets, all UP |
+| dhg-prometheus | 9090 | 7 scrape targets, all UP (includes medkb) |
 | dhg-grafana | 3001 | Dashboards: core golden signals, Docker overview |
 | dhg-loki | 3100 | Log aggregation via Promtail |
 | dhg-tempo | 3200 | Distributed tracing (OTel gRPC :4317, HTTP :4318) |
@@ -200,7 +201,7 @@ The frontend stack (decided Feb 2026, implemented March–April 2026):
 | Agent endpoints | registry/agent_endpoints.py |
 | DB models | registry/models.py |
 | Schemas | registry/schemas.py |
-| Registry tests | registry/test_*.py (5 test files, 105 tests) |
+| Registry tests | registry/test_*.py (12 test files, 227 tests) |
 | Frontend | frontend/src/ |
 | VS Engine | services/vs-engine/ |
 | Observability configs | observability/ (prometheus, grafana, loki, tempo, promtail, alertmanager) |
@@ -224,12 +225,21 @@ The frontend stack (decided Feb 2026, implemented March–April 2026):
 | Files API client | frontend/src/lib/filesApi.ts |
 | Orchestrator Drive hook | langgraph_workflows/dhg-agents-cloud/src/drive_sync.py |
 | Inbox download plan | docs/superpowers/plans/2026-04-14-inbox-document-project-download.md |
-| medkb v2 design | docs/superpowers/plans/2026-04-15-medkb-phase1.md (untracked draft) |
+| medkb v2 design | docs/superpowers/specs/2026-04-17-medkb-rag-as-a-service-design.md |
 | medkb service | services/medkb/src/medkb/ (main.py, config.py, graph/, retriever/, endpoints/) |
 | medkb tests | services/medkb/tests/ |
 | medkb migrations | services/medkb/migrations/ |
 | medkb design spec | docs/superpowers/specs/2026-04-17-medkb-rag-as-a-service-design.md |
 | medkb Plan 1 | docs/superpowers/plans/2026-04-17-medkb-plan1-foundation.md |
+| medkb architecture | docs/architecture/MEDKB_ARCHITECTURE.md |
+| Incident endpoints | registry/incident_endpoints.py |
+| Incident service | registry/incident_service.py |
+| Incident schemas | registry/incident_schemas.py |
+| Incident migration | registry/alembic/versions/011_add_incidents.py |
+| Runbook seeds | registry/seed_runbooks.py |
+| Remediator service | services/remediator/ (remediator.py, Dockerfile) |
+| Agent Observatory spec | docs/superpowers/specs/2026-04-17-agent-observatory-design.md |
+| Ansible fleet bootstrap | docs/superpowers/specs/2026-04-18-ansible-fleet-bootstrap-design.md |
 | Environment vars | .env (secrets — never expose) |
 
 ---
