@@ -34,7 +34,7 @@ async def test_grade_returns_good_for_relevant_chunks():
 
         result = await grade_docs_node(state)
         assert result["doc_grade"] == "good"
-        assert len(result["graded_chunks"]) == 1
+        assert len(result["retrieved_chunks"]) == 1
 
 
 @pytest.mark.asyncio
@@ -65,4 +65,4 @@ async def test_grade_returns_bad_for_irrelevant_chunks():
 
         result = await grade_docs_node(state)
         assert result["doc_grade"] == "bad"
-        assert len(result["graded_chunks"]) == 0
+        assert len(result["retrieved_chunks"]) == 0

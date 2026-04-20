@@ -58,6 +58,80 @@ async def test_crag_strategy_grades_and_generates():
 
 
 @pytest.mark.asyncio
+async def test_crag_filters_irrelevant_chunks_before_generation():
+    """Verify grade filtering is actually honored by generate (not a no-op)."""
+    good = RetrievedChunk(
+        chunk_id="g1", document_id="d1", corpus_id="corp1",
+        text="KEYNOTE-024 showed superior PFS for pembrolizumab.",
+        section="results", metadata={"title": "Good"},
+        retriever_source="pgvector", raw_score=0.9, fusion_rank=1,
+    )
+    bad = RetrievedChunk(
+        chunk_id="b1", document_id="d2", corpus_id="corp1",
+        text="Marketing event planning guide.",
+        section=None, metadata={"title": "Bad"},
+        retriever_source="pgvector", raw_score=0.3, fusion_rank=2,
+    )
+    mock_retriever = AsyncMock()
+    mock_retriever.name = "pgvector"
+    mock_retriever.retrieve = AsyncMock(return_value=[good, bad])
+
+    grade_responses = [
+        MagicMock(content="relevant", usage_metadata={"input_tokens": 200, "output_tokens": 5}),
+        MagicMock(content="not_relevant", usage_metadata={"input_tokens": 200, "output_tokens": 5}),
+    ]
+    gen_response = MagicMock()
+    gen_response.content = "Answer cites only the relevant document."
+    gen_response.usage_metadata = {"input_tokens": 500, "output_tokens": 50}
+
+    graph = build_rag_graph()
+    config = RAGConfig(
+        strategy="crag", corpora=["test"], k=8,
+        generate_answer=True, generation_model="claude-sonnet-4-6",
+        grader_model="ollama:qwen3:14b", max_retries=2,
+        include_citations=True, max_total_tokens=50000,
+    )
+    state = make_initial_state(
+        query="pembrolizumab outcomes", config=config,
+        run_id="run-1", caller_id="test",
+    )
+    state["_retrievers"] = [mock_retriever]
+
+    captured_gen_messages = []
+
+    async def gen_side_effect(messages):
+        captured_gen_messages.append(messages)
+        return gen_response
+
+    with patch("medkb.graph.nodes.grade.get_llm") as mock_grade_llm, \
+         patch("medkb.graph.nodes.generate.get_llm") as mock_gen_llm:
+
+        grade_llm = AsyncMock()
+        grade_llm.ainvoke = AsyncMock(side_effect=grade_responses)
+        mock_grade_llm.return_value = grade_llm
+
+        gen_llm = AsyncMock()
+        gen_llm.ainvoke = AsyncMock(side_effect=gen_side_effect)
+        mock_gen_llm.return_value = gen_llm
+
+        result = await graph.ainvoke(state)
+
+    assert result["doc_grade"] == "good"
+    assert len(result["retrieved_chunks"]) == 1
+    assert result["retrieved_chunks"][0].chunk_id == "g1"
+
+    # Generate must have received the filtered context (good doc only, not bad).
+    assert len(captured_gen_messages) == 1
+    human_content = captured_gen_messages[0][1].content
+    assert "KEYNOTE-024" in human_content
+    assert "Marketing event planning" not in human_content
+
+    # Citations must only include the relevant chunk.
+    assert len(result["citations"]) == 1
+    assert result["citations"][0]["chunk_id"] == "g1"
+
+
+@pytest.mark.asyncio
 async def test_crag_rewrites_on_bad_grade():
     bad_chunk = RetrievedChunk(
         chunk_id="c1", document_id="d1", corpus_id="corp1",

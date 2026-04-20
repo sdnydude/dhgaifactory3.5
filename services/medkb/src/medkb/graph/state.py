@@ -34,7 +34,6 @@ class RAGState(TypedDict, total=False):
     config: RAGConfig
 
     retrieved_chunks: list[RetrievedChunk]
-    graded_chunks: list[RetrievedChunk]
     doc_grade: str
     rewrite_count: int
     regenerated: bool
@@ -66,7 +65,6 @@ def make_initial_state(
         caller_id=caller_id,
         config=config,
         retrieved_chunks=[],
-        graded_chunks=[],
         doc_grade="",
         rewrite_count=0,
         regenerated=False,

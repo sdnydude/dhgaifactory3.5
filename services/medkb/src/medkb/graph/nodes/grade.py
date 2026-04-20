@@ -55,7 +55,7 @@ async def grade_docs_node(state: RAGState) -> dict:
         len(graded), len(chunks), doc_grade,
     )
     return {
-        "graded_chunks": graded,
+        "retrieved_chunks": graded,
         "doc_grade": doc_grade,
         "tokens_used": total_tokens,
     }
