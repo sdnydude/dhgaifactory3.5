@@ -41,7 +41,7 @@ async def generate_node(state: RAGState) -> dict:
     if not state["config"].get("generate_answer", True):
         return {"answer": ""}
 
-    chunks = state.get("retrieved_chunks", [])
+    chunks = state.get("graded_chunks") or state.get("retrieved_chunks", [])
     if not chunks:
         return {"answer": "No relevant documents were retrieved for this query."}
 
