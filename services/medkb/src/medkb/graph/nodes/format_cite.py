@@ -15,7 +15,7 @@ async def format_cite_node(state: RAGState) -> dict:
         return {"citations": []}
 
     citations = []
-    for chunk in state.get("retrieved_chunks", []):
+    for chunk in state.get("graded_chunks") or state.get("retrieved_chunks", []):
         citations.append({
             "title": chunk.metadata.get("title"),
             "source": chunk.retriever_source,
