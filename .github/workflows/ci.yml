@@ -52,6 +52,9 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install -r registry/requirements.txt pytest pytest-asyncio httpx
+      - run: cd registry && alembic upgrade head
+        env:
+          DATABASE_URL: postgresql://dhg:testpass@localhost:5432/dhg_registry
       - run: pytest registry/ -v --tb=short
         env:
           DATABASE_URL: postgresql://dhg:testpass@localhost:5432/dhg_registry
