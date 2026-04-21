@@ -7,7 +7,7 @@ import os
 
 from prometheus_client import Gauge
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import sessionmaker
 
 # Prometheus gauge for active DB connections
 db_connections = Gauge(

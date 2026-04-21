@@ -1,7 +1,7 @@
 """Initial schema - media, transcripts, segments, events tables
 
 Revision ID: 001_initial
-Revises: 
+Revises:
 Create Date: 2025-11-28 15:45:00.000000
 
 """
@@ -33,7 +33,7 @@ def upgrade() -> None:
     )
     op.create_index('idx_media_status', 'media', ['status'])
     op.create_index('idx_media_created_at', 'media', ['created_at'])
-    
+
     # Create transcripts table
     op.create_table(
         'transcripts',
@@ -51,7 +51,7 @@ def upgrade() -> None:
     )
     op.create_index('idx_transcripts_media_id', 'transcripts', ['media_id'])
     op.create_index('idx_transcripts_created_at', 'transcripts', ['created_at'])
-    
+
     # Create segments table (timestamped segments)
     op.create_table(
         'segments',
@@ -69,7 +69,7 @@ def upgrade() -> None:
     )
     op.create_index('idx_segments_transcript_id', 'segments', ['transcript_id'])
     op.create_index('idx_segments_times', 'segments', ['start_time_seconds', 'end_time_seconds'])
-    
+
     # Create events table (audit log)
     op.create_table(
         'events',

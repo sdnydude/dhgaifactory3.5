@@ -7,7 +7,6 @@ Per Build Spec Section 3.3 Node 2.
 
 import logging
 import numpy as np
-from typing import Optional
 
 from ..state import AudioAgentState
 from ..config import settings
@@ -41,7 +40,7 @@ def get_diarization_pipeline():
         if not settings.hf_token:
             logger.warning("HF_TOKEN not set — diarization disabled")
             return None
-        
+
         from pyannote.audio import Pipeline
         logger.info("Loading pyannote diarization pipeline")
         _diarization_pipeline = Pipeline.from_pretrained(
@@ -62,12 +61,12 @@ def assign_speakers_to_segments(
 ) -> list[dict]:
     """
     Assign speaker labels to transcript segments based on diarization.
-    
+
     Uses overlapping timestamps to match speakers to segments.
     """
     if diarization_result is None:
         return segments
-    
+
     # Build speaker timeline
     speaker_timeline = []
     for turn, _, speaker in diarization_result.itertracks(yield_label=True):
@@ -76,31 +75,31 @@ def assign_speakers_to_segments(
             "end": turn.end,
             "speaker": speaker,
         })
-    
+
     # Assign speakers to segments
     for segment in segments:
         seg_start = segment["start"]
         seg_end = segment["end"]
         seg_mid = (seg_start + seg_end) / 2
-        
+
         # Find speaker at segment midpoint
         assigned_speaker = None
         for sp in speaker_timeline:
             if sp["start"] <= seg_mid <= sp["end"]:
                 assigned_speaker = sp["speaker"]
                 break
-        
+
         segment["speaker"] = assigned_speaker
-    
+
     return segments
 
 
 async def transcribe(state: AudioAgentState) -> dict:
     """
     Transcribe audio file using faster-whisper.
-    
+
     Optionally performs speaker diarization with pyannote if enabled.
-    
+
     Returns:
         dict with transcript_text, transcript_segments, detected_language,
         confidence, duration_seconds
@@ -108,15 +107,15 @@ async def transcribe(state: AudioAgentState) -> dict:
     # Skip if error already set
     if state.get("error"):
         return {}
-    
+
     audio_path = state["audio_path"]
     language_id = state.get("language_id")
     diarize = state.get("diarize", True)
     num_speakers = state.get("num_speakers")
-    
+
     try:
         model = get_whisper_model()
-        
+
         # Transcribe with Whisper
         logger.info(f"Transcribing: {audio_path}")
         segments_gen, info = model.transcribe(
@@ -126,11 +125,11 @@ async def transcribe(state: AudioAgentState) -> dict:
             word_timestamps=True,
             vad_filter=True,
         )
-        
+
         # Collect segments
         segments = []
         confidences = []
-        
+
         for seg in segments_gen:
             segments.append({
                 "start": seg.start,
@@ -142,13 +141,13 @@ async def transcribe(state: AudioAgentState) -> dict:
             if seg.avg_logprob:
                 conf = np.exp(seg.avg_logprob)
                 confidences.append(min(1.0, max(0.0, conf)))
-        
+
         # Calculate overall confidence
         avg_confidence = float(np.mean(confidences)) if confidences else 0.5
-        
+
         # Build full transcript
         transcript_text = " ".join(seg["text"] for seg in segments)
-        
+
         # Perform diarization if requested
         if diarize:
             try:
@@ -163,10 +162,10 @@ async def transcribe(state: AudioAgentState) -> dict:
                     logger.info("Diarization complete")
             except Exception as e:
                 logger.warning(f"Diarization failed (continuing without): {e}")
-        
+
         logger.info(f"Transcription complete: {len(segments)} segments, "
                    f"{info.duration:.1f}s, language={info.language}")
-        
+
         return {
             "transcript_text": transcript_text,
             "transcript_segments": segments,
@@ -174,7 +173,7 @@ async def transcribe(state: AudioAgentState) -> dict:
             "confidence": avg_confidence,
             "duration_seconds": info.duration,
         }
-        
+
     except FileNotFoundError as e:
         logger.error(f"Audio file not found: {e}")
         return {"error": f"Audio file not found: {e}"}

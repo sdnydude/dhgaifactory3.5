@@ -1,4 +1,31 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(curl -s *)",
+      "Bash(curl -sS *)",
+      "Bash(docker compose ps *)",
+      "Bash(docker compose logs *)",
+      "Bash(docker network ls *)",
+      "Bash(docker network inspect *)",
+      "Bash(docker cp *)",
+      "Bash(npm --prefix *)",
+      "Bash(npx pyright *)",
+      "Bash(dpkg *)",
+      "Bash(nvidia-smi *)",
+      "Bash(ansible --version *)",
+      "Bash(ansible-galaxy *)",
+      "Bash(ansible-inventory *)",
+      "Bash(ansible all -m ping *)",
+      "Bash(ssh -o *)",
+      "mcp__codegraph__codegraph_search",
+      "mcp__codegraph__codegraph_status",
+      "mcp__codegraph__codegraph_node",
+      "mcp__codegraph__codegraph_callers",
+      "mcp__codegraph__codegraph_callees",
+      "mcp__codegraph__codegraph_impact",
+      "mcp__codegraph__codegraph_files"
+    ]
+  },
   "enabledPlugins": {
     "frontend-design@claude-plugins-official": true,
     "superpowers@claude-plugins-official": true,

@@ -38,7 +38,7 @@ def render_cme_proposal(data: Dict[str, Any]) -> str:
     findings = data.get("key_findings", [])
     citations = data.get("validated_citations", [])
     synthesis = data.get("synthesis", "")
-    
+
     output = f"""# CME Activity Proposal: {topic}
 
 **Date:** {datetime.now().strftime("%B %d, %Y")}
@@ -50,7 +50,7 @@ Current clinical practice demonstrates {len(gaps)} critical gaps:
 """
     for i, gap in enumerate(gaps, 1):
         output += f"{i}. {gap}\n"
-    
+
     output += f"""
 ## Content Outline
 
@@ -61,7 +61,7 @@ Current clinical practice demonstrates {len(gaps)} critical gaps:
 """
     for i, finding in enumerate(findings, 1):
         output += f"{i}. {finding}\n"
-    
+
     output += f"""
 ## References ({len(citations)} citations)
 
@@ -69,7 +69,7 @@ Current clinical practice demonstrates {len(gaps)} critical gaps:
     for i, cit in enumerate(citations[:10], 1):
         ama = cit.get("ama_format", cit.get("title", "Citation"))
         output += f"{i}. {ama}\n"
-    
+
     return output
 
 
@@ -78,7 +78,7 @@ def render_podcast_script(data: Dict[str, Any]) -> str:
     topic = data.get("topic", "Unknown Topic")
     gaps = data.get("clinical_gaps", [])
     findings = data.get("key_findings", [])
-    
+
     output = f"""# Podcast Script: {topic}
 
 ## Opening
@@ -90,14 +90,14 @@ Welcome to DHG CME Podcast. Today: {topic}
 """
     for gap in gaps[:2]:
         output += f"- {gap}\n"
-    
+
     output += """
 ## Key Findings
 
 """
     for finding in findings:
         output += f"- {finding}\n"
-    
+
     output += """
 ## Closing
 
@@ -112,7 +112,7 @@ def render_gap_report(data: Dict[str, Any]) -> str:
     gaps = data.get("clinical_gaps", [])
     findings = data.get("key_findings", [])
     citations = data.get("validated_citations", [])
-    
+
     output = f"""# Clinical Practice Gap Analysis
 
 **Topic:** {topic}
@@ -124,14 +124,14 @@ def render_gap_report(data: Dict[str, Any]) -> str:
     for i, gap in enumerate(gaps, 1):
         priority = "High" if i <= 2 else "Medium"
         output += f"### Gap #{i}: {gap}\n**Priority:** {priority}\n\n"
-    
-    output += f"""
+
+    output += """
 ## Supporting Evidence
 
 """
     for finding in findings:
         output += f"- {finding}\n"
-    
+
     output += f"""
 ## Evidence Base: {len(citations)} citations
 """
@@ -143,7 +143,7 @@ def render_powerpoint_outline(data: Dict[str, Any]) -> str:
     topic = data.get("topic", "Unknown Topic")
     gaps = data.get("clinical_gaps", [])
     findings = data.get("key_findings", [])
-    
+
     output = f"""# PowerPoint Outline: {topic}
 
 ## Slide 1: Title
@@ -153,7 +153,7 @@ def render_powerpoint_outline(data: Dict[str, Any]) -> str:
 """
     for i, gap in enumerate(gaps[:4], 1):
         output += f"{i}. Describe {gap.lower()}\n"
-    
+
     output += """
 ## Slides 3-5: Evidence Review
 [Content from synthesis]
@@ -162,7 +162,7 @@ def render_powerpoint_outline(data: Dict[str, Any]) -> str:
 """
     for finding in findings:
         output += f"- {finding}\n"
-    
+
     output += """
 ## Slide 7: References
 [Citations]

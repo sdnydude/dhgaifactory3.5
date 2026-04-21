@@ -10,15 +10,15 @@ from datetime import datetime
 from enum import Enum
 from fastapi import APIRouter, HTTPException, Depends, status, BackgroundTasks
 from sqlalchemy.orm import Session
-from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Enum as SQLEnum, func, text, literal_column, union_all, cast, Float as SAFloat
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy import func, text
 from pydantic import BaseModel, Field
 import httpx
 import logging
 
 logger = logging.getLogger("uvicorn.error")
 
-import sys, os
+import sys
+import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from database import get_db
 from models import (
@@ -245,12 +245,12 @@ class AgentOutput(BaseModel):
 # =============================================================================
 # DATABASE MODEL (for reference - actual migration needed)
 # =============================================================================
-# Note: This model definition is for documentation. 
+# Note: This model definition is for documentation.
 # A proper Alembic migration should be created to add this table.
 #
 # class CMEProject(Base):
 #     __tablename__ = "cme_projects"
-#     
+#
 #     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 #     name = Column(String(255), nullable=False)
 #     status = Column(String(50), nullable=False, default="intake")
@@ -1105,7 +1105,7 @@ async def create_cme_project(
     try:
         # Convert intake to dict for storage (mode='json' serializes datetimes to ISO strings)
         intake_dict = intake.model_dump(mode='json')
-        
+
         # Create project in database
         db_project = CMEProject(
             name=intake.section_a.project_name,
@@ -1127,17 +1127,17 @@ async def create_cme_project(
         db.add(db_project)
         db.commit()
         db.refresh(db_project)
-        
+
         registry_write_operations.labels(operation="create_cme_project").inc()
         registry_write_latency.observe((time.time() - start) * 1000)
-        
+
         return CMEProjectCreateResponse(
             project_id=str(db_project.id),
             status=CMEProjectStatus.INTAKE,
             message=f"CME project '{intake.section_a.project_name}' created successfully",
             created_at=db_project.created_at
         )
-        
+
     except Exception as e:
         db.rollback()
         registry_errors.labels(error_type="create_cme_project").inc()
@@ -1164,7 +1164,7 @@ async def list_cme_projects(
 
         # Pagination
         projects = query.order_by(CMEProject.created_at.desc()).offset(skip).limit(limit).all()
-        
+
         result = [
             CMEProjectDetail(
                 id=str(p.id),
@@ -1181,12 +1181,12 @@ async def list_cme_projects(
             )
             for p in projects
         ]
-        
+
         registry_read_operations.labels(operation="list_cme_projects").inc()
         registry_read_latency.observe((time.time() - start) * 1000)
-        
+
         return result
-        
+
     except Exception as e:
         registry_errors.labels(error_type="list_cme_projects").inc()
         raise HTTPException(status_code=500, detail=str(e))
@@ -1200,10 +1200,10 @@ async def get_cme_project(project_id: str, db: Session = Depends(get_db)):
         p = db.query(CMEProject).filter(CMEProject.id == project_id).first()
         if not p:
             raise HTTPException(status_code=404, detail="CME project not found")
-        
+
         registry_read_operations.labels(operation="get_cme_project").inc()
         registry_read_latency.observe((time.time() - start) * 1000)
-        
+
         return CMEProjectDetail(
             id=str(p.id),
             name=p.name,
@@ -1321,13 +1321,13 @@ async def start_cme_pipeline(
         project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
         if not project:
             raise HTTPException(status_code=404, detail="CME project not found")
-        
+
         if project.status not in ["intake", "failed"]:
             raise HTTPException(
                 status_code=400,
                 detail=f"Cannot start pipeline: project status is {project.status}"
             )
-        
+
         now = datetime.utcnow()
         project.status = "processing"
         project.started_at = now
@@ -1361,10 +1361,10 @@ async def start_cme_pipeline(
 
         db.commit()
         db.refresh(project)
-        
+
         registry_write_operations.labels(operation="start_cme_pipeline").inc()
         registry_write_latency.observe((time.time() - start) * 1000)
-        
+
         return ExecutionStatus(
             project_id=str(project.id),
             status=CMEProjectStatus(project.status),
@@ -1376,7 +1376,7 @@ async def start_cme_pipeline(
             started_at=project.started_at,
             estimated_completion=None
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -1441,13 +1441,13 @@ async def pause_cme_pipeline(project_id: str, db: Session = Depends(get_db)):
     project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="CME project not found")
-    
+
     if project.status != "processing":
         raise HTTPException(status_code=400, detail="Pipeline is not running")
-    
+
     project.status = "review"
     db.commit()
-    
+
     return {"status": "paused", "project_id": str(project.id)}
 
 
@@ -1457,13 +1457,13 @@ async def resume_cme_pipeline(project_id: str, db: Session = Depends(get_db)):
     project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="CME project not found")
-    
+
     if project.status != "review":
         raise HTTPException(status_code=400, detail="Pipeline is not paused")
-    
+
     project.status = "processing"
     db.commit()
-    
+
     return {"status": "resumed", "project_id": str(project.id)}
 
 
@@ -1650,10 +1650,10 @@ async def list_cme_outputs(project_id: str, db: Session = Depends(get_db)):
     project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="CME project not found")
-    
+
     # Query outputs from cme_agent_outputs table
     outputs = db.query(CMEAgentOutput).filter(CMEAgentOutput.project_id == project_id).all()
-    
+
     return [
         AgentOutput(
             agent_name=o.agent_name,
@@ -1677,15 +1677,15 @@ async def get_cme_agent_output(
     project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="CME project not found")
-    
+
     output = db.query(CMEAgentOutput).filter(
         CMEAgentOutput.project_id == project_id,
         CMEAgentOutput.agent_name == agent_name
     ).first()
-    
+
     if not output:
         raise HTTPException(status_code=404, detail=f"No output from agent: {agent_name}")
-    
+
     return AgentOutput(
         agent_name=output.agent_name,
         output_type=output.output_type,
@@ -1715,9 +1715,9 @@ async def agent_complete_webhook(
     project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="CME project not found")
-    
+
     now = datetime.utcnow()
-    
+
     # Store output in cme_agent_outputs table
     db_output = CMEAgentOutput(
         project_id=project.id,
@@ -1727,19 +1727,19 @@ async def agent_complete_webhook(
         quality_score=quality_score
     )
     db.add(db_output)
-    
+
     # Update project progress
     agents_pending = list(project.agents_pending or [])
     agents_completed = list(project.agents_completed or [])
-    
+
     if agent_name in agents_pending:
         agents_pending.remove(agent_name)
         agents_completed.append(agent_name)
-    
+
     project.agents_pending = agents_pending
     project.agents_completed = agents_completed
     project.progress_percent = calculate_progress(agents_completed)
-    
+
     # Set next agent
     if agents_pending:
         project.current_agent = agents_pending[0]
@@ -1747,9 +1747,9 @@ async def agent_complete_webhook(
         project.current_agent = None
         project.status = "complete"
         project.completed_at = now
-    
+
     db.commit()
-    
+
     return {
         "status": "received",
         "project_id": str(project.id),
@@ -1840,7 +1840,7 @@ async def list_reviewers(
     if active_only:
         query = query.filter(CMEReviewerConfig.is_active == True)
     reviewers = query.all()
-    
+
     return [
         ReviewerResponse(
             id=str(r.id),
@@ -1866,7 +1866,7 @@ async def create_reviewer(
     existing = db.query(CMEReviewerConfig).filter(CMEReviewerConfig.email == reviewer.email).first()
     if existing:
         raise HTTPException(status_code=400, detail="Reviewer with this email already exists")
-    
+
     db_reviewer = CMEReviewerConfig(
         email=reviewer.email,
         display_name=reviewer.display_name,
@@ -1878,7 +1878,7 @@ async def create_reviewer(
     db.add(db_reviewer)
     db.commit()
     db.refresh(db_reviewer)
-    
+
     return ReviewerResponse(
         id=str(db_reviewer.id),
         email=db_reviewer.email,
@@ -1901,7 +1901,7 @@ async def deactivate_reviewer(
     reviewer = db.query(CMEReviewerConfig).filter(CMEReviewerConfig.id == reviewer_id).first()
     if not reviewer:
         raise HTTPException(status_code=404, detail="Reviewer not found")
-    
+
     reviewer.is_active = False
     db.commit()
 
@@ -1938,10 +1938,10 @@ async def submit_for_review(
     project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    
+
     if len(request.reviewer_emails) > 3:
         raise HTTPException(status_code=400, detail="Maximum 3 reviewers allowed (R2)")
-    
+
     # Validate all reviewers exist and are active
     assignments = []
     for order, email in enumerate(request.reviewer_emails, start=1):
@@ -1951,11 +1951,11 @@ async def submit_for_review(
         ).first()
         if not reviewer:
             raise HTTPException(status_code=400, detail=f"Reviewer not found or inactive: {email}")
-        
+
         # Create assignment
         now = datetime.utcnow()
         sla_hours = 24  # Decision R3
-        
+
         assignment = CMEReviewAssignment(
             project_id=project.id,
             reviewer_id=reviewer.id,
@@ -1970,12 +1970,12 @@ async def submit_for_review(
             "order": order,
             "status": assignment.status
         })
-    
+
     # Update project status
     project.status = "review"
     project.human_review_status = "pending"
     db.commit()
-    
+
     return {
         "project_id": project_id,
         "status": "submitted_for_review",
@@ -1992,11 +1992,11 @@ async def get_review_status(
     project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    
+
     assignments = db.query(CMEReviewAssignment).filter(
         CMEReviewAssignment.project_id == project_id
     ).order_by(CMEReviewAssignment.reviewer_order).all()
-    
+
     return {
         "project_id": project_id,
         "project_status": project.status,
@@ -2038,28 +2038,28 @@ async def submit_review(
         CMEReviewerConfig.email == reviewer_email,
         CMEReviewAssignment.status == "active"
     ).first()
-    
+
     if not assignment:
         raise HTTPException(status_code=404, detail="No active review assignment found for this reviewer")
-    
+
     now = datetime.utcnow()
-    
+
     # Update assignment
     assignment.status = request.decision
     assignment.decision = request.decision
     assignment.notes = request.notes
     assignment.annotations = request.annotations or []
     assignment.completed_at = now
-    
+
     project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
-    
+
     if request.decision == "approved":
         # Check if this is the final reviewer
         next_assignment = db.query(CMEReviewAssignment).filter(
             CMEReviewAssignment.project_id == project_id,
             CMEReviewAssignment.status == "pending"
         ).order_by(CMEReviewAssignment.reviewer_order).first()
-        
+
         if next_assignment:
             # Activate next reviewer
             next_assignment.status = "active"
@@ -2076,9 +2076,9 @@ async def submit_review(
         # Revision requested
         project.human_review_status = "revision_requested"
         project.human_review_notes = request.notes
-    
+
     db.commit()
-    
+
     return {
         "project_id": project_id,
         "decision": request.decision,
@@ -2097,12 +2097,12 @@ async def get_my_reviews(
     query = db.query(CMEReviewAssignment).join(CMEReviewerConfig).filter(
         CMEReviewerConfig.email == reviewer_email
     )
-    
+
     if status_filter:
         query = query.filter(CMEReviewAssignment.status == status_filter)
-    
+
     assignments = query.order_by(CMEReviewAssignment.assigned_at).all()
-    
+
     result = []
     for a in assignments:
         project = db.query(CMEProject).filter(CMEProject.id == a.project_id).first()
@@ -2116,7 +2116,7 @@ async def get_my_reviews(
             "sla_deadline": a.sla_deadline.isoformat() if a.sla_deadline else None,
             "hours_remaining": ((a.sla_deadline - datetime.utcnow()).total_seconds() / 3600) if a.sla_deadline else None
         })
-    
+
     return {"reviews": result, "count": len(result)}
 
 

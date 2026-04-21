@@ -239,7 +239,7 @@ function EditorialForm({ entry }: { entry: DevChangelogEntry }) {
           ))}
         </select>
         <p className="text-[10px] text-muted-foreground">
-          Overrides the agent's detected status. Empty falls back to detected.
+          Overrides the agent&apos;s detected status. Empty falls back to detected.
         </p>
       </div>
 

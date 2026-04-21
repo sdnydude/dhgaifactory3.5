@@ -13,13 +13,12 @@ Uses APScheduler for in-process scheduling.
 
 import asyncio
 from datetime import datetime, timedelta
-from typing import List
 from sqlalchemy.orm import Session
 
 from langsmith import traceable
 
 # Database imports
-from database import SessionLocal, get_db
+from database import SessionLocal
 from models import CMEProject, CMEReviewAssignment, CMEReviewerConfig
 
 # Notification service
@@ -35,16 +34,16 @@ async def check_sla_timeouts():
     db = SessionLocal()
     try:
         now = datetime.utcnow()
-        
+
         # Find active assignments past their SLA deadline
         expired_assignments = db.query(CMEReviewAssignment).filter(
             CMEReviewAssignment.status == "active",
             CMEReviewAssignment.sla_deadline < now
         ).all()
-        
+
         for assignment in expired_assignments:
             await handle_timeout(db, assignment)
-        
+
         # Find assignments approaching deadline (4 hours warning)
         warning_threshold = now + timedelta(hours=4)
         warning_assignments = db.query(CMEReviewAssignment).filter(
@@ -53,13 +52,13 @@ async def check_sla_timeouts():
             CMEReviewAssignment.sla_deadline > now,
             CMEReviewAssignment.reminder_sent_at.is_(None)
         ).all()
-        
+
         for assignment in warning_assignments:
             await send_warning(db, assignment)
-        
+
         db.commit()
         print(f"[TIMEOUT_HANDLER] Checked {len(expired_assignments)} expired, {len(warning_assignments)} warnings")
-        
+
     finally:
         db.close()
 
@@ -70,31 +69,31 @@ async def handle_timeout(db: Session, assignment: CMEReviewAssignment):
     now = datetime.utcnow()
     project = db.query(CMEProject).filter(CMEProject.id == assignment.project_id).first()
     reviewer = db.query(CMEReviewerConfig).filter(CMEReviewerConfig.id == assignment.reviewer_id).first()
-    
+
     if not project or not reviewer:
         return
-    
+
     # Mark current assignment as timeout
     assignment.status = "timeout"
     assignment.completed_at = now
-    
+
     # Check for next reviewer
     next_assignment = db.query(CMEReviewAssignment).filter(
         CMEReviewAssignment.project_id == assignment.project_id,
         CMEReviewAssignment.status == "pending"
     ).order_by(CMEReviewAssignment.reviewer_order).first()
-    
+
     if next_assignment:
         # R4: Escalate to next reviewer
         next_reviewer = db.query(CMEReviewerConfig).filter(
             CMEReviewerConfig.id == next_assignment.reviewer_id
         ).first()
-        
+
         if next_reviewer:
             next_assignment.status = "active"
             next_assignment.assigned_at = now
             next_assignment.sla_deadline = now + timedelta(hours=24)
-            
+
             await notification_service.on_sla_timeout(
                 prev_reviewer_email=reviewer.email,
                 prev_reviewer_name=reviewer.display_name,
@@ -104,13 +103,13 @@ async def handle_timeout(db: Session, assignment: CMEReviewAssignment):
                 project_id=str(project.id),
                 webhook_url=next_reviewer.google_chat_webhook_url
             )
-            
+
             print(f"[TIMEOUT_HANDLER] Escalated {project.name} from {reviewer.email} to {next_reviewer.email}")
     else:
         # R5: Final reviewer timeout - set to HOLD
         project.human_review_status = "hold"
         assignment.escalation_sent_at = now
-        
+
         await notification_service.on_final_timeout(
             reviewer_email=reviewer.email,
             reviewer_name=reviewer.display_name,
@@ -118,7 +117,7 @@ async def handle_timeout(db: Session, assignment: CMEReviewAssignment):
             project_id=str(project.id),
             webhook_url=reviewer.google_chat_webhook_url
         )
-        
+
         print(f"[TIMEOUT_HANDLER] Final reviewer timeout - {project.name} set to HOLD")
 
 
@@ -128,12 +127,12 @@ async def send_warning(db: Session, assignment: CMEReviewAssignment):
     now = datetime.utcnow()
     project = db.query(CMEProject).filter(CMEProject.id == assignment.project_id).first()
     reviewer = db.query(CMEReviewerConfig).filter(CMEReviewerConfig.id == assignment.reviewer_id).first()
-    
+
     if not project or not reviewer:
         return
-    
+
     hours_remaining = (assignment.sla_deadline - now).total_seconds() / 3600
-    
+
     await notification_service.on_sla_warning(
         reviewer_email=reviewer.email,
         reviewer_name=reviewer.display_name,
@@ -142,7 +141,7 @@ async def send_warning(db: Session, assignment: CMEReviewAssignment):
         hours_remaining=hours_remaining,
         webhook_url=reviewer.google_chat_webhook_url
     )
-    
+
     assignment.reminder_sent_at = now
     print(f"[TIMEOUT_HANDLER] Sent warning to {reviewer.email} for {project.name}")
 
@@ -159,19 +158,19 @@ async def send_daily_hold_reminders():
         held_projects = db.query(CMEProject).filter(
             CMEProject.human_review_status == "hold"
         ).all()
-        
+
         for project in held_projects:
             # Find the final reviewer (highest order, timed out)
             assignment = db.query(CMEReviewAssignment).filter(
                 CMEReviewAssignment.project_id == project.id,
                 CMEReviewAssignment.status == "timeout"
             ).order_by(CMEReviewAssignment.reviewer_order.desc()).first()
-            
+
             if assignment:
                 reviewer = db.query(CMEReviewerConfig).filter(
                     CMEReviewerConfig.id == assignment.reviewer_id
                 ).first()
-                
+
                 if reviewer:
                     await notification_service.on_final_timeout(
                         reviewer_email=reviewer.email,
@@ -180,9 +179,9 @@ async def send_daily_hold_reminders():
                         project_id=str(project.id),
                         webhook_url=reviewer.google_chat_webhook_url
                     )
-        
+
         print(f"[TIMEOUT_HANDLER] Sent daily HOLD reminders for {len(held_projects)} projects")
-        
+
     finally:
         db.close()
 
@@ -196,9 +195,9 @@ def start_scheduler():
         from apscheduler.schedulers.asyncio import AsyncIOScheduler
         from apscheduler.triggers.interval import IntervalTrigger
         from apscheduler.triggers.cron import CronTrigger
-        
+
         scheduler = AsyncIOScheduler()
-        
+
         # Check for timeouts every 15 minutes
         scheduler.add_job(
             check_sla_timeouts,
@@ -206,7 +205,7 @@ def start_scheduler():
             id="check_sla_timeouts",
             replace_existing=True
         )
-        
+
         # Send daily HOLD reminders at 9 AM UTC
         scheduler.add_job(
             send_daily_hold_reminders,
@@ -214,11 +213,11 @@ def start_scheduler():
             id="daily_hold_reminders",
             replace_existing=True
         )
-        
+
         scheduler.start()
         print("[TIMEOUT_HANDLER] Scheduler started")
         return scheduler
-        
+
     except ImportError:
         print("[TIMEOUT_HANDLER] APScheduler not installed. Run: pip install apscheduler")
         return None

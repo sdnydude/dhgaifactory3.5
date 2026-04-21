@@ -1,7 +1,7 @@
 """
 Clinical Practice Agent - Agent #3
 ===================================
-Analyzes real-world clinical practice patterns, identifies deviations from 
+Analyzes real-world clinical practice patterns, identifies deviations from
 guideline-recommended care, and characterizes barriers to optimal management.
 
 LangGraph Cloud Ready:
@@ -13,7 +13,6 @@ LangGraph Cloud Ready:
 import os
 import re
 import json
-import operator
 import httpx
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Annotated
@@ -27,7 +26,7 @@ from langsmith import traceable
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from extract_topic import extract_topic_node
-from pubmed_client import PubMedClient, build_references_section
+from pubmed_client import build_references_section
 from vs_client import vs_generate, vs_select, vs_is_available
 
 # OpenTelemetry tracing (dual-export with LangSmith)
@@ -72,24 +71,24 @@ class ClinicalPracticeState(TypedDict):
     geographic_focus: str
     known_gaps: Optional[List[str]]
     known_barriers: Optional[List[str]]
-    
+
     # === PROCESSING ===
     messages: Annotated[list, add_messages]
-    
+
     # Section-specific data
     standard_of_care_data: Dict[str, Any]
     real_world_practice_data: Dict[str, Any]
     practice_barriers_data: Dict[str, Any]
     specialty_perspectives_data: Dict[str, Any]
     setting_variations_data: Dict[str, Any]
-    
+
     # Citations
     citations: List[Dict[str, Any]]
-    
+
     # === OUTPUT ===
     clinical_practice_report: Dict[str, Any]
     clinical_practice_document: str
-    
+
     # === METADATA ===
     sources_analyzed: int
     errors: List[str]
@@ -107,7 +106,7 @@ class ClinicalPracticeState(TypedDict):
 
 class LLMClient:
     """Claude-based LLM client with cost tracking."""
-    
+
     def __init__(self):
         self.model = ChatAnthropic(
             model="claude-sonnet-4-20250514",
@@ -115,7 +114,7 @@ class LLMClient:
         )
         self.cost_per_1k_input = 0.003
         self.cost_per_1k_output = 0.015
-    
+
     @traceable(name="clinical_practice_llm_call", run_type="llm")
     async def generate(self, system: str, prompt: str, metadata: dict = None) -> dict:
         """Generate response with cost tracking."""
@@ -123,21 +122,21 @@ class LLMClient:
             SystemMessage(content=system),
             HumanMessage(content=prompt)
         ]
-        
+
         response = await self.model.ainvoke(
             messages,
             config={"metadata": metadata or {}}
         )
-        
+
         input_tokens = 0
         output_tokens = 0
         if hasattr(response, 'usage_metadata') and response.usage_metadata:
             input_tokens = response.usage_metadata.get("input_tokens", 0)
             output_tokens = response.usage_metadata.get("output_tokens", 0)
-        
+
         cost = (input_tokens / 1000 * self.cost_per_1k_input) + \
                (output_tokens / 1000 * self.cost_per_1k_output)
-        
+
         return {
             "content": response.content,
             "input_tokens": input_tokens,
@@ -156,27 +155,27 @@ llm = LLMClient()
 
 class PerplexityClient:
     """Perplexity API for practice data search."""
-    
+
     ACADEMIC_DOMAINS = [
         "pubmed.ncbi.nlm.nih.gov", "ncbi.nlm.nih.gov", "jamanetwork.com",
         "nejm.org", "thelancet.com", "bmj.com",
         "cms.gov", "ahrq.gov", "qualitynet.cms.gov"
     ]
-    
+
     def __init__(self):
         self.api_key = os.getenv("PERPLEXITY_API_KEY")
-    
+
     @traceable(name="perplexity_practice_search", run_type="retriever")
     async def search(self, query: str) -> dict:
         """Search for practice pattern data."""
         if not self.api_key:
             return {"content": "", "citations": []}
-        
+
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
         }
-        
+
         system_prompt = """You are a clinical practice analyst.
 Focus on real-world practice data specific to the disease state in the user query. Prefer sources such as:
 - Disease-specific registries and quality-improvement programs relevant to the condition
@@ -185,7 +184,7 @@ Focus on real-world practice data specific to the disease state in the user quer
 - Quality measure performance data (HEDIS, CMS quality measures, specialty-society measures)
 Include specific utilization rates, adherence percentages, and outcome data when available.
 Cite sources with author/organization and year. Do not substitute data from unrelated therapeutic areas when direct evidence is sparse — say so explicitly instead."""
-        
+
         payload = {
             "model": "sonar-pro",
             "messages": [
@@ -195,7 +194,7 @@ Cite sources with author/organization and year. Do not substitute data from unre
             "return_citations": True,
             "search_domain_filter": self.ACADEMIC_DOMAINS
         }
-        
+
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
                 "https://api.perplexity.ai/chat/completions",
@@ -258,17 +257,17 @@ PROHIBITED:
 @traced_node("clinical_practice_agent", "analyze_standard_of_care_node")
 async def analyze_standard_of_care_node(state: ClinicalPracticeState) -> dict:
     """Define the guideline-recommended standard of care."""
-    
+
     disease = state.get("disease_state", "")
     audience = state.get("target_audience", "")
-    
+
     perplexity = PerplexityClient()
     soc_result = await perplexity.search(
         f"What are the current guideline-recommended diagnostic pathways and treatment algorithms for {disease}? "
         f"Include key decision points, first-line treatments, escalation criteria, monitoring requirements, "
         f"and established quality measures with target benchmarks. Focus on major society guidelines."
     )
-    
+
     system = f"""{CLINICAL_PRACTICE_SYSTEM_PROMPT}
 
 You are defining STANDARD OF CARE. Return a JSON object:
@@ -288,7 +287,7 @@ You are defining STANDARD OF CARE. Return a JSON object:
         "target_benchmarks": {{"metric_name": "target_value"}}
     }}
 }}"""
-    
+
     prompt = f"""Define the guideline-recommended standard of care for {disease}.
 Target audience: {audience}
 
@@ -340,10 +339,10 @@ Return ONLY valid JSON. Be specific about guideline sources and years."""
 @traced_node("clinical_practice_agent", "analyze_real_world_practice_node")
 async def analyze_real_world_practice_node(state: ClinicalPracticeState) -> dict:
     """Analyze actual real-world practice patterns vs guidelines."""
-    
+
     disease = state.get("disease_state", "")
     soc = state.get("standard_of_care_data", {})
-    
+
     perplexity = PerplexityClient()
     rwp_result = await perplexity.search(
         f"What is the real-world utilization and adherence data for {disease} treatments? "
@@ -351,7 +350,7 @@ async def analyze_real_world_practice_node(state: ClinicalPracticeState) -> dict
         f"actual prescribing rates, dose optimization rates, and quality measure performance. "
         f"Focus on gaps between recommended and actual care for {disease} specifically — do not substitute data from other conditions."
     )
-    
+
     system = f"""{CLINICAL_PRACTICE_SYSTEM_PROMPT}
 
 You are analyzing REAL-WORLD PRACTICE patterns. Return a JSON object:
@@ -376,7 +375,7 @@ You are analyzing REAL-WORLD PRACTICE patterns. Return a JSON object:
         "outcome_disparities": ["list of disparity findings"]
     }}
 }}"""
-    
+
     prompt = f"""Analyze real-world practice patterns for {disease}.
 
 STANDARD OF CARE (for comparison):
@@ -430,11 +429,11 @@ Return ONLY valid JSON. Quantify all gaps with specific percentages and sources.
 @traced_node("clinical_practice_agent", "identify_barriers_node")
 async def identify_barriers_node(state: ClinicalPracticeState) -> dict:
     """Identify and categorize barriers to optimal care."""
-    
+
     disease = state.get("disease_state", "")
     audience = state.get("target_audience", "")
     known_barriers = state.get("known_barriers", [])
-    
+
     perplexity = PerplexityClient()
     barriers_result = await perplexity.search(
         f"What are the barriers to optimal {disease} care for {audience}? "
@@ -442,7 +441,7 @@ async def identify_barriers_node(state: ClinicalPracticeState) -> dict:
         f"(time, access, cost, workflow), and patient barriers (adherence, access, literacy). "
         f"Reference physician surveys, needs assessments, and barrier studies."
     )
-    
+
     system = f"""{CLINICAL_PRACTICE_SYSTEM_PROMPT}
 
 You are identifying PRACTICE BARRIERS. Use this categorization framework:
@@ -486,9 +485,9 @@ Return a JSON object:
         "evidence": "source and data"
     }}]
 }}"""
-    
-    known_context = f"\nKNOWN BARRIERS TO CONSIDER:\n- " + "\n- ".join(known_barriers) if known_barriers else ""
-    
+
+    known_context = "\nKNOWN BARRIERS TO CONSIDER:\n- " + "\n- ".join(known_barriers) if known_barriers else ""
+
     prompt = f"""Identify barriers to optimal {disease} care for {audience}.
 {known_context}
 
@@ -540,17 +539,17 @@ Return ONLY valid JSON. Every barrier must be categorized and have evidence."""
 @traced_node("clinical_practice_agent", "analyze_specialty_perspectives_node")
 async def analyze_specialty_perspectives_node(state: ClinicalPracticeState) -> dict:
     """Analyze specialty-specific perspectives and care coordination."""
-    
+
     disease = state.get("disease_state", "")
     audience = state.get("target_audience", "")
-    
+
     perplexity = PerplexityClient()
     specialty_result = await perplexity.search(
         f"How do different specialties (primary care, specialists) manage {disease}? "
         f"Include referral patterns, care coordination gaps, specialist capacity issues, "
         f"and handoff challenges between care settings."
     )
-    
+
     system = f"""{CLINICAL_PRACTICE_SYSTEM_PROMPT}
 
 You are analyzing SPECIALTY PERSPECTIVES. Return a JSON object:
@@ -570,7 +569,7 @@ You are analyzing SPECIALTY PERSPECTIVES. Return a JSON object:
         "handoff_issues": ["list of handoff problems"]
     }}
 }}"""
-    
+
     prompt = f"""Analyze specialty perspectives for {disease} care.
 Target audience focus: {audience}
 
@@ -622,18 +621,18 @@ Return ONLY valid JSON. Include specific data on referral rates and coordination
 @traced_node("clinical_practice_agent", "analyze_setting_variations_node")
 async def analyze_setting_variations_node(state: ClinicalPracticeState) -> dict:
     """Analyze practice variations by setting."""
-    
+
     disease = state.get("disease_state", "")
     settings = state.get("practice_settings", [])
     geographic = state.get("geographic_focus", "United States")
-    
+
     perplexity = PerplexityClient()
     settings_result = await perplexity.search(
         f"How does {disease} care vary between academic and community settings, "
         f"urban and rural areas, and resource-rich vs resource-limited environments? "
         f"Include specific data on outcome differences and access disparities in {geographic}."
     )
-    
+
     system = f"""{CLINICAL_PRACTICE_SYSTEM_PROMPT}
 
 You are analyzing SETTING VARIATIONS. Return a JSON object:
@@ -642,9 +641,9 @@ You are analyzing SETTING VARIATIONS. Return a JSON object:
     "urban_vs_rural": "comparison with specific data on access and outcomes",
     "resource_rich_vs_limited": "comparison with specific data"
 }}"""
-    
+
     settings_context = f"\nPRACTICE SETTINGS OF INTEREST: {', '.join(settings)}" if settings else ""
-    
+
     prompt = f"""Analyze practice setting variations for {disease} in {geographic}.
 {settings_context}
 
@@ -654,7 +653,7 @@ SETTING DATA:
 Return ONLY valid JSON with specific comparative data."""
 
     result = await llm.generate(system, prompt, {"step": "setting_variations"})
-    
+
     try:
         content = result["content"]
         json_match = re.search(r'\{[\s\S]*\}', content)
@@ -664,11 +663,11 @@ Return ONLY valid JSON with specific comparative data."""
             settings_data = {"error": "Failed to parse settings data"}
     except json.JSONDecodeError:
         settings_data = {"error": "Invalid JSON in settings response"}
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
     prev_sources = state.get("sources_analyzed", 0)
-    
+
     return {
         "setting_variations_data": settings_data,
         "sources_analyzed": prev_sources + 1,
@@ -681,7 +680,7 @@ Return ONLY valid JSON with specific comparative data."""
 @traced_node("clinical_practice_agent", "assemble_clinical_report_node")
 async def assemble_clinical_report_node(state: ClinicalPracticeState) -> dict:
     """Assemble the final clinical practice report."""
-    
+
     report = {
         "metadata": {
             "agent_version": "2.0",
@@ -698,7 +697,7 @@ async def assemble_clinical_report_node(state: ClinicalPracticeState) -> dict:
         "setting_variations": state.get("setting_variations_data", {}),
         "citations": state.get("citations", [])
     }
-    
+
     return {
         "clinical_practice_report": report,
         "messages": [HumanMessage(content=f"Clinical practice analysis complete: {state.get('sources_analyzed', 0)} sources analyzed")]
@@ -709,10 +708,10 @@ async def assemble_clinical_report_node(state: ClinicalPracticeState) -> dict:
 @traced_node("clinical_practice_agent", "render_clinical_document_node")
 async def render_clinical_document_node(state: ClinicalPracticeState) -> dict:
     """Render the report as a readable prose document."""
-    
+
     disease = state.get("disease_state", "")
     report = state.get("clinical_practice_report", {})
-    
+
     system = """You are a medical writer converting structured clinical practice data into a cohesive, readable report.
 
 FORMATTING RULES:
@@ -743,7 +742,7 @@ Do NOT use:
 - Bullet points in the main text
 - Colons in prose (except citations)
 """
-    
+
     prompt = f"""Convert this clinical practice data on {disease} into a cohesive report.
 
 CLINICAL PRACTICE DATA:
@@ -752,12 +751,12 @@ CLINICAL PRACTICE DATA:
 Write a complete, readable report following the structure above. Emphasize the gaps between guidelines and practice, and clearly categorize all barriers."""
 
     result = await llm.generate(system, prompt, {"step": "render_document"})
-    
+
     document = result["content"]
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
-    
+
     return {
         "clinical_practice_document": document,
         "total_tokens": prev_tokens + result["total_tokens"],
@@ -787,9 +786,9 @@ async def generate_references_node(state: ClinicalPracticeState) -> dict:
 
 def create_clinical_practice_graph() -> StateGraph:
     """Create the Clinical Practice Agent graph."""
-    
+
     graph = StateGraph(ClinicalPracticeState)
-    
+
     # Add nodes
     graph.add_node("extract_topic", extract_topic_node)
     graph.add_node("analyze_standard_of_care", analyze_standard_of_care_node)
@@ -813,7 +812,7 @@ def create_clinical_practice_graph() -> StateGraph:
     graph.add_edge("assemble_report", "render_document")
     graph.add_edge("render_document", "generate_references")
     graph.add_edge("generate_references", END)
-    
+
     return graph
 
 
@@ -827,7 +826,7 @@ graph = create_clinical_practice_graph().compile()
 
 if __name__ == "__main__":
     import asyncio
-    
+
     async def test():
         test_state = {
             "therapeutic_area": "pulmonology",
@@ -844,22 +843,22 @@ if __name__ == "__main__":
             "total_tokens": 0,
             "total_cost": 0.0
         }
-        
+
         result = await graph.ainvoke(test_state)
-        
-        print(f"\n=== CLINICAL PRACTICE ANALYSIS ===")
+
+        print("\n=== CLINICAL PRACTICE ANALYSIS ===")
         print(f"Sources analyzed: {result.get('sources_analyzed', 0)}")
         print(f"Total tokens: {result.get('total_tokens', 0)}")
         print(f"Total cost: ${result.get('total_cost', 0):.4f}")
-        
+
         report = result.get("clinical_practice_report", {})
-        print(f"\n=== SECTIONS ===")
+        print("\n=== SECTIONS ===")
         for section in ["standard_of_care", "real_world_practice", "practice_barriers", "specialty_perspectives", "setting_variations"]:
             data = report.get(section, {})
             print(f"- {section}: {'✓' if data and 'error' not in data else '✗'}")
-        
-        print(f"\n=== DOCUMENT PREVIEW ===")
+
+        print("\n=== DOCUMENT PREVIEW ===")
         doc = result.get("clinical_practice_document", "")
         print(doc[:500] + "..." if len(doc) > 500 else doc)
-    
+
     asyncio.run(test())

@@ -4,12 +4,17 @@ Shared test fixtures for registry API tests.
 Handles:
 - Prometheus CollectorRegistry cleanup between test sessions
 - FastAPI dependency override for get_db (mock database)
+- sys.path setup so registry modules import correctly
 """
 
+import sys
+import os
 import pytest
 from unittest.mock import MagicMock
 from prometheus_client import REGISTRY
 from prometheus_client.metrics import MetricWrapperBase
+
+sys.path.insert(0, os.path.dirname(__file__))
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -39,10 +44,6 @@ def mock_db():
 @pytest.fixture
 def client(mock_db):
     """Create a test client with the database dependency overridden."""
-    import sys
-    import os
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
-
     from database import get_db
     from api import app
 

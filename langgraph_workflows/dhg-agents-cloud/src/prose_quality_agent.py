@@ -20,8 +20,7 @@ Version: 1.0.0
 """
 
 import re
-from datetime import datetime
-from typing import Annotated, Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any
 from typing_extensions import TypedDict
 
 # LangGraph imports
@@ -73,55 +72,55 @@ BANNED_PATTERNS = {
 
 class ProseQualityState(TypedDict):
     """State for Prose Quality Agent."""
-    
+
     # === INPUT ===
     document_text: str
     pass_number: int  # 1 = after needs assessment, 2 = after full package
     character_name: Optional[str]  # For tracking character thread
-    
+
     # Section word count targets (from calling agent or defaults)
     section_targets: Dict[str, Dict[str, int]]  # {section: {min: x, max: y}}
-    
+
     # === PROCESSING ===
     sections: Dict[str, str]  # Parsed sections
-    
+
     # === OUTPUT ===
     overall_passed: bool
     overall_score: float
     summary: str
-    
+
     # Prose density
     prose_density_score: float
     prose_density_passed: bool
     prose_density_by_section: Dict[str, float]
     problem_sections: List[str]
-    
+
     # Word counts
     word_count_total: int
     word_count_by_section: Dict[str, int]
     word_count_passed: bool
     sections_under_minimum: List[str]
-    
+
     # AI patterns
     ai_patterns_found: List[Dict[str, Any]]
     ai_patterns_count: int
     ai_patterns_passed: bool
-    
+
     # Cold open (Pass 1 only)
     cold_open_present: bool
     cold_open_word_count: int
     cold_open_has_character: bool
     cold_open_has_turn: bool
     cold_open_passed: bool
-    
+
     # Character thread
     character_appearances: int
     character_locations: List[str]
     character_thread_passed: bool
-    
+
     # Revision instructions
     revision_instructions: List[Dict[str, Any]]
-    
+
     # Metadata
     errors: List[str]
 
@@ -155,24 +154,24 @@ def calculate_prose_density(text: str) -> float:
     lines = text.split('\n')
     prose_chars = 0
     total_chars = 0
-    
+
     for line in lines:
         stripped = line.strip()
         if not stripped:
             continue
-        
+
         total_chars += len(stripped)
-        
+
         # Detect list items
         is_list = (
             stripped.startswith(('-', '*', '•', '–')) or
             re.match(r'^\d+[\.)\]]\s', stripped) or
             stripped.startswith('|')  # Table row
         )
-        
+
         if not is_list:
             prose_chars += len(stripped)
-    
+
     return (prose_chars / total_chars * 100) if total_chars > 0 else 100.0
 
 
@@ -194,7 +193,7 @@ def parse_sections(text: str) -> Dict[str, str]:
     sections = {}
     current_section = "cold_open"
     current_content = []
-    
+
     lines = text.split('\n')
     for line in lines:
         # Check for markdown headers
@@ -203,7 +202,7 @@ def parse_sections(text: str) -> Dict[str, str]:
             # Save previous section
             if current_content:
                 sections[current_section] = '\n'.join(current_content).strip()
-            
+
             # Start new section
             header_text = header_match.group(1).lower()
             # Normalize section names
@@ -223,15 +222,15 @@ def parse_sections(text: str) -> Dict[str, str]:
                 current_section = "conclusion"
             else:
                 current_section = header_text.replace(' ', '_')[:30]
-            
+
             current_content = []
         else:
             current_content.append(line)
-    
+
     # Save last section
     if current_content:
         sections[current_section] = '\n'.join(current_content).strip()
-    
+
     return sections
 
 
@@ -243,10 +242,10 @@ def validate_cold_open(text: str, character_name: Optional[str] = None) -> Dict[
         cold_open = text[:first_heading_match.start()].strip()
     else:
         cold_open = text[:500].strip()
-    
+
     words = cold_open.split()
     word_count = len(words)
-    
+
     # Check for character name if provided
     has_character = False
     if character_name:
@@ -254,10 +253,10 @@ def validate_cold_open(text: str, character_name: Optional[str] = None) -> Dict[
     else:
         # Check for name pattern (First Last)
         has_character = bool(re.search(r'\b[A-Z][a-z]+ [A-Z][a-z]+\b', cold_open))
-    
+
     # Check for age
     has_age = bool(re.search(r'\b\d{1,3}[,\s-]*(year|years|-year-old)?\b', cold_open))
-    
+
     # Check for "the turn" - connection to population
     turn_patterns = [
         r'one of [\d,]+ (million|thousand)',
@@ -268,14 +267,14 @@ def validate_cold_open(text: str, character_name: Optional[str] = None) -> Dict[
         r'he is one of',
     ]
     has_turn = any(re.search(p, cold_open, re.IGNORECASE) for p in turn_patterns)
-    
+
     passed = all([
         len(cold_open) > 50,
         50 <= word_count <= 100,
         has_character,
         has_turn
     ])
-    
+
     return {
         "present": len(cold_open) > 50,
         "word_count": word_count,
@@ -291,18 +290,18 @@ def track_character_thread(text: str, character_name: str) -> Dict[str, Any]:
     """Track character appearances throughout document."""
     if not character_name:
         return {"appearances": 0, "locations": [], "passed": False}
-    
+
     sections = parse_sections(text)
     appearances = 0
     locations = []
-    
+
     first_name = character_name.split()[0] if character_name else ""
-    
+
     for section_name, content in sections.items():
         if character_name in content or first_name in content:
             appearances += 1
             locations.append(section_name)
-    
+
     return {
         "appearances": appearances,
         "locations": locations,
@@ -320,27 +319,27 @@ def calculate_overall_score(
 ) -> float:
     """Calculate weighted overall score (0-100)."""
     score = 100.0
-    
+
     # AI patterns: -30 if any found
     if ai_patterns_count > 0:
         score -= 30
-    
+
     # Prose density: proportional (25 points)
     density_score = min((prose_density / 80) * 25, 25)
     score -= (25 - density_score)
-    
+
     # Word count: -20 if failed
     if not word_count_passed:
         score -= 20
-    
+
     # Cold open (Pass 1 only): -15 if failed
     if pass_number == 1 and not cold_open_passed:
         score -= 15
-    
+
     # Character thread: -10 if failed
     if not character_thread_passed:
         score -= 10
-    
+
     return max(score, 0)
 
 
@@ -355,7 +354,7 @@ def generate_revision_instructions(
 ) -> List[Dict[str, Any]]:
     """Generate actionable revision instructions."""
     instructions = []
-    
+
     # AI patterns (critical)
     for pattern in ai_patterns:
         instructions.append({
@@ -367,7 +366,7 @@ def generate_revision_instructions(
             "context": pattern['context'],
             "suggested_fix": f"Remove or replace '{pattern['instance']}' with appropriate alternative"
         })
-    
+
     # Prose density issues (major)
     if prose_density < 80:
         for section in problem_sections:
@@ -378,7 +377,7 @@ def generate_revision_instructions(
                 "location": section,
                 "suggested_fix": "Convert bullet points and lists to flowing narrative paragraphs"
             })
-    
+
     # Word count issues (major)
     for section in sections_under_minimum:
         instructions.append({
@@ -388,7 +387,7 @@ def generate_revision_instructions(
             "location": section,
             "suggested_fix": "Expand section with additional detail and evidence"
         })
-    
+
     # Cold open issues (Pass 1)
     if pass_number == 1 and not cold_open_result.get("passed", True):
         issues = []
@@ -398,7 +397,7 @@ def generate_revision_instructions(
             issues.append("missing named character")
         if not cold_open_result.get("has_turn"):
             issues.append("missing 'the turn' connecting to population")
-        
+
         instructions.append({
             "issue_type": "cold_open",
             "severity": "critical",
@@ -406,7 +405,7 @@ def generate_revision_instructions(
             "location": "Opening paragraph",
             "suggested_fix": "Revise cold open to include named character with age, humanizing detail, and population connection"
         })
-    
+
     # Character thread (minor)
     if not character_result.get("passed", True):
         instructions.append({
@@ -416,7 +415,7 @@ def generate_revision_instructions(
             "location": "Throughout document",
             "suggested_fix": "Add character references in Disease Overview, Practice Gaps, Educational Rationale, and Conclusion"
         })
-    
+
     return instructions
 
 
@@ -430,7 +429,7 @@ async def parse_document_node(state: ProseQualityState) -> dict:
     """Parse document into sections."""
     text = state.get("document_text", "")
     sections = parse_sections(text)
-    
+
     return {
         "sections": sections,
         "errors": []
@@ -443,7 +442,7 @@ async def check_ai_patterns_node(state: ProseQualityState) -> dict:
     """Detect AI patterns in document."""
     text = state.get("document_text", "")
     patterns = detect_ai_patterns(text)
-    
+
     return {
         "ai_patterns_found": patterns,
         "ai_patterns_count": len(patterns),
@@ -457,16 +456,16 @@ async def check_prose_density_node(state: ProseQualityState) -> dict:
     """Calculate prose density."""
     text = state.get("document_text", "")
     sections = state.get("sections", {})
-    
+
     overall_density = calculate_prose_density(text)
     density_by_section = calculate_prose_density_by_section(sections)
-    
+
     # Find problem sections (below 80%)
     problem_sections = [
         section for section, density in density_by_section.items()
         if density < 80
     ]
-    
+
     return {
         "prose_density_score": overall_density,
         "prose_density_passed": overall_density >= 80,
@@ -482,10 +481,10 @@ async def check_word_counts_node(state: ProseQualityState) -> dict:
     text = state.get("document_text", "")
     sections = state.get("sections", {})
     targets = state.get("section_targets", {})
-    
+
     total_words = count_words(text)
     word_counts = {section: count_words(content) for section, content in sections.items()}
-    
+
     # Check against targets
     sections_under = []
     for section, count in word_counts.items():
@@ -493,14 +492,14 @@ async def check_word_counts_node(state: ProseQualityState) -> dict:
             min_words = targets[section].get("min", 0)
             if count < min_words:
                 sections_under.append(section)
-    
+
     # Default minimum total (varies by pass)
     pass_number = state.get("pass_number", 1)
     min_total = 3100 if pass_number == 1 else 4000
-    
+
     # Consider passed if total meets minimum or all sections meet targets
     passed = total_words >= min_total or len(sections_under) == 0
-    
+
     return {
         "word_count_total": total_words,
         "word_count_by_section": word_counts,
@@ -514,7 +513,7 @@ async def check_word_counts_node(state: ProseQualityState) -> dict:
 async def check_cold_open_node(state: ProseQualityState) -> dict:
     """Validate cold open (Pass 1 only)."""
     pass_number = state.get("pass_number", 1)
-    
+
     if pass_number != 1:
         return {
             "cold_open_present": True,
@@ -523,12 +522,12 @@ async def check_cold_open_node(state: ProseQualityState) -> dict:
             "cold_open_has_turn": True,
             "cold_open_passed": True
         }
-    
+
     text = state.get("document_text", "")
     character_name = state.get("character_name")
-    
+
     result = validate_cold_open(text, character_name)
-    
+
     return {
         "cold_open_present": result["present"],
         "cold_open_word_count": result["word_count"],
@@ -544,16 +543,16 @@ async def check_character_thread_node(state: ProseQualityState) -> dict:
     """Track character appearances."""
     text = state.get("document_text", "")
     character_name = state.get("character_name", "")
-    
+
     if not character_name:
         return {
             "character_appearances": 0,
             "character_locations": [],
             "character_thread_passed": True  # Skip if no character provided
         }
-    
+
     result = track_character_thread(text, character_name)
-    
+
     return {
         "character_appearances": result["appearances"],
         "character_locations": result["locations"],
@@ -566,7 +565,7 @@ async def check_character_thread_node(state: ProseQualityState) -> dict:
 async def calculate_score_node(state: ProseQualityState) -> dict:
     """Calculate overall score and generate instructions."""
     pass_number = state.get("pass_number", 1)
-    
+
     # Calculate score
     score = calculate_overall_score(
         ai_patterns_count=state.get("ai_patterns_count", 0),
@@ -576,7 +575,7 @@ async def calculate_score_node(state: ProseQualityState) -> dict:
         character_thread_passed=state.get("character_thread_passed", True),
         pass_number=pass_number
     )
-    
+
     # Determine pass/fail
     passed = (
         state.get("ai_patterns_passed", False) and
@@ -584,7 +583,7 @@ async def calculate_score_node(state: ProseQualityState) -> dict:
         state.get("word_count_passed", False) and
         (pass_number != 1 or state.get("cold_open_passed", True))
     )
-    
+
     # Generate revision instructions if failed
     instructions = []
     if not passed:
@@ -595,12 +594,12 @@ async def calculate_score_node(state: ProseQualityState) -> dict:
             "has_character": state.get("cold_open_has_character", True),
             "has_turn": state.get("cold_open_has_turn", True)
         }
-        
+
         character_result = {
             "passed": state.get("character_thread_passed", True),
             "appearances": state.get("character_appearances", 0)
         }
-        
+
         instructions = generate_revision_instructions(
             ai_patterns=state.get("ai_patterns_found", []),
             prose_density=state.get("prose_density_score", 0),
@@ -610,7 +609,7 @@ async def calculate_score_node(state: ProseQualityState) -> dict:
             character_result=character_result,
             pass_number=pass_number
         )
-    
+
     # Generate summary
     issues = []
     if not state.get("ai_patterns_passed"):
@@ -623,12 +622,12 @@ async def calculate_score_node(state: ProseQualityState) -> dict:
         issues.append("cold open issues")
     if not state.get("character_thread_passed"):
         issues.append(f"character appears {state.get('character_appearances', 0)} times (need 4+)")
-    
+
     if passed:
         summary = f"PASSED with score {score:.1f}/100. Document meets all quality standards."
     else:
         summary = f"FAILED with score {score:.1f}/100. Issues: {'; '.join(issues)}"
-    
+
     return {
         "overall_passed": passed,
         "overall_score": score,
@@ -643,9 +642,9 @@ async def calculate_score_node(state: ProseQualityState) -> dict:
 
 def create_prose_quality_graph() -> StateGraph:
     """Create the Prose Quality Agent graph."""
-    
+
     graph = StateGraph(ProseQualityState)
-    
+
     # Add nodes
     graph.add_node("parse_document", parse_document_node)
     graph.add_node("check_ai_patterns", check_ai_patterns_node)
@@ -654,7 +653,7 @@ def create_prose_quality_graph() -> StateGraph:
     graph.add_node("check_cold_open", check_cold_open_node)
     graph.add_node("check_character_thread", check_character_thread_node)
     graph.add_node("calculate_score", calculate_score_node)
-    
+
     # Define flow
     graph.set_entry_point("parse_document")
     graph.add_edge("parse_document", "check_ai_patterns")
@@ -664,7 +663,7 @@ def create_prose_quality_graph() -> StateGraph:
     graph.add_edge("check_cold_open", "check_character_thread")
     graph.add_edge("check_character_thread", "calculate_score")
     graph.add_edge("calculate_score", END)
-    
+
     return graph
 
 

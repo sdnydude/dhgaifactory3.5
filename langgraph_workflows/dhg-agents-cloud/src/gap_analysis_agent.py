@@ -10,10 +10,8 @@ LangGraph Cloud Ready:
 - Output to: Needs Assessment Agent, Learning Objectives Agent
 """
 
-import os
 import re
 import json
-import operator
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Annotated
 from typing_extensions import TypedDict
@@ -25,7 +23,7 @@ from langsmith import traceable
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from extract_topic import extract_topic_node
-from pubmed_client import PubMedClient, build_references_section
+from pubmed_client import build_references_section
 from vs_client import vs_generate, vs_select, vs_is_available
 
 # OpenTelemetry tracing (dual-export with LangSmith)
@@ -54,10 +52,10 @@ class GapAnalysisState(TypedDict):
     # === INPUT (from upstream agents) ===
     # From Research Agent
     research_report: Dict[str, Any]
-    
+
     # From Clinical Practice Agent
     clinical_practice_report: Dict[str, Any]
-    
+
     # From intake form
     known_gaps: Optional[List[str]]
     educational_priorities: Optional[List[str]]
@@ -65,20 +63,20 @@ class GapAnalysisState(TypedDict):
     therapeutic_area: str
     disease_state: str
     target_audience: str
-    
+
     # === PROCESSING ===
     messages: Annotated[list, add_messages]
-    
+
     # Section-specific data
     synthesis_summary: Dict[str, Any]
     raw_gaps: List[Dict[str, Any]]
     validated_gaps: List[Dict[str, Any]]
     prioritized_gaps: List[Dict[str, Any]]
-    
+
     # === OUTPUT ===
     gap_analysis_report: Dict[str, Any]
     gap_analysis_document: str
-    
+
     # === METADATA ===
     gaps_identified: int
     gaps_prioritized: int
@@ -98,7 +96,7 @@ class GapAnalysisState(TypedDict):
 
 class LLMClient:
     """Claude-based LLM client with cost tracking."""
-    
+
     def __init__(self):
         self.model = ChatAnthropic(
             model="claude-sonnet-4-20250514",
@@ -106,7 +104,7 @@ class LLMClient:
         )
         self.cost_per_1k_input = 0.003
         self.cost_per_1k_output = 0.015
-    
+
     @traceable(name="gap_analysis_llm_call", run_type="llm")
     async def generate(self, system: str, prompt: str, metadata: dict = None) -> dict:
         """Generate response with cost tracking."""
@@ -114,21 +112,21 @@ class LLMClient:
             SystemMessage(content=system),
             HumanMessage(content=prompt)
         ]
-        
+
         response = await self.model.ainvoke(
             messages,
             config={"metadata": metadata or {}}
         )
-        
+
         input_tokens = 0
         output_tokens = 0
         if hasattr(response, 'usage_metadata') and response.usage_metadata:
             input_tokens = response.usage_metadata.get("input_tokens", 0)
             output_tokens = response.usage_metadata.get("output_tokens", 0)
-        
+
         cost = (input_tokens / 1000 * self.cost_per_1k_input) + \
                (output_tokens / 1000 * self.cost_per_1k_output)
-        
+
         return {
             "content": response.content,
             "input_tokens": input_tokens,
@@ -195,11 +193,11 @@ When citing, mentally track what each number refers to (e.g. [1] = Smith et al. 
 @traced_node("gap_analysis_agent", "synthesize_inputs_node")
 async def synthesize_inputs_node(state: GapAnalysisState) -> dict:
     """Synthesize research and clinical practice findings."""
-    
+
     disease = state.get("disease_state", "")
     research = state.get("research_report", {})
     clinical = state.get("clinical_practice_report", {})
-    
+
     system = f"""{GAP_ANALYSIS_SYSTEM_PROMPT}
 
 You are creating a SYNTHESIS SUMMARY of research and practice findings. Return a JSON object:
@@ -212,7 +210,7 @@ You are creating a SYNTHESIS SUMMARY of research and practice findings. Return a
         "disconnect 3: ..."
     ]
 }}"""
-    
+
     # Truncate inputs to fit context
     research_summary = json.dumps({
         "epidemiology": research.get("epidemiology", {}),
@@ -220,13 +218,13 @@ You are creating a SYNTHESIS SUMMARY of research and practice findings. Return a
         "guidelines": research.get("guidelines", {}),
         "literature_synthesis": research.get("literature_synthesis", {})
     }, indent=2)[:4000]
-    
+
     clinical_summary = json.dumps({
         "standard_of_care": clinical.get("standard_of_care", {}),
         "real_world_practice": clinical.get("real_world_practice", {}),
         "practice_barriers": clinical.get("practice_barriers", {})
     }, indent=2)[:4000]
-    
+
     prompt = f"""Synthesize findings for {disease}.
 
 RESEARCH FINDINGS:
@@ -238,7 +236,7 @@ CLINICAL PRACTICE FINDINGS:
 Identify key disconnects between evidence and practice. Return ONLY valid JSON."""
 
     result = await llm.generate(system, prompt, {"step": "synthesize_inputs"})
-    
+
     try:
         content = result["content"]
         json_match = re.search(r'\{[\s\S]*\}', content)
@@ -248,10 +246,10 @@ Identify key disconnects between evidence and practice. Return ONLY valid JSON."
             synthesis = {"error": "Failed to parse synthesis"}
     except json.JSONDecodeError:
         synthesis = {"error": "Invalid JSON in synthesis"}
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
-    
+
     return {
         "synthesis_summary": synthesis,
         "total_tokens": prev_tokens + result["total_tokens"],
@@ -263,14 +261,13 @@ Identify key disconnects between evidence and practice. Return ONLY valid JSON."
 @traced_node("gap_analysis_agent", "identify_gaps_node")
 async def identify_gaps_node(state: GapAnalysisState) -> dict:
     """Identify all potential educational gaps."""
-    
+
     disease = state.get("disease_state", "")
     audience = state.get("target_audience", "")
     synthesis = state.get("synthesis_summary", {})
-    research = state.get("research_report", {})
     clinical = state.get("clinical_practice_report", {})
     known_gaps = state.get("known_gaps", [])
-    
+
     system = f"""{GAP_ANALYSIS_SYSTEM_PROMPT}
 
 You are identifying EDUCATIONAL GAPS. Return a JSON array of 5-8 gaps:
@@ -298,15 +295,15 @@ You are identifying EDUCATIONAL GAPS. Return a JSON array of 5-8 gaps:
         }}
     ]
 }}"""
-    
+
     # Include known gaps for validation
     known_context = ""
     if known_gaps:
-        known_context = f"\nKNOWN GAPS TO VALIDATE:\n- " + "\n- ".join(known_gaps)
-    
+        known_context = "\nKNOWN GAPS TO VALIDATE:\n- " + "\n- ".join(known_gaps)
+
     # Get barriers from clinical report
     barriers = clinical.get("practice_barriers", {})
-    
+
     prompt = f"""Identify educational gaps for {disease} targeting {audience}.
 
 SYNTHESIS:
@@ -379,9 +376,9 @@ Identify 5-8 distinct, quantified gaps. Each must have evidence and barrier cate
 @traced_node("gap_analysis_agent", "validate_gaps_node")
 async def validate_gaps_node(state: GapAnalysisState) -> dict:
     """Validate each gap meets all criteria and add addressability assessment."""
-    
+
     raw_gaps = state.get("raw_gaps", [])
-    
+
     system = f"""{GAP_ANALYSIS_SYSTEM_PROMPT}
 
 You are VALIDATING and ENRICHING gaps. For each gap, add:
@@ -408,7 +405,7 @@ Return a JSON array:
         }}
     ]
 }}"""
-    
+
     prompt = f"""Validate and enrich these gaps.
 
 GAPS TO VALIDATE:
@@ -424,7 +421,7 @@ For each gap:
 Return ONLY valid JSON with validated_gaps array."""
 
     result = await llm.generate(system, prompt, {"step": "validate_gaps"})
-    
+
     try:
         content = result["content"]
         json_match = re.search(r'\{[\s\S]*\}', content)
@@ -435,10 +432,10 @@ Return ONLY valid JSON with validated_gaps array."""
             validated = raw_gaps
     except json.JSONDecodeError:
         validated = raw_gaps
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
-    
+
     return {
         "validated_gaps": validated,
         "total_tokens": prev_tokens + result["total_tokens"],
@@ -450,11 +447,11 @@ Return ONLY valid JSON with validated_gaps array."""
 @traced_node("gap_analysis_agent", "prioritize_gaps_node")
 async def prioritize_gaps_node(state: GapAnalysisState) -> dict:
     """Score and prioritize gaps."""
-    
+
     validated_gaps = state.get("validated_gaps", [])
     educational_priorities = state.get("educational_priorities", [])
     outcome_goals = state.get("outcome_goals", [])
-    
+
     system = f"""{GAP_ANALYSIS_SYSTEM_PROMPT}
 
 You are SCORING and PRIORITIZING gaps using this rubric (100 points total):
@@ -507,13 +504,13 @@ Return JSON:
     ],
     "ranked_order": ["GAP-001", "GAP-003", "GAP-002", ...]
 }}"""
-    
+
     priorities_context = ""
     if educational_priorities:
         priorities_context = f"\nEDUCATIONAL PRIORITIES: {', '.join(educational_priorities)}"
     if outcome_goals:
         priorities_context += f"\nOUTCOME GOALS: {', '.join(outcome_goals)}"
-    
+
     prompt = f"""Score and prioritize these validated gaps.
 {priorities_context}
 
@@ -523,7 +520,7 @@ GAPS TO PRIORITIZE:
 Apply the scoring rubric to each gap. Return ranked by total score (highest first). Return ONLY valid JSON."""
 
     result = await llm.generate(system, prompt, {"step": "prioritize_gaps"})
-    
+
     try:
         content = result["content"]
         json_match = re.search(r'\{[\s\S]*\}', content)
@@ -534,10 +531,10 @@ Apply the scoring rubric to each gap. Return ranked by total score (highest firs
             prioritized = validated_gaps
     except json.JSONDecodeError:
         prioritized = validated_gaps
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
-    
+
     return {
         "prioritized_gaps": prioritized,
         "gaps_prioritized": len(prioritized),
@@ -550,28 +547,28 @@ Apply the scoring rubric to each gap. Return ranked by total score (highest firs
 @traced_node("gap_analysis_agent", "assemble_gap_report_node")
 async def assemble_gap_report_node(state: GapAnalysisState) -> dict:
     """Assemble the final gap analysis report."""
-    
+
     prioritized_gaps = state.get("prioritized_gaps", [])
     synthesis = state.get("synthesis_summary", {})
-    
+
     # Sort gaps by priority score
     sorted_gaps = sorted(
         prioritized_gaps,
         key=lambda g: g.get("priority_score", {}).get("total", 0) if isinstance(g.get("priority_score"), dict) else 0,
         reverse=True
     )
-    
+
     # Split into primary and secondary
     primary_focus = [g.get("gap_id", f"GAP-{i+1}") for i, g in enumerate(sorted_gaps[:3])]
     secondary_focus = [g.get("gap_id", f"GAP-{i+4}") for i, g in enumerate(sorted_gaps[3:6])]
-    
+
     # Identify system-heavy gaps
     system_gaps = [
         g.get("gap_id")
         for g in sorted_gaps
         if g.get("root_causes", {}).get("primary_barrier_type") == "system"
     ]
-    
+
     report = {
         "metadata": {
             "agent_version": "2.0",
@@ -601,7 +598,7 @@ async def assemble_gap_report_node(state: GapAnalysisState) -> dict:
             "gaps_requiring_system_change": system_gaps
         }
     }
-    
+
     return {
         "gap_analysis_report": report,
         "messages": [HumanMessage(content=f"Gap analysis complete: {len(sorted_gaps)} gaps prioritized, top 3 identified for primary focus")]
@@ -612,10 +609,10 @@ async def assemble_gap_report_node(state: GapAnalysisState) -> dict:
 @traced_node("gap_analysis_agent", "render_gap_document_node")
 async def render_gap_document_node(state: GapAnalysisState) -> dict:
     """Render the gap report as a readable prose document."""
-    
+
     disease = state.get("disease_state", "")
     report = state.get("gap_analysis_report", {})
-    
+
     system = """You are a medical writer converting gap analysis data into a cohesive, readable report.
 
 FORMATTING RULES:
@@ -644,7 +641,7 @@ Do NOT use:
 - Bullet points in prose sections
 - Colons in prose (except citations)
 """
-    
+
     prompt = f"""Convert this gap analysis for {disease} into a cohesive report.
 
 GAP ANALYSIS DATA:
@@ -653,12 +650,12 @@ GAP ANALYSIS DATA:
 Write a complete, readable gap analysis report. Emphasize quantified deltas and barrier categorization for each gap."""
 
     result = await llm.generate(system, prompt, {"step": "render_document"})
-    
+
     document = result["content"]
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
-    
+
     return {
         "gap_analysis_document": document,
         "total_tokens": prev_tokens + result["total_tokens"],
@@ -688,9 +685,9 @@ async def generate_references_node(state: GapAnalysisState) -> dict:
 
 def create_gap_analysis_graph() -> StateGraph:
     """Create the Gap Analysis Agent graph."""
-    
+
     graph = StateGraph(GapAnalysisState)
-    
+
     # Add nodes
     graph.add_node("extract_topic", extract_topic_node)
     graph.add_node("synthesize_inputs", synthesize_inputs_node)
@@ -712,7 +709,7 @@ def create_gap_analysis_graph() -> StateGraph:
     graph.add_edge("assemble_report", "render_document")
     graph.add_edge("render_document", "generate_references")
     graph.add_edge("generate_references", END)
-    
+
     return graph
 
 
@@ -726,7 +723,7 @@ graph = create_gap_analysis_graph().compile()
 
 if __name__ == "__main__":
     import asyncio
-    
+
     async def test():
         # Mock upstream data
         mock_research = {
@@ -758,19 +755,19 @@ if __name__ == "__main__":
             "total_tokens": 0,
             "total_cost": 0.0
         }
-        
+
         result = await graph.ainvoke(test_state)
-        
-        print(f"\n=== GAP ANALYSIS RESULT ===")
+
+        print("\n=== GAP ANALYSIS RESULT ===")
         print(f"Gaps identified: {result.get('gaps_identified', 0)}")
         print(f"Gaps prioritized: {result.get('gaps_prioritized', 0)}")
         print(f"Total tokens: {result.get('total_tokens', 0)}")
         print(f"Total cost: ${result.get('total_cost', 0):.4f}")
-        
+
         report = result.get("gap_analysis_report", {})
         recs = report.get("recommendations", {})
-        print(f"\n=== RECOMMENDATIONS ===")
+        print("\n=== RECOMMENDATIONS ===")
         print(f"Primary focus: {recs.get('primary_focus', [])}")
         print(f"Secondary focus: {recs.get('secondary_focus', [])}")
-    
+
     asyncio.run(test())

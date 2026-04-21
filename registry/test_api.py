@@ -2,40 +2,12 @@
 Registry API Tests
 ==================
 Tests for healthcheck, metrics, and core CRUD endpoints.
+Uses shared `client` fixture from conftest.py.
 
 Run with: pytest registry/test_api.py -v
 """
 
-import uuid
-import pytest
 from unittest.mock import MagicMock, patch
-from fastapi.testclient import TestClient
-
-
-@pytest.fixture
-def mock_engine():
-    """Mock the database engine so api.py can import without a real DB."""
-    with patch("api.create_engine") as mock_ce:
-        mock_ce.return_value = MagicMock()
-        yield mock_ce
-
-
-@pytest.fixture
-def client(mock_engine):
-    """Create a test client with mocked database."""
-    import sys
-    import os
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
-
-    with patch("api.SessionLocal") as mock_session_cls:
-        mock_db = MagicMock()
-        mock_session_cls.return_value = mock_db
-        mock_db.__enter__ = MagicMock(return_value=mock_db)
-        mock_db.__exit__ = MagicMock(return_value=False)
-
-        from api import app
-        with TestClient(app) as c:
-            yield c
 
 
 class TestHealthcheck:

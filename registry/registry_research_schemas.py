@@ -23,7 +23,7 @@ class ResearchRequestInput(BaseModel):
     max_results: Optional[int] = 50
     use_local_llm: Optional[bool] = False
     output_format: Optional[str] = "cme_proposal"
-    
+
     # Project details
     due_date: Optional[datetime] = None
     product_name: Optional[str] = None
@@ -73,17 +73,17 @@ class ResearchRequestResponse(BaseModel):
     user_id: str
     agent_type: str
     status: str
-    
+
     input_params: ResearchRequestInput
     output_summary: Optional[ResearchRequestOutputSummary] = None
     metadata: Optional[ResearchRequestMetadata] = None
-    
+
     created_at: datetime
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
-    
+
     error_message: Optional[str] = None
-    
+
     class Config:
         from_attributes = True
 

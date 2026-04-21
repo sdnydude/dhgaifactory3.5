@@ -19,7 +19,6 @@ Decision #10: Recipe-Based Orchestrator (confirmed 2026-02-04)
 
 import os
 import sys
-import operator
 import asyncio
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Annotated, Literal
@@ -34,7 +33,7 @@ if _src_dir not in sys.path:
 
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
-from langgraph.types import interrupt, Command
+from langgraph.types import interrupt
 
 # PostgresSaver is optional - fallback to in-memory if not available
 try:
@@ -117,18 +116,18 @@ class ErrorCategory(Enum):
 
 class CMEPipelineState(TypedDict):
     """Unified state for all CME pipeline recipes."""
-    
+
     # === PROJECT IDENTITY ===
     project_id: str
     project_name: str
     status: str
     created_at: str
     updated_at: str
-    
+
     # === INTAKE DATA ===
     intake_data: Dict[str, Any]
     intake_validated: bool
-    
+
     # === AGENT OUTPUTS (accumulated as pipeline progresses) ===
     research_output: Optional[Dict[str, Any]]
     clinical_output: Optional[Dict[str, Any]]
@@ -139,12 +138,12 @@ class CMEPipelineState(TypedDict):
     protocol_output: Optional[Dict[str, Any]]
     marketing_output: Optional[Dict[str, Any]]
     grant_package_output: Optional[Dict[str, Any]]
-    
+
     # === QUALITY RESULTS ===
     prose_quality_pass_1: Optional[Dict[str, Any]]
     prose_quality_pass_2: Optional[Dict[str, Any]]
     compliance_result: Optional[Dict[str, Any]]
-    
+
     # === HUMAN REVIEW ===
     human_review_status: Optional[str]  # pending, approved, revision_requested, rejected
     human_review_notes: Optional[str]
@@ -153,13 +152,13 @@ class CMEPipelineState(TypedDict):
     # === REVIEW LOOP ===
     review_comments: List[Dict[str, Any]]  # [{selectedText, comment, startOffset, endOffset, document_id, timestamp}]
     review_round: int  # Tracks revision cycle (max 3)
-    
+
     # === CONTROL ===
     current_step: str
     retry_count: int
     messages: Annotated[list, add_messages]
     errors: List[Dict[str, Any]]  # [{error_type, message, agent, timestamp}]
-    
+
     # === CHECKPOINTING ===
     last_checkpoint: str
     checkpoint_agent: str
@@ -188,9 +187,9 @@ def create_error_record(
 def should_retry(state: CMEPipelineState, error_type: str, agent_name: str) -> bool:
     """Determine if we should retry based on error type and retry count."""
     # Count retries for this specific agent and error type
-    agent_errors = [e for e in state.get("errors", []) 
+    agent_errors = [e for e in state.get("errors", [])
                     if e.get("agent") == agent_name and e.get("error_type") == error_type]
-    
+
     max_retries = MAX_RETRIES.get(error_type, 3)
     return len(agent_errors) < max_retries
 
@@ -629,7 +628,7 @@ async def run_learning_objectives_agent(state: CMEPipelineState) -> dict:
     """Run Learning Objectives Agent."""
     try:
         graph = get_agent_graph("learning_objectives")
-        
+
         intake = state.get("intake_data", {})
         agent_input = {
             "gap_analysis_report": state.get("gap_analysis_output", {}),
@@ -675,12 +674,12 @@ async def run_needs_assessment_agent(state: CMEPipelineState) -> dict:
     """Run Needs Assessment Agent."""
     try:
         graph = get_agent_graph("needs_assessment")
-        
+
         # Include feedback from prose quality if retrying
         prose_feedback = None
         if state.get("prose_quality_pass_1") and not state["prose_quality_pass_1"].get("overall_passed"):
             prose_feedback = state["prose_quality_pass_1"].get("feedback", "")
-        
+
         intake = state.get("intake_data", {})
         research_out = state.get("research_output") or {}
         clinical_out = state.get("clinical_output") or {}
@@ -736,7 +735,7 @@ async def run_curriculum_agent(state: CMEPipelineState) -> dict:
     """Run Curriculum Design Agent."""
     try:
         graph = get_agent_graph("curriculum")
-        
+
         intake = state.get("intake_data", {})
         needs_out = state.get("needs_assessment_output") or {}
         lo_out = state.get("learning_objectives_output") or {}
@@ -791,7 +790,7 @@ async def run_protocol_agent(state: CMEPipelineState) -> dict:
     """Run Research Protocol Agent."""
     try:
         graph = get_agent_graph("protocol")
-        
+
         intake = state.get("intake_data", {})
         lo_out = state.get("learning_objectives_output") or {}
         curriculum_out = state.get("curriculum_output") or {}
@@ -844,7 +843,7 @@ async def run_marketing_agent(state: CMEPipelineState) -> dict:
     """Run Marketing Plan Agent."""
     try:
         graph = get_agent_graph("marketing")
-        
+
         intake = state.get("intake_data", {})
         lo_out = state.get("learning_objectives_output") or {}
         needs_out = state.get("needs_assessment_output") or {}
@@ -898,14 +897,14 @@ async def run_grant_writer_agent(state: CMEPipelineState) -> dict:
     """Run Grant Writer Agent."""
     try:
         graph = get_agent_graph("grant_writer")
-        
+
         intake = state.get("intake_data", {})
-        
+
         # Include feedback from prose quality if retrying
         prose_feedback = None
         if state.get("prose_quality_pass_2") and not state["prose_quality_pass_2"].get("overall_passed"):
             prose_feedback = state["prose_quality_pass_2"].get("feedback", "")
-        
+
         agent_input = {
             "project_title": intake.get("project_title", ""),
             "activity_title": intake.get("activity_title", ""),
@@ -926,12 +925,12 @@ async def run_grant_writer_agent(state: CMEPipelineState) -> dict:
             "research_output": state.get("research_output", {}),
             "revision_feedback": prose_feedback,
         }
-        
+
         result = await asyncio.wait_for(
             graph.ainvoke(agent_input),
             timeout=AGENT_TIMEOUT * 2  # Grant writer may take longer
         )
-        
+
         return {
             "grant_package_output": result,
             "current_step": "grant_writer_complete",
@@ -959,26 +958,26 @@ async def run_prose_quality_pass_1(state: CMEPipelineState) -> dict:
     """Run Prose Quality Agent (Pass 1 - after Needs Assessment)."""
     try:
         graph = get_agent_graph("prose_quality")
-        
+
         needs_output = state.get("needs_assessment_output", {})
         document_text = needs_output.get("complete_document", "")
-        
+
         agent_input = {
             "document_text": document_text,
             "pass_number": 1,
             "character_name": state.get("intake_data", {}).get("character_name"),
         }
-        
+
         result = await asyncio.wait_for(
             graph.ainvoke(agent_input),
             timeout=AGENT_TIMEOUT
         )
-        
+
         # Increment retry count if failed
         new_retry_count = state.get("retry_count", 0)
         if not result.get("overall_passed", False):
             new_retry_count += 1
-        
+
         return {
             "prose_quality_pass_1": result,
             "current_step": "prose_quality_1_complete",
@@ -1007,26 +1006,26 @@ async def run_prose_quality_pass_2(state: CMEPipelineState) -> dict:
     """Run Prose Quality Agent (Pass 2 - after Grant Writer)."""
     try:
         graph = get_agent_graph("prose_quality")
-        
+
         grant_output = state.get("grant_package_output", {})
         document_text = grant_output.get("complete_document_markdown", "")
-        
+
         agent_input = {
             "document_text": document_text,
             "pass_number": 2,
             "character_name": state.get("intake_data", {}).get("character_name"),
         }
-        
+
         result = await asyncio.wait_for(
             graph.ainvoke(agent_input),
             timeout=AGENT_TIMEOUT
         )
-        
+
         # Increment retry count if failed
         new_retry_count = state.get("retry_count", 0)
         if not result.get("overall_passed", False):
             new_retry_count += 1
-        
+
         return {
             "prose_quality_pass_2": result,
             "current_step": "prose_quality_2_complete",
@@ -1055,9 +1054,9 @@ async def run_compliance_agent(state: CMEPipelineState) -> dict:
     """Run Compliance Review Agent."""
     try:
         graph = get_agent_graph("compliance")
-        
+
         grant_output = state.get("grant_package_output", {})
-        
+
         intake = state.get("intake_data", {})
         agent_input = {
             "grant_package": grant_output,
@@ -1066,12 +1065,12 @@ async def run_compliance_agent(state: CMEPipelineState) -> dict:
             "competitor_products": intake.get("competitor_products", []),
             "accreditation_types": intake.get("accreditation_types", []),
         }
-        
+
         result = await asyncio.wait_for(
             graph.ainvoke(agent_input),
             timeout=AGENT_TIMEOUT
         )
-        
+
         return {
             "compliance_result": result,
             "current_step": "compliance_complete",
@@ -1397,12 +1396,12 @@ async def run_early_research_parallel(state: CMEPipelineState) -> dict:
     try:
         research_graph = get_agent_graph("research")
         clinical_graph = get_agent_graph("clinical")
-        
+
         intake = state.get("intake_data", {})
 
         research_input = _build_research_input(intake)
         clinical_input = _build_clinical_input(intake)
-        
+
         # Execute both in parallel
         research_task = asyncio.create_task(
             asyncio.wait_for(research_graph.ainvoke(research_input), timeout=AGENT_TIMEOUT)
@@ -1410,35 +1409,35 @@ async def run_early_research_parallel(state: CMEPipelineState) -> dict:
         clinical_task = asyncio.create_task(
             asyncio.wait_for(clinical_graph.ainvoke(clinical_input), timeout=AGENT_TIMEOUT)
         )
-        
+
         # Wait for both to complete
         results = await asyncio.gather(research_task, clinical_task, return_exceptions=True)
-        
+
         # Process results
         research_result, clinical_result = results
         errors = state.get("errors", [])
-        
+
         update = {
             "current_step": "early_research_complete",
             "last_checkpoint": datetime.now().isoformat(),
             "checkpoint_agent": "early_research_parallel"
         }
-        
+
         if isinstance(research_result, Exception):
             errors.append(create_error_record("agent_failure", str(research_result), "research"))
         else:
             update["research_output"] = research_result
-            
+
         if isinstance(clinical_result, Exception):
             errors.append(create_error_record("agent_failure", str(clinical_result), "clinical"))
         else:
             update["clinical_output"] = clinical_result
-        
+
         if errors != state.get("errors", []):
             update["errors"] = errors
-            
+
         return update
-        
+
     except Exception as e:
         return {
             "errors": state.get("errors", []) + [
@@ -1459,29 +1458,29 @@ async def run_design_phase_parallel(state: CMEPipelineState) -> dict:
         curriculum_graph = get_agent_graph("curriculum")
         protocol_graph = get_agent_graph("protocol")
         marketing_graph = get_agent_graph("marketing")
-        
+
         intake = state.get("intake_data", {})
         needs = state.get("needs_assessment_output", {})
         lo = state.get("learning_objectives_output", {})
-        
+
         curriculum_input = {
             "needs_assessment_output": needs,
             "learning_objectives_output": lo,
             "intake_data": intake,
         }
-        
+
         protocol_input = {
             "needs_assessment_output": needs,
             "learning_objectives_output": lo,
             "curriculum_output": {},  # Will be empty since running parallel
         }
-        
+
         marketing_input = {
             "needs_assessment_output": needs,
             "curriculum_output": {},  # Will be empty since running parallel
             "intake_data": intake,
         }
-        
+
         # Execute all three in parallel
         curriculum_task = asyncio.create_task(
             asyncio.wait_for(curriculum_graph.ainvoke(curriculum_input), timeout=AGENT_TIMEOUT)
@@ -1492,43 +1491,43 @@ async def run_design_phase_parallel(state: CMEPipelineState) -> dict:
         marketing_task = asyncio.create_task(
             asyncio.wait_for(marketing_graph.ainvoke(marketing_input), timeout=AGENT_TIMEOUT)
         )
-        
+
         # Wait for all to complete
         results = await asyncio.gather(
-            curriculum_task, protocol_task, marketing_task, 
+            curriculum_task, protocol_task, marketing_task,
             return_exceptions=True
         )
-        
+
         # Process results
         curriculum_result, protocol_result, marketing_result = results
         errors = state.get("errors", [])
-        
+
         update = {
             "current_step": "design_phase_complete",
             "last_checkpoint": datetime.now().isoformat(),
             "checkpoint_agent": "design_phase_parallel"
         }
-        
+
         if isinstance(curriculum_result, Exception):
             errors.append(create_error_record("agent_failure", str(curriculum_result), "curriculum"))
         else:
             update["curriculum_output"] = curriculum_result
-            
+
         if isinstance(protocol_result, Exception):
             errors.append(create_error_record("agent_failure", str(protocol_result), "protocol"))
         else:
             update["protocol_output"] = protocol_result
-            
+
         if isinstance(marketing_result, Exception):
             errors.append(create_error_record("agent_failure", str(marketing_result), "marketing"))
         else:
             update["marketing_output"] = marketing_result
-        
+
         if errors != state.get("errors", []):
             update["errors"] = errors
-            
+
         return update
-        
+
     except Exception as e:
         return {
             "errors": state.get("errors", []) + [
@@ -2247,10 +2246,10 @@ async def _run_pipeline_inner(
             graph = grant_graph
     else:
         raise ValueError(f"Unknown recipe: {recipe}")
-    
+
     config = {"configurable": {"thread_id": project_id}}
     result = await graph.ainvoke(initial_state, config=config)
-    
+
     return result
 
 
@@ -2262,13 +2261,13 @@ if __name__ == "__main__":
     print("=" * 60)
     print("RECIPE-BASED ORCHESTRATOR - CME GRANT PIPELINE")
     print("=" * 60)
-    
+
     print("\n=== NEEDS PACKAGE GRAPH ===")
     print(needs_graph.get_graph().draw_mermaid())
-    
+
     print("\n=== CURRICULUM PACKAGE GRAPH ===")
     print(curriculum_graph.get_graph().draw_mermaid())
-    
+
     print("\n=== GRANT PACKAGE GRAPH ===")
     print(grant_graph.get_graph().draw_mermaid())
 

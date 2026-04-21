@@ -36,7 +36,7 @@ STRICT_JSON_PROMPT = (
 def extract_json_array(text: str) -> Optional[list]:
     """Try to extract JSON array from text response."""
     text = text.strip()
-    
+
     # Try direct parse first
     try:
         result = json.loads(text)
@@ -44,7 +44,7 @@ def extract_json_array(text: str) -> Optional[list]:
             return result
     except json.JSONDecodeError:
         pass
-    
+
     # Try to find JSON array in text
     match = re.search(r'\[.*\]', text, re.DOTALL)
     if match:
@@ -54,40 +54,40 @@ def extract_json_array(text: str) -> Optional[list]:
                 return result
         except json.JSONDecodeError:
             pass
-    
+
     return None
 
 
 def validate_topics(topics: list) -> list[dict]:
     """Validate and clean topic list."""
     valid_topics = []
-    
+
     for t in topics:
         if not isinstance(t, dict):
             continue
-        
+
         label = t.get("label", "")
         confidence = t.get("confidence", 0.5)
-        
+
         # Validate label
         if not label or not isinstance(label, str):
             continue
         label = label.strip()
         if len(label) < 2:
             continue
-        
+
         # Validate confidence
         try:
             confidence = float(confidence)
             confidence = min(1.0, max(0.0, confidence))
         except (TypeError, ValueError):
             confidence = 0.5
-        
+
         valid_topics.append({
             "label": label,
             "confidence": confidence,
         })
-    
+
     return valid_topics
 
 
@@ -98,7 +98,7 @@ def fallback_keyword_extraction(text: str) -> list[dict]:
     """
     import re
     from collections import Counter
-    
+
     # Remove common words
     stopwords = {
         "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
@@ -115,14 +115,14 @@ def fallback_keyword_extraction(text: str) -> list[dict]:
         "who", "whom", "whose", "if", "because", "about", "into", "through",
         "during", "before", "after", "above", "below", "between", "with",
     }
-    
+
     # Extract words (3+ chars)
     words = re.findall(r'\b[a-zA-Z]{3,}\b', text.lower())
     words = [w for w in words if w not in stopwords]
-    
+
     # Count frequencies
     counter = Counter(words)
-    
+
     # Get top topics
     topics = []
     for word, count in counter.most_common(5):
@@ -131,33 +131,33 @@ def fallback_keyword_extraction(text: str) -> list[dict]:
         # Rough confidence based on frequency
         confidence = min(1.0, count / 20)
         topics.append({"label": label, "confidence": round(confidence, 2)})
-    
+
     return topics
 
 
 async def tag_topics(state: AudioAgentState) -> dict:
     """
     Extract main topics from transcript using Ollama.
-    
+
     Returns structured topic labels with confidence scores.
     Falls back to keyword extraction if JSON parsing fails.
-    
+
     Returns:
         dict with 'topics' key (list of {label, confidence})
     """
     # Skip if error already set
     if state.get("error"):
         return {}
-    
+
     # Use translation if available, otherwise use transcript
     text_to_analyze = state.get("translation") or state.get("transcript_text", "")
-    
+
     if not text_to_analyze:
         logger.warning("No text to analyze for topics")
         return {"topics": []}
-    
+
     logger.info(f"Extracting topics from {len(text_to_analyze)} chars")
-    
+
     try:
         # First attempt
         response = await call_ollama(
@@ -166,9 +166,9 @@ async def tag_topics(state: AudioAgentState) -> dict:
             max_tokens=300,
             temperature=0.3,
         )
-        
+
         topics = extract_json_array(response)
-        
+
         # Retry with stricter prompt if parsing failed
         if topics is None:
             logger.warning("First topic extraction returned invalid JSON, retrying...")
@@ -179,17 +179,17 @@ async def tag_topics(state: AudioAgentState) -> dict:
                 temperature=0.2,
             )
             topics = extract_json_array(response)
-        
+
         # Fallback to keyword extraction
         if topics is None:
             logger.warning("JSON parsing failed, using keyword fallback")
             topics = fallback_keyword_extraction(text_to_analyze)
         else:
             topics = validate_topics(topics)
-        
+
         logger.info(f"Extracted {len(topics)} topics")
         return {"topics": topics}
-        
+
     except OllamaError as e:
         logger.error(f"Topic extraction failed: {e}")
         # Use fallback rather than failing completely

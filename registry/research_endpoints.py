@@ -4,7 +4,7 @@ Research Request Endpoints for AI Factory Registry
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
-from typing import List, Optional
+from typing import Optional
 from datetime import datetime
 import uuid
 
@@ -26,10 +26,10 @@ async def create_research_request(
     db: Session = Depends(get_db)
 ):
     """Create a new research request"""
-    
+
     # Generate request ID
     request_id = f"req_{uuid.uuid4().hex[:12]}"
-    
+
     # Create database record
     db_request = ResearchRequest(
         request_id=request_id,
@@ -39,11 +39,11 @@ async def create_research_request(
         input_params=request.input_params.dict(),
         created_at=datetime.utcnow()
     )
-    
+
     db.add(db_request)
     db.commit()
     db.refresh(db_request)
-    
+
     return db_request
 
 
@@ -53,14 +53,14 @@ async def get_research_request(
     db: Session = Depends(get_db)
 ):
     """Get a specific research request"""
-    
+
     db_request = db.query(ResearchRequest).filter(
         ResearchRequest.request_id == request_id
     ).first()
-    
+
     if not db_request:
         raise HTTPException(status_code=404, detail="Research request not found")
-    
+
     return db_request
 
 
@@ -74,24 +74,24 @@ async def list_research_requests(
     db: Session = Depends(get_db)
 ):
     """List research requests with filtering and pagination"""
-    
+
     # Build query
     query = db.query(ResearchRequest)
-    
+
     if user_id:
         query = query.filter(ResearchRequest.user_id == user_id)
     if status:
         query = query.filter(ResearchRequest.status == status)
     if agent_type:
         query = query.filter(ResearchRequest.agent_type == agent_type)
-    
+
     # Get total count
     total = query.count()
-    
+
     # Apply pagination
     offset = (page - 1) * page_size
     requests = query.order_by(desc(ResearchRequest.created_at)).offset(offset).limit(page_size).all()
-    
+
     return {
         "requests": requests,
         "total": total,
@@ -107,14 +107,14 @@ async def update_research_request(
     db: Session = Depends(get_db)
 ):
     """Update a research request (status, results, metadata)"""
-    
+
     db_request = db.query(ResearchRequest).filter(
         ResearchRequest.request_id == request_id
     ).first()
-    
+
     if not db_request:
         raise HTTPException(status_code=404, detail="Research request not found")
-    
+
     # Update fields
     update_data = update.dict(exclude_unset=True)
     for field, value in update_data.items():
@@ -124,14 +124,14 @@ async def update_research_request(
             setattr(db_request, field, value.dict())
         else:
             setattr(db_request, field, value)
-    
+
     # Set started_at if status changed to running
     if update.status == "running" and not db_request.started_at:
         db_request.started_at = datetime.utcnow()
-    
+
     db.commit()
     db.refresh(db_request)
-    
+
     return db_request
 
 
@@ -141,15 +141,15 @@ async def delete_research_request(
     db: Session = Depends(get_db)
 ):
     """Delete a research request"""
-    
+
     db_request = db.query(ResearchRequest).filter(
         ResearchRequest.request_id == request_id
     ).first()
-    
+
     if not db_request:
         raise HTTPException(status_code=404, detail="Research request not found")
-    
+
     db.delete(db_request)
     db.commit()
-    
+
     return None

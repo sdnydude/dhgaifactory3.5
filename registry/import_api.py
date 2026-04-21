@@ -4,7 +4,6 @@ Data Import API endpoints for LibreChat integration.
 Provides file upload endpoints to import ChatGPT, Claude, and Gemini exports
 directly from the LibreChat UI.
 """
-import json
 import logging
 import os
 import shutil
@@ -43,18 +42,18 @@ def run_import_script(job_id: str, source: str, file_path: str, user_id: str, or
     """Background task to run import script."""
     try:
         import_jobs[job_id].status = "running"
-        
+
         # Select script based on source
         script_map = {
             "chatgpt": SCRIPTS_DIR / "import_chatgpt.py",
             "claude": SCRIPTS_DIR / "import_claude.py",
             "gemini": SCRIPTS_DIR / "import_gemini.py",
         }
-        
+
         script = script_map.get(source)
         if not script or not script.exists():
             raise ValueError(f"Unknown source or script not found: {source}")
-        
+
         # Build command
         cmd = [
             "python3", str(script),
@@ -63,7 +62,7 @@ def run_import_script(job_id: str, source: str, file_path: str, user_id: str, or
         ]
         if org_id:
             cmd.extend(["--org-id", org_id])
-        
+
         # Run script
         result = subprocess.run(
             cmd,
@@ -76,11 +75,11 @@ def run_import_script(job_id: str, source: str, file_path: str, user_id: str, or
                 "POSTGRES_PASSWORD": os.getenv("POSTGRES_PASSWORD", ""),
             }
         )
-        
+
         if result.returncode == 0:
             import_jobs[job_id].status = "completed"
             import_jobs[job_id].message = "Import completed successfully"
-            
+
             # Try to parse counts from output
             output = result.stdout
             if "Imported" in output:
@@ -98,12 +97,12 @@ def run_import_script(job_id: str, source: str, file_path: str, user_id: str, or
             import_jobs[job_id].status = "failed"
             import_jobs[job_id].message = f"Import failed: {result.stderr[:500]}"
             logger.error(f"Import failed for job {job_id}: {result.stderr}")
-    
+
     except Exception as e:
         import_jobs[job_id].status = "failed"
         import_jobs[job_id].message = f"Error: {str(e)}"
         logger.exception(f"Import error for job {job_id}")
-    
+
     finally:
         # Cleanup temp file
         try:
@@ -123,20 +122,20 @@ async def upload_and_import(
 ):
     """
     Upload and import an AI conversation export file.
-    
+
     Args:
         source: One of 'chatgpt', 'claude', 'gemini'
         file: The export file (ZIP for ChatGPT/Gemini, JSON for Claude)
         user_id: User UUID
         organization_id: Optional organization UUID
-    
+
     Returns:
         ImportStatus with job_id for tracking
     """
     # Validate source
     if source not in ("chatgpt", "claude", "gemini"):
         raise HTTPException(400, f"Invalid source: {source}. Must be chatgpt, claude, or gemini")
-    
+
     # Validate UUIDs
     try:
         uuid.UUID(user_id)
@@ -144,7 +143,7 @@ async def upload_and_import(
             uuid.UUID(organization_id)
     except ValueError:
         raise HTTPException(400, "Invalid UUID format")
-    
+
     # Validate file extension
     filename = file.filename or "upload"
     if source in ("chatgpt", "gemini"):
@@ -153,19 +152,19 @@ async def upload_and_import(
     elif source == "claude":
         if not filename.endswith(".json"):
             raise HTTPException(400, "Claude exports must be JSON files")
-    
+
     # Save file to temp location
     job_id = str(uuid.uuid4())
     suffix = ".zip" if source in ("chatgpt", "gemini") else ".json"
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
-    
+
     try:
         shutil.copyfileobj(file.file, temp_file)
         temp_file.close()
         temp_path = temp_file.name
     except Exception as e:
         raise HTTPException(500, f"Failed to save uploaded file: {e}")
-    
+
     # Create job status
     status = ImportStatus(
         job_id=job_id,
@@ -174,13 +173,13 @@ async def upload_and_import(
         message=f"Import queued for {filename}"
     )
     import_jobs[job_id] = status
-    
+
     # Queue background task
     background_tasks.add_task(
         run_import_script,
         job_id, source, temp_path, user_id, organization_id
     )
-    
+
     return status
 
 

@@ -6,8 +6,6 @@ Tests for agent registration, heartbeat, listing, and discovery.
 Run with: pytest registry/test_agent_endpoints.py -v
 """
 
-import uuid
-import pytest
 from unittest.mock import MagicMock
 
 

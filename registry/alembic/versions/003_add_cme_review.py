@@ -41,7 +41,7 @@ def upgrade() -> None:
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     )
-    
+
     # Create cme_review_assignments table
     op.create_table(
         'cme_review_assignments',
@@ -60,7 +60,7 @@ def upgrade() -> None:
         sa.Column('escalation_sent_at', sa.DateTime(timezone=True), nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     )
-    
+
     # Add index for finding active assignments by deadline (for timeout handler)
     op.create_index(
         'ix_cme_review_assignments_sla_lookup',

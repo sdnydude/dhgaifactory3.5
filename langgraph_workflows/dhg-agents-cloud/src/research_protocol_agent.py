@@ -10,10 +10,8 @@ LangGraph Cloud Ready:
 - Output to: Grant Writer Agent
 """
 
-import os
 import re
 import json
-import operator
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Annotated
 from typing_extensions import TypedDict
@@ -25,7 +23,7 @@ from langsmith import traceable
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from extract_topic import extract_topic_node
-from pubmed_client import PubMedClient, build_references_section
+from pubmed_client import build_references_section
 from vs_client import vs_generate, vs_select, vs_is_available
 
 # OpenTelemetry tracing (dual-export with LangSmith)
@@ -70,7 +68,7 @@ class ResearchProtocolState(TypedDict):
     learning_objectives_report: Dict[str, Any]
     curriculum_report: Dict[str, Any]
     gap_analysis_report: Dict[str, Any]
-    
+
     # From intake form
     target_audience: str
     estimated_reach: Optional[int]
@@ -79,10 +77,10 @@ class ResearchProtocolState(TypedDict):
     measurement_preferences: Optional[str]
     therapeutic_area: str
     disease_state: str
-    
+
     # === PROCESSING ===
     messages: Annotated[list, add_messages]
-    
+
     # Section-specific data
     study_objectives: Dict[str, Any]
     study_design: Dict[str, Any]
@@ -91,11 +89,11 @@ class ResearchProtocolState(TypedDict):
     data_collection_plan: Dict[str, Any]
     statistical_plan: Dict[str, Any]
     ethical_considerations: Dict[str, Any]
-    
+
     # === OUTPUT ===
     protocol_report: Dict[str, Any]
     protocol_document: str
-    
+
     # === METADATA ===
     target_enrollment: int
     study_duration_months: int
@@ -115,7 +113,7 @@ class ResearchProtocolState(TypedDict):
 
 class LLMClient:
     """Claude-based LLM client with cost tracking."""
-    
+
     def __init__(self):
         self.model = ChatAnthropic(
             model="claude-sonnet-4-20250514",
@@ -123,7 +121,7 @@ class LLMClient:
         )
         self.cost_per_1k_input = 0.003
         self.cost_per_1k_output = 0.015
-    
+
     @traceable(name="research_protocol_llm_call", run_type="llm")
     async def generate(self, system: str, prompt: str, metadata: dict = None) -> dict:
         """Generate response with cost tracking."""
@@ -131,21 +129,21 @@ class LLMClient:
             SystemMessage(content=system),
             HumanMessage(content=prompt)
         ]
-        
+
         response = await self.model.ainvoke(
             messages,
             config={"metadata": metadata or {}}
         )
-        
+
         input_tokens = 0
         output_tokens = 0
         if hasattr(response, 'usage_metadata') and response.usage_metadata:
             input_tokens = response.usage_metadata.get("input_tokens", 0)
             output_tokens = response.usage_metadata.get("output_tokens", 0)
-        
+
         cost = (input_tokens / 1000 * self.cost_per_1k_input) + \
                (output_tokens / 1000 * self.cost_per_1k_output)
-        
+
         return {
             "content": response.content,
             "input_tokens": input_tokens,
@@ -204,12 +202,12 @@ When citing, mentally track what each number refers to (e.g. [1] = Smith et al. 
 @traced_node("research_protocol_agent", "define_study_objectives_node")
 async def define_study_objectives_node(state: ResearchProtocolState) -> dict:
     """Define primary and secondary study objectives."""
-    
+
     objectives = state.get("learning_objectives_report", {}).get("objectives", [])
     gaps = state.get("gap_analysis_report", {}).get("gaps", [])
     disease = state.get("disease_state", "")
     audience = state.get("target_audience", "")
-    
+
     system = f"""{RESEARCH_PROTOCOL_SYSTEM_PROMPT}
 
 You are defining STUDY OBJECTIVES for an educational outcomes research protocol. Return a JSON object:
@@ -226,7 +224,7 @@ You are defining STUDY OBJECTIVES for an educational outcomes research protocol.
     "background_rationale": "Brief paragraph on why this study is needed...",
     "expected_contribution": "What this adds to CME outcomes literature..."
 }}"""
-    
+
     # Extract primary Moore level from objectives
     level_counts = {"level_5": 0, "level_4": 0, "level_3": 0}
     for obj in objectives:
@@ -237,9 +235,9 @@ You are defining STUDY OBJECTIVES for an educational outcomes research protocol.
             level_counts["level_4"] += 1
         else:
             level_counts["level_3"] += 1
-    
+
     primary_level = max(level_counts, key=level_counts.get)
-    
+
     prompt = f"""Define study objectives for {disease} CME outcomes research.
 Target audience: {audience}
 
@@ -299,11 +297,11 @@ Return ONLY valid JSON."""
 @traced_node("research_protocol_agent", "design_study_node")
 async def design_study_node(state: ResearchProtocolState) -> dict:
     """Design study type, population, and sample size."""
-    
+
     audience = state.get("target_audience", "")
     estimated_reach = state.get("estimated_reach", 200)
     disease = state.get("disease_state", "")
-    
+
     system = f"""{RESEARCH_PROTOCOL_SYSTEM_PROMPT}
 
 You are designing the STUDY DESIGN section. Return a JSON object:
@@ -332,9 +330,9 @@ You are designing the STUDY DESIGN section. Return a JSON object:
         "total_duration": "X months"
     }}
 }}"""
-    
+
     target_n = estimated_reach if estimated_reach and estimated_reach > 0 else 200
-    
+
     prompt = f"""Design study for {disease} CME outcomes research.
 Target audience: {audience}
 Estimated reach: {target_n} participants
@@ -392,11 +390,11 @@ Return ONLY valid JSON."""
 @traced_node("research_protocol_agent", "specify_outcomes_node")
 async def specify_outcomes_node(state: ResearchProtocolState) -> dict:
     """Specify primary and secondary outcome measures."""
-    
+
     objectives = state.get("learning_objectives_report", {}).get("objectives", [])
     moore_target = state.get("moore_level_target", "Level 5")
     disease = state.get("disease_state", "")
-    
+
     system = f"""{RESEARCH_PROTOCOL_SYSTEM_PROMPT}
 
 You are specifying OUTCOME MEASURES. Return a JSON object:
@@ -427,7 +425,7 @@ You are specifying OUTCOME MEASURES. Return a JSON object:
 }}
 
 Primary outcome should align to the highest Moore level targeted."""
-    
+
     prompt = f"""Specify outcome measures for {disease} CME research.
 Target Moore level: {moore_target}
 
@@ -483,10 +481,10 @@ Return ONLY valid JSON."""
 @traced_node("research_protocol_agent", "design_instruments_node")
 async def design_instruments_node(state: ResearchProtocolState) -> dict:
     """Design assessment instruments."""
-    
+
     outcomes = state.get("outcome_measures", {})
     disease = state.get("disease_state", "")
-    
+
     system = f"""{RESEARCH_PROTOCOL_SYSTEM_PROMPT}
 
 You are designing ASSESSMENT INSTRUMENTS. Return a JSON array:
@@ -526,7 +524,7 @@ You are designing ASSESSMENT INSTRUMENTS. Return a JSON array:
         }}
     ]
 }}"""
-    
+
     prompt = f"""Design assessment instruments for {disease} CME outcomes research.
 
 OUTCOMES TO MEASURE:
@@ -542,7 +540,7 @@ Design instruments that:
 Return ONLY valid JSON."""
 
     result = await llm.generate(system, prompt, {"step": "instruments"})
-    
+
     try:
         content = result["content"]
         json_match = re.search(r'\{[\s\S]*\}', content)
@@ -553,10 +551,10 @@ Return ONLY valid JSON."""
             instruments = []
     except json.JSONDecodeError:
         instruments = []
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
-    
+
     return {
         "assessment_instruments": instruments,
         "total_tokens": prev_tokens + result["total_tokens"],
@@ -568,14 +566,14 @@ Return ONLY valid JSON."""
 @traced_node("research_protocol_agent", "create_data_collection_plan_node")
 async def create_data_collection_plan_node(state: ResearchProtocolState) -> dict:
     """Create the data collection plan."""
-    
+
     instruments = state.get("assessment_instruments", [])
-    
+
     # Build timepoints from instruments
     timepoints = []
-    
+
     # Pre-activity
-    pre_instruments = [i["instrument_name"] for i in instruments 
+    pre_instruments = [i["instrument_name"] for i in instruments
                        if "pre" in i.get("administration_timing", "").lower() or "before" in i.get("administration_timing", "").lower()]
     if pre_instruments:
         timepoints.append({
@@ -584,9 +582,9 @@ async def create_data_collection_plan_node(state: ResearchProtocolState) -> dict
             "assessments_administered": pre_instruments,
             "data_collected": ["Baseline knowledge", "Demographics", "Practice characteristics"]
         })
-    
+
     # Immediate post
-    post_instruments = [i["instrument_name"] for i in instruments 
+    post_instruments = [i["instrument_name"] for i in instruments
                         if "immediate" in i.get("administration_timing", "").lower() or "post" in i.get("administration_timing", "").lower()]
     if post_instruments:
         timepoints.append({
@@ -595,7 +593,7 @@ async def create_data_collection_plan_node(state: ResearchProtocolState) -> dict
             "assessments_administered": post_instruments,
             "data_collected": ["Post-activity knowledge/competence", "Satisfaction", "Commitments to change"]
         })
-    
+
     # 30-day
     timepoints.append({
         "timepoint_name": "30-Day Follow-up",
@@ -603,7 +601,7 @@ async def create_data_collection_plan_node(state: ResearchProtocolState) -> dict
         "assessments_administered": ["Knowledge Retention Assessment"],
         "data_collected": ["Knowledge retention", "Initial practice change"]
     })
-    
+
     # 60-day
     timepoints.append({
         "timepoint_name": "60-Day Follow-up",
@@ -611,7 +609,7 @@ async def create_data_collection_plan_node(state: ResearchProtocolState) -> dict
         "assessments_administered": ["Practice Change Survey", "Barrier Assessment"],
         "data_collected": ["Commitment implementation", "Barriers encountered", "Practice changes made"]
     })
-    
+
     data_collection_plan = {
         "timepoints": timepoints,
         "data_management": {
@@ -620,7 +618,7 @@ async def create_data_collection_plan_node(state: ResearchProtocolState) -> dict
             "quality_assurance": "Range checks, logic checks, double data entry for key variables"
         }
     }
-    
+
     return {
         "data_collection_plan": data_collection_plan,
         "total_tokens": state.get("total_tokens", 0),
@@ -632,12 +630,12 @@ async def create_data_collection_plan_node(state: ResearchProtocolState) -> dict
 @traced_node("research_protocol_agent", "develop_statistical_plan_node")
 async def develop_statistical_plan_node(state: ResearchProtocolState) -> dict:
     """Develop the statistical analysis plan."""
-    
+
     outcomes = state.get("outcome_measures", {})
     target_n = state.get("target_enrollment", 200)
     disease = state.get("disease_state", "")
     therapeutic_area = state.get("therapeutic_area", "")
-    
+
     system = f"""{RESEARCH_PROTOCOL_SYSTEM_PROMPT}
 
 You are developing a STATISTICAL ANALYSIS PLAN. Return a JSON object:
@@ -658,7 +656,7 @@ You are developing a STATISTICAL ANALYSIS PLAN. Return a JSON object:
     ],
     "handling_missing_data": "Paragraph describing missing data approach..."
 }}"""
-    
+
     prompt = f"""Develop statistical plan for {disease} CME outcomes research in {therapeutic_area}.
 Target enrollment: {target_n}
 Expected completers: ~{int(target_n * 0.6)} (40% attrition)
@@ -718,14 +716,14 @@ Return ONLY valid JSON."""
 @traced_node("research_protocol_agent", "address_ethics_node")
 async def address_ethics_node(state: ResearchProtocolState) -> dict:
     """Address ethical considerations."""
-    
+
     ethical_considerations = {
         "irb_requirements": "Protocol will be submitted for IRB review. Educational outcomes research with minimal risk typically qualifies for expedited review or exemption under 45 CFR 46.104(d)(1) as research on educational practices.",
         "informed_consent": "Participants will be informed of the research component and provide consent by completing the pre-activity assessment. Consent will explain data use, confidentiality, and voluntary nature.",
         "data_privacy": "All data will be collected and stored in HIPAA-compliant systems. Identifying information will be separated from responses and linked only by study ID. Data will be reported only in aggregate.",
         "participant_rights": "Participation in research component is voluntary. Participants may complete the educational activity without contributing data to the study. No incentives contingent on research participation."
     }
-    
+
     return {
         "ethical_considerations": ethical_considerations,
         "total_tokens": state.get("total_tokens", 0),
@@ -737,10 +735,10 @@ async def address_ethics_node(state: ResearchProtocolState) -> dict:
 @traced_node("research_protocol_agent", "assemble_protocol_report_node")
 async def assemble_protocol_report_node(state: ResearchProtocolState) -> dict:
     """Assemble the final protocol report."""
-    
+
     study_objectives = state.get("study_objectives", {})
     outcomes = state.get("outcome_measures", {})
-    
+
     report = {
         "metadata": {
             "agent_version": "2.0",
@@ -791,7 +789,7 @@ async def assemble_protocol_report_node(state: ResearchProtocolState) -> dict:
             ]
         }
     }
-    
+
     return {
         "protocol_report": report,
         "messages": [HumanMessage(content=f"Research protocol complete: {state.get('target_enrollment', 200)} target enrollment, {state.get('study_duration_months', 6)}-month study")]
@@ -802,10 +800,10 @@ async def assemble_protocol_report_node(state: ResearchProtocolState) -> dict:
 @traced_node("research_protocol_agent", "render_protocol_document_node")
 async def render_protocol_document_node(state: ResearchProtocolState) -> dict:
     """Render the protocol as a readable document."""
-    
+
     disease = state.get("disease_state", "")
     report = state.get("protocol_report", {})
-    
+
     system = """You are a research methodologist writing an IRB-ready outcomes research protocol.
 
 FORMATTING RULES:
@@ -830,7 +828,7 @@ STRUCTURE:
 13. References
 
 Write in formal scientific style suitable for IRB review."""
-    
+
     prompt = f"""Create an IRB-ready research protocol document for {disease} CME outcomes research.
 
 PROTOCOL DATA:
@@ -839,12 +837,12 @@ PROTOCOL DATA:
 Format as a complete, formal research protocol document."""
 
     result = await llm.generate(system, prompt, {"step": "render_document"})
-    
+
     document = result["content"]
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
-    
+
     return {
         "protocol_document": document,
         "total_tokens": prev_tokens + result["total_tokens"],
@@ -878,9 +876,9 @@ async def generate_references_node(state: ResearchProtocolState) -> dict:
 
 def create_research_protocol_graph() -> StateGraph:
     """Create the Research Protocol Agent graph."""
-    
+
     graph = StateGraph(ResearchProtocolState)
-    
+
     # Add nodes
     graph.add_node("extract_topic", extract_topic_node)
     graph.add_node("define_objectives", define_study_objectives_node)
@@ -908,7 +906,7 @@ def create_research_protocol_graph() -> StateGraph:
     graph.add_edge("assemble_report", "render_document")
     graph.add_edge("render_document", "generate_references")
     graph.add_edge("generate_references", END)
-    
+
     return graph
 
 
@@ -922,7 +920,7 @@ graph = create_research_protocol_graph().compile()
 
 if __name__ == "__main__":
     import asyncio
-    
+
     async def test():
         # Mock upstream data
         mock_objectives = {
@@ -960,19 +958,19 @@ if __name__ == "__main__":
             "total_tokens": 0,
             "total_cost": 0.0
         }
-        
+
         result = await graph.ainvoke(test_state)
-        
-        print(f"\n=== RESEARCH PROTOCOL RESULT ===")
+
+        print("\n=== RESEARCH PROTOCOL RESULT ===")
         print(f"Target enrollment: {result.get('target_enrollment', 0)}")
         print(f"Study duration: {result.get('study_duration_months', 0)} months")
         print(f"Total tokens: {result.get('total_tokens', 0)}")
         print(f"Total cost: ${result.get('total_cost', 0):.4f}")
-        
+
         report = result.get("protocol_report", {})
         summary = report.get("protocol_summary", {})
-        print(f"\n=== PROTOCOL SUMMARY ===")
+        print("\n=== PROTOCOL SUMMARY ===")
         print(f"Title: {summary.get('title', 'Unknown')}")
         print(f"Primary endpoint: {summary.get('primary_endpoint', 'Unknown')}")
-    
+
     asyncio.run(test())

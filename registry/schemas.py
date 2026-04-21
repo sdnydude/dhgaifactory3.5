@@ -52,18 +52,18 @@ class ServiceIdentity(BaseModel):
     division: Division
     type: AgentType
     description: Optional[str] = None
-    
+
     # LangSmith Cloud fields
     deployment_type: DeploymentType = DeploymentType.LANGSMITH_CLOUD
     deployment_url: Optional[str] = None
     langsmith_deployment_id: Optional[str] = None
     langsmith_org: Optional[str] = None
-    
+
     # GitHub integration
     github_repo: Optional[str] = None
     github_branch: Optional[str] = "main"
     github_path: Optional[str] = None
-    
+
     # Legacy self-hosted fields (backward compatibility)
     endpoint: Optional[str] = None
 
@@ -154,7 +154,7 @@ class Heartbeat(BaseModel):
     timestamp: Optional[datetime] = None
     models: Dict[str, ModelInfo] = Field(default_factory=dict)
     metrics: Optional[HeartbeatMetrics] = None
-    
+
     # LangSmith Cloud fields
     langsmith_deployment_status: Optional[str] = None
     langsmith_traces_count: Optional[int] = None
@@ -237,7 +237,7 @@ class AntigravityChatResponse(BaseModel):
     status: str
     tags: Optional[List[str]] = []
     file_count: Optional[int] = 0
-    
+
     class Config:
         from_attributes = True
 
@@ -262,7 +262,7 @@ class AntigravityFileResponse(BaseModel):
     summary: Optional[str]
     created_at: datetime
     last_modified: datetime
-    
+
     class Config:
         from_attributes = True
 # Registry Research Request Schemas
@@ -290,7 +290,7 @@ class ResearchRequestInput(BaseModel):
     max_results: Optional[int] = 50
     use_local_llm: Optional[bool] = False
     output_format: Optional[str] = "cme_proposal"
-    
+
     # Project details
     due_date: Optional[datetime] = None
     product_name: Optional[str] = None
@@ -340,17 +340,17 @@ class ResearchRequestResponse(BaseModel):
     user_id: str
     agent_type: str
     status: str
-    
+
     input_params: ResearchRequestInput
     output_summary: Optional[ResearchRequestOutputSummary] = None
     processing_metadata: Optional[ResearchRequestMetadata] = None
-    
+
     created_at: datetime
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
-    
+
     error_message: Optional[str] = None
-    
+
     class Config:
         from_attributes = True
 

@@ -2,11 +2,9 @@
 DHG Inference Platform API - Node discovery, model routing, interaction logging.
 """
 import logging
-from datetime import datetime
 from typing import Optional
-from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func as sa_func, and_
 

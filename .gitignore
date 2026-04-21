@@ -28,6 +28,12 @@ models/
 *.swo
 **/.DS_Store
 **/._.DS_Store
+**/._*
+
+# Local tool state (MCP, Serena, remember)
+.mcp.json
+.serena/
+.remember/
 
 # Docker
 *.pid

@@ -11,7 +11,6 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Optional
 
 import torch
 from fastapi import FastAPI, HTTPException, BackgroundTasks
@@ -26,7 +25,7 @@ from .models import (
     TranscriptSegment, TopicTag, AnalysisMetadata
 )
 from .ollama_client import check_ollama_health, get_available_models
-from .db import init_db, check_db_health, AsyncSessionLocal, Job, Result
+from .db import init_db, check_db_health
 from .graph import run_audio_pipeline
 
 # Logging setup
@@ -90,12 +89,12 @@ async def process_job(job_id: str, request: AnalyzeRequest):
     """Run audio pipeline as background task."""
     start_time = time.time()
     active_jobs.inc()
-    
+
     try:
         # Update job status
         job_store[job_id]["status"] = "processing"
         job_store[job_id]["started_at"] = datetime.utcnow()
-        
+
         # Run pipeline
         result = await run_audio_pipeline(
             audio_path=request.audio_path,
@@ -103,9 +102,9 @@ async def process_job(job_id: str, request: AnalyzeRequest):
             diarize=request.diarize,
             num_speakers=request.num_speakers,
         )
-        
+
         processing_time = time.time() - start_time
-        
+
         if result.get("error"):
             job_store[job_id]["status"] = "failed"
             job_store[job_id]["error"] = result["error"]
@@ -116,14 +115,14 @@ async def process_job(job_id: str, request: AnalyzeRequest):
             job_store[job_id]["result"] = result
             job_store[job_id]["processing_time"] = processing_time
             jobs_total.labels(status="completed").inc()
-            
+
             # Record metrics
             if result.get("duration_seconds"):
                 audio_duration.observe(result["duration_seconds"])
             pipeline_duration.observe(processing_time)
-        
+
         job_store[job_id]["completed_at"] = datetime.utcnow()
-        
+
     except Exception as e:
         logger.exception(f"Job {job_id} failed: {e}")
         job_store[job_id]["status"] = "failed"
@@ -131,7 +130,7 @@ async def process_job(job_id: str, request: AnalyzeRequest):
         job_store[job_id]["completed_at"] = datetime.utcnow()
         jobs_total.labels(status="failed").inc()
         errors_total.labels(node="pipeline", error_type="exception").inc()
-    
+
     finally:
         active_jobs.dec()
 
@@ -147,19 +146,19 @@ async def lifespan(app: FastAPI):
     logger.info("=" * 60)
     logger.info("DHG Audio Analysis Agent starting...")
     logger.info("=" * 60)
-    
+
     # Check Ollama
     ollama_ok = await check_ollama_health()
     if not ollama_ok:
         logger.warning("Ollama not available — LLM features will fail")
-    
+
     # Check GPU
     gpu_available = torch.cuda.is_available()
     if gpu_available:
         logger.info(f"CUDA GPU available: {torch.cuda.get_device_name(0)}")
     else:
         logger.warning("No CUDA GPU — transcription will be slow")
-    
+
     # Initialize database (optional)
     try:
         await init_db()
@@ -167,11 +166,11 @@ async def lifespan(app: FastAPI):
         logger.info(f"Database: {'connected' if db_ok else 'not available'}")
     except Exception as e:
         logger.warning(f"Database not available: {e}")
-    
+
     logger.info("Startup complete")
-    
+
     yield
-    
+
     # Shutdown
     logger.info("Shutting down...")
 
@@ -199,11 +198,11 @@ async def analyze_audio(
 ):
     """
     Submit audio for analysis.
-    
+
     Kicks off async pipeline and returns job_id for polling.
     """
     job_id = str(uuid.uuid4())
-    
+
     job_store[job_id] = {
         "job_id": job_id,
         "status": "queued",
@@ -214,9 +213,9 @@ async def analyze_audio(
         "result": None,
         "error": None,
     }
-    
+
     background_tasks.add_task(process_job, job_id, request)
-    
+
     logger.info(f"Job {job_id} queued for {request.audio_path}")
     return JobResponse(job_id=job_id, status="queued")
 
@@ -225,14 +224,14 @@ async def analyze_audio(
 async def get_job_status(job_id: str):
     """
     Get job status and result.
-    
+
     Poll this endpoint to check job progress and retrieve results.
     """
     if job_id not in job_store:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-    
+
     job = job_store[job_id]
-    
+
     response = JobDetailResponse(
         job_id=job_id,
         status=job["status"],
@@ -240,16 +239,16 @@ async def get_job_status(job_id: str):
         created_at=job.get("created_at"),
         completed_at=job.get("completed_at"),
     )
-    
+
     # If completed, format full result
     if job["status"] == "completed" and job.get("result"):
         result = job["result"]
-        
+
         response.result = FullAnalysisResult(
             transcription=TranscriptionResult(
                 text=result.get("transcript_text", ""),
                 segments=[
-                    TranscriptSegment(**seg) 
+                    TranscriptSegment(**seg)
                     for seg in result.get("transcript_segments", [])
                 ],
                 language=result.get("detected_language", "unknown"),
@@ -258,7 +257,7 @@ async def get_job_status(job_id: str):
             translation=result.get("translation"),
             summary=result.get("summary", ""),
             topics=[
-                TopicTag(**t) 
+                TopicTag(**t)
                 for t in result.get("topics", [])
             ],
             metadata=AnalysisMetadata(
@@ -271,7 +270,7 @@ async def get_job_status(job_id: str):
                 }
             )
         )
-    
+
     return response
 
 
@@ -279,22 +278,22 @@ async def get_job_status(job_id: str):
 async def health_check():
     """
     Health check endpoint.
-    
+
     Returns status of all dependencies: Whisper, Ollama, Postgres, GPU.
     """
     ollama_ok = await check_ollama_health()
     db_ok = await check_db_health()
     gpu_available = torch.cuda.is_available()
-    
+
     # Check Whisper (lazy load means we just check if import works)
     try:
-        import faster_whisper
+        import faster_whisper  # noqa: F401
         whisper_ok = True
     except ImportError:
         whisper_ok = False
-    
+
     overall = "healthy" if (ollama_ok and whisper_ok) else "degraded"
-    
+
     return HealthResponse(
         status=overall,
         whisper=whisper_ok,
@@ -308,12 +307,12 @@ async def health_check():
 async def analyze_audio_sync(request: AnalyzeRequest):
     """
     Synchronous analysis endpoint.
-    
+
     Blocks until complete. Use for short audio only (< 10 minutes).
     Timeout: 300 seconds.
     """
     start_time = time.time()
-    
+
     result = await asyncio.wait_for(
         run_audio_pipeline(
             audio_path=request.audio_path,
@@ -323,17 +322,17 @@ async def analyze_audio_sync(request: AnalyzeRequest):
         ),
         timeout=300,
     )
-    
+
     processing_time = time.time() - start_time
-    
+
     if result.get("error"):
         raise HTTPException(status_code=500, detail=result["error"])
-    
+
     return FullAnalysisResult(
         transcription=TranscriptionResult(
             text=result.get("transcript_text", ""),
             segments=[
-                TranscriptSegment(**seg) 
+                TranscriptSegment(**seg)
                 for seg in result.get("transcript_segments", [])
             ],
             language=result.get("detected_language", "unknown"),
@@ -342,7 +341,7 @@ async def analyze_audio_sync(request: AnalyzeRequest):
         translation=result.get("translation"),
         summary=result.get("summary", ""),
         topics=[
-            TopicTag(**t) 
+            TopicTag(**t)
             for t in result.get("topics", [])
         ],
         metadata=AnalysisMetadata(
@@ -361,7 +360,7 @@ async def analyze_audio_sync(request: AnalyzeRequest):
 async def get_models():
     """Get available models."""
     ollama_models = await get_available_models()
-    
+
     return ModelsResponse(
         whisper_model=settings.whisper_model_size,
         llm_model=settings.ollama_model,

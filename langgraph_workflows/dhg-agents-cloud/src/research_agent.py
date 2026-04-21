@@ -12,7 +12,6 @@ LangGraph Cloud Ready:
 import os
 import re
 import json
-import operator
 import httpx
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Annotated
@@ -27,7 +26,7 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from extract_topic import extract_topic_node
-from pubmed_client import PubMedClient as SharedPubMedClient, build_references_section
+from pubmed_client import build_references_section
 from vs_client import vs_generate, vs_select, vs_is_available
 
 # OpenTelemetry tracing (dual-export with LangSmith)
@@ -70,10 +69,10 @@ class ResearchState(TypedDict):
     supporter_products: Optional[List[str]]
     known_gaps: Optional[List[str]]
     competitor_products: Optional[List[str]]
-    
+
     # === PROCESSING ===
     messages: Annotated[list, add_messages]
-    
+
     # Research results by section
     epidemiology_data: Dict[str, Any]
     economic_burden_data: Dict[str, Any]
@@ -81,14 +80,14 @@ class ResearchState(TypedDict):
     guidelines_data: Dict[str, Any]
     market_intelligence_data: Dict[str, Any]
     literature_synthesis_data: Dict[str, Any]
-    
+
     # Citations
     citations: List[Dict[str, Any]]
-    
+
     # === OUTPUT ===
     research_report: Dict[str, Any]
     research_document: str  # Rendered prose document
-    
+
     # Metadata
     search_queries_executed: int
     sources_reviewed: int
@@ -110,7 +109,7 @@ class ResearchState(TypedDict):
 
 class LLMClient:
     """Claude-based LLM client for research synthesis."""
-    
+
     def __init__(self):
         self.model = ChatAnthropic(
             model="claude-sonnet-4-20250514",
@@ -118,7 +117,7 @@ class LLMClient:
         )
         self.cost_per_1k_input = 0.003
         self.cost_per_1k_output = 0.015
-    
+
     @traceable(name="research_llm_call", run_type="llm")
     async def generate(self, system: str, prompt: str, metadata: dict = None) -> dict:
         """Generate response with cost tracking."""
@@ -126,20 +125,20 @@ class LLMClient:
             SystemMessage(content=system),
             HumanMessage(content=prompt)
         ]
-        
+
         response = await self.model.ainvoke(
             messages,
             config={"metadata": metadata or {}}
         )
-        
+
         input_tokens = 0
         output_tokens = 0
         if hasattr(response, 'usage_metadata') and response.usage_metadata:
             input_tokens = response.usage_metadata.get("input_tokens", 0)
             output_tokens = response.usage_metadata.get("output_tokens", 0)
-        
+
         cost = (input_tokens / 1000 * self.cost_per_1k_input) + (output_tokens / 1000 * self.cost_per_1k_output)
-        
+
         return {
             "content": response.content,
             "input_tokens": input_tokens,
@@ -158,9 +157,9 @@ llm = LLMClient()
 
 class PubMedClient:
     """PubMed E-Utils API client."""
-    
+
     BASE_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
-    
+
     @traceable(name="pubmed_search", run_type="retriever")
     async def search(self, query: str, max_results: int = 50, years: int = 5) -> List[str]:
         """Search PubMed and return PMIDs."""
@@ -174,35 +173,35 @@ class PubMedClient:
             "retmode": "json",
             "sort": "relevance"
         }
-        
+
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(f"{self.BASE_URL}/esearch.fcgi", params=params)
             response.raise_for_status()
             data = response.json()
             return data.get("esearchresult", {}).get("idlist", [])
-    
+
     @traceable(name="pubmed_fetch", run_type="retriever")
     async def fetch_details(self, pmids: List[str]) -> List[Dict]:
         """Fetch article details for PMIDs."""
         if not pmids:
             return []
-        
+
         params = {
             "db": "pubmed",
             "id": ",".join(pmids[:50]),
             "retmode": "xml"
         }
-        
+
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.get(f"{self.BASE_URL}/efetch.fcgi", params=params)
             response.raise_for_status()
             return self._parse_xml(response.text)
-    
+
     def _parse_xml(self, xml_text: str) -> List[Dict]:
         """Parse PubMed XML response."""
         import xml.etree.ElementTree as ET
         articles = []
-        
+
         try:
             root = ET.fromstring(xml_text)
             for article in root.findall(".//PubmedArticle"):
@@ -210,39 +209,39 @@ class PubMedClient:
                     medline = article.find(".//MedlineCitation")
                     if medline is None:
                         continue
-                    
+
                     pmid = medline.findtext("PMID", "")
                     art = medline.find(".//Article")
                     if art is None:
                         continue
-                    
+
                     title = art.findtext(".//ArticleTitle", "")
                     abstract_parts = [el.text or "" for el in art.findall(".//AbstractText")]
                     abstract = " ".join(abstract_parts)
-                    
+
                     journal_el = art.find(".//Journal")
                     journal = journal_el.findtext(".//Title", "") if journal_el else ""
-                    
+
                     year = ""
                     pub_date = journal_el.find(".//PubDate") if journal_el else None
                     if pub_date is not None:
                         year = pub_date.findtext("Year", "")
-                    
+
                     authors = []
                     for author in art.findall(".//Author"):
                         last = author.findtext("LastName", "")
                         init = author.findtext("Initials", "")
                         if last:
                             authors.append(f"{last} {init}".strip())
-                    
+
                     doi = ""
                     for eid in article.findall(".//ArticleId"):
                         if eid.get("IdType") == "doi":
                             doi = eid.text or ""
                             break
-                    
+
                     pub_types = [pt.text for pt in medline.findall(".//PublicationType") if pt.text]
-                    
+
                     articles.append({
                         "pmid": pmid,
                         "doi": doi,
@@ -258,7 +257,7 @@ class PubMedClient:
                     continue
         except Exception:
             pass
-        
+
         return articles
 
 
@@ -268,33 +267,33 @@ class PubMedClient:
 
 class PerplexityClient:
     """Perplexity API for academic search."""
-    
+
     ACADEMIC_DOMAINS = [
         "pubmed.ncbi.nlm.nih.gov", "ncbi.nlm.nih.gov", "cochranelibrary.com",
         "jamanetwork.com", "nejm.org", "thelancet.com", "bmj.com",
         "nature.com", "sciencedirect.com", "nih.gov", "cdc.gov", "fda.gov"
     ]
-    
+
     def __init__(self):
         self.api_key = os.getenv("PERPLEXITY_API_KEY")
-    
+
     @traceable(name="perplexity_search", run_type="retriever")
     async def search(self, query: str, focus: str = "academic") -> dict:
         """Search Perplexity with academic focus."""
         if not self.api_key:
             return {"content": "", "citations": []}
-        
+
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
         }
-        
-        system_prompt = """You are a medical research assistant. 
+
+        system_prompt = """You are a medical research assistant.
 ONLY cite peer-reviewed publications from major medical journals.
 Include PMID or DOI for every source.
 Focus on recent data (last 5 years preferred).
 Include specific statistics and numbers."""
-        
+
         payload = {
             "model": "sonar-pro",
             "messages": [
@@ -304,7 +303,7 @@ Include specific statistics and numbers."""
             "return_citations": True,
             "search_domain_filter": self.ACADEMIC_DOMAINS
         }
-        
+
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
                 "https://api.perplexity.ai/chat/completions",
@@ -364,22 +363,22 @@ PROHIBITED:
 @traced_node("research_agent", "research_epidemiology_node")
 async def research_epidemiology_node(state: ResearchState) -> dict:
     """Research epidemiology data for the disease state."""
-    
+
     disease = state.get("disease_state", "")
     geographic = state.get("geographic_focus", "United States")
-    
+
     # Search PubMed for epidemiology
     pubmed = PubMedClient()
     pmids = await pubmed.search(f"{disease} epidemiology prevalence incidence", max_results=20, years=5)
     articles = await pubmed.fetch_details(pmids)
-    
+
     # Search Perplexity for current stats
     perplexity = PerplexityClient()
     epi_result = await perplexity.search(
         f"What is the current prevalence, incidence, mortality, and disease burden for {disease} in {geographic}? "
         f"Include specific statistics with citations from CDC, WHO, or peer-reviewed sources."
     )
-    
+
     system = f"""{RESEARCH_SYSTEM_PROMPT}
 
 You are extracting EPIDEMIOLOGY data. Return a JSON object with this exact structure:
@@ -408,13 +407,13 @@ You are extracting EPIDEMIOLOGY data. Return a JSON object with this exact struc
         "drivers_of_change": "string with citation"
     }}
 }}"""
-    
+
     # Prepare context from PubMed
     pubmed_context = "\n".join([
         f"- {a['title']} ({a['journal']}, {a['year']}): {a['abstract'][:300]}..."
         for a in articles[:10]
     ])
-    
+
     prompt = f"""Extract epidemiology data for {disease} in {geographic}.
 
 PUBMED ARTICLES:
@@ -487,16 +486,16 @@ Return ONLY valid JSON matching the schema above. Every field must have a citati
 @traced_node("research_agent", "research_economic_burden_node")
 async def research_economic_burden_node(state: ResearchState) -> dict:
     """Research economic burden data."""
-    
+
     disease = state.get("disease_state", "")
-    
+
     perplexity = PerplexityClient()
     econ_result = await perplexity.search(
         f"What is the economic burden of {disease}? Include direct healthcare costs, "
         f"indirect costs (productivity, caregiver burden), and healthcare utilization "
         f"(hospitalizations, ED visits) with specific dollar amounts and citations."
     )
-    
+
     system = f"""{RESEARCH_SYSTEM_PROMPT}
 
 You are extracting ECONOMIC BURDEN data. Return a JSON object:
@@ -516,7 +515,7 @@ You are extracting ECONOMIC BURDEN data. Return a JSON object:
         "outpatient_visits": "rate or number with citation"
     }}
 }}"""
-    
+
     prompt = f"""Extract economic burden data for {disease}.
 
 RESEARCH DATA:
@@ -567,20 +566,20 @@ Return ONLY valid JSON. Every dollar amount must have a citation."""
 @traced_node("research_agent", "research_treatment_landscape_node")
 async def research_treatment_landscape_node(state: ResearchState) -> dict:
     """Research current treatment landscape."""
-    
+
     disease = state.get("disease_state", "")
-    
+
     # Search PubMed for treatment/therapy
     pubmed = PubMedClient()
     pmids = await pubmed.search(f"{disease} treatment therapy guideline", max_results=25, years=3)
     articles = await pubmed.fetch_details(pmids)
-    
+
     perplexity = PerplexityClient()
     tx_result = await perplexity.search(
         f"What are the current treatment options for {disease}? Include guideline-recommended "
         f"first-line and second-line therapies, recent drug approvals, and pipeline agents in Phase 3."
     )
-    
+
     system = f"""{RESEARCH_SYSTEM_PROMPT}
 
 You are extracting TREATMENT LANDSCAPE data. Return a JSON object:
@@ -601,12 +600,12 @@ You are extracting TREATMENT LANDSCAPE data. Return a JSON object:
         "recently_approved": ["list of drugs approved in last 2 years"]
     }}
 }}"""
-    
+
     pubmed_context = "\n".join([
         f"- {a['title']} ({a['journal']}, {a['year']})"
         for a in articles[:15]
     ])
-    
+
     prompt = f"""Extract treatment landscape for {disease}.
 
 PUBMED ARTICLES:
@@ -677,16 +676,16 @@ Return ONLY valid JSON. Name specific guidelines (ACC/AHA, ESC, etc.) and drugs.
 @traced_node("research_agent", "research_guidelines_node")
 async def research_guidelines_node(state: ResearchState) -> dict:
     """Research clinical practice guidelines."""
-    
+
     disease = state.get("disease_state", "")
-    
+
     perplexity = PerplexityClient()
     guide_result = await perplexity.search(
         f"What are the major clinical practice guidelines for {disease}? "
         f"Include society names, publication years, and key recommendations. "
         f"Focus on ACC, AHA, ESC, ASCO, NCCN, and other major specialty societies."
     )
-    
+
     system = f"""{RESEARCH_SYSTEM_PROMPT}
 
 You are extracting GUIDELINES data. Return a JSON object:
@@ -711,7 +710,7 @@ You are extracting GUIDELINES data. Return a JSON object:
     "consensus_areas": ["list of areas where guidelines agree"],
     "controversy_areas": ["list of areas where guidelines differ"]
 }}"""
-    
+
     prompt = f"""Extract guideline information for {disease}.
 
 RESEARCH DATA:
@@ -762,14 +761,14 @@ Return ONLY valid JSON. Be specific about society names and years."""
 @traced_node("research_agent", "research_market_intelligence_node")
 async def research_market_intelligence_node(state: ResearchState) -> dict:
     """Research market intelligence (if supporter context provided)."""
-    
+
     disease = state.get("disease_state", "")
     supporter = state.get("supporter_company", "")
     products = state.get("supporter_products", [])
     competitors = state.get("competitor_products", [])
-    
+
     perplexity = PerplexityClient()
-    
+
     if supporter:
         market_query = (
             f"What is the market landscape for {disease} treatments? "
@@ -781,9 +780,9 @@ async def research_market_intelligence_node(state: ResearchState) -> dict:
             f"What is the market landscape for {disease} treatments? "
             f"Include market size, growth trajectory, and major pharmaceutical companies."
         )
-    
+
     market_result = await perplexity.search(market_query)
-    
+
     system = f"""{RESEARCH_SYSTEM_PROMPT}
 
 You are extracting MARKET INTELLIGENCE data. Return a JSON object:
@@ -805,7 +804,7 @@ You are extracting MARKET INTELLIGENCE data. Return a JSON object:
         "pipeline_competition": ["upcoming competitors"]
     }}
 }}"""
-    
+
     prompt = f"""Extract market intelligence for {disease}.
 
 SUPPORTER COMPANY: {supporter or 'Not specified'}
@@ -860,13 +859,13 @@ Return ONLY valid JSON. Be balanced and include competitive context."""
 @traced_node("research_agent", "synthesize_research_node")
 async def synthesize_research_node(state: ResearchState) -> dict:
     """Synthesize all research into literature findings and gaps."""
-    
+
     disease = state.get("disease_state", "")
     epi = state.get("epidemiology_data", {})
     econ = state.get("economic_burden_data", {})
     tx = state.get("treatment_landscape_data", {})
     guidelines = state.get("guidelines_data", {})
-    
+
     system = f"""{RESEARCH_SYSTEM_PROMPT}
 
 You are synthesizing research into KEY FINDINGS and EVIDENCE GAPS. Return a JSON object:
@@ -888,7 +887,7 @@ You are synthesizing research into KEY FINDINGS and EVIDENCE GAPS. Return a JSON
         "priority 2: important but less urgent"
     ]
 }}"""
-    
+
     prompt = f"""Synthesize research on {disease}.
 
 EPIDEMIOLOGY:
@@ -946,7 +945,7 @@ Identify 5-10 key findings and 3-5 evidence gaps. Return ONLY valid JSON."""
 @traced_node("research_agent", "assemble_research_report_node")
 async def assemble_research_report_node(state: ResearchState) -> dict:
     """Assemble final research report."""
-    
+
     # Deduplicate citations
     citations = state.get("citations", [])
     seen_ids = set()
@@ -956,7 +955,7 @@ async def assemble_research_report_node(state: ResearchState) -> dict:
         if cid and cid not in seen_ids:
             seen_ids.add(cid)
             unique_citations.append(c)
-    
+
     report = {
         "metadata": {
             "agent_version": "2.0",
@@ -973,11 +972,11 @@ async def assemble_research_report_node(state: ResearchState) -> dict:
         "literature_synthesis": state.get("literature_synthesis_data", {}),
         "citations": unique_citations
     }
-    
+
     # Quality checks
     citation_count = len(unique_citations)
     meets_citation_minimum = citation_count >= 30
-    
+
     return {
         "research_report": report,
         "sources_reviewed": len(citations),
@@ -990,10 +989,10 @@ async def assemble_research_report_node(state: ResearchState) -> dict:
 @traced_node("research_agent", "render_research_document_node")
 async def render_research_document_node(state: ResearchState) -> dict:
     """Render the research report as a readable prose document."""
-    
+
     disease = state.get("disease_state", "")
     report = state.get("research_report", {})
-    
+
     system = """You are a medical writer converting structured research data into a cohesive, readable research report.
 
 FORMATTING RULES:
@@ -1020,7 +1019,7 @@ Do NOT use:
 - "Studies show" without naming the study
 - Bullet points in the main text
 """
-    
+
     prompt = f"""Convert this research data on {disease} into a cohesive research document.
 
 RESEARCH DATA:
@@ -1029,9 +1028,9 @@ RESEARCH DATA:
 Write a complete, readable research document following the structure above. Use full sentences and paragraphs. Include all key statistics with their citations inline."""
 
     result = await llm.generate(system, prompt, {"step": "render_document"})
-    
+
     document = result["content"]
-    
+
     # Add references section from citations
     citations = report.get("citations", [])
     if citations:
@@ -1046,10 +1045,10 @@ Write a complete, readable research document following the structure above. Use 
             if pmid:
                 document += f" PMID: {pmid}"
             document += "\n\n"
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
-    
+
     return {
         "research_document": document,
         "total_tokens": prev_tokens + result["total_tokens"],
@@ -1080,9 +1079,9 @@ async def generate_references_node(state: ResearchState) -> dict:
 
 def create_research_graph() -> StateGraph:
     """Create the Research Agent graph."""
-    
+
     graph = StateGraph(ResearchState)
-    
+
     # Add nodes
     graph.add_node("extract_topic", extract_topic_node)
     graph.add_node("research_epidemiology", research_epidemiology_node)
@@ -1109,7 +1108,7 @@ def create_research_graph() -> StateGraph:
     graph.add_edge("assemble_report", "render_document")
     graph.add_edge("render_document", "generate_references")
     graph.add_edge("generate_references", END)
-    
+
     return graph
 
 
@@ -1124,7 +1123,7 @@ graph = create_research_graph().compile()
 
 if __name__ == "__main__":
     import asyncio
-    
+
     async def test():
         test_state = {
             "therapeutic_area": "pulmonology",
@@ -1142,20 +1141,20 @@ if __name__ == "__main__":
             "total_tokens": 0,
             "total_cost": 0.0
         }
-        
+
         result = await graph.ainvoke(test_state)
-        
-        print(f"\n=== RESEARCH REPORT ===")
+
+        print("\n=== RESEARCH REPORT ===")
         print(f"Citations: {result.get('sources_cited', 0)} (target: 30+)")
         print(f"Queries executed: {result.get('search_queries_executed', 0)}")
         print(f"Total tokens: {result.get('total_tokens', 0)}")
         print(f"Total cost: ${result.get('total_cost', 0):.4f}")
-        
+
         report = result.get("research_report", {})
-        print(f"\n=== SECTIONS ===")
+        print("\n=== SECTIONS ===")
         for section in ["epidemiology", "economic_burden", "treatment_landscape", "guidelines", "market_intelligence"]:
             data = report.get(section, {})
             print(f"- {section}: {'✓' if data and 'error' not in data else '✗'}")
-    
+
     asyncio.run(test())
 

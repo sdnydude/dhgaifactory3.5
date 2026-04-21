@@ -10,7 +10,6 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from pgvector.sqlalchemy import Vector
-import uuid
 
 Base = declarative_base()
 
@@ -18,7 +17,7 @@ Base = declarative_base()
 class Media(Base):
     """Source media files"""
     __tablename__ = 'media'
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     filename = Column(String(512), nullable=False)
     filepath = Column(String(1024), nullable=False)
@@ -29,7 +28,7 @@ class Media(Base):
     meta_data = Column(JSONB, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
-    
+
     # Relationships
     transcripts = relationship("Transcript", back_populates="media", cascade="all, delete-orphan")
 
@@ -37,7 +36,7 @@ class Media(Base):
 class Transcript(Base):
     """Complete transcription results"""
     __tablename__ = 'transcripts'
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     media_id = Column(UUID(as_uuid=True), ForeignKey('media.id', ondelete='CASCADE'), nullable=False)
     full_text = Column(Text, nullable=False)
@@ -48,7 +47,7 @@ class Transcript(Base):
     processing_time_seconds = Column(Float, nullable=False)
     meta_data = Column(JSONB, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    
+
     # Relationships
     media = relationship("Media", back_populates="transcripts")
     segments = relationship("Segment", back_populates="transcript", cascade="all, delete-orphan")
@@ -57,7 +56,7 @@ class Transcript(Base):
 class Segment(Base):
     """Timestamped transcript segments"""
     __tablename__ = 'segments'
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     transcript_id = Column(UUID(as_uuid=True), ForeignKey('transcripts.id', ondelete='CASCADE'), nullable=False)
     segment_index = Column(Integer, nullable=False)
@@ -68,7 +67,7 @@ class Segment(Base):
     speaker_id = Column(String(64), nullable=True)
     meta_data = Column(JSONB, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    
+
     # Relationships
     transcript = relationship("Transcript", back_populates="segments")
 
@@ -76,7 +75,7 @@ class Segment(Base):
 class Event(Base):
     """Audit log for all registry operations"""
     __tablename__ = 'events'
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     event_type = Column(String(64), nullable=False)  # create, update, delete, transcribe, etc.
     entity_type = Column(String(64), nullable=False)  # media, transcript, segment
@@ -90,7 +89,7 @@ class Event(Base):
 class Project(Base):
     """Claude AI Projects"""
     __tablename__ = 'projects'
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String(512), nullable=False)
     project_id = Column(String(256), nullable=True, unique=True)
@@ -100,7 +99,7 @@ class Project(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
     meta_data = Column(JSONB, nullable=True)
-    
+
     # Relationships
     conversations = relationship("Conversation", back_populates="project", cascade="all, delete-orphan")
 
@@ -108,7 +107,7 @@ class Project(Base):
 class Conversation(Base):
     """Claude AI Conversations"""
     __tablename__ = 'conversations'
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     title = Column(String(1024), nullable=False)
     conversation_id = Column(String(256), nullable=True, unique=True)
@@ -118,7 +117,7 @@ class Conversation(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
     meta_data = Column(JSONB, nullable=True)
-    
+
     # Relationships
     project = relationship("Project", back_populates="conversations")
     messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan", order_by="Message.message_index")
@@ -128,7 +127,7 @@ class Conversation(Base):
 class Message(Base):
     """Individual messages in Claude conversations"""
     __tablename__ = 'messages'
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     conversation_id = Column(UUID(as_uuid=True), ForeignKey('conversations.id', ondelete='CASCADE'), nullable=False)
     message_index = Column(Integer, nullable=False)
@@ -137,7 +136,7 @@ class Message(Base):
     attachments = Column(JSONB, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     meta_data = Column(JSONB, nullable=True)
-    
+
     # Relationships
     conversation = relationship("Conversation", back_populates="messages")
     artifacts = relationship("Artifact", back_populates="message")
@@ -146,7 +145,7 @@ class Message(Base):
 class Artifact(Base):
     """Claude AI Artifacts (code, documents, visualizations, etc.)"""
     __tablename__ = 'artifacts'
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     conversation_id = Column(UUID(as_uuid=True), ForeignKey('conversations.id', ondelete='CASCADE'), nullable=False)
     message_id = Column(UUID(as_uuid=True), ForeignKey('messages.id', ondelete='SET NULL'), nullable=True)
@@ -158,7 +157,7 @@ class Artifact(Base):
     published_url = Column(String(1024), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     meta_data = Column(JSONB, nullable=True)
-    
+
     # Relationships
     conversation = relationship("Conversation", back_populates="artifacts")
     message = relationship("Message", back_populates="artifacts")
@@ -170,59 +169,59 @@ class Artifact(Base):
 
 class Agent(Base):
     __tablename__ = "agents"
-    
+
     id = Column(String, primary_key=True, index=True)
     name = Column(String, nullable=False)
     version = Column(String, nullable=False)
     division = Column(String, nullable=False)
     type = Column(String, nullable=False)
     description = Column(Text)
-    
+
     # Deployment info
     deployment_type = Column(String, default="langsmith_cloud")
     deployment_url = Column(String)
     langsmith_deployment_id = Column(String)
     langsmith_org = Column(String)
-    
+
     # GitHub integration
     github_repo = Column(String)
     github_branch = Column(String, default="main")
     github_path = Column(String)
-    
+
     # Legacy self-hosted (backward compatibility)
     endpoint = Column(String)
-    
+
     # Capabilities and schemas (JSONB for flexibility)
     capabilities = Column(JSONB)
     io_schema = Column(JSONB)
     models = Column(JSONB)
     external_apis = Column(JSONB)
     observability = Column(JSONB)
-    
+
     # Status
     status = Column(String, default="healthy")
     last_heartbeat = Column(DateTime(timezone=True))
-    
+
     # Timestamps
     registered_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    
+
     # Relationships
     heartbeats = relationship("AgentHeartbeat", back_populates="agent", cascade="all, delete-orphan")
 
 
 class AgentHeartbeat(Base):
     __tablename__ = "agent_heartbeats"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     agent_id = Column(String, ForeignKey("agents.id", ondelete="CASCADE"), nullable=False, index=True)
-    
+
     status = Column(String, nullable=False)
     timestamp = Column(DateTime(timezone=True), server_default=func.now(), index=True)
-    
+
     # Model status
     models = Column(JSONB)
-    
+
     # Metrics
     requests_total = Column(Integer, default=0)
     requests_success = Column(Integer, default=0)
@@ -230,12 +229,12 @@ class AgentHeartbeat(Base):
     avg_latency_ms = Column(Float, default=0.0)
     total_tokens = Column(Integer, default=0)
     total_cost_usd = Column(Float, default=0.0)
-    
+
     # LangSmith Cloud metrics
     langsmith_deployment_status = Column(String)
     langsmith_traces_count = Column(Integer)
     deployment_tier = Column(String)
-    
+
     # Relationship
     agent = relationship("Agent", back_populates="heartbeats")
 
@@ -246,7 +245,7 @@ class AgentHeartbeat(Base):
 
 class AntigravityChat(Base):
     __tablename__ = "antigravity_chats"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     conversation_id = Column(String, unique=True, nullable=False, index=True)
     title = Column(Text)
@@ -260,14 +259,14 @@ class AntigravityChat(Base):
     status = Column(String, default="active", index=True)
     tags = Column(ARRAY(String))
     extra_processing_metadata = Column('metadata', JSONB)
-    
+
     # Relationship
     files = relationship("AntigravityFile", back_populates="chat", cascade="all, delete-orphan")
 
 
 class AntigravityFile(Base):
     __tablename__ = "antigravity_files"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     conversation_id = Column(String, ForeignKey("antigravity_chats.conversation_id", ondelete="CASCADE"), nullable=False, index=True)
     file_path = Column(Text, nullable=False)
@@ -278,7 +277,7 @@ class AntigravityFile(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     last_modified = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     extra_processing_metadata = Column('metadata', JSONB)
-    
+
     # Relationship
     chat = relationship("AntigravityChat", back_populates="files")
 
@@ -290,30 +289,30 @@ class AntigravityFile(Base):
 class ResearchRequest(Base):
     """Research request tracking"""
     __tablename__ = "research_requests"
-    
+
     request_id = Column(String, primary_key=True, default=lambda: f"req_{uuid.uuid4().hex[:12]}")
     user_id = Column(String, nullable=False, index=True)
     agent_type = Column(String, nullable=False, default="cme_research")
     status = Column(String, nullable=False, default="pending", index=True)  # pending, running, completed, failed
-    
+
     # Input parameters (JSON)
     input_params = Column(JSONB, nullable=False)
-    
+
     # Output summary (JSON)
     output_summary = Column(JSONB, nullable=True)
-    
+
     # Metadata (JSON)
     processing_metadata = Column(JSONB, nullable=True)
-    
+
     # Error tracking
     error_message = Column(Text, nullable=True)
-    
+
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
     # Indexes
     __table_args__ = (
         Index("idx_research_user_created", "user_id", "created_at"),
@@ -328,44 +327,44 @@ class ResearchRequest(Base):
 class CMEProject(Base):
     """CME Grant projects with intake data and pipeline execution status"""
     __tablename__ = "cme_projects"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    
+
     # Project basics
     name = Column(String(255), nullable=False)
     status = Column(String(50), nullable=False, default="intake")  # intake/processing/review/complete/failed/cancelled
-    
+
     # Full intake form stored as JSONB (10 sections, 47 fields)
     intake = Column(JSONB, nullable=False)
-    
+
     # Pipeline execution tracking
     current_agent = Column(String(100), nullable=True)
     progress_percent = Column(Integer, default=0)
     agents_completed = Column(ARRAY(String), default=[])
     agents_pending = Column(ARRAY(String), default=[])
-    
+
     # LangGraph integration
     pipeline_thread_id = Column(String(100), nullable=True)
     langsmith_run_id = Column(String(100), nullable=True)
-    
+
     # Outputs from each agent stored as JSONB
     outputs = Column(JSONB, default={})
-    
+
     # Error tracking
     errors = Column(JSONB, default=[])
-    
+
     # Human review
     human_review_status = Column(String(50), nullable=True)
     human_review_notes = Column(Text, nullable=True)
     reviewed_by = Column(String(255), nullable=True)
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
-    
+
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
-    
+
     # Run-tracking (added migration 008)
     intake_version = Column(Integer, nullable=False, server_default="1")
     current_run_id = Column(
@@ -470,29 +469,29 @@ class CMEAgentOutput(Base):
 class CMEReviewerConfig(Base):
     """Admin-configurable list of reviewers (R1)"""
     __tablename__ = "cme_reviewer_config"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    
+
     # Reviewer identity
     email = Column(String(255), unique=True, nullable=False, index=True)
     display_name = Column(String(255), nullable=False)
-    
+
     # Configuration
     is_active = Column(Boolean, default=True, nullable=False)
     max_concurrent_reviews = Column(Integer, default=5)  # Workload limit
-    
+
     # Notification preferences
     notify_email = Column(Boolean, default=True)
     notify_google_chat = Column(Boolean, default=True)
     google_chat_webhook_url = Column(String(500), nullable=True)
-    
+
     # Stats
     total_reviews = Column(Integer, default=0)
     avg_review_time_hours = Column(Float, nullable=True)
-    
+
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
-    
+
     # Relationships
     assignments = relationship("CMEReviewAssignment", back_populates="reviewer")
 
@@ -500,37 +499,37 @@ class CMEReviewerConfig(Base):
 class CMEReviewAssignment(Base):
     """Individual review assignment with SLA tracking (R2-R5)"""
     __tablename__ = "cme_review_assignments"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    
+
     # Foreign keys
     project_id = Column(UUID(as_uuid=True), ForeignKey("cme_projects.id", ondelete="CASCADE"), nullable=False, index=True)
     reviewer_id = Column(UUID(as_uuid=True), ForeignKey("cme_reviewer_config.id"), nullable=False, index=True)
-    
+
     # Assignment order (1, 2, or 3 per R2)
     reviewer_order = Column(Integer, nullable=False)
-    
+
     # Status: pending, active, approved, revision_requested, timeout, skipped
     status = Column(String(50), nullable=False, default="pending")
-    
+
     # SLA tracking (R3: 24 hours)
     assigned_at = Column(DateTime(timezone=True), nullable=True)
     sla_deadline = Column(DateTime(timezone=True), nullable=True)  # assigned_at + 24h
     completed_at = Column(DateTime(timezone=True), nullable=True)
-    
+
     # Review content
     decision = Column(String(50), nullable=True)  # approved, revision_requested
     notes = Column(Text, nullable=True)
-    
+
     # Plate JS annotations (stored as JSONB for inline suggestions)
     annotations = Column(JSONB, default=[])
-    
+
     # Notification tracking
     reminder_sent_at = Column(DateTime(timezone=True), nullable=True)
     escalation_sent_at = Column(DateTime(timezone=True), nullable=True)
-    
+
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    
+
     # Relationships
     project = relationship("CMEProject", back_populates="review_assignments")
     reviewer = relationship("CMEReviewerConfig", back_populates="assignments")

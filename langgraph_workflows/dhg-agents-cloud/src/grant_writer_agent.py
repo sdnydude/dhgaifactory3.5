@@ -11,15 +11,11 @@ LangGraph Cloud Ready:
 Model: Claude Opus 4.5 (claude-opus-4-20250514)
 """
 
-import os
 import re
 import json
-import operator
-import httpx
 from datetime import datetime
-from typing import List, Dict, Any, Optional, Annotated
+from typing import List, Dict, Any, Annotated
 from typing_extensions import TypedDict
-from enum import Enum
 
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
@@ -28,7 +24,7 @@ from langsmith import traceable
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from extract_topic import extract_topic_node
-from pubmed_client import PubMedClient, build_references_section
+from pubmed_client import build_references_section
 from vs_client import vs_generate, vs_select, vs_is_available
 
 # OpenTelemetry tracing (dual-export with LangSmith)
@@ -51,33 +47,33 @@ class GrantWriterState(TypedDict):
     accreditation_statement: str
     therapeutic_area: str
     target_audience: str
-    
+
     # Needs Assessment Agent Output
     needs_assessment_output: Dict[str, Any]
-    
+
     # Learning Objectives Agent Output
     learning_objectives_output: Dict[str, Any]
-    
+
     # Curriculum Design Agent Output
     curriculum_design_output: Dict[str, Any]
-    
+
     # Research Protocol Agent Output
     research_protocol_output: Dict[str, Any]
-    
+
     # Marketing Plan Agent Output
     marketing_plan_output: Dict[str, Any]
-    
+
     # Gap Analysis Output (for reference)
     gap_analysis_output: Dict[str, Any]
-    
+
     # Research Output (for reference)
     research_output: Dict[str, Any]
-    
+
     # === PROCESSING ===
     messages: Annotated[list, add_messages]
     current_section: str
     sections_completed: List[str]
-    
+
     # === OUTPUTS (Draft Sections) ===
     cover_letter: Dict[str, Any]
     executive_summary: Dict[str, Any]
@@ -91,11 +87,11 @@ class GrantWriterState(TypedDict):
     org_qualifications_section: Dict[str, Any]
     independence_section: Dict[str, Any]
     appendices: List[Dict[str, Any]]
-    
+
     # Final Output
     grant_package_output: Dict[str, Any]
     complete_document_markdown: str
-    
+
     # Metadata
     agent_version: str
     errors: List[str]
@@ -113,7 +109,7 @@ class GrantWriterState(TypedDict):
 
 class LLMClient:
     """Claude Opus 4.5 LLM client for grant writing."""
-    
+
     def __init__(self):
         self.model = ChatAnthropic(
             model="claude-opus-4-20250514",
@@ -121,7 +117,7 @@ class LLMClient:
         )
         self.cost_per_1k_input = 0.015
         self.cost_per_1k_output = 0.075
-    
+
     @traceable(name="grant_writer_llm_call", run_type="llm")
     async def generate(self, system: str, prompt: str, metadata: dict = None) -> dict:
         """Generate response with cost tracking."""
@@ -129,20 +125,20 @@ class LLMClient:
             SystemMessage(content=system),
             HumanMessage(content=prompt)
         ]
-        
+
         response = await self.model.ainvoke(
             messages,
             config={"metadata": metadata or {}}
         )
-        
+
         input_tokens = 0
         output_tokens = 0
         if hasattr(response, 'usage_metadata') and response.usage_metadata:
             input_tokens = response.usage_metadata.get("input_tokens", 0)
             output_tokens = response.usage_metadata.get("output_tokens", 0)
-        
+
         cost = (input_tokens / 1000 * self.cost_per_1k_input) + (output_tokens / 1000 * self.cost_per_1k_output)
-        
+
         return {
             "content": response.content,
             "input_tokens": input_tokens,
@@ -190,16 +186,16 @@ When citing, mentally track what each number refers to (e.g. [1] = Smith et al. 
 @traced_node("grant_writer_agent", "draft_cover_letter_node")
 async def draft_cover_letter_node(state: GrantWriterState) -> dict:
     """Draft the cover letter."""
-    
+
     project_title = state.get("project_title", "")
     supporter_company = state.get("supporter_company", "")
     supporter_contact = state.get("supporter_contact", "")
     amount = state.get("requested_amount", "")
     therapeutic_area = state.get("therapeutic_area", "")
-    
+
     gap_summary = json.dumps(state.get("gap_analysis_output", {}).get("gap_summary", ""), indent=2)
     objectives = json.dumps(state.get("learning_objectives_output", {}), indent=2)
-    
+
     system = f"""{GRANT_WRITER_SYSTEM_PROMPT}
 
 You are drafting the COVER LETTER. Return a JSON object:
@@ -211,18 +207,18 @@ You are drafting the COVER LETTER. Return a JSON object:
 }}"""
 
     prompt = f"""Draft a cover letter for a CME grant proposal.
-    
+
     PROJECT TITLE: {project_title}
     THERAPEUTIC AREA: {therapeutic_area}
     SUPPORTER: {supporter_company} (Contact: {supporter_contact})
     REQUESTED AMOUNT: {amount}
-    
+
     GAP SUMMARY:
     {gap_summary}
-    
+
     OBJECTIVES:
     {objectives}
-    
+
     Focus on the unmet need and the value of this educational intervention."""
 
     vs_result = None
@@ -265,14 +261,14 @@ You are drafting the COVER LETTER. Return a JSON object:
 @traced_node("grant_writer_agent", "draft_executive_summary_node")
 async def draft_executive_summary_node(state: GrantWriterState) -> dict:
     """Draft the executive summary."""
-    
+
     needs = state.get("needs_assessment_output", {})
     curriculum = state.get("curriculum_design_output", {})
     marketing = state.get("marketing_plan_output", {})
     project_title = state.get("project_title", "")
     therapeutic_area = state.get("therapeutic_area", "")
     requested_amount = state.get("requested_amount", "")
-    
+
     system = f"""{GRANT_WRITER_SYSTEM_PROMPT}
 
 You are drafting the EXECUTIVE SUMMARY. Return a JSON object:
@@ -287,20 +283,20 @@ You are drafting the EXECUTIVE SUMMARY. Return a JSON object:
 }}"""
 
     prompt = f"""Draft an executive summary for this CME grant proposal.
-    
+
     PROJECT TITLE: {project_title}
     THERAPEUTIC AREA: {therapeutic_area}
     REQUESTED AMOUNT: {requested_amount}
-    
+
     NEEDS ASSESSMENT HIGHLIGHTS:
     {json.dumps(needs, indent=2)[:2000]}
-    
+
     PROPOSED SOLUTION (Curriculum):
     {json.dumps(curriculum, indent=2)[:1000]}
-    
+
     REACH (Marketing):
     {json.dumps(marketing, indent=2)[:500]}
-    
+
     Make a compelling case for support."""
 
     vs_result = None
@@ -342,9 +338,9 @@ You are drafting the EXECUTIVE SUMMARY. Return a JSON object:
 @traced_node("grant_writer_agent", "integrate_needs_assessment_node")
 async def integrate_needs_assessment_node(state: GrantWriterState) -> dict:
     """Integrate the full Needs Assessment from upstream agent."""
-    
+
     needs_output = state.get("needs_assessment_output", {})
-    
+
     return {
         "needs_assessment_section": {
             "content": needs_output.get("full_narrative", json.dumps(needs_output, indent=2)),
@@ -359,15 +355,15 @@ async def integrate_needs_assessment_node(state: GrantWriterState) -> dict:
 @traced_node("grant_writer_agent", "format_learning_objectives_node")
 async def format_learning_objectives_node(state: GrantWriterState) -> dict:
     """Format Learning Objectives section."""
-    
+
     objectives = state.get("learning_objectives_output", {})
-    
+
     objectives_list = objectives.get("objectives", [])
     formatted_objectives = "\n".join([
         f"- {obj.get('text', obj) if isinstance(obj, dict) else obj}"
         for obj in objectives_list
     ]) if objectives_list else json.dumps(objectives, indent=2)
-    
+
     return {
         "learning_objectives_section": {
             "content": formatted_objectives,
@@ -382,9 +378,9 @@ async def format_learning_objectives_node(state: GrantWriterState) -> dict:
 @traced_node("grant_writer_agent", "integrate_curriculum_node")
 async def integrate_curriculum_node(state: GrantWriterState) -> dict:
     """Integrate Curriculum Design."""
-    
+
     curriculum = state.get("curriculum_design_output", {})
-    
+
     return {
         "curriculum_section": {
             "content": curriculum.get("curriculum_narrative", json.dumps(curriculum, indent=2)),
@@ -401,11 +397,11 @@ async def integrate_curriculum_node(state: GrantWriterState) -> dict:
 @traced_node("grant_writer_agent", "create_faculty_section_node")
 async def create_faculty_section_node(state: GrantWriterState) -> dict:
     """Create Faculty and Planning Committee section using LLM."""
-    
+
     therapeutic_area = state.get("therapeutic_area", "")
     curriculum = state.get("curriculum_design_output", {})
     org_info = state.get("organization_info", {})
-    
+
     system = f"""{GRANT_WRITER_SYSTEM_PROMPT}
 
 You are drafting the FACULTY AND PLANNING COMMITTEE section. Return a JSON object:
@@ -471,9 +467,9 @@ Requirements:
 @traced_node("grant_writer_agent", "integrate_outcomes_node")
 async def integrate_outcomes_node(state: GrantWriterState) -> dict:
     """Integrate Outcomes and Evaluation Plan from Research Protocol."""
-    
+
     protocol = state.get("research_protocol_output", {})
-    
+
     return {
         "outcomes_section": {
             "content": protocol.get("protocol_narrative", json.dumps(protocol, indent=2)),
@@ -490,9 +486,9 @@ async def integrate_outcomes_node(state: GrantWriterState) -> dict:
 @traced_node("grant_writer_agent", "integrate_marketing_node")
 async def integrate_marketing_node(state: GrantWriterState) -> dict:
     """Integrate Marketing and Audience Generation Plan."""
-    
+
     marketing = state.get("marketing_plan_output", {})
-    
+
     return {
         "marketing_section": {
             "content": marketing.get("narrative_plan", json.dumps(marketing, indent=2)),
@@ -509,13 +505,13 @@ async def integrate_marketing_node(state: GrantWriterState) -> dict:
 @traced_node("grant_writer_agent", "create_budget_section_node")
 async def create_budget_section_node(state: GrantWriterState) -> dict:
     """Create Budget section with LLM-generated justification."""
-    
+
     budget_breakdown = state.get("budget_breakdown", {})
     total = state.get("requested_amount", "0")
     project_title = state.get("project_title", "")
     curriculum = state.get("curriculum_design_output", {})
     marketing = state.get("marketing_plan_output", {})
-    
+
     system = f"""{GRANT_WRITER_SYSTEM_PROMPT}
 
 You are drafting the BUDGET JUSTIFICATION section. Return a JSON object:
@@ -587,10 +583,10 @@ Requirements:
 @traced_node("grant_writer_agent", "draft_org_qualifications_node")
 async def draft_org_qualifications_node(state: GrantWriterState) -> dict:
     """Draft Organizational Qualifications."""
-    
+
     org_info = state.get("organization_info", {})
     therapeutic_area = state.get("therapeutic_area", "")
-    
+
     system = f"""{GRANT_WRITER_SYSTEM_PROMPT}
 
 You are drafting the ORGANIZATIONAL QUALIFICATIONS section. Return a JSON object:
@@ -602,12 +598,12 @@ You are drafting the ORGANIZATIONAL QUALIFICATIONS section. Return a JSON object
 }}"""
 
     prompt = f"""Describe the organization's qualifications for executing this CME program.
-    
+
 THERAPEUTIC AREA: {therapeutic_area}
 
 ORG INFO:
 {json.dumps(org_info, indent=2)}
-    
+
 Emphasize:
 1. Accreditation status and compliance history
 2. Experience in this therapeutic area
@@ -653,11 +649,11 @@ Emphasize:
 @traced_node("grant_writer_agent", "draft_independence_node")
 async def draft_independence_node(state: GrantWriterState) -> dict:
     """Draft Independence and Compliance section using LLM."""
-    
+
     accreditation_statement = state.get("accreditation_statement", "")
     supporter_company = state.get("supporter_company", "")
     org_info = state.get("organization_info", {})
-    
+
     system = f"""{GRANT_WRITER_SYSTEM_PROMPT}
 
 You are drafting the INDEPENDENCE AND COMPLIANCE section. Return a JSON object:
@@ -732,14 +728,14 @@ def _extract_section_content(section: Dict[str, Any]) -> str:
 @traced_node("grant_writer_agent", "assemble_package_node")
 async def assemble_package_node(state: GrantWriterState) -> dict:
     """Assemble the final Grant Package Output with actual document generation."""
-    
+
     project_title = state.get("project_title", "CME Grant Proposal")
     activity_title = state.get("activity_title", "")
     supporter_company = state.get("supporter_company", "")
-    
+
     # Build the complete Markdown document
     sections = []
-    
+
     # Title Page
     sections.append(f"# {project_title}")
     if activity_title:
@@ -748,62 +744,62 @@ async def assemble_package_node(state: GrantWriterState) -> dict:
     sections.append(f"**Date:** {datetime.now().strftime('%B %d, %Y')}")
     sections.append(f"**Requested Amount:** {state.get('requested_amount', 'TBD')}")
     sections.append("\n---\n")
-    
+
     # Cover Letter
     sections.append("## Cover Letter")
     sections.append(_extract_section_content(state.get("cover_letter", {})))
     sections.append("\n---\n")
-    
+
     # Executive Summary
     sections.append("## Executive Summary")
     sections.append(_extract_section_content(state.get("executive_summary", {})))
     sections.append("\n---\n")
-    
+
     # Needs Assessment
     sections.append("## Needs Assessment")
     sections.append(_extract_section_content(state.get("needs_assessment_section", {})))
     sections.append("\n---\n")
-    
+
     # Learning Objectives
     sections.append("## Learning Objectives")
     sections.append(_extract_section_content(state.get("learning_objectives_section", {})))
     sections.append("\n---\n")
-    
+
     # Curriculum and Educational Design
     sections.append("## Curriculum and Educational Design")
     sections.append(_extract_section_content(state.get("curriculum_section", {})))
     sections.append("\n---\n")
-    
+
     # Faculty and Planning Committee
     sections.append("## Faculty and Planning Committee")
     sections.append(_extract_section_content(state.get("faculty_section", {})))
     sections.append("\n---\n")
-    
+
     # Outcomes and Evaluation
     sections.append("## Outcomes and Evaluation Plan")
     sections.append(_extract_section_content(state.get("outcomes_section", {})))
     sections.append("\n---\n")
-    
+
     # Marketing and Audience Generation
     sections.append("## Marketing and Audience Generation")
     sections.append(_extract_section_content(state.get("marketing_section", {})))
     sections.append("\n---\n")
-    
+
     # Budget
     sections.append("## Budget Justification")
     sections.append(_extract_section_content(state.get("budget_section", {})))
     sections.append("\n---\n")
-    
+
     # Organizational Qualifications
     sections.append("## Organizational Qualifications")
     sections.append(_extract_section_content(state.get("org_qualifications_section", {})))
     sections.append("\n---\n")
-    
+
     # Independence and Compliance
     sections.append("## Independence and Compliance Statement")
     sections.append(_extract_section_content(state.get("independence_section", {})))
     sections.append("\n---\n")
-    
+
     # Appendices
     appendices = state.get("appendices", [])
     if appendices:
@@ -811,16 +807,16 @@ async def assemble_package_node(state: GrantWriterState) -> dict:
         for i, appendix in enumerate(appendices, 1):
             sections.append(f"### Appendix {i}: {appendix.get('title', 'Untitled')}")
             sections.append(_extract_section_content(appendix))
-    
+
     # Join all sections
     complete_document = "\n\n".join(sections)
-    
+
     # Count words
     word_count = len(complete_document.split())
-    
+
     # Estimate pages (approx 500 words per page)
     page_estimate = (word_count // 500) + 1
-    
+
     package = {
         "metadata": {
             "agent_version": "2.1-opus",
@@ -845,7 +841,7 @@ async def assemble_package_node(state: GrantWriterState) -> dict:
         "independence_and_compliance": state.get("independence_section"),
         "appendices": appendices
     }
-    
+
     return {
         "grant_package_output": package,
         "complete_document_markdown": complete_document,
@@ -875,9 +871,9 @@ async def generate_references_node(state: GrantWriterState) -> dict:
 
 def create_grant_writer_graph():
     """Create the Grant Writer graph."""
-    
+
     workflow = StateGraph(GrantWriterState)
-    
+
     # Add nodes
     workflow.add_node("extract_topic", extract_topic_node)
     workflow.add_node("draft_cover_letter", draft_cover_letter_node)
@@ -911,7 +907,7 @@ def create_grant_writer_graph():
     workflow.add_edge("draft_independence", "assemble_package")
     workflow.add_edge("assemble_package", "generate_references")
     workflow.add_edge("generate_references", END)
-    
+
     return workflow.compile()
 
 
@@ -921,7 +917,7 @@ graph = create_grant_writer_graph()
 
 if __name__ == "__main__":
     graph = create_grant_writer_graph()
-    
+
     # Generate visualization
     print("=== MERMAID DIAGRAM ===")
     print(graph.get_graph().draw_mermaid())

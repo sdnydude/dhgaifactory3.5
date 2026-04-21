@@ -10,10 +10,8 @@ LangGraph Cloud Ready:
 - Output to: Curriculum Design Agent, Research Protocol Agent
 """
 
-import os
 import re
 import json
-import operator
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Annotated
 from typing_extensions import TypedDict
@@ -25,7 +23,7 @@ from langsmith import traceable
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from extract_topic import extract_topic_node
-from pubmed_client import PubMedClient, build_references_section
+from pubmed_client import build_references_section
 from vs_client import vs_generate, vs_select, vs_is_available
 
 # OpenTelemetry tracing (dual-export with LangSmith)
@@ -69,10 +67,10 @@ class LearningObjectivesState(TypedDict):
     # === INPUT (from upstream agents) ===
     # From Gap Analysis Agent
     gap_analysis_report: Dict[str, Any]
-    
+
     # From Needs Assessment (for context)
     needs_assessment_document: Optional[str]
-    
+
     # From intake form
     target_audience: str
     educational_format: Optional[str]
@@ -80,10 +78,10 @@ class LearningObjectivesState(TypedDict):
     moore_level_target: Optional[str]  # "Level 4", "Level 5"
     therapeutic_area: str
     disease_state: str
-    
+
     # === PROCESSING ===
     messages: Annotated[list, add_messages]
-    
+
     # Section-specific data
     distribution_plan: Dict[str, Any]
     level_5_objectives: List[Dict[str, Any]]
@@ -91,11 +89,11 @@ class LearningObjectivesState(TypedDict):
     level_3_objectives: List[Dict[str, Any]]
     all_objectives: List[Dict[str, Any]]
     gap_coverage_matrix: List[Dict[str, Any]]
-    
+
     # === OUTPUT ===
     learning_objectives_report: Dict[str, Any]
     learning_objectives_document: str
-    
+
     # === METADATA ===
     objectives_count: int
     errors: List[str]
@@ -113,7 +111,7 @@ class LearningObjectivesState(TypedDict):
 
 class LLMClient:
     """Claude-based LLM client with cost tracking."""
-    
+
     def __init__(self):
         self.model = ChatAnthropic(
             model="claude-sonnet-4-20250514",
@@ -121,7 +119,7 @@ class LLMClient:
         )
         self.cost_per_1k_input = 0.003
         self.cost_per_1k_output = 0.015
-    
+
     @traceable(name="learning_objectives_llm_call", run_type="llm")
     async def generate(self, system: str, prompt: str, metadata: dict = None) -> dict:
         """Generate response with cost tracking."""
@@ -129,21 +127,21 @@ class LLMClient:
             SystemMessage(content=system),
             HumanMessage(content=prompt)
         ]
-        
+
         response = await self.model.ainvoke(
             messages,
             config={"metadata": metadata or {}}
         )
-        
+
         input_tokens = 0
         output_tokens = 0
         if hasattr(response, 'usage_metadata') and response.usage_metadata:
             input_tokens = response.usage_metadata.get("input_tokens", 0)
             output_tokens = response.usage_metadata.get("output_tokens", 0)
-        
+
         cost = (input_tokens / 1000 * self.cost_per_1k_input) + \
                (output_tokens / 1000 * self.cost_per_1k_output)
-        
+
         return {
             "content": response.content,
             "input_tokens": input_tokens,
@@ -171,13 +169,13 @@ LEARNING_OBJECTIVES_SYSTEM_PROMPT = """You are a learning objectives specialist 
 MOORE'S FRAMEWORK LEVELS:
 - Level 5 (Performance): Actual behavior change in practice
   VERBS: prescribe, order, initiate, discontinue, adjust, monitor, refer, screen, counsel, document, implement, integrate, incorporate
-  
+
 - Level 4 (Competence): Ability to apply in simulated setting
   VERBS: select, determine, differentiate, assess, evaluate, calculate, interpret, formulate, develop, design
-  
+
 - Level 3B (Procedural Knowledge): Can demonstrate skill
   VERBS: perform, execute, demonstrate, apply, use, administer, conduct
-  
+
 - Level 3A (Declarative Knowledge): Can recall/explain
   VERBS: identify, recognize, describe, explain (USE SPARINGLY)
 
@@ -215,12 +213,12 @@ When citing, mentally track what each number refers to (e.g. [1] = Smith et al. 
 @traced_node("learning_objectives_agent", "plan_distribution_node")
 async def plan_distribution_node(state: LearningObjectivesState) -> dict:
     """Plan objective distribution based on target Moore level."""
-    
+
     target_level = str(state.get("moore_level_target", "Level 5"))
     gap_report = state.get("gap_analysis_report", {})
     gaps = gap_report.get("gaps", [])
     audience = state.get("target_audience", "")
-    
+
     # Determine distribution based on target
     if "5" in target_level:
         distribution = {
@@ -236,16 +234,16 @@ async def plan_distribution_node(state: LearningObjectivesState) -> dict:
             "level_3b_target": "10-20%",
             "level_3a_target": "10-20%"
         }
-    
+
     # Map gaps to objectives needed
     gap_objectives_map = []
     priority_gaps = gap_report.get("recommendations", {}).get("primary_focus", [])
-    
+
     for gap in gaps:
         gap_id = gap.get("gap_id", "")
         barrier_type = gap.get("root_causes", {}).get("primary_barrier_type", "knowledge")
         is_priority = gap_id in priority_gaps
-        
+
         # Suggest Moore level based on barrier type
         if barrier_type == "knowledge":
             suggested_level = "Level 3A or Level 4"
@@ -255,7 +253,7 @@ async def plan_distribution_node(state: LearningObjectivesState) -> dict:
             suggested_level = "Level 4 or Level 5"
         else:  # system or mixed
             suggested_level = "Level 5"
-        
+
         gap_objectives_map.append({
             "gap_id": gap_id,
             "gap_title": gap.get("title", ""),
@@ -264,14 +262,14 @@ async def plan_distribution_node(state: LearningObjectivesState) -> dict:
             "is_priority": is_priority,
             "objectives_needed": 2 if is_priority else 1
         })
-    
+
     distribution_plan = {
         **distribution,
         "gap_objectives_map": gap_objectives_map,
         "total_objectives_planned": sum(g["objectives_needed"] for g in gap_objectives_map),
         "rationale": f"Targeting {target_level} for {audience} based on gap barrier analysis"
     }
-    
+
     return {
         "distribution_plan": distribution_plan,
         "total_tokens": state.get("total_tokens", 0),
@@ -283,13 +281,12 @@ async def plan_distribution_node(state: LearningObjectivesState) -> dict:
 @traced_node("learning_objectives_agent", "draft_level_5_objectives_node")
 async def draft_level_5_objectives_node(state: LearningObjectivesState) -> dict:
     """Draft Level 5 (Performance) objectives."""
-    
+
     disease = state.get("disease_state", "")
     audience = state.get("target_audience", "")
     gap_report = state.get("gap_analysis_report", {})
     gaps = gap_report.get("gaps", [])
-    distribution = state.get("distribution_plan", {})
-    
+
     system = f"""{LEARNING_OBJECTIVES_SYSTEM_PROMPT}
 
 You are drafting LEVEL 5 (Performance) objectives. These target actual behavior change in practice.
@@ -326,11 +323,11 @@ Return a JSON array:
         }}
     ]
 }}"""
-    
+
     # Get priority gaps that need Level 5 objectives
-    priority_gaps = [g for g in gaps if g.get("gap_id") in 
+    priority_gaps = [g for g in gaps if g.get("gap_id") in
                      gap_report.get("recommendations", {}).get("primary_focus", [])]
-    
+
     prompt = f"""Draft 3-5 Level 5 (Performance) objectives for {disease} CME targeting {audience}.
 
 PRIORITY GAPS TO ADDRESS:
@@ -387,17 +384,17 @@ Return ONLY valid JSON."""
 @traced_node("learning_objectives_agent", "draft_level_4_objectives_node")
 async def draft_level_4_objectives_node(state: LearningObjectivesState) -> dict:
     """Draft Level 4 (Competence) objectives."""
-    
+
     disease = state.get("disease_state", "")
     audience = state.get("target_audience", "")
     gap_report = state.get("gap_analysis_report", {})
     gaps = gap_report.get("gaps", [])
     level_5_objectives = state.get("level_5_objectives", [])
-    
+
     # Find gaps not yet covered
     covered_gaps = {obj.get("gap_alignment", {}).get("gap_id") for obj in level_5_objectives}
     uncovered_gaps = [g for g in gaps if g.get("gap_id") not in covered_gaps]
-    
+
     system = f"""{LEARNING_OBJECTIVES_SYSTEM_PROMPT}
 
 You are drafting LEVEL 4 (Competence) objectives. These target clinical reasoning ability.
@@ -434,7 +431,7 @@ Return a JSON array:
         }}
     ]
 }}"""
-    
+
     prompt = f"""Draft 2-4 Level 4 (Competence) objectives for {disease} CME targeting {audience}.
 
 GAPS NEEDING COVERAGE (not yet addressed by Level 5):
@@ -493,32 +490,32 @@ Return ONLY valid JSON."""
 @traced_node("learning_objectives_agent", "draft_level_3_objectives_node")
 async def draft_level_3_objectives_node(state: LearningObjectivesState) -> dict:
     """Draft Level 3 objectives only if gaps remain uncovered."""
-    
+
     disease = state.get("disease_state", "")
     audience = state.get("target_audience", "")
     gap_report = state.get("gap_analysis_report", {})
     gaps = gap_report.get("gaps", [])
     level_5_objectives = state.get("level_5_objectives", [])
     level_4_objectives = state.get("level_4_objectives", [])
-    
+
     # Find still-uncovered gaps
     covered_gaps = set()
     for obj in level_5_objectives + level_4_objectives:
         covered_gaps.add(obj.get("gap_alignment", {}).get("gap_id"))
-    
+
     uncovered_gaps = [g for g in gaps if g.get("gap_id") not in covered_gaps]
-    
+
     # Only create Level 3 if there are uncovered gaps with knowledge barriers
-    knowledge_gaps = [g for g in uncovered_gaps 
+    knowledge_gaps = [g for g in uncovered_gaps
                       if g.get("root_causes", {}).get("primary_barrier_type") == "knowledge"]
-    
+
     if not knowledge_gaps:
         return {
             "level_3_objectives": [],
             "total_tokens": state.get("total_tokens", 0),
             "total_cost": state.get("total_cost", 0.0)
         }
-    
+
     system = f"""{LEARNING_OBJECTIVES_SYSTEM_PROMPT}
 
 You are drafting LEVEL 3 objectives. These should be used sparingly (<20% of total).
@@ -544,7 +541,7 @@ Return a JSON array:
         }}
     ]
 }}"""
-    
+
     prompt = f"""Draft 1-2 Level 3 objectives for {disease} CME targeting {audience}.
 These are for foundational knowledge gaps only. Keep to <20% of total objectives.
 
@@ -600,21 +597,21 @@ Return ONLY valid JSON."""
 @traced_node("learning_objectives_agent", "build_coverage_matrix_node")
 async def build_coverage_matrix_node(state: LearningObjectivesState) -> dict:
     """Build gap coverage matrix and compile all objectives."""
-    
+
     gap_report = state.get("gap_analysis_report", {})
     gaps = gap_report.get("gaps", [])
-    
+
     # Compile all objectives
     all_objectives = (
         state.get("level_5_objectives", []) +
         state.get("level_4_objectives", []) +
         state.get("level_3_objectives", [])
     )
-    
+
     # Renumber objectives sequentially
     for i, obj in enumerate(all_objectives, 1):
         obj["objective_id"] = f"OBJ-{i:03d}"
-    
+
     # Build coverage matrix
     coverage_matrix = []
     for gap in gaps:
@@ -624,21 +621,21 @@ async def build_coverage_matrix_node(state: LearningObjectivesState) -> dict:
             for obj in all_objectives
             if obj.get("gap_alignment", {}).get("gap_id") == gap_id
         ]
-        
+
         if len(addressing_objectives) == 0:
             completeness = "NOT COVERED"
         elif len(addressing_objectives) == 1:
             completeness = "Minimally covered"
         else:
             completeness = "Well covered"
-        
+
         coverage_matrix.append({
             "gap_id": gap_id,
             "gap_title": gap.get("title", ""),
             "objectives_addressing": addressing_objectives,
             "coverage_completeness": completeness
         })
-    
+
     return {
         "all_objectives": all_objectives,
         "gap_coverage_matrix": coverage_matrix,
@@ -652,11 +649,11 @@ async def build_coverage_matrix_node(state: LearningObjectivesState) -> dict:
 @traced_node("learning_objectives_agent", "assemble_objectives_report_node")
 async def assemble_objectives_report_node(state: LearningObjectivesState) -> dict:
     """Assemble the final learning objectives report."""
-    
+
     all_objectives = state.get("all_objectives", [])
     coverage_matrix = state.get("gap_coverage_matrix", [])
     distribution = state.get("distribution_plan", {})
-    
+
     # Calculate level distribution
     level_counts = {"level_3a": 0, "level_3b": 0, "level_4": 0, "level_5": 0, "level_6": 0}
     for obj in all_objectives:
@@ -669,10 +666,10 @@ async def assemble_objectives_report_node(state: LearningObjectivesState) -> dic
             level_counts["level_3b"] += 1
         elif "3a" in level or "3" in level:
             level_counts["level_3a"] += 1
-    
+
     # Determine primary level
     primary_level = max(level_counts, key=level_counts.get)
-    
+
     # Build measurement plan summary
     measurement_plan = {
         "immediate_assessment": [],
@@ -680,18 +677,18 @@ async def assemble_objectives_report_node(state: LearningObjectivesState) -> dic
         "sixty_to_ninety_day_followup": [],
         "outcome_tracking": []
     }
-    
+
     for obj in all_objectives:
         obj_id = obj.get("objective_id", "")
         timing = obj.get("measurement", {}).get("timing", "").lower()
-        
+
         if "immediate" in timing or "pre/post" in timing:
             measurement_plan["immediate_assessment"].append(obj_id)
         if "30" in timing or "thirty" in timing:
             measurement_plan["thirty_day_followup"].append(obj_id)
         if "60" in timing or "90" in timing or "sixty" in timing:
             measurement_plan["sixty_to_ninety_day_followup"].append(obj_id)
-    
+
     report = {
         "metadata": {
             "agent_version": "2.0",
@@ -711,7 +708,7 @@ async def assemble_objectives_report_node(state: LearningObjectivesState) -> dic
         "gap_coverage_matrix": coverage_matrix,
         "measurement_plan_summary": measurement_plan
     }
-    
+
     return {
         "learning_objectives_report": report,
         "messages": [HumanMessage(content=f"Learning objectives complete: {len(all_objectives)} objectives created, {level_counts['level_5'] + level_counts['level_4']} at Level 4+")]
@@ -722,10 +719,10 @@ async def assemble_objectives_report_node(state: LearningObjectivesState) -> dic
 @traced_node("learning_objectives_agent", "render_objectives_document_node")
 async def render_objectives_document_node(state: LearningObjectivesState) -> dict:
     """Render the objectives as a readable document."""
-    
+
     disease = state.get("disease_state", "")
     report = state.get("learning_objectives_report", {})
-    
+
     system = """You are a medical education writer creating a learning objectives document.
 
 FORMATTING RULES:
@@ -747,7 +744,7 @@ Do NOT use:
 - Bullet points for the objectives themselves (use numbered)
 - Vague language
 """
-    
+
     prompt = f"""Create a learning objectives document for {disease} CME.
 
 LEARNING OBJECTIVES DATA:
@@ -760,12 +757,12 @@ Present objectives professionally with:
 - Measurement methodology"""
 
     result = await llm.generate(system, prompt, {"step": "render_document"})
-    
+
     document = result["content"]
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
-    
+
     return {
         "learning_objectives_document": document,
         "total_tokens": prev_tokens + result["total_tokens"],
@@ -795,9 +792,9 @@ async def generate_references_node(state: LearningObjectivesState) -> dict:
 
 def create_learning_objectives_graph() -> StateGraph:
     """Create the Learning Objectives Agent graph."""
-    
+
     graph = StateGraph(LearningObjectivesState)
-    
+
     # Add nodes
     graph.add_node("extract_topic", extract_topic_node)
     graph.add_node("plan_distribution", plan_distribution_node)
@@ -821,7 +818,7 @@ def create_learning_objectives_graph() -> StateGraph:
     graph.add_edge("assemble_report", "render_document")
     graph.add_edge("render_document", "generate_references")
     graph.add_edge("generate_references", END)
-    
+
     return graph
 
 
@@ -835,7 +832,7 @@ graph = create_learning_objectives_graph().compile()
 
 if __name__ == "__main__":
     import asyncio
-    
+
     async def test():
         # Mock gap analysis data
         mock_gap_report = {
@@ -878,18 +875,18 @@ if __name__ == "__main__":
             "total_tokens": 0,
             "total_cost": 0.0
         }
-        
+
         result = await graph.ainvoke(test_state)
-        
-        print(f"\n=== LEARNING OBJECTIVES RESULT ===")
+
+        print("\n=== LEARNING OBJECTIVES RESULT ===")
         print(f"Objectives created: {result.get('objectives_count', 0)}")
         print(f"Total tokens: {result.get('total_tokens', 0)}")
         print(f"Total cost: ${result.get('total_cost', 0):.4f}")
-        
+
         report = result.get("learning_objectives_report", {})
         dist = report.get("framework_application", {}).get("level_distribution", {})
-        print(f"\n=== LEVEL DISTRIBUTION ===")
+        print("\n=== LEVEL DISTRIBUTION ===")
         for level, count in dist.items():
             print(f"- {level}: {count}")
-    
+
     asyncio.run(test())

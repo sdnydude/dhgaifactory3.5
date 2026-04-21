@@ -20,7 +20,7 @@ import re
 import json
 import asyncio
 import logging
-from datetime import datetime, date
+from datetime import datetime
 from typing import Optional, List, Dict, Any
 from typing_extensions import TypedDict
 
@@ -530,7 +530,6 @@ async def validate_quality_node(state: CitationCheckerState) -> dict:
             issues.append("Trust score is 0 but some citations are verified — scoring error")
 
     quality_passed = len(issues) == 0
-    quality_score = 1.0 if quality_passed else max(0.0, 1.0 - (len(issues) * 0.25))
 
     result = {"quality_score": quality_passed}
     if issues:

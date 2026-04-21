@@ -10,10 +10,8 @@ LangGraph Cloud Ready:
 - Output to: Grant Writer Agent
 """
 
-import os
 import re
 import json
-import operator
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Annotated
 from typing_extensions import TypedDict
@@ -25,7 +23,7 @@ from langsmith import traceable
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from extract_topic import extract_topic_node
-from pubmed_client import PubMedClient, build_references_section
+from pubmed_client import build_references_section
 from vs_client import vs_generate, vs_select, vs_is_available
 
 # OpenTelemetry tracing (dual-export with LangSmith)
@@ -64,7 +62,7 @@ class MarketingPlanState(TypedDict):
     # === INPUT (from upstream agents) ===
     learning_objectives_report: Optional[Dict[str, Any]]
     needs_assessment_document: Optional[str]
-    
+
     # From intake form
     target_audience: str
     practice_settings: Optional[List[str]]
@@ -76,10 +74,10 @@ class MarketingPlanState(TypedDict):
     therapeutic_area: str
     disease_state: str
     educational_format: Optional[str]
-    
+
     # === PROCESSING ===
     messages: Annotated[list, add_messages]
-    
+
     # Section-specific data
     audience_profile: Dict[str, Any]
     key_messages: Dict[str, Any]
@@ -87,11 +85,11 @@ class MarketingPlanState(TypedDict):
     budget_allocation: Dict[str, Any]
     timeline: Dict[str, Any]
     performance_metrics: Dict[str, Any]
-    
+
     # === OUTPUT ===
     marketing_report: Dict[str, Any]
     marketing_document: str
-    
+
     # === METADATA ===
     total_budget: float
     projected_reach: int
@@ -111,7 +109,7 @@ class MarketingPlanState(TypedDict):
 
 class LLMClient:
     """Claude-based LLM client with cost tracking."""
-    
+
     def __init__(self):
         self.model = ChatAnthropic(
             model="claude-sonnet-4-20250514",
@@ -119,7 +117,7 @@ class LLMClient:
         )
         self.cost_per_1k_input = 0.003
         self.cost_per_1k_output = 0.015
-    
+
     @traceable(name="marketing_plan_llm_call", run_type="llm")
     async def generate(self, system: str, prompt: str, metadata: dict = None) -> dict:
         """Generate response with cost tracking."""
@@ -127,21 +125,21 @@ class LLMClient:
             SystemMessage(content=system),
             HumanMessage(content=prompt)
         ]
-        
+
         response = await self.model.ainvoke(
             messages,
             config={"metadata": metadata or {}}
         )
-        
+
         input_tokens = 0
         output_tokens = 0
         if hasattr(response, 'usage_metadata') and response.usage_metadata:
             input_tokens = response.usage_metadata.get("input_tokens", 0)
             output_tokens = response.usage_metadata.get("output_tokens", 0)
-        
+
         cost = (input_tokens / 1000 * self.cost_per_1k_input) + \
                (output_tokens / 1000 * self.cost_per_1k_output)
-        
+
         return {
             "content": response.content,
             "input_tokens": input_tokens,
@@ -200,13 +198,13 @@ When citing, mentally track what each number refers to (e.g. [1] = Smith et al. 
 @traced_node("marketing_plan_agent", "develop_audience_profile_node")
 async def develop_audience_profile_node(state: MarketingPlanState) -> dict:
     """Develop detailed audience profile."""
-    
+
     audience = state.get("target_audience", "")
     settings = state.get("practice_settings", [])
     geographic = state.get("geographic_focus", "United States")
     estimated_reach = state.get("estimated_reach", 500)
     disease = state.get("disease_state", "")
-    
+
     system = f"""{MARKETING_SYSTEM_PROMPT}
 
 You are developing an AUDIENCE PROFILE. Return a JSON object:
@@ -238,7 +236,7 @@ You are developing an AUDIENCE PROFILE. Return a JSON object:
         "optimal_timing": "Early morning or evening, weekdays preferred"
     }}
 }}"""
-    
+
     prompt = f"""Develop audience profile for {disease} CME.
 Target audience: {audience}
 Practice settings: {json.dumps(settings) if settings else "Not specified"}
@@ -290,11 +288,11 @@ Return ONLY valid JSON."""
 @traced_node("marketing_plan_agent", "craft_key_messages_node")
 async def craft_key_messages_node(state: MarketingPlanState) -> dict:
     """Craft key marketing messages."""
-    
+
     disease = state.get("disease_state", "")
     audience = state.get("target_audience", "")
     objectives = state.get("learning_objectives_report", {}).get("objectives", [])
-    
+
     system = f"""{MARKETING_SYSTEM_PROMPT}
 
 You are crafting KEY MESSAGES for marketing. Return a JSON object:
@@ -318,10 +316,10 @@ Messages must:
 - Lead with educational value
 - Not promote specific products
 - Highlight clinical relevance"""
-    
+
     # Extract objective themes
     obj_themes = [o.get("objective_text", "")[:100] for o in objectives[:3]]
-    
+
     prompt = f"""Craft key marketing messages for {disease} CME targeting {audience}.
 
 LEARNING OBJECTIVES (for message alignment):
@@ -376,7 +374,7 @@ Return ONLY valid JSON."""
 @traced_node("marketing_plan_agent", "develop_channel_strategy_node")
 async def develop_channel_strategy_node(state: MarketingPlanState) -> dict:
     """Develop multi-channel marketing strategy."""
-    
+
     audience = state.get("target_audience", "")
     audience_profile = state.get("audience_profile", {})
     budget = state.get("marketing_budget", 50000)
@@ -384,11 +382,11 @@ async def develop_channel_strategy_node(state: MarketingPlanState) -> dict:
     preferred_channels = state.get("marketing_channels", [])
     disease = state.get("disease_state", "")
     format_type = state.get("educational_format", "Live symposium")
-    
+
     # Determine if live or online for CPR benchmark
     is_live = "live" in format_type.lower() if format_type else True
     cpr_benchmark = CPR_BENCHMARKS["live_event" if is_live else "online_activity"]["typical"]
-    
+
     system = f"""{MARKETING_SYSTEM_PROMPT}
 
 You are developing a CHANNEL STRATEGY. Return a JSON object:
@@ -423,11 +421,11 @@ CHANNEL CONVERSION RATES (use these for projections):
 - Journal advertising: 0.1-0.3%
 - Social media paid: 0.3-0.8%
 - CME aggregators: 0.5-1%"""
-    
+
     preferred_context = ""
     if preferred_channels:
         preferred_context = f"\nPREFERRED CHANNELS (prioritize): {', '.join(preferred_channels)}"
-    
+
     prompt = f"""Develop channel strategy for {disease} CME.
 Target audience: {audience}
 Budget: ${budget:,.0f}
@@ -492,16 +490,16 @@ Return ONLY valid JSON."""
 @traced_node("marketing_plan_agent", "create_budget_allocation_node")
 async def create_budget_allocation_node(state: MarketingPlanState) -> dict:
     """Create detailed budget allocation."""
-    
+
     budget = state.get("marketing_budget", 50000)
     channel_strategy = state.get("channel_strategy", {})
     projected_reach = state.get("projected_reach", 500)
-    
+
     # Extract channel budgets
     channels = channel_strategy.get("channels", [])
     allocation_by_channel = []
     total_allocated = 0
-    
+
     for channel in channels:
         channel_budget = channel.get("total_channel_budget", 0)
         total_allocated += channel_budget
@@ -510,7 +508,7 @@ async def create_budget_allocation_node(state: MarketingPlanState) -> dict:
             "budget": channel_budget,
             "percentage": (channel_budget / budget * 100) if budget > 0 else 0
         })
-    
+
     # Calculate contingency
     contingency = max(0, budget - total_allocated)
     if contingency > 0:
@@ -519,10 +517,10 @@ async def create_budget_allocation_node(state: MarketingPlanState) -> dict:
             "budget": contingency,
             "percentage": (contingency / budget * 100) if budget > 0 else 0
         })
-    
+
     # Calculate cost per registration
     cpr = budget / projected_reach if projected_reach > 0 else 0
-    
+
     budget_allocation = {
         "total_budget": budget,
         "allocation_by_channel": allocation_by_channel,
@@ -535,7 +533,7 @@ async def create_budget_allocation_node(state: MarketingPlanState) -> dict:
         "contingency": contingency,
         "cost_per_registration_target": round(cpr, 2)
     }
-    
+
     return {
         "budget_allocation": budget_allocation,
         "total_budget": budget,
@@ -549,10 +547,10 @@ async def create_budget_allocation_node(state: MarketingPlanState) -> dict:
 @traced_node("marketing_plan_agent", "build_timeline_node")
 async def build_timeline_node(state: MarketingPlanState) -> dict:
     """Build marketing timeline."""
-    
+
     launch_date = state.get("launch_date", "TBD")
     channel_strategy = state.get("channel_strategy", {})
-    
+
     system = f"""{MARKETING_SYSTEM_PROMPT}
 
 You are building a MARKETING TIMELINE. Return a JSON object:
@@ -579,9 +577,9 @@ You are building a MARKETING TIMELINE. Return a JSON object:
         }}
     ]
 }}"""
-    
+
     channels = [c.get("channel_name") for c in channel_strategy.get("channels", [])]
-    
+
     prompt = f"""Build marketing timeline for CME launch.
 Launch date: {launch_date}
 Campaign duration: 12 weeks
@@ -600,7 +598,7 @@ Include specific activities and milestones.
 Return ONLY valid JSON."""
 
     result = await llm.generate(system, prompt, {"step": "timeline"})
-    
+
     try:
         content = result["content"]
         json_match = re.search(r'\{[\s\S]*\}', content)
@@ -610,10 +608,10 @@ Return ONLY valid JSON."""
             timeline = {}
     except json.JSONDecodeError:
         timeline = {}
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
-    
+
     return {
         "timeline": timeline,
         "total_tokens": prev_tokens + result["total_tokens"],
@@ -625,11 +623,10 @@ Return ONLY valid JSON."""
 @traced_node("marketing_plan_agent", "define_metrics_node")
 async def define_metrics_node(state: MarketingPlanState) -> dict:
     """Define performance metrics and KPIs."""
-    
-    channel_strategy = state.get("channel_strategy", {})
+
     budget = state.get("total_budget", 50000)
     projected_reach = state.get("projected_reach", 500)
-    
+
     performance_metrics = {
         "kpis": [
             {
@@ -666,7 +663,7 @@ async def define_metrics_node(state: MarketingPlanState) -> dict:
         "tracking_plan": "All campaigns will use UTM parameters for attribution. Weekly performance reports will be generated. A central dashboard will track registrations by channel.",
         "optimization_triggers": "Underperforming channels (below 50% of projected conversions at week 4) will have budget reallocated to higher performers."
     }
-    
+
     return {
         "performance_metrics": performance_metrics,
         "total_tokens": state.get("total_tokens", 0),
@@ -678,10 +675,10 @@ async def define_metrics_node(state: MarketingPlanState) -> dict:
 @traced_node("marketing_plan_agent", "assemble_marketing_report_node")
 async def assemble_marketing_report_node(state: MarketingPlanState) -> dict:
     """Assemble the final marketing report."""
-    
+
     channel_strategy = state.get("channel_strategy", {})
     budget_allocation = state.get("budget_allocation", {})
-    
+
     report = {
         "metadata": {
             "agent_version": "2.0",
@@ -710,7 +707,7 @@ async def assemble_marketing_report_node(state: MarketingPlanState) -> dict:
             "regulatory_considerations": "All communications comply with ACCME Standards for Integrity and Independence in Accredited CE."
         }
     }
-    
+
     return {
         "marketing_report": report,
         "messages": [HumanMessage(content=f"Marketing plan complete: ${state.get('total_budget', 0):,.0f} budget targeting {state.get('projected_reach', 0)} registrations")]
@@ -721,10 +718,10 @@ async def assemble_marketing_report_node(state: MarketingPlanState) -> dict:
 @traced_node("marketing_plan_agent", "render_marketing_document_node")
 async def render_marketing_document_node(state: MarketingPlanState) -> dict:
     """Render the marketing plan as a readable document."""
-    
+
     disease = state.get("disease_state", "")
     report = state.get("marketing_report", {})
-    
+
     system = """You are a healthcare marketing strategist writing a marketing plan document.
 
 FORMATTING RULES:
@@ -745,7 +742,7 @@ STRUCTURE:
 8. Compliance
 
 Write in professional marketing language."""
-    
+
     prompt = f"""Create a marketing plan document for {disease} CME.
 
 MARKETING PLAN DATA:
@@ -754,12 +751,12 @@ MARKETING PLAN DATA:
 Present as a complete, actionable marketing plan."""
 
     result = await llm.generate(system, prompt, {"step": "render_document"})
-    
+
     document = result["content"]
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
-    
+
     return {
         "marketing_document": document,
         "total_tokens": prev_tokens + result["total_tokens"],
@@ -789,9 +786,9 @@ async def generate_references_node(state: MarketingPlanState) -> dict:
 
 def create_marketing_plan_graph() -> StateGraph:
     """Create the Marketing Plan Agent graph."""
-    
+
     graph = StateGraph(MarketingPlanState)
-    
+
     # Add nodes
     graph.add_node("extract_topic", extract_topic_node)
     graph.add_node("develop_audience", develop_audience_profile_node)
@@ -817,7 +814,7 @@ def create_marketing_plan_graph() -> StateGraph:
     graph.add_edge("assemble_report", "render_document")
     graph.add_edge("render_document", "generate_references")
     graph.add_edge("generate_references", END)
-    
+
     return graph
 
 
@@ -831,7 +828,7 @@ graph = create_marketing_plan_graph().compile()
 
 if __name__ == "__main__":
     import asyncio
-    
+
     async def test():
         test_state = {
             "therapeutic_area": "pulmonology",
@@ -849,20 +846,20 @@ if __name__ == "__main__":
             "total_tokens": 0,
             "total_cost": 0.0
         }
-        
+
         result = await graph.ainvoke(test_state)
-        
-        print(f"\n=== MARKETING PLAN RESULT ===")
+
+        print("\n=== MARKETING PLAN RESULT ===")
         print(f"Total budget: ${result.get('total_budget', 0):,.0f}")
         print(f"Projected reach: {result.get('projected_reach', 0)}")
         print(f"Cost per registration: ${result.get('cost_per_registration', 0):.2f}")
         print(f"Total tokens: {result.get('total_tokens', 0)}")
         print(f"Total cost: ${result.get('total_cost', 0):.4f}")
-        
+
         report = result.get("marketing_report", {})
         channels = report.get("channel_strategy", {}).get("channels", [])
-        print(f"\n=== CHANNELS ===")
+        print("\n=== CHANNELS ===")
         for c in channels:
             print(f"- {c.get('channel_name', 'Unknown')}: ${c.get('total_channel_budget', 0):,.0f}")
-    
+
     asyncio.run(test())

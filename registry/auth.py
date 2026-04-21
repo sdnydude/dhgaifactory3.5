@@ -20,13 +20,10 @@ import jwt
 import httpx
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
-from sqlalchemy.sql import func
 
 from database import get_db
 from models import (
     SecurityUser,
-    SecurityUserRole,
-    SecurityRole,
     SecurityProjectAccess,
     SecurityAuditLog,
 )

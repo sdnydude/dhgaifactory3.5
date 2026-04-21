@@ -15,7 +15,6 @@ Author: Digital Harmony Group
 Version: 1.0.0
 """
 
-import os
 import json
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any, Literal
@@ -23,9 +22,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from langsmith import Client as LangSmithClient
-from langsmith.schemas import Run, Feedback
-from langsmith.evaluation import evaluate
-import httpx
 
 
 # =============================================================================
@@ -64,7 +60,7 @@ class FeedbackEntry:
     issues: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
     timestamp: datetime = field(default_factory=datetime.utcnow)
-    
+
     def to_langsmith_feedback(self) -> dict:
         """Convert to LangSmith feedback format"""
         return {
@@ -87,19 +83,19 @@ class FeedbackEntry:
 class FeedbackCollector:
     """
     Collects feedback from multiple sources and submits to LangSmith.
-    
+
     Sources:
     - Direct API calls
     - MCP Server
     - LibreChat UI
     - Automated evaluations
     """
-    
+
     def __init__(self, project_name: str = "dhg-cme-research-agent"):
         self.client = LangSmithClient()
         self.project_name = project_name
         self._feedback_buffer: List[FeedbackEntry] = []
-    
+
     def submit_feedback(
         self,
         run_id: str,
@@ -111,7 +107,7 @@ class FeedbackCollector:
     ) -> str:
         """
         Submit feedback to LangSmith.
-        
+
         Args:
             run_id: LangSmith run ID
             score: Quality score 0.0 (bad) to 1.0 (excellent)
@@ -119,7 +115,7 @@ class FeedbackCollector:
             source: Where feedback came from
             comment: Optional text comment
             issues: Optional list of specific issues
-        
+
         Returns:
             Feedback ID
         """
@@ -131,10 +127,10 @@ class FeedbackCollector:
             comment=comment,
             issues=issues or []
         )
-        
+
         feedback = self.client.create_feedback(**entry.to_langsmith_feedback())
         return feedback.id
-    
+
     def submit_thumbs(self, run_id: str, thumbs_up: bool, comment: Optional[str] = None) -> str:
         """Simple thumbs up/down feedback"""
         return self.submit_feedback(
@@ -143,7 +139,7 @@ class FeedbackCollector:
             source=FeedbackSource.USER_MANUAL,
             comment=comment
         )
-    
+
     def submit_multi_dimension(
         self,
         run_id: str,
@@ -163,7 +159,7 @@ class FeedbackCollector:
             )
             feedback_ids.append(fid)
         return feedback_ids
-    
+
     def get_run_feedback(self, run_id: str) -> List[dict]:
         """Get all feedback for a run"""
         feedbacks = self.client.list_feedback(run_ids=[run_id])
@@ -177,22 +173,22 @@ class FeedbackCollector:
             }
             for f in feedbacks
         ]
-    
+
     def get_feedback_summary(self, days: int = 7) -> dict:
         """Get feedback summary for recent runs"""
         runs = self.client.list_runs(
             project_name=self.project_name,
             start_time=datetime.utcnow() - timedelta(days=days)
         )
-        
+
         total_runs = 0
         feedback_counts = {"positive": 0, "negative": 0, "neutral": 0}
         dimension_scores = {d.value: [] for d in QualityDimension}
-        
+
         for run in runs:
             total_runs += 1
             feedbacks = list(self.client.list_feedback(run_ids=[run.id]))
-            
+
             for f in feedbacks:
                 if f.score is not None:
                     if f.score >= 0.7:
@@ -201,10 +197,10 @@ class FeedbackCollector:
                         feedback_counts["negative"] += 1
                     else:
                         feedback_counts["neutral"] += 1
-                    
+
                     if f.key in dimension_scores:
                         dimension_scores[f.key].append(f.score)
-        
+
         return {
             "period_days": days,
             "total_runs": total_runs,
@@ -226,16 +222,16 @@ class EvaluationCase:
     id: str
     name: str
     description: str
-    
+
     # Input to the agent
     input: Dict[str, Any]
-    
+
     # Expected output characteristics (not exact match)
     expected: Dict[str, Any]
-    
+
     # Tags for filtering
     tags: List[str] = field(default_factory=list)
-    
+
     # Difficulty level
     difficulty: Literal["easy", "medium", "hard"] = "medium"
 
@@ -243,13 +239,13 @@ class EvaluationCase:
 class EvaluationDataset:
     """
     Manages evaluation test cases for the CME Research Agent.
-    
+
     Test cases define:
     - Input parameters
     - Expected output characteristics
     - Quality criteria
     """
-    
+
     # Built-in test cases for CME Research Agent
     BUILTIN_CASES = [
         EvaluationCase(
@@ -359,32 +355,32 @@ class EvaluationDataset:
             difficulty="easy"
         )
     ]
-    
+
     def __init__(self, langsmith_client: Optional[LangSmithClient] = None):
         self.client = langsmith_client or LangSmithClient()
         self.cases = {c.id: c for c in self.BUILTIN_CASES}
-    
+
     def get_case(self, case_id: str) -> Optional[EvaluationCase]:
         """Get a specific test case"""
         return self.cases.get(case_id)
-    
+
     def get_cases_by_tag(self, tag: str) -> List[EvaluationCase]:
         """Get all cases with a specific tag"""
         return [c for c in self.cases.values() if tag in c.tags]
-    
+
     def get_cases_by_difficulty(self, difficulty: str) -> List[EvaluationCase]:
         """Get all cases of a specific difficulty"""
         return [c for c in self.cases.values() if c.difficulty == difficulty]
-    
+
     def add_case(self, case: EvaluationCase) -> None:
         """Add a custom test case"""
         self.cases[case.id] = case
-    
+
     def create_langsmith_dataset(self, name: str = "cme-research-eval") -> str:
         """Create/update LangSmith dataset from test cases"""
         # Check if dataset exists
         datasets = list(self.client.list_datasets(dataset_name=name))
-        
+
         if datasets:
             dataset = datasets[0]
         else:
@@ -392,7 +388,7 @@ class EvaluationDataset:
                 dataset_name=name,
                 description="Evaluation dataset for DHG CME Research Agent"
             )
-        
+
         # Add examples
         for case in self.cases.values():
             self.client.create_example(
@@ -406,9 +402,9 @@ class EvaluationDataset:
                     "tags": case.tags
                 }
             )
-        
+
         return dataset.id
-    
+
     def export_cases(self) -> List[dict]:
         """Export all cases as JSON-serializable dicts"""
         return [
@@ -432,17 +428,17 @@ class EvaluationDataset:
 class QualityEvaluator:
     """
     Automated quality evaluation for research agent outputs.
-    
+
     Evaluates:
     - Citation quality and count
     - Synthesis accuracy
     - Gap identification
     - CME compliance
     """
-    
+
     def __init__(self):
         self.feedback_collector = FeedbackCollector()
-    
+
     def evaluate_result(
         self,
         result: Dict[str, Any],
@@ -451,27 +447,27 @@ class QualityEvaluator:
     ) -> Dict[str, Any]:
         """
         Evaluate agent result against expected criteria.
-        
+
         Returns:
             Evaluation scores and details
         """
         scores = {}
         issues = []
-        
+
         # Citation count
         citations = result.get("validated_citations", [])
         citation_count = len(citations)
-        
+
         if "min_citations" in expected:
             if citation_count >= expected["min_citations"]:
                 scores["citation_count"] = 1.0
             else:
                 scores["citation_count"] = citation_count / expected["min_citations"]
                 issues.append(f"Only {citation_count} citations, expected {expected['min_citations']}+")
-        
+
         if "max_citations" in expected and citation_count > expected["max_citations"]:
             issues.append(f"Too many citations: {citation_count} > {expected['max_citations']}")
-        
+
         # Evidence levels
         if "evidence_levels_include" in expected:
             found_levels = set(c.get("evidence_level") for c in citations)
@@ -481,7 +477,7 @@ class QualityEvaluator:
                 scores["evidence_quality"] = len(overlap) / len(expected_levels)
                 if not overlap:
                     issues.append(f"No high-quality evidence found (expected: {expected_levels})")
-        
+
         # Clinical gaps
         clinical_gaps = result.get("clinical_gaps", [])
         if expected.get("has_clinical_gaps"):
@@ -493,7 +489,7 @@ class QualityEvaluator:
             else:
                 scores["gap_identification"] = 0.0
                 issues.append("No clinical gaps identified")
-        
+
         # Key findings
         key_findings = result.get("key_findings", [])
         if expected.get("has_key_findings"):
@@ -504,18 +500,18 @@ class QualityEvaluator:
             else:
                 scores["findings"] = 0.0
                 issues.append("No key findings extracted")
-        
+
         # Synthesis quality
         synthesis = result.get("synthesis", "")
         word_count = len(synthesis.split())
-        
+
         if "synthesis_min_words" in expected:
             if word_count >= expected["synthesis_min_words"]:
                 scores["synthesis_completeness"] = 1.0
             else:
                 scores["synthesis_completeness"] = word_count / expected["synthesis_min_words"]
                 issues.append(f"Synthesis too short: {word_count} words, expected {expected['synthesis_min_words']}+")
-        
+
         # Must mention terms
         if "must_mention" in expected:
             synthesis_lower = synthesis.lower()
@@ -524,15 +520,15 @@ class QualityEvaluator:
             missing = [t for t in expected["must_mention"] if t.lower() not in synthesis_lower]
             if missing:
                 issues.append(f"Missing required terms: {missing}")
-        
+
         # Overall score
         if scores:
             overall = sum(scores.values()) / len(scores)
         else:
             overall = 0.5  # Neutral if no criteria
-        
+
         scores["overall"] = overall
-        
+
         # Submit feedback to LangSmith if run_id provided
         if run_id:
             for dimension_name, score in scores.items():
@@ -540,7 +536,7 @@ class QualityEvaluator:
                     dimension = QualityDimension(dimension_name)
                 except ValueError:
                     dimension = QualityDimension.OVERALL
-                
+
                 self.feedback_collector.submit_feedback(
                     run_id=run_id,
                     score=score,
@@ -548,7 +544,7 @@ class QualityEvaluator:
                     source=FeedbackSource.AUTOMATED_EVAL,
                     issues=issues if dimension_name == "overall" else None
                 )
-        
+
         return {
             "scores": scores,
             "overall": overall,
@@ -559,7 +555,7 @@ class QualityEvaluator:
             "finding_count": len(key_findings),
             "synthesis_words": word_count
         }
-    
+
     async def run_evaluation_suite(
         self,
         agent_func,
@@ -569,13 +565,13 @@ class QualityEvaluator:
     ) -> Dict[str, Any]:
         """
         Run evaluation suite against multiple test cases.
-        
+
         Args:
             agent_func: Async function to run agent (e.g., run_research)
             dataset: Evaluation dataset
             case_ids: Specific case IDs to run (or None for all)
             tags: Filter by tags
-        
+
         Returns:
             Suite results with per-case and aggregate scores
         """
@@ -589,23 +585,23 @@ class QualityEvaluator:
             cases = list({c.id: c for c in cases}.values())  # Dedupe
         else:
             cases = list(dataset.cases.values())
-        
+
         results = []
         for case in cases:
             try:
                 # Run agent
                 agent_result = await agent_func(**case.input)
-                
+
                 # Get run_id from result if available
                 run_id = agent_result.get("_run_id")
-                
+
                 # Evaluate
                 eval_result = self.evaluate_result(
                     result=agent_result,
                     expected=case.expected,
                     run_id=run_id
                 )
-                
+
                 results.append({
                     "case_id": case.id,
                     "case_name": case.name,
@@ -615,7 +611,7 @@ class QualityEvaluator:
                     "scores": eval_result["scores"],
                     "issues": eval_result["issues"]
                 })
-                
+
             except Exception as e:
                 results.append({
                     "case_id": case.id,
@@ -625,12 +621,12 @@ class QualityEvaluator:
                     "overall_score": 0.0,
                     "error": str(e)
                 })
-        
+
         # Aggregate
         passed_count = sum(1 for r in results if r["passed"])
         total_count = len(results)
         avg_score = sum(r["overall_score"] for r in results) / total_count if total_count else 0
-        
+
         return {
             "summary": {
                 "total_cases": total_count,
@@ -643,7 +639,7 @@ class QualityEvaluator:
                 diff: {
                     "count": len([r for r in results if r.get("difficulty") == diff]),
                     "passed": len([r for r in results if r.get("difficulty") == diff and r["passed"]]),
-                    "avg_score": sum(r["overall_score"] for r in results if r.get("difficulty") == diff) / 
+                    "avg_score": sum(r["overall_score"] for r in results if r.get("difficulty") == diff) /
                                max(1, len([r for r in results if r.get("difficulty") == diff]))
                 }
                 for diff in ["easy", "medium", "hard"]
@@ -659,36 +655,36 @@ class QualityEvaluator:
 class ImprovementTracker:
     """
     Tracks improvements over time and identifies patterns.
-    
+
     Analyzes:
     - Score trends
     - Common failure patterns
     - Improvement opportunities
     """
-    
+
     def __init__(self, project_name: str = "dhg-cme-research-agent"):
         self.client = LangSmithClient()
         self.project_name = project_name
         self.feedback_collector = FeedbackCollector(project_name)
-    
+
     def get_score_trend(self, days: int = 30, dimension: str = "overall") -> List[dict]:
         """Get score trend over time"""
         runs = list(self.client.list_runs(
             project_name=self.project_name,
             start_time=datetime.utcnow() - timedelta(days=days)
         ))
-        
+
         daily_scores = {}
         for run in runs:
             date_key = run.start_time.strftime("%Y-%m-%d")
             feedbacks = list(self.client.list_feedback(run_ids=[run.id]))
-            
+
             for f in feedbacks:
                 if f.key == dimension and f.score is not None:
                     if date_key not in daily_scores:
                         daily_scores[date_key] = []
                     daily_scores[date_key].append(f.score)
-        
+
         return [
             {
                 "date": date,
@@ -699,28 +695,28 @@ class ImprovementTracker:
             }
             for date, scores in sorted(daily_scores.items())
         ]
-    
+
     def identify_failure_patterns(self, days: int = 14) -> Dict[str, Any]:
         """Identify common failure patterns from feedback"""
         runs = list(self.client.list_runs(
             project_name=self.project_name,
             start_time=datetime.utcnow() - timedelta(days=days)
         ))
-        
+
         issue_counts = {}
         low_score_dimensions = {}
         failure_inputs = []
-        
+
         for run in runs:
             feedbacks = list(self.client.list_feedback(run_ids=[run.id]))
-            
+
             for f in feedbacks:
                 # Track low scores by dimension
                 if f.score is not None and f.score < 0.5:
                     if f.key not in low_score_dimensions:
                         low_score_dimensions[f.key] = 0
                     low_score_dimensions[f.key] += 1
-                
+
                 # Parse issues from comments
                 if f.comment:
                     try:
@@ -731,7 +727,7 @@ class ImprovementTracker:
                             issue_counts[issue] += 1
                     except json.JSONDecodeError:
                         pass
-                
+
                 # Track failing inputs
                 if f.score is not None and f.score < 0.3:
                     failure_inputs.append({
@@ -740,14 +736,14 @@ class ImprovementTracker:
                         "score": f.score,
                         "dimension": f.key
                     })
-        
+
         return {
             "common_issues": sorted(issue_counts.items(), key=lambda x: -x[1])[:10],
             "weak_dimensions": sorted(low_score_dimensions.items(), key=lambda x: -x[1]),
             "failure_examples": failure_inputs[:5],
             "recommendations": self._generate_recommendations(issue_counts, low_score_dimensions)
         }
-    
+
     def _generate_recommendations(
         self,
         issue_counts: Dict[str, int],
@@ -755,50 +751,50 @@ class ImprovementTracker:
     ) -> List[str]:
         """Generate improvement recommendations based on patterns"""
         recommendations = []
-        
+
         # Check for citation issues
         citation_issues = [k for k in issue_counts if "citation" in k.lower()]
         if citation_issues:
             recommendations.append(
                 "CITATION QUALITY: Consider expanding PubMed search terms or adjusting evidence level filters"
             )
-        
+
         # Check for gap identification issues
         if low_score_dimensions.get("gap_identification", 0) > 3:
             recommendations.append(
                 "GAP IDENTIFICATION: Review synthesis prompt - may need more explicit gap extraction instructions"
             )
-        
+
         # Check for synthesis issues
         if low_score_dimensions.get("synthesis_completeness", 0) > 3:
             recommendations.append(
                 "SYNTHESIS DEPTH: Increase max_tokens for synthesis step or adjust prompt for more detail"
             )
-        
+
         # Check for relevance issues
         missing_terms = [k for k in issue_counts if "Missing required terms" in k]
         if missing_terms:
             recommendations.append(
                 "RELEVANCE: Agent may be going off-topic - consider adding relevance guardrails"
             )
-        
+
         # Check for evidence quality
         if low_score_dimensions.get("evidence_quality", 0) > 3:
             recommendations.append(
                 "EVIDENCE QUALITY: Tighten evidence level filters or expand date range for more high-quality sources"
             )
-        
+
         if not recommendations:
             recommendations.append("No major issues detected - continue monitoring")
-        
+
         return recommendations
-    
+
     def generate_improvement_report(self, days: int = 14) -> Dict[str, Any]:
         """Generate comprehensive improvement report"""
         trend = self.get_score_trend(days=days)
         patterns = self.identify_failure_patterns(days=days)
         summary = self.feedback_collector.get_feedback_summary(days=days)
-        
+
         # Calculate trend direction
         if len(trend) >= 2:
             recent_avg = sum(t["avg_score"] for t in trend[-3:]) / min(3, len(trend))
@@ -806,7 +802,7 @@ class ImprovementTracker:
             trend_direction = "improving" if recent_avg > earlier_avg else "declining" if recent_avg < earlier_avg else "stable"
         else:
             trend_direction = "insufficient_data"
-        
+
         return {
             "report_date": datetime.utcnow().isoformat(),
             "period_days": days,

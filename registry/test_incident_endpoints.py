@@ -7,7 +7,6 @@ Run with: pytest registry/test_incident_endpoints.py -v
 """
 
 import uuid
-import pytest
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 

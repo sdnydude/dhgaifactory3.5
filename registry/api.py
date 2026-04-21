@@ -3,11 +3,10 @@ DHG Registry API Service
 FastAPI service with /healthz, /metrics, and CRUD operations
 All data stored in PostgreSQL DHG Registry
 """
-import os
 import time
 import logging
 from contextlib import asynccontextmanager
-from typing import List, Optional, Union
+from typing import List, Optional
 from datetime import datetime
 import uuid
 
@@ -16,13 +15,13 @@ logger = logging.getLogger("dhg.registry")
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
-from pydantic import BaseModel, Field, UUID4
-from sqlalchemy import select, func
+from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session
-from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
+from prometheus_client import Counter, Histogram, generate_latest
 
-from database import engine, SessionLocal, get_db, db_connections
-from models import Base, Media, Transcript, Segment, Event, Project, Conversation, Message, Artifact
+from database import engine, SessionLocal, get_db
+from models import Media, Transcript, Segment, Event
 
 
 # ============================================================================
@@ -384,7 +383,7 @@ async def create_media(media: MediaCreate, db: Session = Depends(get_db)):
         db.add(db_media)
         db.commit()
         db.refresh(db_media)
-        
+
         # Log event
         db_event = Event(
             event_type="create",
@@ -394,10 +393,10 @@ async def create_media(media: MediaCreate, db: Session = Depends(get_db)):
         )
         db.add(db_event)
         db.commit()
-        
+
         registry_write_operations.labels(operation='create_media').inc()
         registry_write_latency.observe((time.time() - start_time) * 1000)
-        
+
         return db_media
     except Exception as e:
         registry_errors.labels(error_type='create_media_failed').inc()
@@ -448,16 +447,16 @@ async def create_transcript(transcript: TranscriptCreate, db: Session = Depends(
         media = db.query(Media).filter(Media.id == transcript.media_id).first()
         if not media:
             raise HTTPException(status_code=404, detail="Media not found")
-        
+
         db_transcript = Transcript(**transcript.model_dump())
         db.add(db_transcript)
-        
+
         # Update media status
         media.status = "completed"
-        
+
         db.commit()
         db.refresh(db_transcript)
-        
+
         # Log event
         db_event = Event(
             event_type="transcribe",
@@ -467,10 +466,10 @@ async def create_transcript(transcript: TranscriptCreate, db: Session = Depends(
         )
         db.add(db_event)
         db.commit()
-        
+
         registry_write_operations.labels(operation='create_transcript').inc()
         registry_write_latency.observe((time.time() - start_time) * 1000)
-        
+
         return db_transcript
     except HTTPException:
         raise
@@ -519,10 +518,10 @@ async def create_segment(segment: SegmentCreate, db: Session = Depends(get_db)):
         db.add(db_segment)
         db.commit()
         db.refresh(db_segment)
-        
+
         registry_write_operations.labels(operation='create_segment').inc()
         registry_write_latency.observe((time.time() - start_time) * 1000)
-        
+
         return db_segment
     except Exception as e:
         registry_errors.labels(error_type='create_segment_failed').inc()
@@ -555,10 +554,10 @@ async def create_event(event: EventCreate, db: Session = Depends(get_db)):
         db.add(db_event)
         db.commit()
         db.refresh(db_event)
-        
+
         registry_write_operations.labels(operation='create_event').inc()
         registry_write_latency.observe((time.time() - start_time) * 1000)
-        
+
         return db_event
     except Exception as e:
         registry_errors.labels(error_type='create_event_failed').inc()
@@ -597,19 +596,19 @@ from websocket_manager import manager as ws_manager
 async def websocket_endpoint(websocket: WebSocket, client_id: Optional[str] = None):
     """WebSocket endpoint for real-time communication with UI"""
     client_id = await ws_manager.connect(websocket, client_id)
-    
+
     try:
         while True:
             # Receive message from client
             data = await websocket.receive_json()
-            
+
             # Process message and get response
             response = await ws_manager.handle_client_message(client_id, data)
-            
+
             # Send response if one was returned
             if response:
                 await ws_manager.send_message(client_id, response)
-                
+
     except WebSocketDisconnect:
         ws_manager.disconnect(client_id)
     except Exception as e:

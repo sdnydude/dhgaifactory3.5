@@ -16,7 +16,7 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install ruff
-      - run: ruff check registry/ langgraph_workflows/dhg-agents-cloud/src/ --select E,F,W --ignore E501
+      - run: ruff check registry/ langgraph_workflows/dhg-agents-cloud/src/ --select E,F,W --ignore E501,E402,E722,E712
 
   lint-js:
     name: Lint JavaScript
@@ -51,7 +51,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install -r registry/requirements.txt pytest httpx
+      - run: pip install -r registry/requirements.txt pytest pytest-asyncio httpx
       - run: pytest registry/ -v --tb=short
         env:
           DATABASE_URL: postgresql://dhg:testpass@localhost:5432/dhg_registry

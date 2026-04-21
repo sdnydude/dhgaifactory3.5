@@ -33,7 +33,7 @@ def upgrade() -> None:
     )
     op.create_index('idx_projects_name', 'projects', ['name'])
     op.create_index('idx_projects_created_at', 'projects', ['created_at'])
-    
+
     # Create conversations table
     op.create_table(
         'conversations',
@@ -51,7 +51,7 @@ def upgrade() -> None:
     op.create_index('idx_conversations_project_id', 'conversations', ['project_id'])
     op.create_index('idx_conversations_created_at', 'conversations', ['created_at'])
     op.create_index('idx_conversations_export_source', 'conversations', ['export_source'])
-    
+
     # Create messages table
     op.create_table(
         'messages',
@@ -68,7 +68,7 @@ def upgrade() -> None:
     op.create_index('idx_messages_conversation_index', 'messages', ['conversation_id', 'message_index'])
     op.create_index('idx_messages_role', 'messages', ['role'])
     op.create_index('idx_messages_created_at', 'messages', ['created_at'])
-    
+
     # Create artifacts table
     op.create_table(
         'artifacts',

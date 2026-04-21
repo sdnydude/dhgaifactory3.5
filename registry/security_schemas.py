@@ -7,7 +7,7 @@ and audit log queries.
 from uuid import UUID
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field
 
 
 # =============================================================================

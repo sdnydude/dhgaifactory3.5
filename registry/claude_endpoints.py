@@ -3,14 +3,14 @@ Claude AI Data Endpoints
 Handles Claude projects, conversations, messages, and artifacts
 """
 import time
-import uuid
 from typing import List, Optional, Union
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, UUID4
 
-import sys, os
+import sys
+import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from database import get_db
 from models import Project, Conversation, Message, Artifact
@@ -103,7 +103,7 @@ async def list_projects(skip: int = 0, limit: int = 100, db: Session = Depends(g
     start = time.time()
     try:
         projects = db.query(Project).offset(skip).limit(limit).all()
-        
+
         # Add conversation count
         result = []
         for project in projects:
@@ -120,7 +120,7 @@ async def list_projects(skip: int = 0, limit: int = 100, db: Session = Depends(g
                 'conversation_count': conv_count
             }
             result.append(ProjectResponse(**proj_dict))
-        
+
         registry_read_latency.observe((time.time() - start) * 1000)
         registry_read_operations.labels(operation="list_projects").inc()
         return result
@@ -137,7 +137,7 @@ async def get_project(project_id: UUID4, db: Session = Depends(get_db)):
         project = db.query(Project).filter(Project.id == project_id).first()
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
-        
+
         conv_count = db.query(Conversation).filter(Conversation.project_id == project.id).count()
         proj_dict = {
             'id': project.id,
@@ -150,7 +150,7 @@ async def get_project(project_id: UUID4, db: Session = Depends(get_db)):
             'updated_at': project.updated_at,
             'conversation_count': conv_count
         }
-        
+
         registry_read_latency.observe((time.time() - start) * 1000)
         registry_read_operations.labels(operation="get_project").inc()
         return ProjectResponse(**proj_dict)
@@ -177,14 +177,14 @@ async def list_conversations(
     start = time.time()
     try:
         query = db.query(Conversation)
-        
+
         if project_id:
             query = query.filter(Conversation.project_id == project_id)
         if export_source:
             query = query.filter(Conversation.export_source == export_source)
-        
+
         conversations = query.order_by(Conversation.created_at.desc()).offset(skip).limit(limit).all()
-        
+
         # Add counts
         result = []
         for conv in conversations:
@@ -203,7 +203,7 @@ async def list_conversations(
                 'artifact_count': art_count
             }
             result.append(ConversationResponse(**conv_dict))
-        
+
         registry_read_latency.observe((time.time() - start) * 1000)
         registry_read_operations.labels(operation="list_conversations").inc()
         return result
@@ -220,7 +220,7 @@ async def get_conversation(conversation_id: UUID4, db: Session = Depends(get_db)
         conv = db.query(Conversation).filter(Conversation.id == conversation_id).first()
         if not conv:
             raise HTTPException(status_code=404, detail="Conversation not found")
-        
+
         msg_count = db.query(Message).filter(Message.conversation_id == conv.id).count()
         art_count = db.query(Artifact).filter(Artifact.conversation_id == conv.id).count()
         conv_dict = {
@@ -235,7 +235,7 @@ async def get_conversation(conversation_id: UUID4, db: Session = Depends(get_db)
             'message_count': msg_count,
             'artifact_count': art_count
         }
-        
+
         registry_read_latency.observe((time.time() - start) * 1000)
         registry_read_operations.labels(operation="get_conversation").inc()
         return ConversationResponse(**conv_dict)
@@ -260,7 +260,7 @@ async def search_conversations(
         conversations = db.query(Conversation).filter(
             Conversation.title.ilike(f'%{q}%')
         ).order_by(Conversation.created_at.desc()).offset(skip).limit(limit).all()
-        
+
         result = []
         for conv in conversations:
             msg_count = db.query(Message).filter(Message.conversation_id == conv.id).count()
@@ -278,7 +278,7 @@ async def search_conversations(
                 'artifact_count': art_count
             }
             result.append(conv_dict)
-        
+
         registry_read_latency.observe((time.time() - start) * 1000)
         registry_read_operations.labels(operation="search_conversations").inc()
         return result
@@ -299,7 +299,7 @@ async def list_messages(conversation_id: UUID4, db: Session = Depends(get_db)):
         messages = db.query(Message).filter(
             Message.conversation_id == conversation_id
         ).order_by(Message.message_index).all()
-        
+
         registry_read_latency.observe((time.time() - start) * 1000)
         registry_read_operations.labels(operation="list_messages").inc()
         return messages
@@ -323,12 +323,12 @@ async def list_artifacts(
     start = time.time()
     try:
         query = db.query(Artifact)
-        
+
         if artifact_type:
             query = query.filter(Artifact.artifact_type == artifact_type)
-        
+
         artifacts = query.order_by(Artifact.created_at.desc()).offset(skip).limit(limit).all()
-        
+
         registry_read_latency.observe((time.time() - start) * 1000)
         registry_read_operations.labels(operation="list_artifacts").inc()
         return artifacts
@@ -345,7 +345,7 @@ async def list_artifacts_by_conversation(conversation_id: UUID4, db: Session = D
         artifacts = db.query(Artifact).filter(
             Artifact.conversation_id == conversation_id
         ).order_by(Artifact.created_at).all()
-        
+
         registry_read_latency.observe((time.time() - start) * 1000)
         registry_read_operations.labels(operation="list_artifacts_by_conversation").inc()
         return artifacts
@@ -362,7 +362,7 @@ async def get_artifact(artifact_id: UUID4, db: Session = Depends(get_db)):
         artifact = db.query(Artifact).filter(Artifact.id == artifact_id).first()
         if not artifact:
             raise HTTPException(status_code=404, detail="Artifact not found")
-        
+
         registry_read_latency.observe((time.time() - start) * 1000)
         registry_read_operations.labels(operation="get_artifact").inc()
         return artifact

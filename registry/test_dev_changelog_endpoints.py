@@ -242,7 +242,7 @@ class TestDevChangelogRealDB:
         slug_a = self._seed_entry(SessionLocal, epic="real-db test A")
         slug_b = self._seed_entry(SessionLocal, epic="real-db test B")
         try:
-            r = client.get(f"/api/dev-changelog?q=real-db test")
+            r = client.get("/api/dev-changelog?q=real-db test")
             assert r.status_code == 200, r.text
             body = r.json()
             found = {e["slug"] for e in body["entries"]}

@@ -11,7 +11,7 @@ Covers:
 """
 import uuid
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -79,7 +79,8 @@ def _make_authenticated_user(user_id, email, display_name, roles, permissions):
 @pytest.fixture
 def security_client(mock_db, admin_user_id):
     """TestClient with auth overridden to return an admin user."""
-    import sys, os
+    import sys
+    import os
     sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 
     from database import get_db
@@ -110,7 +111,8 @@ def security_client(mock_db, admin_user_id):
 @pytest.fixture
 def viewer_client(mock_db, viewer_user_id):
     """TestClient with auth overridden to return a viewer (limited permissions)."""
-    import sys, os
+    import sys
+    import os
     sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 
     from database import get_db
@@ -141,7 +143,8 @@ def viewer_client(mock_db, viewer_user_id):
 @pytest.fixture
 def unauth_client(mock_db):
     """TestClient with NO auth override — simulates unauthenticated requests."""
-    import sys, os
+    import sys
+    import os
     sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 
     from database import get_db
@@ -308,7 +311,6 @@ class TestSecurityUserEndpoints:
 
         # Set up side_effect for multiple .filter().first() calls
         call_count = {"n": 0}
-        original_filter = mock_db.query.return_value.filter
 
         def filter_side_effect(*args, **kwargs):
             result = MagicMock()

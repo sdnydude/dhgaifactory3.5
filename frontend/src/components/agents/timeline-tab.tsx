@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { useAgentsStore } from "@/stores/agents-store";
 import type { RunningAgent, ThreadState } from "@/lib/agentsApi";
@@ -60,6 +61,7 @@ interface TimelineTabProps {
 }
 
 export function TimelineTab({ agent, state }: TimelineTabProps) {
+  const [renderTime] = useState(() => Date.now());
   const tokenUsage = useAgentsStore((s) => s.tokenUsage);
   const streamEvents = useAgentsStore((s) => s.streamEvents);
 
@@ -101,7 +103,7 @@ export function TimelineTab({ agent, state }: TimelineTabProps) {
     const startMs = new Date(timing.startedAt).getTime();
     const endMs = timing.completedAt
       ? new Date(timing.completedAt).getTime()
-      : Date.now();
+      : renderTime;
 
     minTime = Math.min(minTime, startMs);
     maxTime = Math.max(maxTime, endMs);

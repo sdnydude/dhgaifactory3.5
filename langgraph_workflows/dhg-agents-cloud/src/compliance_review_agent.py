@@ -10,14 +10,11 @@ LangGraph Cloud Ready:
 - Output: Pass/Fail Compliance Report
 """
 
-import os
 import re
 import json
-import operator
 from datetime import datetime
-from typing import List, Dict, Any, Optional, Annotated
+from typing import List, Dict, Any, Annotated
 from typing_extensions import TypedDict
-from enum import Enum
 
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
@@ -66,15 +63,15 @@ class ComplianceState(TypedDict):
     supporter_products: List[str]
     competitor_products: List[str]
     accreditation_types: List[str]
-    
+
     # === PROCESSING ===
     messages: Annotated[list, add_messages]
     bias_issues_found: List[Dict]
     standard_checks: Dict[str, Any]  # Stores results of each standard check
-    
+
     # === OUTPUT ===
     compliance_report: Dict[str, Any]
-    
+
     # Metadata
     agent_version: str
     model_used: str
@@ -88,7 +85,7 @@ class ComplianceState(TypedDict):
 
 class LLMClient:
     """Claude Opus 4.5 LLM client for compliance review."""
-    
+
     def __init__(self):
         self.model = ChatAnthropic(
             model="claude-opus-4-20250514",
@@ -96,7 +93,7 @@ class LLMClient:
         )
         self.cost_per_1k_input = 0.015
         self.cost_per_1k_output = 0.075
-    
+
     @traceable(name="compliance_llm_call", run_type="llm")
     async def generate(self, system: str, prompt: str, metadata: dict = None) -> dict:
         """Generate response with cost tracking."""
@@ -104,20 +101,20 @@ class LLMClient:
             SystemMessage(content=system),
             HumanMessage(content=prompt)
         ]
-        
+
         response = await self.model.ainvoke(
             messages,
             config={"metadata": metadata or {}}
         )
-        
+
         input_tokens = 0
         output_tokens = 0
         if hasattr(response, 'usage_metadata') and response.usage_metadata:
             input_tokens = response.usage_metadata.get("input_tokens", 0)
             output_tokens = response.usage_metadata.get("output_tokens", 0)
-        
+
         cost = (input_tokens / 1000 * self.cost_per_1k_input) + (output_tokens / 1000 * self.cost_per_1k_output)
-        
+
         return {
             "content": response.content,
             "input_tokens": input_tokens,
@@ -168,12 +165,12 @@ def _extract_text_content(package: Dict[str, Any]) -> str:
 @traced_node("compliance_review_agent", "check_bias_regex_node")
 async def check_bias_regex_node(state: ComplianceState) -> dict:
     """Run regex-based bias detection."""
-    
+
     package = state.get("grant_package", {})
     text_content = _extract_text_content(package)
-    
+
     issues = []
-    
+
     # Check regex patterns
     for category, patterns in BIAS_PATTERNS.items():
         for pattern in patterns:
@@ -185,11 +182,10 @@ async def check_bias_regex_node(state: ComplianceState) -> dict:
                     "severity": "major",
                     "location": "Full Document Scan"
                 })
-                
+
     # Check mention balance (basic)
     supporter_products = state.get("supporter_products", [])
-    competitor_products = state.get("competitor_products", [])
-    
+
     for prod in supporter_products:
         count = text_content.lower().count(prod.lower())
         if count > 10:  # Arbitrary threshold for concern
@@ -199,7 +195,7 @@ async def check_bias_regex_node(state: ComplianceState) -> dict:
                 "severity": "minor",
                 "location": "Global Count"
             })
-            
+
     return {
         "bias_issues_found": issues
     }
@@ -209,11 +205,11 @@ async def check_bias_regex_node(state: ComplianceState) -> dict:
 @traced_node("compliance_review_agent", "review_independence_node")
 async def review_independence_node(state: ComplianceState) -> dict:
     """Review Standards 1 (Independence) & 6 (Commercial Support)."""
-    
+
     package = state.get("grant_package", {})
     indep_section = package.get("independence_and_compliance", {})
     cover_letter = package.get("cover_letter", {})
-    
+
     system = f"""{COMPLIANCE_SYSTEM_PROMPT}
 
 You are reviewing ACCME Standard 1 (Independence) and Standard 6 (Commercial Support).
@@ -232,19 +228,19 @@ Return JSON:
 }}"""
 
     prompt = f"""Review these sections for Independence and Support disclosure.
-    
+
     INDEPENDENCE SECTION:
     {json.dumps(indep_section, indent=2)}
-    
+
     COVER LETTER:
     {json.dumps(cover_letter, indent=2)}
-    
+
     Verify that:
     1. Provider maintains control (std 1).
     2. Support is acknowledged but properly separated (std 6)."""
 
     result = await llm.generate(system, prompt, {"step": "independence"})
-    
+
     try:
         data = json.loads(result["content"])
     except:
@@ -253,13 +249,13 @@ Return JSON:
             "standard_1": {"compliant": False, "findings": ["Parse error"], "evidence": ""},
             "standard_6": {"compliant": False, "findings": ["Parse error"], "evidence": ""}
         }
-        
+
     prev_checks = state.get("standard_checks", {})
     prev_checks.update(data)
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
-    
+
     return {
         "standard_checks": prev_checks,
         "total_tokens": prev_tokens + result["total_tokens"],
@@ -271,15 +267,15 @@ Return JSON:
 @traced_node("compliance_review_agent", "review_content_validity_node")
 async def review_content_validity_node(state: ComplianceState) -> dict:
     """Review Standard 3 (Content Validity & Fair Balance)."""
-    
+
     package = state.get("grant_package", {})
     needs = package.get("needs_assessment", {})
     curriculum = package.get("curriculum_and_educational_design", {})
-    
+
     supporter = state.get("supporter_company", "")
     products = state.get("supporter_products", [])
     competitors = state.get("competitor_products", [])
-    
+
     system = f"""{COMPLIANCE_SYSTEM_PROMPT}
 
 You are reviewing ACCME Standard 3 (Content Validity & Fair Balance).
@@ -298,24 +294,24 @@ Return JSON:
 }}"""
 
     prompt = f"""Review content for Fair Balance.
-    
+
     SUPPORTER: {supporter}
     PRODUCTS: {products}
     COMPETITORS: {competitors}
-    
+
     NEEDS ASSESSMENT EXCERPT:
     {str(needs)[:2000]}...
-    
+
     CURRICULUM EXCERPT:
     {str(curriculum)[:2000]}...
-    
+
     Verify that:
     1. Content is valid/evidence-based.
     2. Treatment options are balanced (benefits/risks).
     3. No preferential treatment of supporter products."""
 
     result = await llm.generate(system, prompt, {"step": "content_validity"})
-    
+
     try:
         data = json.loads(result["content"])
     except:
@@ -326,10 +322,10 @@ Return JSON:
 
     prev_checks = state.get("standard_checks", {})
     prev_checks.update(data)
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
-    
+
     return {
         "standard_checks": prev_checks,
         "total_tokens": prev_tokens + result["total_tokens"],
@@ -341,27 +337,27 @@ Return JSON:
 @traced_node("compliance_review_agent", "generate_compliance_report_node")
 async def generate_compliance_report_node(state: ComplianceState) -> dict:
     """Generate final compliance report."""
-    
+
     checks = state.get("standard_checks", {})
     bias_issues = state.get("bias_issues_found", [])
-    
+
     # Simple scoring logic
     passed = True
     score = 100
-    
+
     # Check Standards
     for std in ["standard_1", "standard_6", "standard_3"]:
         if not checks.get(std, {}).get("compliant", False):
             passed = False
             score -= 20
-            
+
     # Check Bias
     if len(bias_issues) > 0:
         passed = False
         score -= (len(bias_issues) * 5)
-    
+
     score = max(0, score)
-    
+
     report = {
         "metadata": {
             "agent_version": "2.0",
@@ -381,7 +377,7 @@ async def generate_compliance_report_node(state: ComplianceState) -> dict:
             "passed": len(bias_issues) == 0
         }
     }
-    
+
     # Add Remediation if failed
     if not passed:
         report["remediation_required"] = {
@@ -393,7 +389,7 @@ async def generate_compliance_report_node(state: ComplianceState) -> dict:
                 }
             ] if bias_issues else []
         }
-    
+
     return {
         "compliance_report": report
     }
@@ -405,24 +401,24 @@ async def generate_compliance_report_node(state: ComplianceState) -> dict:
 
 def create_compliance_graph():
     """Create the Compliance Review graph."""
-    
+
     workflow = StateGraph(ComplianceState)
-    
+
     # Add nodes
     workflow.add_node("check_bias", check_bias_regex_node)
     workflow.add_node("review_independence", review_independence_node)
     workflow.add_node("review_content", review_content_validity_node)
     workflow.add_node("generate_report", generate_compliance_report_node)
-    
+
     # Parallel flow for checks
     workflow.set_entry_point("check_bias")
-    
+
     # Fan out / Sequential for simplicity in this version
     workflow.add_edge("check_bias", "review_independence")
-    workflow.add_edge("review_independence", "review_content") 
+    workflow.add_edge("review_independence", "review_content")
     workflow.add_edge("review_content", "generate_report")
     workflow.add_edge("generate_report", END)
-    
+
     return workflow.compile()
 
 
@@ -432,6 +428,6 @@ graph = create_compliance_graph()
 
 if __name__ == "__main__":
     graph = create_compliance_graph()
-    
+
     print("=== MERMAID DIAGRAM ===")
     print(graph.get_graph().draw_mermaid())

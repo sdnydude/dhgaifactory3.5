@@ -373,7 +373,7 @@ function Row({
 
 export default function DashboardsPage() {
   const [t, setT] = useState<Telemetry>(EMPTY);
-  const [tick, setTick] = useState(0);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const intervalRef = useRef<ReturnType<typeof setInterval> | undefined>(
     undefined,
   );
@@ -386,7 +386,7 @@ export default function DashboardsPage() {
     };
     run();
     intervalRef.current = setInterval(run, POLL_MS);
-    const tickInt = setInterval(() => setTick((x) => x + 1), 1000);
+    const tickInt = setInterval(() => setNowMs(Date.now()), 1000);
     return () => {
       cancelled = true;
       if (intervalRef.current) clearInterval(intervalRef.current);
@@ -396,7 +396,7 @@ export default function DashboardsPage() {
 
   const elapsedSec =
     t.lastUpdated != null
-      ? Math.floor((Date.now() - t.lastUpdated.getTime()) / 1000)
+      ? Math.floor((nowMs - t.lastUpdated.getTime()) / 1000)
       : null;
 
   const allUp =
@@ -423,7 +423,7 @@ export default function DashboardsPage() {
   const ss = String(now.getUTCSeconds()).padStart(2, "0");
   const utcStamp = `${hh}:${mm}:${ss}Z`;
 
-  void tick;
+  void nowMs;
 
   return (
     <div className="mc-root h-full overflow-y-auto">

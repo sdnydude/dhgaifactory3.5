@@ -16,7 +16,7 @@ import httpx
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 from dataclasses import dataclass
 
 from langsmith import traceable
@@ -38,14 +38,14 @@ config = NotificationConfig()
 
 class EmailSender:
     """Send email notifications via SMTP."""
-    
+
     def __init__(self):
         self.host = config.smtp_host
         self.port = config.smtp_port
         self.user = config.smtp_user
         self.password = config.smtp_password
         self.from_email = config.from_email
-    
+
     @traceable(name="send_email", run_type="tool")
     async def send(
         self,
@@ -58,27 +58,27 @@ class EmailSender:
         if not self.user or not self.password:
             print(f"[EMAIL] Skipped (no SMTP credentials): {to_email} - {subject}")
             return False
-        
+
         try:
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
             msg["From"] = self.from_email
             msg["To"] = to_email
-            
+
             # Attach text and HTML versions
             if body_text:
                 msg.attach(MIMEText(body_text, "plain"))
             msg.attach(MIMEText(body_html, "html"))
-            
+
             # Send via SMTP
             with smtplib.SMTP(self.host, self.port) as server:
                 server.starttls()
                 server.login(self.user, self.password)
                 server.sendmail(self.from_email, to_email, msg.as_string())
-            
+
             print(f"[EMAIL] Sent: {to_email} - {subject}")
             return True
-            
+
         except Exception as e:
             print(f"[EMAIL] Failed: {to_email} - {e}")
             return False
@@ -86,7 +86,7 @@ class EmailSender:
 
 class GoogleChatSender:
     """Send Google Chat notifications via webhook."""
-    
+
     @traceable(name="send_google_chat", run_type="tool")
     async def send(
         self,
@@ -98,12 +98,12 @@ class GoogleChatSender:
         if not webhook_url:
             print(f"[CHAT] Skipped (no webhook): {message[:50]}...")
             return False
-        
+
         try:
             payload = {"text": message}
             if card:
                 payload["cards"] = [card]
-            
+
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     webhook_url,
@@ -111,10 +111,10 @@ class GoogleChatSender:
                     headers={"Content-Type": "application/json"}
                 )
                 response.raise_for_status()
-            
-            print(f"[CHAT] Sent to webhook")
+
+            print("[CHAT] Sent to webhook")
             return True
-            
+
         except Exception as e:
             print(f"[CHAT] Failed: {e}")
             return False
@@ -122,11 +122,11 @@ class GoogleChatSender:
 
 class NotificationService:
     """Main notification service for CME review workflow."""
-    
+
     def __init__(self):
         self.email = EmailSender()
         self.chat = GoogleChatSender()
-    
+
     @traceable(name="notify_review_assigned", run_type="chain")
     async def on_review_assigned(
         self,
@@ -140,7 +140,7 @@ class NotificationService:
         """Notify reviewer when assigned to a project (R6)."""
         hours_remaining = (sla_deadline - datetime.utcnow()).total_seconds() / 3600
         review_url = f"https://app.digitalharmonyai.com/cme/review/{project_id}"
-        
+
         # Email notification
         subject = f"[CME Review] New Review Assignment: {project_name}"
         body_html = f"""
@@ -157,18 +157,18 @@ class NotificationService:
         </body>
         </html>
         """
-        
+
         email_sent = await self.email.send(reviewer_email, subject, body_html)
-        
+
         # Google Chat notification
         chat_message = f"📋 *New Review Assignment*\n\n*Project:* {project_name}\n*Deadline:* {hours_remaining:.1f} hours\n*Reviewer:* {reviewer_name}\n\n{review_url}"
         chat_sent = await self.chat.send(
             webhook_url or config.google_chat_default_webhook,
             chat_message
         )
-        
+
         return {"email": email_sent, "chat": chat_sent}
-    
+
     @traceable(name="notify_sla_warning", run_type="chain")
     async def on_sla_warning(
         self,
@@ -181,7 +181,7 @@ class NotificationService:
     ) -> Dict[str, bool]:
         """Send reminder 4 hours before deadline."""
         review_url = f"https://app.digitalharmonyai.com/cme/review/{project_id}"
-        
+
         subject = f"⏰ [REMINDER] Review Due Soon: {project_name}"
         body_html = f"""
         <html>
@@ -194,17 +194,17 @@ class NotificationService:
         </body>
         </html>
         """
-        
+
         email_sent = await self.email.send(reviewer_email, subject, body_html)
-        
+
         chat_message = f"⏰ *Review Deadline Approaching*\n\n*Project:* {project_name}\n*Time Remaining:* {hours_remaining:.1f} hours\n*Reviewer:* {reviewer_name}\n\n{review_url}"
         chat_sent = await self.chat.send(
             webhook_url or config.google_chat_default_webhook,
             chat_message
         )
-        
+
         return {"email": email_sent, "chat": chat_sent}
-    
+
     @traceable(name="notify_sla_timeout", run_type="chain")
     async def on_sla_timeout(
         self,
@@ -223,7 +223,7 @@ class NotificationService:
             f"[CME Review] Review Escalated: {project_name}",
             f"<p>Your review for {project_name} has been escalated to {next_reviewer_name} due to SLA timeout.</p>"
         )
-        
+
         # Notify next reviewer
         return await self.on_review_assigned(
             next_reviewer_email,
@@ -233,7 +233,7 @@ class NotificationService:
             datetime.utcnow() + timedelta(hours=24),
             webhook_url
         )
-    
+
     @traceable(name="notify_final_timeout", run_type="chain")
     async def on_final_timeout(
         self,
@@ -245,7 +245,7 @@ class NotificationService:
     ) -> Dict[str, bool]:
         """Daily HOLD notification when final reviewer times out (R5)."""
         review_url = f"https://app.digitalharmonyai.com/cme/review/{project_id}"
-        
+
         subject = f"🚨 [HOLD] Final Review Required: {project_name}"
         body_html = f"""
         <html>
@@ -258,15 +258,15 @@ class NotificationService:
         </body>
         </html>
         """
-        
+
         email_sent = await self.email.send(reviewer_email, subject, body_html)
-        
+
         chat_message = f"🚨 *PROJECT ON HOLD*\n\n*Project:* {project_name}\n*Status:* Awaiting final review\n*Reviewer:* {reviewer_name}\n\n{review_url}"
         chat_sent = await self.chat.send(
             webhook_url or config.google_chat_default_webhook,
             chat_message
         )
-        
+
         return {"email": email_sent, "chat": chat_sent}
 
 

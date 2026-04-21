@@ -19,14 +19,10 @@ Author: Digital Harmony Group
 Version: 1.0.0
 """
 
-import os
 import re
 import json
-from datetime import datetime
 from typing import Annotated, Optional, List, Dict, Any
 from typing_extensions import TypedDict
-from dataclasses import dataclass, field
-from enum import Enum
 
 # LangGraph imports
 from langgraph.graph import StateGraph, END
@@ -37,8 +33,7 @@ from langsmith import traceable
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from extract_topic import extract_topic_node
-from pubmed_client import PubMedClient, build_references_section
-from langchain_core.runnables import RunnableConfig
+from pubmed_client import build_references_section
 from vs_client import vs_generate, vs_select, vs_is_available
 
 # OpenTelemetry tracing (dual-export with LangSmith)
@@ -162,14 +157,14 @@ def check_prose_density(text: str) -> float:
     lines = text.split('\n')
     prose_lines = 0
     bullet_lines = 0
-    
+
     for line in lines:
         stripped = line.strip()
         if stripped.startswith(('-', '*', '•', '1.', '2.', '3.')):
             bullet_lines += 1
         elif len(stripped) > 20:  # Substantial prose line
             prose_lines += 1
-    
+
     total = prose_lines + bullet_lines
     if total == 0:
         return 1.0
@@ -229,7 +224,7 @@ SECTION_REQUIREMENTS = {
 
 class NeedsAssessmentState(TypedDict):
     """State for Needs Assessment Agent."""
-    
+
     # === INPUT ===
     # From intake form
     therapeutic_area: str
@@ -245,17 +240,17 @@ class NeedsAssessmentState(TypedDict):
     research_summary: str  # From Research Agent
     clinical_barriers: List[str]  # From Clinical Practice Agent
     epidemiology: Dict[str, Any]  # From Research Agent
-    
+
     # === PROCESSING ===
     messages: Annotated[list, add_messages]
-    
+
     # Character thread
     character_name: str
     character_age: int
     character_type: str  # "patient" or "clinician"
     character_humanizing_detail: str
     character_appearances: int
-    
+
     # Document sections
     cold_open: str
     disease_state_overview: str
@@ -265,20 +260,20 @@ class NeedsAssessmentState(TypedDict):
     educational_rationale: str
     target_audience_section: str
     conclusion: str
-    
+
     # === OUTPUT ===
     complete_document: str
     word_count: int
     prose_density: float
     banned_patterns_found: List[str]
     section_word_counts: Dict[str, int]
-    
+
     # Quality flags
     meets_word_count: bool
     meets_prose_density: bool
     meets_character_thread: bool
     quality_passed: bool
-    
+
     # Metadata
     errors: List[str]
     model_used: str
@@ -296,10 +291,10 @@ class NeedsAssessmentState(TypedDict):
 
 class NeedsAssessmentLLM:
     """LLM client for Needs Assessment generation."""
-    
+
     def __init__(self):
         self._sonnet = None
-    
+
     def _get_sonnet(self):
         if self._sonnet is None:
             self._sonnet = ChatAnthropic(
@@ -307,29 +302,29 @@ class NeedsAssessmentLLM:
                 max_tokens=8192
             )
         return self._sonnet
-    
+
     @traceable(name="needs_assessment_llm", run_type="llm")
     async def generate(self, system: str, prompt: str, metadata: dict = None) -> dict:
         """Generate content with Claude Sonnet."""
         model = self._get_sonnet()
-        
+
         messages = [
             SystemMessage(content=system),
             HumanMessage(content=prompt)
         ]
-        
+
         config = {"metadata": {"agent": "needs_assessment", **(metadata or {})}}
         response = await model.ainvoke(messages, config=config)
-        
+
         input_tokens = 0
         output_tokens = 0
         if hasattr(response, 'usage_metadata') and response.usage_metadata:
             input_tokens = response.usage_metadata.get("input_tokens", 0)
             output_tokens = response.usage_metadata.get("output_tokens", 0)
-        
+
         # Claude Sonnet pricing: $3/M input, $15/M output
         cost = (input_tokens * 0.003 + output_tokens * 0.015) / 1000
-        
+
         return {
             "content": response.content,
             "model": "claude-sonnet-4-20250514",
@@ -467,7 +462,7 @@ Return ONLY the JSON, no other text."""
 @traceable(name="generate_cold_open_node", run_type="chain")
 async def generate_cold_open_node(state: NeedsAssessmentState) -> dict:
     """Generate the cold open narrative."""
-    
+
     character_name = state.get("character_name", "the patient")
     character_age = state.get("character_age", 58)
     character_type = state.get("character_type", "patient")
@@ -475,9 +470,9 @@ async def generate_cold_open_node(state: NeedsAssessmentState) -> dict:
     disease_state = state.get("disease_state", "")
     gaps = state.get("gaps", [])
     epidemiology = state.get("epidemiology", {})
-    
+
     population_stat = epidemiology.get("prevalence", "millions of patients")
-    
+
     prompt = f"""Write a cold open for a needs assessment about {disease_state}.
 
 CHARACTER:
@@ -537,13 +532,13 @@ Return ONLY the narrative text. No headers. No quotes."""
 @traceable(name="generate_disease_overview_node", run_type="chain")
 async def generate_disease_overview_node(state: NeedsAssessmentState) -> dict:
     """Generate Disease State Overview section (125-300 words)."""
-    
+
     disease_state = state.get("disease_state", "")
     therapeutic_area = state.get("therapeutic_area", "")
     character_name = state.get("character_name", "the patient")
     epidemiology = state.get("epidemiology", {})
     research_summary = state.get("research_summary", "")
-    
+
     system = f"""You are a senior medical writer creating a disease state overview for a CME grant.
 
 REQUIREMENTS:
@@ -616,10 +611,10 @@ Write 125-300 words of flowing prose. Start by connecting the character to the p
 @traceable(name="generate_treatment_options_node", run_type="chain")
 async def generate_treatment_options_node(state: NeedsAssessmentState) -> dict:
     """Generate Current Treatment Options section (200-300 words)."""
-    
+
     disease_state = state.get("disease_state", "")
     research_summary = state.get("research_summary", "")
-    
+
     system = f"""You are a senior medical writer creating a treatment options section for a CME grant.
 
 REQUIREMENTS:
@@ -685,11 +680,11 @@ Write 200-300 words of flowing prose."""
 @traceable(name="generate_practice_gaps_node", run_type="chain")
 async def generate_practice_gaps_node(state: NeedsAssessmentState) -> dict:
     """Generate Practice Gaps section (300-400 words)."""
-    
+
     gaps = state.get("gaps", [])
     character_name = state.get("character_name", "the patient")
     disease_state = state.get("disease_state", "")
-    
+
     system = f"""You are a senior medical writer creating a practice gaps section for a CME grant.
 
 REQUIREMENTS:
@@ -762,10 +757,10 @@ Write 300-400 words. Each gap should be a narrative paragraph with evidence."""
 @traceable(name="generate_barriers_node", run_type="chain")
 async def generate_barriers_node(state: NeedsAssessmentState) -> dict:
     """Generate Barriers to Optimal Care section (125-200 words)."""
-    
+
     clinical_barriers = state.get("clinical_barriers", [])
     disease_state = state.get("disease_state", "")
-    
+
     system = f"""You are a senior medical writer creating a barriers section for a CME grant.
 
 REQUIREMENTS:
@@ -794,15 +789,15 @@ Categorize into:
 Write 125-200 words explaining how each barrier perpetuates the practice gaps."""
 
     result = await llm.generate(system, prompt, {"step": "barriers"})
-    
+
     content = result["content"].strip()
     word_count = count_words(content)
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
     section_counts = state.get("section_word_counts", {})
     section_counts["barriers"] = word_count
-    
+
     return {
         "barriers_section": content,
         "section_word_counts": section_counts,
@@ -814,11 +809,11 @@ Write 125-200 words explaining how each barrier perpetuates the practice gaps.""
 @traceable(name="generate_educational_rationale_node", run_type="chain")
 async def generate_educational_rationale_node(state: NeedsAssessmentState) -> dict:
     """Generate Educational Rationale section (200-300 words)."""
-    
+
     character_name = state.get("character_name", "the patient")
     disease_state = state.get("disease_state", "")
     gaps = state.get("gaps", [])
-    
+
     system = f"""You are a senior medical writer creating an educational rationale for a CME grant.
 
 REQUIREMENTS:
@@ -844,19 +839,19 @@ CHARACTER TO INCLUDE:
 Write 200-300 words making the case for why education can improve outcomes."""
 
     result = await llm.generate(system, prompt, {"step": "educational_rationale"})
-    
+
     content = result["content"].strip()
     word_count = count_words(content)
-    
+
     appearances = state.get("character_appearances", 0)
     if character_name.split()[0] in content or character_name in content:
         appearances += 1
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
     section_counts = state.get("section_word_counts", {})
     section_counts["educational_rationale"] = word_count
-    
+
     return {
         "educational_rationale": content,
         "character_appearances": appearances,
@@ -869,11 +864,11 @@ Write 200-300 words making the case for why education can improve outcomes."""
 @traceable(name="generate_target_audience_node", run_type="chain")
 async def generate_target_audience_node(state: NeedsAssessmentState) -> dict:
     """Generate Target Audience section (125-200 words)."""
-    
+
     target_audience = state.get("target_audience", "primary care physicians")
     disease_state = state.get("disease_state", "")
     geographic_focus = state.get("geographic_focus", "")
-    
+
     system = f"""You are a senior medical writer creating a target audience section for a CME grant.
 
 REQUIREMENTS:
@@ -902,15 +897,15 @@ Address:
 Write 125-200 words."""
 
     result = await llm.generate(system, prompt, {"step": "target_audience"})
-    
+
     content = result["content"].strip()
     word_count = count_words(content)
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
     section_counts = state.get("section_word_counts", {})
     section_counts["target_audience"] = word_count
-    
+
     return {
         "target_audience_section": content,
         "section_word_counts": section_counts,
@@ -922,10 +917,10 @@ Write 125-200 words."""
 @traceable(name="generate_conclusion_node", run_type="chain")
 async def generate_conclusion_node(state: NeedsAssessmentState) -> dict:
     """Generate Conclusion section (200-300 words)."""
-    
+
     character_name = state.get("character_name", "the patient")
     disease_state = state.get("disease_state", "")
-    
+
     system = f"""You are a senior medical writer creating a conclusion for a CME needs assessment.
 
 REQUIREMENTS:
@@ -950,19 +945,19 @@ OR
 Write 200-300 words synthesizing the need and calling for educational action."""
 
     result = await llm.generate(system, prompt, {"step": "conclusion"})
-    
+
     content = result["content"].strip()
     word_count = count_words(content)
-    
+
     appearances = state.get("character_appearances", 0)
     if character_name.split()[0] in content or character_name in content:
         appearances += 1
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
     section_counts = state.get("section_word_counts", {})
     section_counts["conclusion"] = word_count
-    
+
     return {
         "conclusion": content,
         "character_appearances": appearances,
@@ -1049,9 +1044,9 @@ async def generate_references_node(state: NeedsAssessmentState) -> dict:
 
 def create_needs_assessment_graph() -> StateGraph:
     """Create the Needs Assessment Agent graph."""
-    
+
     graph = StateGraph(NeedsAssessmentState)
-    
+
     # Add nodes
     graph.add_node("extract_topic", extract_topic_node)
     graph.add_node("create_character", create_character_node)
@@ -1080,7 +1075,7 @@ def create_needs_assessment_graph() -> StateGraph:
     graph.add_edge("generate_conclusion", "assemble_document")
     graph.add_edge("assemble_document", "generate_references")
     graph.add_edge("generate_references", END)
-    
+
     return graph
 
 
@@ -1094,7 +1089,7 @@ graph = create_needs_assessment_graph().compile()
 
 if __name__ == "__main__":
     import asyncio
-    
+
     async def test():
         # Test input
         test_state = {
@@ -1126,10 +1121,10 @@ if __name__ == "__main__":
             "messages": [],
             "errors": []
         }
-        
+
         result = await graph.ainvoke(test_state)
-        
-        print(f"\n=== NEEDS ASSESSMENT OUTPUT ===")
+
+        print("\n=== NEEDS ASSESSMENT OUTPUT ===")
         print(f"Word count: {result['word_count']} (target: 3100+)")
         print(f"Prose density: {result['prose_density']:.1%} (target: 80%+)")
         print(f"Character appearances: {result['character_appearances']} (target: 4+)")
@@ -1137,7 +1132,7 @@ if __name__ == "__main__":
         print(f"Quality passed: {result['quality_passed']}")
         print(f"\nTotal tokens: {result['total_tokens']}")
         print(f"Total cost: ${result['total_cost']:.4f}")
-        print(f"\n=== DOCUMENT PREVIEW ===")
+        print("\n=== DOCUMENT PREVIEW ===")
         print(result['complete_document'][:2000])
-    
+
     asyncio.run(test())

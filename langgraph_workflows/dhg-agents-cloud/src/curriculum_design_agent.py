@@ -10,10 +10,8 @@ LangGraph Cloud Ready:
 - Output to: Grant Writer Agent
 """
 
-import os
 import re
 import json
-import operator
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Annotated
 from typing_extensions import TypedDict
@@ -25,7 +23,7 @@ from langsmith import traceable
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from extract_topic import extract_topic_node
-from pubmed_client import PubMedClient, build_references_section
+from pubmed_client import build_references_section
 from vs_client import vs_generate, vs_select, vs_is_available
 
 # OpenTelemetry tracing (dual-export with LangSmith)
@@ -39,7 +37,7 @@ from tracing import traced_node
 # Instructional methods by Moore level
 METHODS_BY_LEVEL = {
     "level_5": [
-        "case-based decision-making", "commitment-to-change", 
+        "case-based decision-making", "commitment-to-change",
         "action planning", "practice simulation"
     ],
     "level_4": [
@@ -85,7 +83,7 @@ class CurriculumDesignState(TypedDict):
     learning_objectives_report: Dict[str, Any]
     gap_analysis_report: Dict[str, Any]
     needs_assessment_document: Optional[str]
-    
+
     # From intake form
     target_audience: str
     practice_settings: Optional[List[str]]
@@ -96,10 +94,10 @@ class CurriculumDesignState(TypedDict):
     modality: Optional[str]
     therapeutic_area: str
     disease_state: str
-    
+
     # === PROCESSING ===
     messages: Annotated[list, add_messages]
-    
+
     # Section-specific data
     format_spec: Dict[str, Any]
     content_outline: Dict[str, Any]
@@ -109,11 +107,11 @@ class CurriculumDesignState(TypedDict):
     innovation_section: Dict[str, Any]
     assessment_strategy: Dict[str, Any]
     implementation_requirements: Dict[str, Any]
-    
+
     # === OUTPUT ===
     curriculum_report: Dict[str, Any]
     curriculum_document: str
-    
+
     # === METADATA ===
     total_duration_minutes: int
     active_learning_percentage: float
@@ -133,7 +131,7 @@ class CurriculumDesignState(TypedDict):
 
 class LLMClient:
     """Claude-based LLM client with cost tracking."""
-    
+
     def __init__(self):
         self.model = ChatAnthropic(
             model="claude-sonnet-4-20250514",
@@ -141,7 +139,7 @@ class LLMClient:
         )
         self.cost_per_1k_input = 0.003
         self.cost_per_1k_output = 0.015
-    
+
     @traceable(name="curriculum_design_llm_call", run_type="llm")
     async def generate(self, system: str, prompt: str, metadata: dict = None) -> dict:
         """Generate response with cost tracking."""
@@ -149,21 +147,21 @@ class LLMClient:
             SystemMessage(content=system),
             HumanMessage(content=prompt)
         ]
-        
+
         response = await self.model.ainvoke(
             messages,
             config={"metadata": metadata or {}}
         )
-        
+
         input_tokens = 0
         output_tokens = 0
         if hasattr(response, 'usage_metadata') and response.usage_metadata:
             input_tokens = response.usage_metadata.get("input_tokens", 0)
             output_tokens = response.usage_metadata.get("output_tokens", 0)
-        
+
         cost = (input_tokens / 1000 * self.cost_per_1k_input) + \
                (output_tokens / 1000 * self.cost_per_1k_output)
-        
+
         return {
             "content": response.content,
             "input_tokens": input_tokens,
@@ -217,7 +215,7 @@ When citing, mentally track what each number refers to (e.g. [1] = Smith et al. 
 @traced_node("curriculum_design_agent", "design_format_node")
 async def design_format_node(state: CurriculumDesignState) -> dict:
     """Design the format and session structure."""
-    
+
     objectives = state.get("learning_objectives_report", {}).get("objectives", [])
     duration = state.get("duration_minutes", 180)
     modality = state.get("modality", "Hybrid")
@@ -225,7 +223,7 @@ async def design_format_node(state: CurriculumDesignState) -> dict:
     audience = state.get("target_audience", "")
     therapeutic_area = state.get("therapeutic_area", "")
     disease = state.get("disease_state", "")
-    
+
     system = f"""{CURRICULUM_SYSTEM_PROMPT}
 
 You are designing the FORMAT SPECIFICATION. Return a JSON object:
@@ -247,7 +245,7 @@ You are designing the FORMAT SPECIFICATION. Return a JSON object:
 }}
 
 Ensure active learning is at least 40% of total time."""
-    
+
     # Count objectives by level
     level_counts = {"level_5": 0, "level_4": 0, "level_3": 0}
     for obj in objectives:
@@ -258,7 +256,7 @@ Ensure active learning is at least 40% of total time."""
             level_counts["level_4"] += 1
         else:
             level_counts["level_3"] += 1
-    
+
     prompt = f"""Design the educational format for a {duration}-minute {modality} CME activity.
 
 CLINICAL FOCUS:
@@ -330,11 +328,11 @@ Return ONLY valid JSON."""
 @traced_node("curriculum_design_agent", "design_content_outline_node")
 async def design_content_outline_node(state: CurriculumDesignState) -> dict:
     """Design content modules aligned to objectives."""
-    
+
     objectives = state.get("learning_objectives_report", {}).get("objectives", [])
     format_spec = state.get("format_spec", {})
     disease = state.get("disease_state", "")
-    
+
     system = f"""{CURRICULUM_SYSTEM_PROMPT}
 
 You are designing the CONTENT OUTLINE. Return a JSON object:
@@ -360,7 +358,7 @@ You are designing the CONTENT OUTLINE. Return a JSON object:
 }}
 
 Every objective must be addressed by at least one module."""
-    
+
     prompt = f"""Design content modules for {disease} CME.
 
 SESSION STRUCTURE:
@@ -418,12 +416,12 @@ Return ONLY valid JSON."""
 @traced_node("curriculum_design_agent", "design_cases_node")
 async def design_cases_node(state: CurriculumDesignState) -> dict:
     """Design case scenarios for the activity."""
-    
+
     gaps = state.get("gap_analysis_report", {}).get("gaps", [])
     objectives = state.get("learning_objectives_report", {}).get("objectives", [])
     disease = state.get("disease_state", "")
     audience = state.get("target_audience", "")
-    
+
     system = f"""{CURRICULUM_SYSTEM_PROMPT}
 
 You are designing CASE SCENARIOS. Cases should be central, not supplementary. Return a JSON object:
@@ -450,15 +448,14 @@ You are designing CASE SCENARIOS. Cases should be central, not supplementary. Re
 }}
 
 Cases must incorporate real-world barriers (not idealized scenarios)."""
-    
+
     # Get barriers from gaps
     barriers = []
     for gap in gaps:
-        barrier_type = gap.get("root_causes", {}).get("primary_barrier_type", "")
         factors = gap.get("root_causes", {}).get("contributing_factors", [])
         barriers.extend(factors)
     barriers = list(set(barriers))[:8]  # Unique, limit to 8
-    
+
     prompt = f"""Design case scenarios for {disease} CME targeting {audience}.
 
 GAPS TO ADDRESS:
@@ -519,11 +516,11 @@ Return ONLY valid JSON."""
 @traced_node("curriculum_design_agent", "specify_faculty_node")
 async def specify_faculty_node(state: CurriculumDesignState) -> dict:
     """Specify faculty requirements."""
-    
+
     content_outline = state.get("content_outline", {})
     disease = state.get("disease_state", "")
     audience = state.get("target_audience", "")
-    
+
     system = f"""{CURRICULUM_SYSTEM_PROMPT}
 
 You are specifying FACULTY REQUIREMENTS. Return a JSON object:
@@ -542,7 +539,7 @@ You are specifying FACULTY REQUIREMENTS. Return a JSON object:
     ],
     "faculty_development_needs": "What faculty need to be briefed on"
 }}"""
-    
+
     prompt = f"""Specify faculty requirements for {disease} CME targeting {audience}.
 
 CONTENT MODULES:
@@ -597,13 +594,13 @@ Return ONLY valid JSON."""
 @traced_node("curriculum_design_agent", "write_innovation_section_node")
 async def write_innovation_section_node(state: CurriculumDesignState) -> dict:
     """Write the innovation section (500+ words)."""
-    
+
     gaps = state.get("gap_analysis_report", {}).get("gaps", [])
     case_design = state.get("case_design", {})
     format_spec = state.get("format_spec", {})
     disease = state.get("disease_state", "")
     innovation_reqs = state.get("innovation_elements", [])
-    
+
     system = f"""{CURRICULUM_SYSTEM_PROMPT}
 
 You are writing the INNOVATION SECTION. This must be 500+ words and substantive.
@@ -629,13 +626,13 @@ INNOVATION CATEGORIES TO DRAW FROM:
 - Content: Patient voice, real-world data, cross-specialty perspectives
 - Technology: Audience response, simulations, AI scenarios
 - Assessment: Real-time verification, adaptive questioning, commitment contracts"""
-    
+
     # Get barriers for innovation alignment
     barriers = []
     for gap in gaps:
         factors = gap.get("root_causes", {}).get("contributing_factors", [])
         barriers.extend(factors)
-    
+
     prompt = f"""Write a 500+ word innovation section for {disease} CME.
 
 BARRIERS THAT INNOVATIONS SHOULD ADDRESS:
@@ -700,11 +697,11 @@ Return ONLY valid JSON."""
 @traced_node("curriculum_design_agent", "design_assessment_strategy_node")
 async def design_assessment_strategy_node(state: CurriculumDesignState) -> dict:
     """Design the assessment strategy."""
-    
+
     objectives = state.get("learning_objectives_report", {}).get("objectives", [])
     therapeutic_area = state.get("therapeutic_area", "")
     disease = state.get("disease_state", "")
-    
+
     system = f"""{CURRICULUM_SYSTEM_PROMPT}
 
 You are designing the ASSESSMENT STRATEGY. Return a JSON object:
@@ -729,7 +726,7 @@ You are designing the ASSESSMENT STRATEGY. Return a JSON object:
         "follow_up_mechanism": "Email survey, etc."
     }}
 }}"""
-    
+
     # Get measurement from objectives
     measurements = [
         {
@@ -739,7 +736,7 @@ You are designing the ASSESSMENT STRATEGY. Return a JSON object:
         }
         for o in objectives
     ]
-    
+
     prompt = f"""Design assessment strategy for {disease} CME activity in {therapeutic_area}.
 
 OBJECTIVE MEASUREMENT PLANS:
@@ -755,7 +752,7 @@ Design assessments that:
 Return ONLY valid JSON."""
 
     result = await llm.generate(system, prompt, {"step": "assessment_strategy"})
-    
+
     try:
         content = result["content"]
         json_match = re.search(r'\{[\s\S]*\}', content)
@@ -765,10 +762,10 @@ Return ONLY valid JSON."""
             assessment = {}
     except json.JSONDecodeError:
         assessment = {}
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
-    
+
     return {
         "assessment_strategy": assessment,
         "total_tokens": prev_tokens + result["total_tokens"],
@@ -780,20 +777,19 @@ Return ONLY valid JSON."""
 @traced_node("curriculum_design_agent", "document_implementation_node")
 async def document_implementation_node(state: CurriculumDesignState) -> dict:
     """Document implementation requirements."""
-    
-    format_spec = state.get("format_spec", {})
+
     modality = state.get("modality", "Hybrid")
     innovation_section = state.get("innovation_section", {})
-    
+
     # Extract technology from innovations
     tech_innovations = [
         i.get("innovation_name")
         for i in innovation_section.get("innovations", [])
-        if "tech" in i.get("innovation_name", "").lower() or 
+        if "tech" in i.get("innovation_name", "").lower() or
            "virtual" in i.get("description", "").lower() or
            "audience response" in i.get("description", "").lower()
     ]
-    
+
     implementation = {
         "technology_needs": [
             "Presentation system with audience response capability",
@@ -808,10 +804,10 @@ async def document_implementation_node(state: CurriculumDesignState) -> dict:
         "venue_requirements": f"Room setup for {modality} delivery with breakout capability",
         "staffing_needs": "Moderator, AV technician, CME coordinator"
     }
-    
+
     if tech_innovations:
         implementation["technology_needs"].extend(tech_innovations)
-    
+
     return {
         "implementation_requirements": implementation,
         "total_tokens": state.get("total_tokens", 0),
@@ -823,9 +819,9 @@ async def document_implementation_node(state: CurriculumDesignState) -> dict:
 @traced_node("curriculum_design_agent", "assemble_curriculum_report_node")
 async def assemble_curriculum_report_node(state: CurriculumDesignState) -> dict:
     """Assemble the final curriculum report."""
-    
+
     innovation = state.get("innovation_section", {})
-    
+
     report = {
         "metadata": {
             "agent_version": "2.0",
@@ -851,7 +847,7 @@ async def assemble_curriculum_report_node(state: CurriculumDesignState) -> dict:
         "assessment_strategy": state.get("assessment_strategy", {}),
         "implementation_requirements": state.get("implementation_requirements", {})
     }
-    
+
     return {
         "curriculum_report": report,
         "messages": [HumanMessage(content=f"Curriculum design complete: {state.get('total_duration_minutes', 0)} min activity with {len(innovation.get('innovations', []))} innovations")]
@@ -862,10 +858,10 @@ async def assemble_curriculum_report_node(state: CurriculumDesignState) -> dict:
 @traced_node("curriculum_design_agent", "render_curriculum_document_node")
 async def render_curriculum_document_node(state: CurriculumDesignState) -> dict:
     """Render the curriculum as a readable document."""
-    
+
     disease = state.get("disease_state", "")
     report = state.get("curriculum_report", {})
-    
+
     system = """You are a medical education writer creating a curriculum specification document.
 
 FORMATTING RULES:
@@ -889,7 +885,7 @@ Do NOT use:
 - Em dashes (—)
 - Generic descriptions
 """
-    
+
     prompt = f"""Create a curriculum specification document for {disease} CME.
 
 CURRICULUM DATA:
@@ -898,12 +894,12 @@ CURRICULUM DATA:
 Present as a production-ready specification document."""
 
     result = await llm.generate(system, prompt, {"step": "render_document"})
-    
+
     document = result["content"]
-    
+
     prev_tokens = state.get("total_tokens", 0)
     prev_cost = state.get("total_cost", 0.0)
-    
+
     return {
         "curriculum_document": document,
         "total_tokens": prev_tokens + result["total_tokens"],
@@ -937,9 +933,9 @@ async def generate_references_node(state: CurriculumDesignState) -> dict:
 
 def create_curriculum_design_graph() -> StateGraph:
     """Create the Curriculum Design Agent graph."""
-    
+
     graph = StateGraph(CurriculumDesignState)
-    
+
     # Add nodes
     graph.add_node("extract_topic", extract_topic_node)
     graph.add_node("design_format", design_format_node)
@@ -967,7 +963,7 @@ def create_curriculum_design_graph() -> StateGraph:
     graph.add_edge("assemble_report", "render_document")
     graph.add_edge("render_document", "generate_references")
     graph.add_edge("generate_references", END)
-    
+
     return graph
 
 
@@ -981,7 +977,7 @@ graph = create_curriculum_design_graph().compile()
 
 if __name__ == "__main__":
     import asyncio
-    
+
     async def test():
         # Mock upstream data
         mock_objectives = {
@@ -1028,19 +1024,19 @@ if __name__ == "__main__":
             "total_tokens": 0,
             "total_cost": 0.0
         }
-        
+
         result = await graph.ainvoke(test_state)
-        
-        print(f"\n=== CURRICULUM DESIGN RESULT ===")
+
+        print("\n=== CURRICULUM DESIGN RESULT ===")
         print(f"Duration: {result.get('total_duration_minutes', 0)} minutes")
         print(f"Active learning: {result.get('active_learning_percentage', 0):.1f}%")
         print(f"Total tokens: {result.get('total_tokens', 0)}")
         print(f"Total cost: ${result.get('total_cost', 0):.4f}")
-        
+
         report = result.get("curriculum_report", {})
         innovations = report.get("innovation_section", {}).get("innovations", [])
-        print(f"\n=== INNOVATIONS ===")
+        print("\n=== INNOVATIONS ===")
         for i in innovations:
             print(f"- {i.get('innovation_name', 'Unknown')}")
-    
+
     asyncio.run(test())

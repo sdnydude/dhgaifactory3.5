@@ -10,23 +10,23 @@ from functools import lru_cache
 @lru_cache(maxsize=1)
 def load_secrets():
     """Load secrets from Infisical or fall back to environment variables."""
-    
+
     infisical_token = os.getenv("INFISICAL_TOKEN")
-    
+
     if infisical_token:
         try:
             from infisical_client import InfisicalClient, GetSecretOptions
-            
+
             client = InfisicalClient(token=infisical_token)
-            
+
             secrets = {}
             secret_names = [
                 "ANTHROPIC_API_KEY",
-                "GOOGLE_API_KEY", 
+                "GOOGLE_API_KEY",
                 "PERPLEXITY_API_KEY",
                 "NCBI_API_KEY"
             ]
-            
+
             for name in secret_names:
                 try:
                     secret = client.get_secret(GetSecretOptions(
@@ -37,12 +37,12 @@ def load_secrets():
                     os.environ[name] = secret.secret_value
                 except Exception:
                     secrets[name] = os.getenv(name, "")
-            
+
             return secrets
-            
+
         except ImportError:
             pass
-    
+
     return {
         "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY", ""),
         "GOOGLE_API_KEY": os.getenv("GOOGLE_API_KEY", ""),

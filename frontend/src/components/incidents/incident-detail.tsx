@@ -40,6 +40,10 @@ export function IncidentDetailPanel({
   incident,
   loading,
 }: IncidentDetailPanelProps) {
+  const actionLoading = useIncidentsStore((s) => s.actionLoading);
+  const mitigateIncident = useIncidentsStore((s) => s.mitigateIncident);
+  const resolveIncident = useIncidentsStore((s) => s.resolveIncident);
+
   if (loading) {
     return (
       <div className="flex flex-col gap-4 p-6">
@@ -64,10 +68,6 @@ export function IncidentDetailPanel({
   const actions = incident.actions ?? [];
   const pm = incident.postmortem;
   const children = incident.children ?? [];
-  const actionLoading = useIncidentsStore((s) => s.actionLoading);
-  const mitigateIncident = useIncidentsStore((s) => s.mitigateIncident);
-  const resolveIncident = useIncidentsStore((s) => s.resolveIncident);
-
   const canMitigate = incident.status === "active";
   const canResolve = incident.status === "active" || incident.status === "mitigated";
 

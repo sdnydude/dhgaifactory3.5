@@ -10,7 +10,6 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
-from sqlalchemy import func as sa_func
 
 from database import get_db
 from models import (
@@ -24,7 +23,6 @@ from auth import (
     AuthenticatedUser,
     get_current_user,
     require_permission,
-    require_role,
     get_user_project_ids,
     write_audit_log,
     ROLE_DEFINITIONS,
@@ -37,7 +35,6 @@ from security_schemas import (
     RoleResponse,
     RoleListResponse,
     RoleAssignment,
-    RoleRemoval,
     ProjectAccessGrant,
     ProjectAccessResponse,
     ProjectAccessListResponse,
