@@ -1,0 +1,145 @@
+"""Agent Sessions API endpoints.
+
+Routes:
+  POST   /api/agent-sessions              create session record
+  GET    /api/agent-sessions              list with filters (project, source, limit, offset)
+  GET    /api/agent-sessions/{session_id} get by session_id
+"""
+import os
+import sys
+import time
+import logging
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.orm import Session
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from database import get_db
+from models import AgentSession
+from agent_sessions_schemas import (
+    AgentSessionCreate,
+    AgentSessionResponse,
+    AgentSessionList,
+)
+
+logger = logging.getLogger(__name__)
+
+try:
+    from api import (
+        registry_read_latency,
+        registry_read_operations,
+        registry_write_latency,
+        registry_write_operations,
+        registry_errors,
+    )
+except ImportError:
+    from prometheus_client import Counter, Histogram
+    registry_read_latency = Histogram(
+        "registry_read_latency", "Read latency",
+        buckets=[1, 5, 10, 25, 50, 100, 250, 500, 1000],
+    )
+    registry_read_operations = Counter(
+        "registry_read_operations", "Read operations", ["operation"],
+    )
+    registry_write_latency = Histogram(
+        "registry_write_latency", "Write latency",
+        buckets=[1, 5, 10, 25, 50, 100, 250, 500, 1000],
+    )
+    registry_write_operations = Counter(
+        "registry_write_operations", "Write operations", ["operation"],
+    )
+    registry_errors = Counter(
+        "registry_errors", "Registry errors", ["error_type"],
+    )
+
+
+router = APIRouter(prefix="/api/agent-sessions", tags=["agent-sessions"])
+
+
+@router.post("", response_model=AgentSessionResponse, status_code=status.HTTP_201_CREATED)
+async def create_agent_session(
+    payload: AgentSessionCreate,
+    db: Session = Depends(get_db),
+) -> AgentSessionResponse:
+    start = time.time()
+    try:
+        existing = db.query(AgentSession).filter(
+            AgentSession.session_id == payload.session_id
+        ).first()
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Session {payload.session_id} already exists",
+            )
+
+        row = AgentSession(**payload.model_dump())
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+
+        registry_write_operations.labels(operation="create_agent_session").inc()
+        registry_write_latency.observe((time.time() - start) * 1000)
+        return row
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        registry_errors.labels(error_type="create_agent_session_failed").inc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("", response_model=AgentSessionList)
+async def list_agent_sessions(
+    project: Optional[str] = Query(None),
+    source: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+) -> AgentSessionList:
+    start = time.time()
+    try:
+        query = db.query(AgentSession)
+        if project:
+            query = query.filter(AgentSession.project == project)
+        if source:
+            query = query.filter(AgentSession.source == source)
+
+        total = query.count()
+        rows = (
+            query
+            .order_by(AgentSession.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+
+        registry_read_operations.labels(operation="list_agent_sessions").inc()
+        registry_read_latency.observe((time.time() - start) * 1000)
+        return AgentSessionList(sessions=rows, total=total)
+    except Exception as e:
+        registry_errors.labels(error_type="list_agent_sessions_failed").inc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{session_id}", response_model=AgentSessionResponse)
+async def get_agent_session(
+    session_id: str,
+    db: Session = Depends(get_db),
+) -> AgentSessionResponse:
+    start = time.time()
+    try:
+        row = db.query(AgentSession).filter(
+            AgentSession.session_id == session_id
+        ).first()
+        if not row:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        registry_read_operations.labels(operation="get_agent_session").inc()
+        registry_read_latency.observe((time.time() - start) * 1000)
+        return row
+    except HTTPException:
+        raise
+    except Exception as e:
+        registry_errors.labels(error_type="get_agent_session_failed").inc()
+        raise HTTPException(status_code=500, detail=str(e))

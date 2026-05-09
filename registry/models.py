@@ -1137,3 +1137,37 @@ class IncidentPostmortem(Base):
 
     def __repr__(self) -> str:
         return f"<IncidentPostmortem id={self.id} incident_id={self.incident_id}>"
+
+
+# =============================================================================
+# AGENT SESSION TRACKING
+# =============================================================================
+
+class AgentSession(Base):
+    """Tracks Claude Code sessions, scheduled routines, and subagent runs across all DHG projects."""
+    __tablename__ = "agent_sessions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    session_id = Column(String(255), nullable=False, unique=True, index=True)
+    project = Column(String(100), nullable=False, index=True)
+    branch = Column(String(255), nullable=True)
+    source = Column(String(50), nullable=False, index=True)  # claude-code, scheduled-routine, subagent
+    model = Column(String(100), nullable=True)
+
+    summary = Column(Text, nullable=True)
+    tldr = Column(Text, nullable=True)
+
+    commits = Column(JSONB, nullable=False, default=list)
+    files_changed = Column(Integer, nullable=True)
+    skills_used = Column(JSONB, nullable=False, default=list)
+
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    ended_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    meta_data = Column(JSONB, nullable=True)
+
+    __table_args__ = (
+        Index("ix_agent_sessions_project_created", "project", "created_at"),
+        Index("ix_agent_sessions_source", "source"),
+    )
