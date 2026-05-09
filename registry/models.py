@@ -1171,3 +1171,33 @@ class AgentSession(Base):
         Index("ix_agent_sessions_project_created", "project", "created_at"),
         Index("ix_agent_sessions_source", "source"),
     )
+
+
+# =============================================================================
+# MEMORY INTELLIGENCE METRICS
+# =============================================================================
+
+class MemoryMetrics(Base):
+    """Tracks memory intelligence sync results — pattern detection, pruning, health."""
+    __tablename__ = "memory_metrics"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project = Column(String(100), nullable=False, index=True)
+    sync_mode = Column(String(10), nullable=False)
+    sync_run_at = Column(DateTime(timezone=True), nullable=False)
+
+    hot_areas = Column(JSONB, nullable=True)
+    workflow_distribution = Column(JSONB, nullable=True)
+    workflow_trend = Column(JSONB, nullable=True)
+    memory_health = Column(JSONB, nullable=False)
+    decision_stats = Column(JSONB, nullable=True)
+    contradictions = Column(JSONB, nullable=True)
+    unfinished_branches = Column(JSONB, nullable=True)
+    journal_backfills = Column(Integer, nullable=True)
+    patterns_detected = Column(Integer, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_memory_metrics_project_created", "project", "created_at"),
+    )
