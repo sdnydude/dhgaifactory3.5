@@ -38,7 +38,6 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
     )
 
-    op.create_index("ix_memory_metrics_project", "memory_metrics", ["project"])
     op.create_index("ix_memory_metrics_project_created", "memory_metrics", ["project", "created_at"])
 
 
