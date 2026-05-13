@@ -235,6 +235,7 @@ from decision_logs_endpoints import router as decision_logs_router
 from doc_pages_endpoints import router as doc_pages_router
 from ship_sessions_endpoints import router as ship_sessions_router
 from kb_endpoints import router as kb_router
+from corrections_endpoints import router as corrections_router
 
 # Include routers
 app.include_router(agent_router)
@@ -259,6 +260,7 @@ app.include_router(decision_logs_router)
 app.include_router(doc_pages_router)
 app.include_router(ship_sessions_router)
 app.include_router(kb_router)
+app.include_router(corrections_router)
 
 # Add CORS middleware — locked to production origin + localhost for development
 ALLOWED_ORIGINS = [

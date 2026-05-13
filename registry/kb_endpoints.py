@@ -17,7 +17,7 @@ from sqlalchemy import func as sa_func, text as sa_text
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from database import get_db
 from embedding_utils import get_embedding
-from models import DocPage, Insight, DecisionLog, ShipSession
+from models import DocPage, Insight, DecisionLog, ShipSession, Correction
 from kb_schemas import KBSearchRequest, KBSearchResponse, KBSearchResult, VALID_SOURCES
 
 logger = logging.getLogger(__name__)
@@ -103,11 +103,28 @@ def _extract_ship_session(row: ShipSession) -> tuple[str, str, dict[str, Any]]:
     return title, content, metadata
 
 
+def _extract_correction(row: Correction) -> tuple[str, str, dict[str, Any]]:
+    title = f"{row.category}: {row.user_message[:80]}"
+    parts = [f"User: {row.user_message}"]
+    if row.context:
+        parts.append(f"\n\nContext: {row.context}")
+    if row.claude_action:
+        parts.append(f"\n\nShould have: {row.claude_action}")
+    content = "".join(parts)
+    metadata: dict[str, Any] = {
+        "category": row.category,
+        "session_id": row.session_id,
+        "tags": row.tags,
+    }
+    return title, content, metadata
+
+
 _SOURCE_CONFIG: dict[str, tuple[Any, Callable]] = {
     "docs": (DocPage, _extract_doc_page),
     "insights": (Insight, _extract_insight),
     "decisions": (DecisionLog, _extract_decision_log),
     "ship_sessions": (ShipSession, _extract_ship_session),
+    "corrections": (Correction, _extract_correction),
 }
 
 

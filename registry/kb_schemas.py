@@ -5,7 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 
-VALID_SOURCES = {"docs", "insights", "decisions", "ship_sessions"}
+VALID_SOURCES = {"docs", "insights", "decisions", "ship_sessions", "corrections"}
 
 
 class KBSearchRequest(BaseModel):
