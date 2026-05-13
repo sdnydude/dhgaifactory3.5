@@ -230,6 +230,11 @@ from webhook_endpoints import router as webhook_router
 from incident_endpoints import router as incident_router
 from agent_sessions_endpoints import router as agent_sessions_router
 from memory_metrics_endpoints import router as memory_metrics_router
+from insights_endpoints import router as insights_router
+from decision_logs_endpoints import router as decision_logs_router
+from doc_pages_endpoints import router as doc_pages_router
+from ship_sessions_endpoints import router as ship_sessions_router
+from kb_endpoints import router as kb_router
 
 # Include routers
 app.include_router(agent_router)
@@ -249,6 +254,11 @@ app.include_router(webhook_router)
 app.include_router(incident_router)
 app.include_router(agent_sessions_router)
 app.include_router(memory_metrics_router)
+app.include_router(insights_router)
+app.include_router(decision_logs_router)
+app.include_router(doc_pages_router)
+app.include_router(ship_sessions_router)
+app.include_router(kb_router)
 
 # Add CORS middleware — locked to production origin + localhost for development
 ALLOWED_ORIGINS = [

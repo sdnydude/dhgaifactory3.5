@@ -1201,3 +1201,146 @@ class MemoryMetrics(Base):
     __table_args__ = (
         Index("ix_memory_metrics_project_created", "project", "created_at"),
     )
+
+
+class Insight(Base):
+    """AI-generated educational insights captured during coding sessions."""
+    __tablename__ = "insights"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tldr = Column(String(280), nullable=False)
+    insight_statement = Column(Text, nullable=False)
+    project_name = Column(String(100), nullable=False)
+    category = Column(String(64), nullable=False)
+    subcategory = Column(String(64), nullable=True)
+
+    source_file = Column(String(512), nullable=True)
+    source_language = Column(String(32), nullable=True)
+    source_framework = Column(String(64), nullable=True)
+    tags = Column(ARRAY(Text), nullable=True)
+
+    embedding = Column(Vector(768), nullable=True)
+    embedding_model = Column(String(64), nullable=True)
+    search_vector = Column(TSVECTOR, nullable=True)
+
+    session_id = Column(String(128), nullable=True)
+    model_name = Column(String(64), nullable=True)
+    meta_data = Column(JSONB, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index("ix_insights_project_category", "project_name", "category"),
+        Index("ix_insights_created", "created_at"),
+        Index("ix_insights_tags", "tags", postgresql_using="gin"),
+        Index("ix_insights_search", "search_vector", postgresql_using="gin"),
+    )
+
+
+class DecisionLog(Base):
+    """Architectural decision logs captured from coding sessions — choice, rejected alternatives, rationale."""
+    __tablename__ = "decision_logs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title = Column(String(280), nullable=False)
+    choice = Column(Text, nullable=False)
+    alternatives_rejected = Column(Text, nullable=True)
+    rationale = Column(Text, nullable=False)
+    domain = Column(String(32), nullable=False)  # api, web, shared, infra, ops
+    supersedes = Column(String(128), nullable=True)
+
+    project_name = Column(String(100), nullable=False)
+    source_file = Column(String(512), nullable=True)
+    tags = Column(ARRAY(Text), nullable=True)
+
+    search_vector = Column(TSVECTOR, nullable=True)
+
+    session_id = Column(String(128), nullable=True)
+    model_name = Column(String(64), nullable=True)
+    meta_data = Column(JSONB, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    embedding = Column(Vector(768), nullable=True)
+    embedding_model = Column(String(64), nullable=True)
+
+    __table_args__ = (
+        Index("ix_decision_logs_project_domain", "project_name", "domain"),
+        Index("ix_decision_logs_created", "created_at"),
+        Index("ix_decision_logs_tags", "tags", postgresql_using="gin"),
+        Index("ix_decision_logs_search", "search_vector", postgresql_using="gin"),
+    )
+
+
+class ShipSession(Base):
+    """Structured records of /ship workflow runs — feature, approach, review, verification, deferred items."""
+    __tablename__ = "ship_sessions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_name = Column(String(100), nullable=False)
+    feature = Column(Text, nullable=False)
+    approach = Column(Text, nullable=True)
+    status = Column(String(20), nullable=False, default="in_progress")
+    complexity = Column(String(20), nullable=True)
+    tdd = Column(Boolean, nullable=True)
+    pr_url = Column(String(512), nullable=True)
+    branch = Column(String(255), nullable=True)
+
+    commits = Column(JSONB, nullable=False, default=list)
+    deferred = Column(JSONB, nullable=False, default=list)
+    surprises = Column(JSONB, nullable=False, default=list)
+    decisions = Column(JSONB, nullable=False, default=list)
+    review = Column(JSONB, nullable=True)
+    verification = Column(JSONB, nullable=True)
+    file_map = Column(JSONB, nullable=True)
+
+    tags = Column(ARRAY(Text), nullable=True)
+    embedding = Column(Vector(768), nullable=True)
+    embedding_model = Column(String(64), nullable=True)
+    search_vector = Column(TSVECTOR, nullable=True)
+
+    session_id = Column(String(128), nullable=True)
+    model_name = Column(String(64), nullable=True)
+    meta_data = Column(JSONB, nullable=True)
+
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index("ix_ship_sessions_project_status", "project_name", "status"),
+        Index("ix_ship_sessions_created", "created_at"),
+        Index("ix_ship_sessions_tags", "tags", postgresql_using="gin"),
+        Index("ix_ship_sessions_search", "search_vector", postgresql_using="gin"),
+    )
+
+
+class DocPage(Base):
+    """Documentation pages ingested from DHG project markdown files."""
+    __tablename__ = "doc_pages"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_name = Column(String(100), nullable=False)
+    source_file = Column(String(500), nullable=False)
+    chunk_index = Column(Integer, nullable=False, default=0)
+    title = Column(String(500), nullable=True)
+    content = Column(Text, nullable=False)
+    heading_path = Column(String(500), nullable=True)
+    embedding = Column(Vector(768), nullable=True)
+    embedding_model = Column(String(100), nullable=True)
+    search_vector = Column(TSVECTOR, nullable=True)
+    tags = Column(ARRAY(Text), nullable=True)
+    meta_data = Column(JSONB, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("project_name", "source_file", "chunk_index",
+                         name="uq_doc_pages_file_chunk"),
+        Index("ix_doc_pages_project_file", "project_name", "source_file"),
+        Index("ix_doc_pages_created", "created_at"),
+        Index("ix_doc_pages_tags", "tags", postgresql_using="gin"),
+        Index("ix_doc_pages_search", "search_vector", postgresql_using="gin"),
+    )
