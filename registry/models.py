@@ -918,6 +918,10 @@ class DevChangelog(Base):
     priority = Column(Integer, nullable=True)
     locked = Column(Boolean, nullable=False, default=False)
     source = Column(String(20), nullable=False, default="manual")  # manual|agent|mixed
+    project_name = Column(String(100), nullable=False, server_default="shared")
+    search_vector = Column(TSVECTOR, nullable=True)
+    embedding = Column(Vector(768), nullable=True)
+    embedding_model = Column(String(64), nullable=True)
     detected_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     last_agent_run_at = Column(DateTime(timezone=True), nullable=True)
     last_human_edit_at = Column(DateTime(timezone=True), nullable=True)
@@ -929,6 +933,8 @@ class DevChangelog(Base):
         Index("ix_dev_changelog_declared_status", "declared_status"),
         Index("ix_dev_changelog_category", "category"),
         Index("ix_dev_changelog_window_start", "window_start"),
+        Index("ix_dev_changelog_project_name", "project_name"),
+        Index("ix_dev_changelog_search", "search_vector", postgresql_using="gin"),
     )
 
 
@@ -1167,9 +1173,15 @@ class AgentSession(Base):
 
     meta_data = Column(JSONB, nullable=True)
 
+    project_name = Column(String(100), nullable=True)
+    embedding = Column(Vector(768), nullable=True)
+    embedding_model = Column(String(64), nullable=True)
+    search_vector = Column(TSVECTOR, nullable=True)
+
     __table_args__ = (
         Index("ix_agent_sessions_project_created", "project", "created_at"),
         Index("ix_agent_sessions_source", "source"),
+        Index("ix_agent_sessions_search", "search_vector", postgresql_using="gin"),
     )
 
 
@@ -1231,6 +1243,7 @@ class Insight(Base):
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
     __table_args__ = (
+        UniqueConstraint("project_name", "tldr", name="uq_insights_project_tldr"),
         Index("ix_insights_project_category", "project_name", "category"),
         Index("ix_insights_created", "created_at"),
         Index("ix_insights_tags", "tags", postgresql_using="gin"),
@@ -1267,6 +1280,7 @@ class DecisionLog(Base):
     embedding_model = Column(String(64), nullable=True)
 
     __table_args__ = (
+        UniqueConstraint("project_name", "title", name="uq_decision_logs_project_title"),
         Index("ix_decision_logs_project_domain", "project_name", "domain"),
         Index("ix_decision_logs_created", "created_at"),
         Index("ix_decision_logs_tags", "tags", postgresql_using="gin"),
@@ -1354,6 +1368,7 @@ class Correction(Base):
     project_name = Column(String(100), nullable=False)
     category = Column(String(64), nullable=False)
     user_message = Column(Text, nullable=False)
+    upsert_key_hash = Column(String(32), nullable=False)
     context = Column(Text, nullable=True)
     claude_action = Column(Text, nullable=True)
     session_id = Column(String(128), nullable=True)
@@ -1367,6 +1382,7 @@ class Correction(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     __table_args__ = (
+        UniqueConstraint("project_name", "category", "upsert_key_hash", name="uq_corrections_project_cat_hash"),
         Index("ix_corrections_project_category", "project_name", "category"),
         Index("ix_corrections_created", "created_at"),
         Index("ix_corrections_tags", "tags", postgresql_using="gin"),

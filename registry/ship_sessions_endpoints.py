@@ -10,8 +10,10 @@ import sys
 import time
 import logging
 from typing import Optional
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy import func as sa_func
 
@@ -59,28 +61,101 @@ except ImportError:
 router = APIRouter(prefix="/api/ship-sessions", tags=["ship-sessions"])
 
 
+def _upsert_ship_session(
+    db: Session, payload: ShipSessionCreate, embedding=None,
+) -> tuple[ShipSession, bool]:
+    """Upsert by (project_name, feature). Returns (row, created)."""
+    existing = db.query(ShipSession).filter(
+        ShipSession.project_name == payload.project_name,
+        ShipSession.feature == payload.feature,
+    ).first()
+
+    if existing:
+        existing.approach = payload.approach
+        existing.status = payload.status
+        existing.complexity = payload.complexity
+        existing.tdd = payload.tdd
+        existing.pr_url = payload.pr_url
+        existing.branch = payload.branch
+        existing.commits = payload.commits
+        existing.deferred = payload.deferred
+        existing.surprises = payload.surprises
+        existing.decisions = payload.decisions
+        existing.review = payload.review
+        existing.verification = payload.verification
+        existing.file_map = payload.file_map
+        existing.tags = payload.tags
+        existing.session_id = payload.session_id
+        existing.model_name = payload.model_name
+        existing.meta_data = payload.meta_data
+        existing.completed_at = payload.completed_at
+        if embedding:
+            existing.embedding = embedding
+            existing.embedding_model = "nomic-embed-text"
+        return existing, False
+
+    row = ShipSession(**payload.model_dump())
+    if embedding:
+        row.embedding = embedding
+        row.embedding_model = "nomic-embed-text"
+    try:
+        db.add(row)
+        db.flush()
+        return row, True
+    except IntegrityError:
+        db.rollback()
+        existing = db.query(ShipSession).filter(
+            ShipSession.project_name == payload.project_name,
+            ShipSession.feature == payload.feature,
+        ).first()
+        if existing:
+            existing.approach = payload.approach
+            existing.status = payload.status
+            existing.complexity = payload.complexity
+            existing.tdd = payload.tdd
+            existing.pr_url = payload.pr_url
+            existing.branch = payload.branch
+            existing.commits = payload.commits
+            existing.deferred = payload.deferred
+            existing.surprises = payload.surprises
+            existing.decisions = payload.decisions
+            existing.review = payload.review
+            existing.verification = payload.verification
+            existing.file_map = payload.file_map
+            existing.tags = payload.tags
+            existing.session_id = payload.session_id
+            existing.model_name = payload.model_name
+            existing.meta_data = payload.meta_data
+            existing.completed_at = payload.completed_at
+            if embedding:
+                existing.embedding = embedding
+                existing.embedding_model = "nomic-embed-text"
+            return existing, False
+        raise
+
+
 @router.post("", response_model=ShipSessionResponse, status_code=status.HTTP_201_CREATED)
 async def create_ship_session(
     payload: ShipSessionCreate,
+    response: Response,
     db: Session = Depends(get_db),
 ) -> ShipSessionResponse:
     start = time.time()
     try:
-        row = ShipSession(**payload.model_dump())
-
+        embedding = None
         try:
             from embedding_utils import get_embedding
             text_for_embed = f"{payload.feature} {payload.approach or ''}"
             embedding = await get_embedding(text_for_embed)
-            if embedding:
-                row.embedding = embedding
-                row.embedding_model = "nomic-embed-text"
         except Exception as embed_err:
             logger.warning("Embedding generation failed: %s", embed_err)
 
-        db.add(row)
+        row, created = _upsert_ship_session(db, payload, embedding)
         db.commit()
         db.refresh(row)
+
+        if not created:
+            response.status_code = status.HTTP_200_OK
 
         registry_write_operations.labels(operation="create_ship_session").inc()
         registry_write_latency.observe((time.time() - start) * 1000)
@@ -90,7 +165,8 @@ async def create_ship_session(
     except Exception as e:
         db.rollback()
         registry_errors.labels(error_type="create_ship_session_failed").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("%s failed: %s", "ship_sessions_op", e)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("", response_model=ShipSessionList)
@@ -123,7 +199,8 @@ async def list_ship_sessions(
         return ShipSessionList(ship_sessions=rows, total=total)
     except Exception as e:
         registry_errors.labels(error_type="list_ship_sessions_failed").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("%s failed: %s", "ship_sessions_op", e)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/search", response_model=ShipSessionList)
@@ -156,4 +233,25 @@ async def search_ship_sessions(
         return ShipSessionList(ship_sessions=rows, total=total)
     except Exception as e:
         registry_errors.labels(error_type="search_ship_sessions_failed").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("%s failed: %s", "ship_sessions_op", e)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_ship_session(
+    item_id: UUID,
+    db: Session = Depends(get_db),
+):
+    try:
+        row = db.query(ShipSession).filter(ShipSession.id == item_id).first()
+        if not row:
+            raise HTTPException(status_code=404, detail="Not found")
+        db.delete(row)
+        db.commit()
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        registry_errors.labels(error_type="delete_ship_session_failed").inc()
+        logger.error("delete_ship_session failed: %s", e)
+        raise HTTPException(status_code=500, detail="Internal server error")

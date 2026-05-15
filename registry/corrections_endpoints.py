@@ -10,14 +10,17 @@ The corrections table captures user pushback patterns so Claude can learn
 what behaviors to avoid. Queryable via the unified KB search endpoint and
 surfaced in SessionStart briefing Section 8.
 """
+import hashlib
 import os
 import sys
 import time
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy import func as sa_func
 
@@ -67,9 +70,68 @@ except ImportError:
 router = APIRouter(prefix="/api/corrections", tags=["corrections"])
 
 
+def _compute_upsert_hash(user_message: str) -> str:
+    return hashlib.md5(user_message.encode("utf-8")).hexdigest()
+
+
+def _upsert_correction(
+    db: Session, payload: CorrectionCreate, upsert_hash: str, embedding=None,
+) -> tuple[Correction, bool]:
+    """Upsert by (project_name, category, upsert_key_hash). Returns (row, created)."""
+    existing = db.query(Correction).filter(
+        Correction.project_name == payload.project_name,
+        Correction.category == payload.category,
+        Correction.upsert_key_hash == upsert_hash,
+    ).first()
+
+    if existing:
+        existing.user_message = payload.user_message
+        existing.context = payload.context
+        existing.claude_action = payload.claude_action
+        existing.session_id = payload.session_id
+        existing.tags = payload.tags
+        existing.model_name = payload.model_name
+        existing.meta_data = payload.meta_data
+        if embedding:
+            existing.embedding = embedding
+            existing.embedding_model = "nomic-embed-text"
+        return existing, False
+
+    row = Correction(**payload.model_dump())
+    row.upsert_key_hash = upsert_hash
+    if embedding:
+        row.embedding = embedding
+        row.embedding_model = "nomic-embed-text"
+    try:
+        db.add(row)
+        db.flush()
+        return row, True
+    except IntegrityError:
+        db.rollback()
+        existing = db.query(Correction).filter(
+            Correction.project_name == payload.project_name,
+            Correction.category == payload.category,
+            Correction.upsert_key_hash == upsert_hash,
+        ).first()
+        if existing:
+            existing.user_message = payload.user_message
+            existing.context = payload.context
+            existing.claude_action = payload.claude_action
+            existing.session_id = payload.session_id
+            existing.tags = payload.tags
+            existing.model_name = payload.model_name
+            existing.meta_data = payload.meta_data
+            if embedding:
+                existing.embedding = embedding
+                existing.embedding_model = "nomic-embed-text"
+            return existing, False
+        raise
+
+
 @router.post("", response_model=CorrectionResponse, status_code=201)
 async def create_correction(
     payload: CorrectionCreate,
+    response: Response,
     db: Session = Depends(get_db),
 ):
     start = time.time()
@@ -79,19 +141,21 @@ async def create_correction(
             detail=f"Invalid category '{payload.category}'. Valid: {sorted(VALID_CATEGORIES)}",
         )
     try:
-        row = Correction(**payload.model_dump())
+        upsert_hash = _compute_upsert_hash(payload.user_message)
+
+        embedding = None
         try:
             embed_text = f"{payload.category} {payload.user_message} {payload.context or ''}"
             embedding = await get_embedding(embed_text)
-            if embedding:
-                row.embedding = embedding
-                row.embedding_model = "nomic-embed-text"
         except Exception as embed_err:
             logger.warning("Correction embedding failed: %s", embed_err)
 
-        db.add(row)
+        row, created = _upsert_correction(db, payload, upsert_hash, embedding)
         db.commit()
         db.refresh(row)
+
+        if not created:
+            response.status_code = 200
 
         registry_write_operations.labels(operation="create_correction").inc()
         registry_write_latency.observe((time.time() - start) * 1000)
@@ -101,7 +165,8 @@ async def create_correction(
     except Exception as e:
         db.rollback()
         registry_errors.labels(error_type="create_correction_failed").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("%s failed: %s", "corrections_op", e)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("", response_model=CorrectionList)
@@ -133,7 +198,8 @@ async def list_corrections(
         return CorrectionList(corrections=rows, total=total)
     except Exception as e:
         registry_errors.labels(error_type="list_corrections_failed").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("%s failed: %s", "corrections_op", e)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/search", response_model=CorrectionList)
@@ -162,7 +228,8 @@ async def search_corrections(
         return CorrectionList(corrections=rows, total=total)
     except Exception as e:
         registry_errors.labels(error_type="search_corrections_failed").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("%s failed: %s", "corrections_op", e)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/stats")
@@ -196,4 +263,25 @@ async def correction_stats(
         }
     except Exception as e:
         registry_errors.labels(error_type="correction_stats_failed").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("%s failed: %s", "corrections_op", e)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.delete("/{item_id}", status_code=204)
+async def delete_correction(
+    item_id: UUID,
+    db: Session = Depends(get_db),
+):
+    try:
+        row = db.query(Correction).filter(Correction.id == item_id).first()
+        if not row:
+            raise HTTPException(status_code=404, detail="Not found")
+        db.delete(row)
+        db.commit()
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        registry_errors.labels(error_type="delete_correction_failed").inc()
+        logger.error("delete_correction failed: %s", e)
+        raise HTTPException(status_code=500, detail="Internal server error")
