@@ -14,6 +14,7 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy import func as sa_func, text, tuple_ as sa_tuple
 
@@ -99,8 +100,32 @@ def _upsert_page(db: Session, page: DocPageCreate, embedding: Optional[list] = N
     if embedding:
         row.embedding = embedding
         row.embedding_model = "nomic-embed-text"
-    db.add(row)
-    return row, True
+    try:
+        db.add(row)
+        db.flush()
+        return row, True
+    except IntegrityError:
+        db.rollback()
+        existing = (
+            db.query(DocPage)
+            .filter(
+                DocPage.project_name == page.project_name,
+                DocPage.source_file == page.source_file,
+                DocPage.chunk_index == page.chunk_index,
+            )
+            .first()
+        )
+        if existing:
+            existing.title = page.title
+            existing.content = page.content
+            existing.heading_path = page.heading_path
+            existing.tags = page.tags
+            existing.meta_data = page.meta_data
+            if embedding:
+                existing.embedding = embedding
+                existing.embedding_model = "nomic-embed-text"
+            return existing, False
+        raise
 
 
 @router.post("", response_model=DocPageResponse, status_code=status.HTTP_201_CREATED)

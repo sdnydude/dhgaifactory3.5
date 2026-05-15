@@ -38,6 +38,7 @@ class CorrectionResponse(BaseModel):
     project_name: str
     category: str
     user_message: str
+    upsert_key_hash: str
     context: Optional[str]
     claude_action: Optional[str]
     session_id: Optional[str]

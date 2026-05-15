@@ -1,8 +1,9 @@
 """Unified Knowledge Base search endpoint.
 
 Routes:
-  POST /api/kb/search  — Hybrid FTS + vector RRF search across 4 tables, searched sequentially.
-                         Sources: doc_pages, insights, decision_logs, ship_sessions.
+  POST /api/kb/search  — Hybrid FTS + vector RRF search across 7 tables, searched sequentially.
+                         Sources: doc_pages, insights, decision_logs, ship_sessions,
+                         agent_sessions, corrections, dev_changelog.
 """
 import os
 import sys
@@ -17,7 +18,7 @@ from sqlalchemy import func as sa_func, text as sa_text
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from database import get_db
 from embedding_utils import get_embedding
-from models import DocPage, Insight, DecisionLog, ShipSession, Correction
+from models import DocPage, Insight, DecisionLog, ShipSession, Correction, AgentSession, DevChangelog
 from kb_schemas import KBSearchRequest, KBSearchResponse, KBSearchResult, VALID_SOURCES
 
 logger = logging.getLogger(__name__)
@@ -119,12 +120,45 @@ def _extract_correction(row: Correction) -> tuple[str, str, dict[str, Any]]:
     return title, content, metadata
 
 
+def _extract_agent_session(row: AgentSession) -> tuple[str, str, dict[str, Any]]:
+    title = row.tldr or (row.summary.split("\n")[0][:120] if row.summary else f"Session {row.session_id}")
+    content = row.summary or ""
+    metadata: dict[str, Any] = {
+        "project": row.project,
+        "source": row.source,
+        "session_id": row.session_id,
+        "model": row.model,
+        "skills_used": row.skills_used,
+        "branch": row.branch,
+    }
+    return title, content, metadata
+
+
+def _extract_dev_changelog(row: DevChangelog) -> tuple[str, str, dict[str, Any]]:
+    title = row.epic
+    parts = []
+    if row.key_insight:
+        parts.append(row.key_insight)
+    if row.notes:
+        parts.append(row.notes)
+    content = "\n\n".join(parts) if parts else row.epic
+    metadata: dict[str, Any] = {
+        "slug": row.slug,
+        "category": row.category,
+        "status": row.declared_status or row.detected_status,
+        "commit_count": row.commit_count,
+    }
+    return title, content, metadata
+
+
 _SOURCE_CONFIG: dict[str, tuple[Any, Callable]] = {
     "docs": (DocPage, _extract_doc_page),
     "insights": (Insight, _extract_insight),
     "decisions": (DecisionLog, _extract_decision_log),
     "ship_sessions": (ShipSession, _extract_ship_session),
     "corrections": (Correction, _extract_correction),
+    "agent_sessions": (AgentSession, _extract_agent_session),
+    "dev_changelog": (DevChangelog, _extract_dev_changelog),
 }
 
 
