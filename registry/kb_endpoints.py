@@ -1,9 +1,9 @@
 """Unified Knowledge Base search endpoint.
 
 Routes:
-  POST /api/kb/search  — Hybrid FTS + vector RRF search across 7 tables, searched sequentially.
+  POST /api/kb/search  — Hybrid FTS + vector RRF search across 9 tables, searched sequentially.
                          Sources: doc_pages, insights, decision_logs, ship_sessions,
-                         agent_sessions, corrections, dev_changelog.
+                         agent_sessions, corrections, dev_changelog, bug_fixes, deferred_items.
 """
 import os
 import sys
@@ -18,7 +18,7 @@ from sqlalchemy import func as sa_func, text as sa_text
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from database import get_db
 from embedding_utils import get_embedding
-from models import DocPage, Insight, DecisionLog, ShipSession, Correction, AgentSession, DevChangelog
+from models import DocPage, Insight, DecisionLog, ShipSession, Correction, AgentSession, DevChangelog, BugFix, DeferredItem
 from kb_schemas import KBSearchRequest, KBSearchResponse, KBSearchResult, VALID_SOURCES
 
 logger = logging.getLogger(__name__)
@@ -151,6 +151,41 @@ def _extract_dev_changelog(row: DevChangelog) -> tuple[str, str, dict[str, Any]]
     return title, content, metadata
 
 
+def _extract_bug_fix(row: BugFix) -> tuple[str, str, dict[str, Any]]:
+    title = row.tldr
+    parts = [f"Symptom: {row.symptom}"]
+    if row.root_cause:
+        parts.append(f"\n\nRoot Cause: {row.root_cause}")
+    if row.fix_applied:
+        parts.append(f"\n\nFix: {row.fix_applied}")
+    content = "".join(parts)
+    metadata: dict[str, Any] = {
+        "category": row.category,
+        "severity": row.severity,
+        "files_affected": row.files_affected,
+        "tags": row.tags,
+    }
+    return title, content, metadata
+
+
+def _extract_deferred_item(row: DeferredItem) -> tuple[str, str, dict[str, Any]]:
+    title = row.title
+    parts = [row.description]
+    if row.reason:
+        parts.append(f"\n\nReason Deferred: {row.reason}")
+    if row.source_context:
+        parts.append(f"\n\nContext: {row.source_context}")
+    content = "".join(parts)
+    metadata: dict[str, Any] = {
+        "category": row.category,
+        "priority": row.priority,
+        "status": row.status,
+        "affected_files": row.affected_files,
+        "tags": row.tags,
+    }
+    return title, content, metadata
+
+
 _SOURCE_CONFIG: dict[str, tuple[Any, Callable]] = {
     "docs": (DocPage, _extract_doc_page),
     "insights": (Insight, _extract_insight),
@@ -159,6 +194,8 @@ _SOURCE_CONFIG: dict[str, tuple[Any, Callable]] = {
     "corrections": (Correction, _extract_correction),
     "agent_sessions": (AgentSession, _extract_agent_session),
     "dev_changelog": (DevChangelog, _extract_dev_changelog),
+    "bug_fixes": (BugFix, _extract_bug_fix),
+    "deferred_items": (DeferredItem, _extract_deferred_item),
 }
 
 
@@ -241,7 +278,7 @@ async def kb_search(
     body: KBSearchRequest,
     db: Session = Depends(get_db),
 ) -> KBSearchResponse:
-    """Unified hybrid search across doc_pages, insights, decision_logs, and ship_sessions.
+    """Unified hybrid search across all 9 KB sources.
 
     Generates one query embedding, iterates over each requested source sequentially,
     then merges all results with Reciprocal Rank Fusion (k=60) and returns the top
