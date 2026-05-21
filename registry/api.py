@@ -236,6 +236,9 @@ from doc_pages_endpoints import router as doc_pages_router
 from ship_sessions_endpoints import router as ship_sessions_router
 from kb_endpoints import router as kb_router
 from corrections_endpoints import router as corrections_router
+from bug_fixes_endpoints import router as bug_fixes_router
+from deferred_items_endpoints import router as deferred_items_router
+from test_coverage_endpoints import router as test_coverage_router
 
 # Include routers
 app.include_router(agent_router)
@@ -261,6 +264,9 @@ app.include_router(doc_pages_router)
 app.include_router(ship_sessions_router)
 app.include_router(kb_router)
 app.include_router(corrections_router)
+app.include_router(bug_fixes_router)
+app.include_router(deferred_items_router)
+app.include_router(test_coverage_router)
 
 # Add CORS middleware — locked to production origin + localhost for development
 ALLOWED_ORIGINS = [

@@ -1388,3 +1388,132 @@ class Correction(Base):
         Index("ix_corrections_tags", "tags", postgresql_using="gin"),
         Index("ix_corrections_search", "search_vector", postgresql_using="gin"),
     )
+
+
+# =============================================================================
+# BUG FIX / ROOT CAUSE ANALYSIS
+# =============================================================================
+
+class BugFix(Base):
+    """Structured bug-fix records — symptom, root cause, fix applied, severity."""
+    __tablename__ = "bug_fixes"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tldr = Column(String(280), nullable=False)
+    symptom = Column(Text, nullable=False)
+    root_cause = Column(Text, nullable=False)
+    fix_applied = Column(Text, nullable=False)
+    files_affected = Column(ARRAY(Text), nullable=True)
+    severity = Column(String(20), nullable=False)  # low, medium, high, critical
+    category = Column(String(64), nullable=False)  # auth, api, frontend, database, infra, marketplace, shared, testing
+
+    project_name = Column(String(100), nullable=False)
+    source_file = Column(String(512), nullable=True)
+    tags = Column(ARRAY(Text), nullable=True)
+
+    embedding = Column(Vector(768), nullable=True)
+    embedding_model = Column(String(64), nullable=True)
+    search_vector = Column(TSVECTOR, nullable=True)
+
+    session_id = Column(String(128), nullable=True)
+    model_name = Column(String(64), nullable=True)
+    meta_data = Column(JSONB, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("project_name", "tldr", name="uq_bug_fixes_project_tldr"),
+        Index("ix_bug_fixes_project_category", "project_name", "category"),
+        Index("ix_bug_fixes_severity", "severity"),
+        Index("ix_bug_fixes_created", "created_at"),
+        Index("ix_bug_fixes_tags", "tags", postgresql_using="gin"),
+        Index("ix_bug_fixes_search", "search_vector", postgresql_using="gin"),
+    )
+
+
+# =============================================================================
+# DEFERRED ITEMS
+# =============================================================================
+
+class DeferredItem(Base):
+    """Work discovered during sessions that was intentionally not fixed and logged for later."""
+    __tablename__ = "deferred_items"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title = Column(String(280), nullable=False)
+    description = Column(Text, nullable=False)
+    reason = Column(Text, nullable=False)
+    source_context = Column(Text, nullable=True)
+    priority = Column(String(20), nullable=False, default="medium")  # low, medium, high, critical
+    category = Column(String(64), nullable=False)  # auth, api, frontend, database, infra, marketplace, testing, security, performance, config, docs, other
+    status = Column(String(20), nullable=False, default="open")  # open, in_progress, resolved, wont_fix
+    affected_files = Column(ARRAY(Text), nullable=True)
+
+    project_name = Column(String(100), nullable=False)
+    tags = Column(ARRAY(Text), nullable=True)
+
+    embedding = Column(Vector(768), nullable=True)
+    embedding_model = Column(String(64), nullable=True)
+    search_vector = Column(TSVECTOR, nullable=True)
+
+    session_id = Column(String(128), nullable=True)
+    model_name = Column(String(64), nullable=True)
+    meta_data = Column(JSONB, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("project_name", "title", name="uq_deferred_items_project_title"),
+        Index("ix_deferred_items_project_category", "project_name", "category"),
+        Index("ix_deferred_items_priority", "priority"),
+        Index("ix_deferred_items_status", "status"),
+        Index("ix_deferred_items_created", "created_at"),
+        Index("ix_deferred_items_tags", "tags", postgresql_using="gin"),
+        Index("ix_deferred_items_search", "search_vector", postgresql_using="gin"),
+    )
+
+
+# =============================================================================
+# TEST COVERAGE
+# =============================================================================
+
+class TestCoverage(Base):
+    """Test suite change events — tracks when tests are added, removed, or modified."""
+    __tablename__ = "test_coverage"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title = Column(String(280), nullable=False)
+    test_count_before = Column(Integer, nullable=False)
+    test_count_after = Column(Integer, nullable=False)
+    delta = Column(Integer, nullable=False)
+    tests_added = Column(ARRAY(Text), nullable=True)
+    tests_removed = Column(ARRAY(Text), nullable=True)
+    tests_modified = Column(ARRAY(Text), nullable=True)
+    files_affected = Column(ARRAY(Text), nullable=True)
+    category = Column(String(64), nullable=False)  # unit, integration, e2e, api, auth, admin, marketplace, security, performance, other
+    trigger = Column(Text, nullable=True)
+
+    project_name = Column(String(100), nullable=False)
+    tags = Column(ARRAY(Text), nullable=True)
+
+    embedding = Column(Vector(768), nullable=True)
+    embedding_model = Column(String(64), nullable=True)
+    search_vector = Column(TSVECTOR, nullable=True)
+
+    session_id = Column(String(128), nullable=True)
+    model_name = Column(String(64), nullable=True)
+    meta_data = Column(JSONB, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("project_name", "title", name="uq_test_coverage_project_title"),
+        Index("ix_test_coverage_project_category", "project_name", "category"),
+        Index("ix_test_coverage_delta", "delta"),
+        Index("ix_test_coverage_created", "created_at"),
+        Index("ix_test_coverage_tags", "tags", postgresql_using="gin"),
+        Index("ix_test_coverage_search", "search_vector", postgresql_using="gin"),
+    )

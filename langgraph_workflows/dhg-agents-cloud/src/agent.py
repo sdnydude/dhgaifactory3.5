@@ -27,9 +27,12 @@ Version: 2.1.0 (Cloud + Ollama + Registry)
 """
 
 import os
+import logging
 
 # Load secrets from Infisical at startup
 import json
+
+logger = logging.getLogger(__name__)
 from datetime import datetime
 import operator
 from typing import Annotated, Optional, List
@@ -429,8 +432,8 @@ class LLMRouter:
                             max_tokens=4096,
                         )
                     return (self._cache[cache_key], ep["model_name"], 0.0)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Local model lookup failed for %s: %s", task_type, e)
         return None
 
     def get_model(self, task: str, force_local: bool = False) -> tuple:

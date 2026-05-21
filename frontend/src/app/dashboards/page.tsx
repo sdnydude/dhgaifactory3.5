@@ -423,8 +423,6 @@ export default function DashboardsPage() {
   const ss = String(now.getUTCSeconds()).padStart(2, "0");
   const utcStamp = `${hh}:${mm}:${ss}Z`;
 
-  void nowMs;
-
   return (
     <div className="mc-root h-full overflow-y-auto">
       {/* =================== HEADER =================== */}
