@@ -484,7 +484,8 @@ async def create_cme_project(
     except Exception as e:
         db.rollback()
         registry_errors.labels(error_type="create_cme_project").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("create_cme_project failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/projects", response_model=List[CMEProjectDetail])
@@ -528,7 +529,8 @@ async def list_cme_projects(
 
     except Exception as e:
         registry_errors.labels(error_type="list_cme_projects").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("list_cme_projects failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/projects/{project_id}", response_model=CMEProjectDetail)
@@ -561,7 +563,8 @@ async def get_cme_project(project_id: str, db: Session = Depends(get_db)):
         raise
     except Exception as e:
         registry_errors.labels(error_type="get_cme_project").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("get_cme_project failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.put("/projects/{project_id}", response_model=CMEProjectDetail)
@@ -618,7 +621,8 @@ async def update_cme_project(
     except Exception as e:
         db.rollback()
         registry_errors.labels(error_type="update_cme_project").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("update_cme_project failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/projects/{project_id}/archive")
@@ -681,7 +685,8 @@ async def start_cme_pipeline(
     except Exception as e:
         db.rollback()
         registry_errors.labels(error_type="start_cme_pipeline").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("start_cme_pipeline failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/projects/{project_id}/status", response_model=ExecutionStatus)
@@ -728,7 +733,8 @@ async def get_cme_pipeline_status(project_id: str, db: Session = Depends(get_db)
         raise
     except Exception as e:
         registry_errors.labels(error_type="get_cme_pipeline_status").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("get_cme_pipeline_status failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/projects/{project_id}/pause")

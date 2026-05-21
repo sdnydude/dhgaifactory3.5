@@ -57,7 +57,8 @@ async def create_agent_session(
     except Exception as e:
         db.rollback()
         registry_errors.labels(error_type="create_agent_session_failed").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("create_agent_session failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("", response_model=AgentSessionList)
@@ -80,7 +81,8 @@ async def list_agent_sessions(
         return AgentSessionList(sessions=rows, total=total)
     except Exception as e:
         registry_errors.labels(error_type="list_agent_sessions_failed").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("list_agent_sessions failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/{session_id}", response_model=AgentSessionResponse)
@@ -101,4 +103,5 @@ async def get_agent_session(
         raise
     except Exception as e:
         registry_errors.labels(error_type="get_agent_session_failed").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("get_agent_session failed")
+        raise HTTPException(status_code=500, detail="Internal server error")

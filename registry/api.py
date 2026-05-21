@@ -393,7 +393,8 @@ async def create_media(media: MediaCreate, db: Session = Depends(get_db)):
         return db_media
     except Exception as e:
         registry_errors.labels(error_type='create_media_failed').inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("create_media failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/api/v1/media", response_model=List[MediaResponse])
@@ -407,7 +408,8 @@ async def list_media(skip: int = 0, limit: int = 100, db: Session = Depends(get_
         return media
     except Exception as e:
         registry_errors.labels(error_type='list_media_failed').inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("list_media failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/api/v1/media/{media_id}", response_model=MediaResponse)
@@ -425,7 +427,8 @@ async def get_media(media_id: uuid.UUID, db: Session = Depends(get_db)):
         raise
     except Exception as e:
         registry_errors.labels(error_type='get_media_failed').inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("get_media failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ============================================================================
@@ -468,7 +471,8 @@ async def create_transcript(transcript: TranscriptCreate, db: Session = Depends(
         raise
     except Exception as e:
         registry_errors.labels(error_type='create_transcript_failed').inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("create_transcript failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/api/v1/transcripts", response_model=List[TranscriptResponse])
@@ -482,7 +486,8 @@ async def list_transcripts(skip: int = 0, limit: int = 100, db: Session = Depend
         return transcripts
     except Exception as e:
         registry_errors.labels(error_type='list_transcripts_failed').inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("list_transcripts failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/api/v1/transcripts/media/{media_id}", response_model=List[TranscriptResponse])
@@ -496,7 +501,8 @@ async def get_transcripts_by_media(media_id: uuid.UUID, db: Session = Depends(ge
         return transcripts
     except Exception as e:
         registry_errors.labels(error_type='get_transcripts_by_media_failed').inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("get_transcripts_by_media failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ============================================================================
@@ -518,7 +524,8 @@ async def create_segment(segment: SegmentCreate, db: Session = Depends(get_db)):
         return db_segment
     except Exception as e:
         registry_errors.labels(error_type='create_segment_failed').inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("create_segment failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/api/v1/segments/transcript/{transcript_id}", response_model=List[SegmentResponse])
@@ -532,7 +539,8 @@ async def get_segments_by_transcript(transcript_id: uuid.UUID, db: Session = Dep
         return segments
     except Exception as e:
         registry_errors.labels(error_type='get_segments_by_transcript_failed').inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("get_segments_by_transcript failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ============================================================================
@@ -554,7 +562,8 @@ async def create_event(event: EventCreate, db: Session = Depends(get_db)):
         return db_event
     except Exception as e:
         registry_errors.labels(error_type='create_event_failed').inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("create_event failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/api/v1/events", response_model=List[EventResponse])
@@ -568,7 +577,8 @@ async def list_events(skip: int = 0, limit: int = 100, db: Session = Depends(get
         return events
     except Exception as e:
         registry_errors.labels(error_type='list_events_failed').inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("list_events failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 if __name__ == "__main__":

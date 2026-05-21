@@ -71,7 +71,7 @@ async def list_dev_changelog(
     except Exception as e:
         registry_errors.labels(error_type="list_dev_changelog").inc()
         logger.exception("list_dev_changelog failed")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/{slug}", response_model=DevChangelogEntry)
@@ -91,7 +91,7 @@ async def get_dev_changelog(slug: str, db: Session = Depends(get_db)) -> DevChan
     except Exception as e:
         registry_errors.labels(error_type="get_dev_changelog").inc()
         logger.exception("get_dev_changelog failed")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.patch("/{slug}", response_model=DevChangelogEntry)
@@ -120,4 +120,4 @@ async def patch_dev_changelog(
         db.rollback()
         registry_errors.labels(error_type="patch_dev_changelog").inc()
         logger.exception("patch_dev_changelog failed")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")

@@ -3,6 +3,7 @@ Claude AI Data Endpoints
 Handles Claude projects, conversations, messages, and artifacts
 """
 import time
+import logging
 from typing import List, Optional, Union
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends
@@ -16,6 +17,8 @@ from database import get_db
 import claude_service as svc
 
 from metrics import registry_read_latency, registry_read_operations, registry_errors
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="/api/v1", tags=["claude"])
@@ -118,7 +121,8 @@ async def list_projects(skip: int = 0, limit: int = 100, db: Session = Depends(g
         return result
     except Exception as e:
         registry_errors.labels(error_type="list_projects").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("list_projects failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/projects/{project_id}", response_model=ProjectResponse)
@@ -143,7 +147,8 @@ async def get_project(project_id: UUID4, db: Session = Depends(get_db)):
         raise
     except Exception as e:
         registry_errors.labels(error_type="get_project").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("get_project failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # =============================================================================
@@ -172,7 +177,8 @@ async def list_conversations(
         return result
     except Exception as e:
         registry_errors.labels(error_type="list_conversations").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("list_conversations failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/conversations/{conversation_id}", response_model=ConversationResponse)
@@ -192,7 +198,8 @@ async def get_conversation(conversation_id: UUID4, db: Session = Depends(get_db)
         raise
     except Exception as e:
         registry_errors.labels(error_type="get_conversation").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("get_conversation failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/conversations/search")
@@ -213,7 +220,8 @@ async def search_conversations(
         return result
     except Exception as e:
         registry_errors.labels(error_type="search_conversations").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("search_conversations failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # =============================================================================
@@ -231,7 +239,8 @@ async def list_messages(conversation_id: UUID4, db: Session = Depends(get_db)):
         return messages
     except Exception as e:
         registry_errors.labels(error_type="list_messages").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("list_messages failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # =============================================================================
@@ -254,7 +263,8 @@ async def list_artifacts(
         return artifacts
     except Exception as e:
         registry_errors.labels(error_type="list_artifacts").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("list_artifacts failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/artifacts/conversation/{conversation_id}", response_model=List[ArtifactResponse])
@@ -268,7 +278,8 @@ async def list_artifacts_by_conversation(conversation_id: UUID4, db: Session = D
         return artifacts
     except Exception as e:
         registry_errors.labels(error_type="list_artifacts_by_conversation").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("list_artifacts_by_conversation failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/artifacts/{artifact_id}", response_model=ArtifactResponse)
@@ -286,4 +297,5 @@ async def get_artifact(artifact_id: UUID4, db: Session = Depends(get_db)):
         raise
     except Exception as e:
         registry_errors.labels(error_type="get_artifact").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("get_artifact failed")
+        raise HTTPException(status_code=500, detail="Internal server error")

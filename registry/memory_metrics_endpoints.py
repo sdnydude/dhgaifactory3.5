@@ -53,7 +53,8 @@ async def create_memory_metrics(
     except Exception as e:
         db.rollback()
         registry_errors.labels(error_type="create_memory_metrics_failed").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("create_memory_metrics failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("", response_model=MemoryMetricsList)
@@ -74,4 +75,5 @@ async def list_memory_metrics(
         return MemoryMetricsList(metrics=rows, total=total)
     except Exception as e:
         registry_errors.labels(error_type="list_memory_metrics_failed").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("list_memory_metrics failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
