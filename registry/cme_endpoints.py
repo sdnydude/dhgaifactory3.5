@@ -10,7 +10,7 @@ from datetime import datetime
 from enum import Enum
 from fastapi import APIRouter, HTTPException, Depends, status, BackgroundTasks
 from sqlalchemy.orm import Session
-from sqlalchemy import func, text
+from sqlalchemy import text
 from pydantic import BaseModel, Field
 import httpx
 import logging
@@ -28,6 +28,11 @@ from models import (
 from schemas import (
     PipelineRunRead, RerunRequest, PipelineRunListResponse,
 )
+import cme_project_service as project_svc
+import cme_pipeline_service as pipeline_svc
+import cme_review_service as review_svc
+import cme_sync_service as sync_svc
+import cme_search_service as search_svc
 
 # Import metrics from main API
 try:
@@ -243,36 +248,6 @@ class AgentOutput(BaseModel):
 
 
 # =============================================================================
-# DATABASE MODEL (for reference - actual migration needed)
-# =============================================================================
-# Note: This model definition is for documentation.
-# A proper Alembic migration should be created to add this table.
-#
-# class CMEProject(Base):
-#     __tablename__ = "cme_projects"
-#
-#     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-#     name = Column(String(255), nullable=False)
-#     status = Column(String(50), nullable=False, default="intake")
-#     intake = Column(JSONB, nullable=False)
-#     current_agent = Column(String(100))
-#     progress_percent = Column(Integer, default=0)
-#     outputs = Column(JSONB)
-#     errors = Column(JSONB)
-#     human_review_status = Column(String(50))
-#     pipeline_thread_id = Column(String(100))  # LangGraph thread ID
-#     created_at = Column(DateTime, default=datetime.utcnow)
-#     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-#     started_at = Column(DateTime)
-#     completed_at = Column(DateTime)
-
-
-# =============================================================================
-# DATABASE OPERATIONS HELPERS
-# =============================================================================
-
-
-# =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
 
@@ -388,383 +363,6 @@ async def trigger_intake_prefill(payload: dict) -> dict:
         }
 
 
-def calculate_progress(agents_completed: List[str]) -> int:
-    """Calculate progress percentage based on completed agents"""
-    total_agents = 12
-    return int((len(agents_completed) / total_agents) * 100)
-
-
-# =============================================================================
-# LANGGRAPH CLOUD SYNC (replaces unreachable webhook callbacks)
-# =============================================================================
-
-AGENT_OUTPUT_KEYS = [
-    "research_output", "clinical_output", "gap_analysis_output",
-    "needs_assessment_output", "learning_objectives_output",
-    "curriculum_output", "protocol_output", "marketing_output",
-    "grant_package_output", "prose_quality_pass_1", "prose_quality_pass_2",
-    "compliance_result",
-]
-
-THREAD_STATUS_MAP = {
-    "busy": "processing",
-    "interrupted": "review",
-    "error": "failed",
-}
-
-# Maps LangGraph node names (from thread state `next`) to display-friendly
-# agent names used in current_agent. This lets us show "running research"
-# while the node is executing, not just after it completes.
-NODE_TO_AGENT = {
-    "initialize": "initializing",
-    "early_research": "research",
-    "gap_analysis": "gap_analysis",
-    "learning_objectives": "learning_objectives",
-    "needs_assessment": "needs_assessment",
-    "prose_quality": "prose_quality",
-    "prose_quality_1": "prose_quality_1",
-    "design_phase": "design_phase",
-    "grant_writer": "grant_writer",
-    "prose_quality_2": "prose_quality_2",
-    "compliance": "compliance",
-    "human_review": "human_review",
-    "human_review_pq1": "human_review",
-    "human_review_pq2": "human_review",
-    "auto_approve": "auto_approve",
-    "process_feedback": "processing_feedback",
-    "complete": "complete",
-    "failed": "failed",
-}
-
-# Maps state key → (short agent name, document title for cme_documents)
-AGENT_OUTPUT_META = {
-    "research_output": ("research", "Research & Literature Review"),
-    "clinical_output": ("clinical", "Clinical Practice Analysis"),
-    "gap_analysis_output": ("gap_analysis", "Gap Analysis"),
-    "needs_assessment_output": ("needs_assessment", "Needs Assessment"),
-    "learning_objectives_output": ("learning_objectives", "Learning Objectives"),
-    "curriculum_output": ("curriculum", "Curriculum Design"),
-    "protocol_output": ("protocol", "Research Protocol"),
-    "marketing_output": ("marketing", "Marketing Plan"),
-    "grant_package_output": ("grant_package", "Grant Package"),
-    "prose_quality_pass_1": ("prose_quality_1", "Prose Quality Pass 1"),
-    "prose_quality_pass_2": ("prose_quality_2", "Prose Quality Pass 2"),
-    "compliance_result": ("compliance", "Compliance Review"),
-}
-
-# Maps short agent name → JSONB path to the prose document text
-DOCUMENT_TEXT_PATHS = {
-    "research": "research_document",
-    "clinical": "clinical_practice_document",
-    "gap_analysis": "gap_analysis_document",
-    "needs_assessment": "complete_document",
-    "learning_objectives": "learning_objectives_document",
-    "curriculum": "curriculum_document",
-    "protocol": "protocol_document",
-    "marketing": "marketing_document",
-    "grant_package": "complete_document_markdown",
-    "prose_quality_1": "summary",
-    "prose_quality_2": "summary",
-    "compliance": None,  # Built from compliance_report
-}
-
-# Maps short agent name → JSONB path to the structured report dict
-REPORT_PATHS = {
-    "research": "research_report",
-    "clinical": "clinical_practice_report",
-    "gap_analysis": "gap_analysis_report",
-    "learning_objectives": "learning_objectives_report",
-    "curriculum": "curriculum_report",
-    "protocol": "protocol_report",
-    "marketing": "marketing_report",
-    "compliance": "compliance_report",
-}
-
-# Maps short agent name → JSONB path to citations list
-CITATION_PATHS = {
-    "research": ("research_report", "citations"),
-    "clinical": ("clinical_practice_report", "citations"),
-}
-
-
-def _extract_document_text(agent_name: str, content: Dict[str, Any]) -> Optional[str]:
-    """Extract the prose document text from an agent's JSONB output."""
-    if not isinstance(content, dict):
-        return None
-
-    text_path = DOCUMENT_TEXT_PATHS.get(agent_name)
-    if text_path is None and agent_name == "compliance":
-        report = content.get("compliance_report", {})
-        if isinstance(report, dict):
-            verdict = report.get("overall_verdict", "")
-            checks = report.get("standard_checks", {})
-            parts = [f"Compliance Verdict: {verdict}"]
-            for std_name, std_data in checks.items():
-                if isinstance(std_data, dict):
-                    parts.append(f"{std_name}: {std_data.get('status', 'unknown')} — {std_data.get('findings', '')}")
-            return "\n\n".join(parts) if parts else None
-        return None
-
-    if text_path:
-        text = content.get(text_path)
-        if isinstance(text, str) and len(text) > 10:
-            return text
-    return None
-
-
-def _extract_quality_score(agent_name: str, content: Dict[str, Any]) -> Optional[float]:
-    """Extract quality score from an agent's JSONB output. Returns 0.0-1.0 scale."""
-    if not isinstance(content, dict):
-        return None
-
-    if agent_name in ("prose_quality_1", "prose_quality_2"):
-        score = content.get("overall_score")
-        if isinstance(score, (int, float)):
-            return score / 100.0  # Convert 0-100 to 0-1
-    elif agent_name == "needs_assessment":
-        if content.get("quality_passed"):
-            return 1.0
-        word_count = content.get("word_count", 0)
-        if isinstance(word_count, (int, float)) and word_count > 0:
-            return min(word_count / 3100.0, 1.0)  # Ratio to target
-    elif agent_name == "compliance":
-        report = content.get("compliance_report", {})
-        if isinstance(report, dict):
-            verdict = report.get("overall_verdict", "")
-            if verdict == "APPROVED":
-                return 1.0
-            elif verdict == "REQUIRES_REVISION":
-                return 0.5
-            elif verdict == "REJECTED":
-                return 0.0
-    return None
-
-
-def _extract_quality_details(agent_name: str, content: Dict[str, Any]) -> Optional[Dict]:
-    """Extract structured quality details for cme_documents.quality_details."""
-    if not isinstance(content, dict):
-        return None
-
-    if agent_name in ("prose_quality_1", "prose_quality_2"):
-        return {
-            "overall_score": content.get("overall_score"),
-            "overall_passed": content.get("overall_passed"),
-            "prose_density_score": content.get("prose_density_score"),
-            "ai_patterns_count": content.get("ai_patterns_count"),
-            "word_count_total": content.get("word_count_total"),
-            "revision_instructions": content.get("revision_instructions"),
-        }
-    elif agent_name == "needs_assessment":
-        return {
-            "word_count": content.get("word_count"),
-            "meets_word_count": content.get("meets_word_count"),
-            "prose_density": content.get("prose_density"),
-            "quality_passed": content.get("quality_passed"),
-            "section_word_counts": content.get("section_word_counts"),
-            "character_appearances": content.get("character_appearances"),
-        }
-    elif agent_name == "compliance":
-        report = content.get("compliance_report", {})
-        if isinstance(report, dict):
-            return {
-                "overall_verdict": report.get("overall_verdict"),
-                "remediation_required": report.get("remediation_required"),
-                "standard_checks": report.get("standard_checks"),
-                "bias_issues": report.get("bias_issues"),
-            }
-    return None
-
-
-def _extract_word_count(agent_name: str, content: Dict[str, Any]) -> Optional[int]:
-    """Extract word count from output or count from document text."""
-    if not isinstance(content, dict):
-        return None
-
-    if agent_name == "needs_assessment":
-        wc = content.get("word_count")
-        if isinstance(wc, int):
-            return wc
-    elif agent_name in ("prose_quality_1", "prose_quality_2"):
-        wc = content.get("word_count_total")
-        if isinstance(wc, int):
-            return wc
-
-    doc_text = _extract_document_text(agent_name, content)
-    if doc_text:
-        return len(doc_text.split())
-    return None
-
-
-def _extract_citations(agent_name: str, content: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Extract citation list from agent output for cme_source_references."""
-    if agent_name not in CITATION_PATHS or not isinstance(content, dict):
-        return []
-
-    report_key, citations_key = CITATION_PATHS[agent_name]
-    report = content.get(report_key, {})
-    if not isinstance(report, dict):
-        return []
-
-    citations = report.get(citations_key, [])
-    if not isinstance(citations, list):
-        return []
-
-    return citations
-
-
-def _extract_intake_fields(project_id, intake_jsonb: Dict[str, Any], db: Session) -> int:
-    """Explode JSONB intake blob into individual cme_intake_fields rows.
-
-    Returns the number of fields inserted/updated.
-    """
-    if not isinstance(intake_jsonb, dict):
-        return 0
-
-    FIELD_LABELS = {
-        "section_a": {
-            "project_name": "Project Name",
-            "therapeutic_area": "Therapeutic Area",
-            "disease_state": "Disease State",
-            "target_audience_primary": "Primary Target Audience",
-            "target_audience_secondary": "Secondary Target Audience",
-            "target_hcp_types": "Target HCP Types",
-        },
-        "section_b": {
-            "supporter_name": "Supporter Name",
-            "supporter_contact_name": "Supporter Contact Name",
-            "supporter_contact_email": "Supporter Contact Email",
-            "grant_amount_requested": "Grant Amount Requested",
-            "grant_submission_deadline": "Grant Submission Deadline",
-        },
-        "section_c": {
-            "learning_format": "Learning Format",
-            "duration_minutes": "Duration (minutes)",
-            "faculty_count": "Faculty Count",
-            "include_pre_test": "Include Pre-Test",
-            "include_post_test": "Include Post-Test",
-        },
-        "section_d": {
-            "clinical_topics": "Clinical Topics",
-            "treatment_modalities": "Treatment Modalities",
-            "patient_population": "Patient Population",
-            "stage_of_disease": "Stage of Disease",
-            "comorbidities": "Comorbidities",
-        },
-        "section_e": {
-            "knowledge_gaps": "Knowledge Gaps",
-            "competence_gaps": "Competence Gaps",
-            "performance_gaps": "Performance Gaps",
-            "gap_evidence_sources": "Gap Evidence Sources",
-            "gap_priority": "Gap Priority",
-        },
-        "section_f": {
-            "primary_outcomes": "Primary Outcomes",
-            "secondary_outcomes": "Secondary Outcomes",
-            "measurement_approach": "Measurement Approach",
-            "moore_levels_target": "Moore Levels Target",
-            "follow_up_timeline": "Follow-Up Timeline",
-        },
-        "section_g": {
-            "key_messages": "Key Messages",
-            "required_references": "Required References",
-            "excluded_topics": "Excluded Topics",
-            "competitor_products_to_mention": "Competitor Products",
-            "regulatory_considerations": "Regulatory Considerations",
-        },
-        "section_h": {
-            "target_launch_date": "Target Launch Date",
-            "expiration_date": "Expiration Date",
-            "distribution_channels": "Distribution Channels",
-            "geo_restrictions": "Geographic Restrictions",
-            "language_requirements": "Language Requirements",
-        },
-        "section_i": {
-            "accme_compliant": "ACCME Compliant",
-            "financial_disclosure_required": "Financial Disclosure Required",
-            "off_label_discussion": "Off-Label Discussion",
-            "commercial_support_acknowledgment": "Commercial Support Acknowledgment",
-        },
-        "section_j": {
-            "special_instructions": "Special Instructions",
-            "reference_materials": "Reference Materials",
-            "internal_notes": "Internal Notes",
-        },
-    }
-
-    count = 0
-    for section_key, section_data in intake_jsonb.items():
-        if not isinstance(section_data, dict):
-            continue
-        labels = FIELD_LABELS.get(section_key, {})
-
-        for field_name, value in section_data.items():
-            label = labels.get(field_name, field_name.replace("_", " ").title())
-
-            # Determine text vs json storage
-            if isinstance(value, (list, dict)):
-                value_text = str(value) if value else None
-                value_json = value
-            elif isinstance(value, bool):
-                value_text = "Yes" if value else "No"
-                value_json = None
-            elif value is not None:
-                value_text = str(value)
-                value_json = None
-            else:
-                value_text = None
-                value_json = None
-
-            existing = db.query(CMEIntakeField).filter(
-                CMEIntakeField.project_id == project_id,
-                CMEIntakeField.section == section_key,
-                CMEIntakeField.field_name == field_name,
-            ).first()
-
-            if existing:
-                existing.value_text = value_text
-                existing.value_json = value_json
-                existing.field_label = label
-            else:
-                db.add(CMEIntakeField(
-                    project_id=project_id,
-                    section=section_key,
-                    field_name=field_name,
-                    field_label=label,
-                    value_text=value_text,
-                    value_json=value_json,
-                ))
-            count += 1
-
-    return count
-
-
-async def _generate_embedding(text: str) -> Optional[List[float]]:
-    """Generate a 768-dim embedding via Ollama nomic-embed-text.
-
-    Truncates to ~8000 tokens (~32000 chars) to stay within model context.
-    Returns None on failure (non-blocking).
-    """
-    if not text or len(text.strip()) < 10:
-        return None
-
-    truncated = text[:32000]
-
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(
-                f"{os.getenv('OLLAMA_URL', 'http://dhg-ollama:11434')}/api/embeddings",
-                json={"model": "nomic-embed-text", "prompt": truncated},
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            embedding = data.get("embedding")
-            if isinstance(embedding, list) and len(embedding) == 768:
-                return embedding
-    except Exception as e:
-        logger.warning(f"Embedding generation failed: {e}")
-    return None
-
-
 async def _fetch_thread_from_cloud(thread_id: str) -> Optional[Dict[str, Any]]:
     """Fetch thread info and state from LangGraph Cloud."""
     langgraph_url = os.getenv("LANGGRAPH_API_URL", LANGGRAPH_CLOUD_URL)
@@ -793,241 +391,14 @@ async def _fetch_thread_from_cloud(thread_id: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-async def _sync_project_from_thread(project: "CMEProject", thread_data: Dict[str, Any], db: Session) -> Dict[str, Any]:
-    """Sync a CMEProject from LangGraph Cloud thread data.
-
-    Populates: cme_agent_outputs, cme_documents, cme_source_references.
-    Updates: project status, agents_completed, progress.
-    Generates embeddings asynchronously.
-    Returns a summary dict.
-    """
-    thread_info = thread_data["thread"]
-    thread_state = thread_data["state"]
-    values = thread_state.get("values") or {}
-    thread_status = thread_info.get("status", "idle")
-
-    # Map thread status to project status
-    if thread_status == "idle":
-        pipeline_status = values.get("status", "complete")
-        if pipeline_status in ("complete", "approved"):
-            new_status = "complete"
-        elif pipeline_status == "failed":
-            new_status = "failed"
-        else:
-            new_status = project.status
-    else:
-        new_status = THREAD_STATUS_MAP.get(thread_status, project.status)
-
-    old_status = project.status
-    project.status = new_status
-
-    # Derive current_agent from the thread's active node (`next`), which
-    # reflects what's running RIGHT NOW.  Fall back to `current_step` (only
-    # set on completion) for backward compatibility.
-    next_nodes = thread_state.get("next") or []
-    if next_nodes:
-        active_node = next_nodes[0]
-        project.current_agent = NODE_TO_AGENT.get(active_node, active_node)
-    else:
-        project.current_agent = values.get("current_step", project.current_agent)
-
-    project.human_review_status = values.get("human_review_status", project.human_review_status)
-    project.human_review_notes = values.get("human_review_notes", project.human_review_notes)
-
-    # Extract agent outputs → cme_agent_outputs + cme_documents + cme_source_references
-    agents_completed = []
-    documents_created = 0
-    references_created = 0
-
-    for state_key in AGENT_OUTPUT_KEYS:
-        output = values.get(state_key)
-        if not output or not isinstance(output, dict):
-            continue
-
-        meta = AGENT_OUTPUT_META.get(state_key)
-        if not meta:
-            continue
-        agent_name, doc_title = meta
-
-        agents_completed.append(agent_name)
-        doc_text = _extract_document_text(agent_name, output)
-        quality_score = _extract_quality_score(agent_name, output)
-
-        # --- cme_agent_outputs ---
-        existing_output = db.query(CMEAgentOutput).filter(
-            CMEAgentOutput.project_id == project.id,
-            CMEAgentOutput.agent_name == agent_name,
-        ).first()
-
-        if existing_output:
-            if doc_text and not existing_output.document_text:
-                existing_output.document_text = doc_text
-            if quality_score is not None and existing_output.quality_score is None:
-                existing_output.quality_score = quality_score
-            agent_output_id = existing_output.id
-        else:
-            new_output = CMEAgentOutput(
-                project_id=project.id,
-                agent_name=agent_name,
-                output_type="document",
-                content=output,
-                quality_score=quality_score,
-                document_text=doc_text,
-            )
-            db.add(new_output)
-            db.flush()
-            agent_output_id = new_output.id
-
-        # --- cme_documents (immutable, versioned) ---
-        if doc_text:
-            existing_doc = db.query(CMEDocument).filter(
-                CMEDocument.project_id == project.id,
-                CMEDocument.document_type == agent_name,
-                CMEDocument.is_current == True,
-            ).first()
-
-            if not existing_doc:
-                now = datetime.utcnow()
-                doc = CMEDocument(
-                    project_id=project.id,
-                    agent_output_id=agent_output_id,
-                    document_type=agent_name,
-                    version=1,
-                    is_current=True,
-                    title=doc_title,
-                    content_text=doc_text,
-                    content_json=output,
-                    word_count=_extract_word_count(agent_name, output),
-                    quality_score=quality_score,
-                    quality_passed=output.get("quality_passed") or output.get("overall_passed"),
-                    quality_details=_extract_quality_details(agent_name, output),
-                    created_by="langgraph_pipeline",
-                    retention_until=datetime(now.year + 7, now.month, now.day),
-                )
-                db.add(doc)
-                documents_created += 1
-
-        # --- cme_source_references ---
-        citations = _extract_citations(agent_name, output)
-        for cit in citations:
-            if not isinstance(cit, dict):
-                continue
-            ref_id = str(cit.get("pmid", cit.get("doi", "")))
-            if not ref_id:
-                continue
-
-            existing_ref = db.query(CMESourceReference).filter(
-                CMESourceReference.project_id == project.id,
-                CMESourceReference.ref_id == ref_id,
-            ).first()
-
-            if not existing_ref:
-                db.add(CMESourceReference(
-                    project_id=project.id,
-                    ref_type="pubmed" if cit.get("pmid") else "doi",
-                    ref_id=ref_id,
-                    title=cit.get("title", "Untitled"),
-                    authors=cit.get("authors", ""),
-                    journal=cit.get("journal", ""),
-                    url=cit.get("url", ""),
-                    abstract=cit.get("abstract", ""),
-                    cached_content=cit,
-                ))
-                references_created += 1
-
-    if agents_completed:
-        project.agents_completed = agents_completed
-        remaining = [a for a in (project.agents_pending or []) if a not in agents_completed]
-        project.agents_pending = remaining
-        project.progress_percent = calculate_progress(agents_completed)
-
-    if new_status == "complete" and not project.completed_at:
-        project.completed_at = datetime.utcnow()
-
-    # Sync errors
-    cloud_errors = values.get("errors")
-    if cloud_errors:
-        project.errors = cloud_errors
-
-    # Extract intake fields (only once — skip if already done)
-    existing_intake_count = db.query(CMEIntakeField).filter(
-        CMEIntakeField.project_id == project.id,
-    ).count()
-    intake_fields_created = 0
-    if existing_intake_count == 0 and project.intake:
-        intake_fields_created = _extract_intake_fields(project.id, project.intake, db)
-
-    db.commit()
-    db.refresh(project)
-
-    # Generate embeddings in background (non-blocking)
-    try:
-        outputs_needing_embeddings = db.query(CMEAgentOutput).filter(
-            CMEAgentOutput.project_id == project.id,
-            CMEAgentOutput.document_text.isnot(None),
-            CMEAgentOutput.embedding.is_(None),
-        ).all()
-
-        for ao in outputs_needing_embeddings:
-            emb = await _generate_embedding(ao.document_text)
-            if emb:
-                db.execute(
-                    CMEAgentOutput.__table__.update()
-                    .where(CMEAgentOutput.id == ao.id)
-                    .values(embedding=emb)
-                )
-
-        docs_needing_embeddings = db.query(CMEDocument).filter(
-            CMEDocument.project_id == project.id,
-            CMEDocument.embedding.is_(None),
-        ).all()
-
-        for doc in docs_needing_embeddings:
-            emb = await _generate_embedding(doc.content_text)
-            if emb:
-                db.execute(
-                    CMEDocument.__table__.update()
-                    .where(CMEDocument.id == doc.id)
-                    .values(embedding=emb)
-                )
-
-        refs_needing_embeddings = db.query(CMESourceReference).filter(
-            CMESourceReference.project_id == project.id,
-            CMESourceReference.embedding.is_(None),
-            CMESourceReference.abstract.isnot(None),
-        ).all()
-
-        for ref in refs_needing_embeddings:
-            ref_text = f"{ref.title} {ref.authors or ''} {ref.abstract or ''}"
-            emb = await _generate_embedding(ref_text)
-            if emb:
-                db.execute(
-                    CMESourceReference.__table__.update()
-                    .where(CMESourceReference.id == ref.id)
-                    .values(embedding=emb)
-                )
-
-        db.commit()
-    except Exception as e:
-        logger.warning(f"Embedding generation failed (non-blocking): {e}")
-
-    return {
-        "project_id": str(project.id),
-        "old_status": old_status,
-        "new_status": new_status,
-        "thread_status": thread_status,
-        "agents_completed": agents_completed,
-        "documents_created": documents_created,
-        "references_created": references_created,
-        "intake_fields_created": intake_fields_created,
-        "progress_percent": project.progress_percent,
-    }
-
+# =============================================================================
+# SYNC ENDPOINTS
+# =============================================================================
 
 @router.post("/projects/{project_id}/sync")
 async def sync_project_from_cloud(project_id: str, db: Session = Depends(get_db)):
     """Poll LangGraph Cloud for thread state and sync to registry database."""
-    project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+    project = project_svc.get_project(db, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="CME project not found")
 
@@ -1038,8 +409,7 @@ async def sync_project_from_cloud(project_id: str, db: Session = Depends(get_db)
     if not thread_data:
         raise HTTPException(status_code=502, detail="Failed to fetch thread from LangGraph Cloud")
 
-    result = await _sync_project_from_thread(project, thread_data, db)
-    return result
+    return await sync_svc.sync_project_from_thread(project, thread_data, db)
 
 
 @router.post("/sync-active")
@@ -1054,7 +424,7 @@ async def sync_all_active_projects(db: Session = Depends(get_db)):
     for project in projects:
         thread_data = await _fetch_thread_from_cloud(project.pipeline_thread_id)
         if thread_data:
-            result = await _sync_project_from_thread(project, thread_data, db)
+            result = await sync_svc.sync_project_from_thread(project, thread_data, db)
             results.append(result)
         else:
             results.append({"project_id": str(project.id), "error": "cloud_unreachable"})
@@ -1103,30 +473,8 @@ async def create_cme_project(
     """
     start = time.time()
     try:
-        # Convert intake to dict for storage (mode='json' serializes datetimes to ISO strings)
         intake_dict = intake.model_dump(mode='json')
-
-        # Create project in database
-        db_project = CMEProject(
-            name=intake.section_a.project_name,
-            status="intake",
-            intake=intake_dict,
-            current_agent=None,
-            progress_percent=0,
-            outputs={},
-            errors=[],
-            human_review_status=None,
-            pipeline_thread_id=None,
-            agents_completed=[],
-            agents_pending=[
-                "research", "clinical", "gap_analysis", "needs_assessment",
-                "learning_objectives", "curriculum", "protocol", "marketing",
-                "grant_writer", "prose_quality", "compliance", "package_assembly"
-            ]
-        )
-        db.add(db_project)
-        db.commit()
-        db.refresh(db_project)
+        db_project = project_svc.create_project(db, intake.section_a.project_name, intake_dict)
 
         registry_write_operations.labels(operation="create_cme_project").inc()
         registry_write_latency.observe((time.time() - start) * 1000)
@@ -1154,16 +502,12 @@ async def list_cme_projects(
     """List all CME projects with optional status filtering"""
     start = time.time()
     try:
-        query = db.query(CMEProject)
-
-        # Filter by status if provided; exclude archived from unfiltered list
-        if status:
-            query = query.filter(CMEProject.status == status.value)
-        else:
-            query = query.filter(CMEProject.status != "archived")
-
-        # Pagination
-        projects = query.order_by(CMEProject.created_at.desc()).offset(skip).limit(limit).all()
+        projects = project_svc.list_projects(
+            db,
+            status_filter=status.value if status else None,
+            skip=skip,
+            limit=limit,
+        )
 
         result = [
             CMEProjectDetail(
@@ -1197,7 +541,7 @@ async def get_cme_project(project_id: str, db: Session = Depends(get_db)):
     """Get details for a specific CME project"""
     start = time.time()
     try:
-        p = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+        p = project_svc.get_project(db, project_id)
         if not p:
             raise HTTPException(status_code=404, detail="CME project not found")
 
@@ -1241,7 +585,7 @@ async def update_cme_project(
     """
     start = time.time()
     try:
-        project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+        project = project_svc.get_project(db, project_id)
         if not project:
             raise HTTPException(status_code=404, detail="CME project not found")
 
@@ -1252,17 +596,10 @@ async def update_cme_project(
             )
 
         intake_dict = intake.model_dump(mode="json")
-        project.name = intake.section_a.project_name
-        project.intake = intake_dict
-        if project.status != "intake":
-            project.intake_version = (project.intake_version or 1) + 1
-
-        # Re-extract intake fields
-        db.query(CMEIntakeField).filter(CMEIntakeField.project_id == project.id).delete()
-        _extract_intake_fields(project.id, intake_dict, db)
-
-        db.commit()
-        db.refresh(project)
+        project = project_svc.update_project_intake(
+            db, project, intake.section_a.project_name, intake_dict,
+            extract_intake_fields_fn=sync_svc.extract_intake_fields,
+        )
 
         registry_write_operations.labels(operation="update_cme_project").inc()
         registry_write_latency.observe((time.time() - start) * 1000)
@@ -1292,16 +629,14 @@ async def update_cme_project(
 @router.post("/projects/{project_id}/archive")
 async def archive_cme_project(project_id: str, db: Session = Depends(get_db)):
     """Archive a CME project (soft delete). Can be called on any non-archived project."""
-    project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+    project = project_svc.get_project(db, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="CME project not found")
 
     if project.status == "archived":
         raise HTTPException(status_code=400, detail="Project is already archived")
 
-    project.status = "archived"
-    db.commit()
-
+    project_svc.archive_project(db, project)
     return {"status": "archived", "project_id": str(project.id)}
 
 
@@ -1318,7 +653,7 @@ async def start_cme_pipeline(
     """Start the 12-agent LangGraph pipeline for a CME project"""
     start = time.time()
     try:
-        project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+        project = project_svc.get_project(db, project_id)
         if not project:
             raise HTTPException(status_code=404, detail="CME project not found")
 
@@ -1328,39 +663,8 @@ async def start_cme_pipeline(
                 detail=f"Cannot start pipeline: project status is {project.status}"
             )
 
-        now = datetime.utcnow()
-        project.status = "processing"
-        project.started_at = now
-        project.current_agent = "research"
-
         lg = await trigger_langgraph_pipeline(str(project.id), project.intake)
-        project.pipeline_thread_id = lg["thread_id"]
-
-        # Determine next run_number (should be 1 for a fresh start, but handle
-        # edge case where a failed project is being retried via /start).
-        last_run_number = (
-            db.query(func.max(CMEPipelineRun.run_number))
-            .filter(CMEPipelineRun.project_id == project.id)
-            .scalar()
-            or 0
-        )
-        run = CMEPipelineRun(
-            run_id=uuid.uuid4(),
-            project_id=project.id,
-            run_number=last_run_number + 1,
-            thread_id=lg["thread_id"],
-            langgraph_run_id=lg["run_id"],
-            intake_version_used=project.intake_version or 1,
-            trigger_reason="initial" if last_run_number == 0 else "retry",
-            triggered_at=now,
-            status="processing",
-        )
-        db.add(run)
-        db.flush()
-        project.current_run_id = run.run_id
-
-        db.commit()
-        db.refresh(project)
+        pipeline_svc.start_pipeline(db, project, lg["thread_id"], lg["run_id"])
 
         registry_write_operations.labels(operation="start_cme_pipeline").inc()
         registry_write_latency.observe((time.time() - start) * 1000)
@@ -1393,21 +697,18 @@ async def get_cme_pipeline_status(project_id: str, db: Session = Depends(get_db)
     """
     start = time.time()
     try:
-        project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+        project = project_svc.get_project(db, project_id)
         if not project:
             raise HTTPException(status_code=404, detail="CME project not found")
 
-        # Auto-sync from Cloud when project is actively running
         if project.status in ("processing", "review") and project.pipeline_thread_id:
             try:
                 thread_data = await _fetch_thread_from_cloud(project.pipeline_thread_id)
                 if thread_data:
-                    await _sync_project_from_thread(project, thread_data, db)
+                    await sync_svc.sync_project_from_thread(project, thread_data, db)
             except Exception as sync_err:
                 logger.warning(f"Cloud sync failed during status poll: {sync_err}")
         else:
-            # Explicit log so the next investigation can tell "guard skipped"
-            # apart from "guard ran but no-op". Silent skips here cost ~2h on Apr 13.
             logger.info(
                 "auto-sync skipped for %s: status=%s thread_id=%s",
                 project_id, project.status, project.pipeline_thread_id,
@@ -1438,32 +739,28 @@ async def get_cme_pipeline_status(project_id: str, db: Session = Depends(get_db)
 @router.post("/projects/{project_id}/pause")
 async def pause_cme_pipeline(project_id: str, db: Session = Depends(get_db)):
     """Pause pipeline execution (for human review gates)"""
-    project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+    project = project_svc.get_project(db, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="CME project not found")
 
     if project.status != "processing":
         raise HTTPException(status_code=400, detail="Pipeline is not running")
 
-    project.status = "review"
-    db.commit()
-
+    project_svc.set_project_status(db, project, "review")
     return {"status": "paused", "project_id": str(project.id)}
 
 
 @router.post("/projects/{project_id}/resume")
 async def resume_cme_pipeline(project_id: str, db: Session = Depends(get_db)):
     """Resume pipeline execution after human review"""
-    project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+    project = project_svc.get_project(db, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="CME project not found")
 
     if project.status != "review":
         raise HTTPException(status_code=400, detail="Pipeline is not paused")
 
-    project.status = "processing"
-    db.commit()
-
+    project_svc.set_project_status(db, project, "processing")
     return {"status": "resumed", "project_id": str(project.id)}
 
 
@@ -1475,7 +772,7 @@ async def cancel_cme_pipeline(project_id: str, db: Session = Depends(get_db)):
     pipeline_runs row and project as cancelled. Tolerates a missing/finished
     run on the Cloud side (still marks the DB rows cancelled).
     """
-    project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+    project = project_svc.get_project(db, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="CME project not found")
 
@@ -1485,12 +782,7 @@ async def cancel_cme_pipeline(project_id: str, db: Session = Depends(get_db)):
             detail=f"Cannot cancel: project status is {project.status}",
         )
 
-    run: Optional[CMEPipelineRun] = None
-    if project.current_run_id:
-        run = db.query(CMEPipelineRun).filter(
-            CMEPipelineRun.run_id == project.current_run_id
-        ).first()
-
+    run = pipeline_svc.get_active_run(db, project)
     if run is None:
         raise HTTPException(
             status_code=409,
@@ -1498,19 +790,10 @@ async def cancel_cme_pipeline(project_id: str, db: Session = Depends(get_db)):
         )
 
     await cancel_langgraph_run(run.thread_id, run.langgraph_run_id)
-
-    now = datetime.utcnow()
-    run.status = "cancelled"
-    run.completed_at = now
-    run.final_agent = project.current_agent
-    project.status = "cancelled"
-    project.completed_at = now
-
-    db.commit()
-    db.refresh(run)
+    run = pipeline_svc.cancel_pipeline(db, project, run)
 
     registry_write_operations.labels(operation="cancel_cme_pipeline").inc()
-    return _pipeline_run_to_read(run)
+    return pipeline_svc.pipeline_run_to_read(run)
 
 
 @router.post("/projects/{project_id}/rerun", response_model=PipelineRunRead)
@@ -1527,7 +810,7 @@ async def rerun_cme_pipeline(
     status back to processing.
     """
     start = time.time()
-    project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+    project = project_svc.get_project(db, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="CME project not found")
 
@@ -1537,17 +820,11 @@ async def rerun_cme_pipeline(
             detail=f"Cannot rerun: project status is {project.status}",
         )
 
-    # If re-running from a review state, cancel the in-flight run first so
-    # we don't leave an orphan running on the Cloud.
+    prev_run = None
     if project.status == "review" and project.current_run_id:
-        prev = db.query(CMEPipelineRun).filter(
-            CMEPipelineRun.run_id == project.current_run_id
-        ).first()
-        if prev and prev.status == "processing":
-            await cancel_langgraph_run(prev.thread_id, prev.langgraph_run_id)
-            prev.status = "cancelled"
-            prev.completed_at = datetime.utcnow()
-            prev.reason = "superseded by rerun"
+        prev_run = pipeline_svc.get_active_run(db, project)
+        if prev_run and prev_run.status == "processing":
+            await cancel_langgraph_run(prev_run.thread_id, prev_run.langgraph_run_id)
 
     try:
         lg = await trigger_langgraph_pipeline(str(project.id), project.intake)
@@ -1555,88 +832,29 @@ async def rerun_cme_pipeline(
         registry_errors.labels(error_type="rerun_cme_pipeline").inc()
         raise HTTPException(status_code=502, detail=f"LangGraph trigger failed: {e}")
 
-    last_run_number = (
-        db.query(func.max(CMEPipelineRun.run_number))
-        .filter(CMEPipelineRun.project_id == project.id)
-        .scalar()
-        or 0
+    run = pipeline_svc.rerun_pipeline(
+        db, project, lg["thread_id"], lg["run_id"],
+        reason=body.reason, prev_run=prev_run,
     )
-    now = datetime.utcnow()
-    run = CMEPipelineRun(
-        run_id=uuid.uuid4(),
-        project_id=project.id,
-        run_number=last_run_number + 1,
-        thread_id=lg["thread_id"],
-        langgraph_run_id=lg["run_id"],
-        intake_version_used=project.intake_version or 1,
-        trigger_reason="manual",
-        triggered_at=now,
-        status="processing",
-        reason=body.reason,
-    )
-    db.add(run)
-    db.flush()
-
-    project.status = "processing"
-    project.started_at = now
-    project.completed_at = None
-    project.current_agent = "research"
-    project.pipeline_thread_id = lg["thread_id"]
-    project.current_run_id = run.run_id
-    project.agents_completed = []
-    project.errors = []
-
-    db.commit()
-    db.refresh(run)
 
     registry_write_operations.labels(operation="rerun_cme_pipeline").inc()
     registry_write_latency.observe((time.time() - start) * 1000)
-    return _pipeline_run_to_read(run)
+    return pipeline_svc.pipeline_run_to_read(run)
 
 
 @router.get("/projects/{project_id}/runs", response_model=PipelineRunListResponse)
 async def list_cme_pipeline_runs(project_id: str, db: Session = Depends(get_db)):
     """List all pipeline runs for a project, newest first."""
-    project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+    project = project_svc.get_project(db, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="CME project not found")
 
-    runs = (
-        db.query(CMEPipelineRun)
-        .filter(CMEPipelineRun.project_id == project_id)
-        .order_by(CMEPipelineRun.run_number.desc())
-        .all()
-    )
+    runs = pipeline_svc.list_runs(db, project_id)
 
     registry_read_operations.labels(operation="list_cme_pipeline_runs").inc()
     return PipelineRunListResponse(
-        runs=[_pipeline_run_to_read(r) for r in runs],
+        runs=[pipeline_svc.pipeline_run_to_read(r) for r in runs],
         total=len(runs),
-    )
-
-
-def _pipeline_run_to_read(run: CMEPipelineRun) -> PipelineRunRead:
-    """Convert a CMEPipelineRun ORM row to a PipelineRunRead, including
-    derived duration_seconds."""
-    duration: Optional[float] = None
-    if run.completed_at and run.triggered_at:
-        duration = (run.completed_at - run.triggered_at).total_seconds()
-    return PipelineRunRead(
-        run_id=run.run_id,
-        project_id=run.project_id,
-        run_number=run.run_number,
-        thread_id=run.thread_id,
-        langgraph_run_id=run.langgraph_run_id,
-        intake_version_used=run.intake_version_used,
-        triggered_by=run.triggered_by,
-        trigger_reason=run.trigger_reason,
-        triggered_at=run.triggered_at,
-        completed_at=run.completed_at,
-        status=run.status,
-        error_message=run.error_message,
-        final_agent=run.final_agent,
-        reason=run.reason,
-        duration_seconds=duration,
     )
 
 
@@ -1647,11 +865,10 @@ def _pipeline_run_to_read(run: CMEPipelineRun) -> PipelineRunRead:
 @router.get("/projects/{project_id}/outputs", response_model=List[AgentOutput])
 async def list_cme_outputs(project_id: str, db: Session = Depends(get_db)):
     """List all agent outputs for a CME project"""
-    project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+    project = project_svc.get_project(db, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="CME project not found")
 
-    # Query outputs from cme_agent_outputs table
     outputs = db.query(CMEAgentOutput).filter(CMEAgentOutput.project_id == project_id).all()
 
     return [
@@ -1674,7 +891,7 @@ async def get_cme_agent_output(
     db: Session = Depends(get_db)
 ):
     """Get output from a specific agent"""
-    project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+    project = project_svc.get_project(db, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="CME project not found")
 
@@ -1718,7 +935,6 @@ async def agent_complete_webhook(
 
     now = datetime.utcnow()
 
-    # Store output in cme_agent_outputs table
     db_output = CMEAgentOutput(
         project_id=project.id,
         agent_name=agent_name,
@@ -1728,7 +944,6 @@ async def agent_complete_webhook(
     )
     db.add(db_output)
 
-    # Update project progress
     agents_pending = list(project.agents_pending or [])
     agents_completed = list(project.agents_completed or [])
 
@@ -1738,9 +953,8 @@ async def agent_complete_webhook(
 
     project.agents_pending = agents_pending
     project.agents_completed = agents_completed
-    project.progress_percent = calculate_progress(agents_completed)
+    project.progress_percent = sync_svc.calculate_progress(agents_completed)
 
-    # Set next agent
     if agents_pending:
         project.current_agent = agents_pending[0]
     else:
@@ -1836,10 +1050,7 @@ async def list_reviewers(
     db: Session = Depends(get_db)
 ):
     """List all configured reviewers"""
-    query = db.query(CMEReviewerConfig)
-    if active_only:
-        query = query.filter(CMEReviewerConfig.is_active == True)
-    reviewers = query.all()
+    reviewers = review_svc.list_reviewers(db, active_only=active_only)
 
     return [
         ReviewerResponse(
@@ -1863,21 +1074,17 @@ async def create_reviewer(
     db: Session = Depends(get_db)
 ):
     """Add a new reviewer to the configuration"""
-    existing = db.query(CMEReviewerConfig).filter(CMEReviewerConfig.email == reviewer.email).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Reviewer with this email already exists")
-
-    db_reviewer = CMEReviewerConfig(
+    db_reviewer = review_svc.create_reviewer(
+        db,
         email=reviewer.email,
         display_name=reviewer.display_name,
         notify_email=reviewer.notify_email,
         notify_google_chat=reviewer.notify_google_chat,
         google_chat_webhook_url=reviewer.google_chat_webhook_url,
-        max_concurrent_reviews=reviewer.max_concurrent_reviews
+        max_concurrent_reviews=reviewer.max_concurrent_reviews,
     )
-    db.add(db_reviewer)
-    db.commit()
-    db.refresh(db_reviewer)
+    if db_reviewer is None:
+        raise HTTPException(status_code=400, detail="Reviewer with this email already exists")
 
     return ReviewerResponse(
         id=str(db_reviewer.id),
@@ -1898,12 +1105,9 @@ async def deactivate_reviewer(
     db: Session = Depends(get_db)
 ):
     """Deactivate a reviewer (soft delete)"""
-    reviewer = db.query(CMEReviewerConfig).filter(CMEReviewerConfig.id == reviewer_id).first()
+    reviewer = review_svc.deactivate_reviewer(db, reviewer_id)
     if not reviewer:
         raise HTTPException(status_code=404, detail="Reviewer not found")
-
-    reviewer.is_active = False
-    db.commit()
 
 
 # =============================================================================
@@ -1935,51 +1139,22 @@ async def submit_for_review(
     db: Session = Depends(get_db)
 ):
     """Submit a project for human review (Decision R2: up to 3 reviewers)"""
-    project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+    project = project_svc.get_project(db, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
     if len(request.reviewer_emails) > 3:
         raise HTTPException(status_code=400, detail="Maximum 3 reviewers allowed (R2)")
 
-    # Validate all reviewers exist and are active
-    assignments = []
-    for order, email in enumerate(request.reviewer_emails, start=1):
-        reviewer = db.query(CMEReviewerConfig).filter(
-            CMEReviewerConfig.email == email,
-            CMEReviewerConfig.is_active == True
-        ).first()
-        if not reviewer:
-            raise HTTPException(status_code=400, detail=f"Reviewer not found or inactive: {email}")
-
-        # Create assignment
-        now = datetime.utcnow()
-        sla_hours = 24  # Decision R3
-
-        assignment = CMEReviewAssignment(
-            project_id=project.id,
-            reviewer_id=reviewer.id,
-            reviewer_order=order,
-            status="active" if order == 1 else "pending",
-            assigned_at=now if order == 1 else None,
-            sla_deadline=datetime.utcnow().replace(hour=now.hour + sla_hours) if order == 1 else None
-        )
-        db.add(assignment)
-        assignments.append({
-            "email": email,
-            "order": order,
-            "status": assignment.status
-        })
-
-    # Update project status
-    project.status = "review"
-    project.human_review_status = "pending"
-    db.commit()
+    try:
+        result = review_svc.submit_for_review(db, project, request.reviewer_emails)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     return {
         "project_id": project_id,
         "status": "submitted_for_review",
-        "assignments": assignments
+        "assignments": result
     }
 
 
@@ -1989,13 +1164,11 @@ async def get_review_status(
     db: Session = Depends(get_db)
 ):
     """Get current review status for a project"""
-    project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+    project = project_svc.get_project(db, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    assignments = db.query(CMEReviewAssignment).filter(
-        CMEReviewAssignment.project_id == project_id
-    ).order_by(CMEReviewAssignment.reviewer_order).all()
+    assignments = review_svc.get_review_status(db, project_id)
 
     return {
         "project_id": project_id,
@@ -2032,58 +1205,24 @@ async def submit_review(
     db: Session = Depends(get_db)
 ):
     """Submit a review decision with optional Plate JS annotations"""
-    # Find the active assignment for this reviewer
-    assignment = db.query(CMEReviewAssignment).join(CMEReviewerConfig).filter(
-        CMEReviewAssignment.project_id == project_id,
-        CMEReviewerConfig.email == reviewer_email,
-        CMEReviewAssignment.status == "active"
-    ).first()
+    project = project_svc.get_project(db, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
 
-    if not assignment:
+    result = review_svc.submit_review(
+        db, project, reviewer_email,
+        decision=request.decision,
+        notes=request.notes,
+        annotations=request.annotations,
+    )
+    if result is None:
         raise HTTPException(status_code=404, detail="No active review assignment found for this reviewer")
-
-    now = datetime.utcnow()
-
-    # Update assignment
-    assignment.status = request.decision
-    assignment.decision = request.decision
-    assignment.notes = request.notes
-    assignment.annotations = request.annotations or []
-    assignment.completed_at = now
-
-    project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
-
-    if request.decision == "approved":
-        # Check if this is the final reviewer
-        next_assignment = db.query(CMEReviewAssignment).filter(
-            CMEReviewAssignment.project_id == project_id,
-            CMEReviewAssignment.status == "pending"
-        ).order_by(CMEReviewAssignment.reviewer_order).first()
-
-        if next_assignment:
-            # Activate next reviewer
-            next_assignment.status = "active"
-            next_assignment.assigned_at = now
-            from datetime import timedelta
-            next_assignment.sla_deadline = now + timedelta(hours=24)
-        else:
-            # All reviewers approved
-            project.human_review_status = "approved"
-            project.status = "complete"
-            project.reviewed_at = now
-            project.completed_at = now
-    else:
-        # Revision requested
-        project.human_review_status = "revision_requested"
-        project.human_review_notes = request.notes
-
-    db.commit()
 
     return {
         "project_id": project_id,
         "decision": request.decision,
-        "assignment_id": str(assignment.id),
-        "project_status": project.status
+        "assignment_id": result["assignment_id"],
+        "project_status": result["project_status"],
     }
 
 
@@ -2094,29 +1233,7 @@ async def get_my_reviews(
     db: Session = Depends(get_db)
 ):
     """Get pending reviews for current user"""
-    query = db.query(CMEReviewAssignment).join(CMEReviewerConfig).filter(
-        CMEReviewerConfig.email == reviewer_email
-    )
-
-    if status_filter:
-        query = query.filter(CMEReviewAssignment.status == status_filter)
-
-    assignments = query.order_by(CMEReviewAssignment.assigned_at).all()
-
-    result = []
-    for a in assignments:
-        project = db.query(CMEProject).filter(CMEProject.id == a.project_id).first()
-        result.append({
-            "assignment_id": str(a.id),
-            "project_id": str(a.project_id),
-            "project_name": project.name if project else "Unknown",
-            "order": a.reviewer_order,
-            "status": a.status,
-            "assigned_at": a.assigned_at.isoformat() if a.assigned_at else None,
-            "sla_deadline": a.sla_deadline.isoformat() if a.sla_deadline else None,
-            "hours_remaining": ((a.sla_deadline - datetime.utcnow()).total_seconds() / 3600) if a.sla_deadline else None
-        })
-
+    result = review_svc.get_my_reviews(db, reviewer_email, status_filter=status_filter)
     return {"reviews": result, "count": len(result)}
 
 
@@ -2186,16 +1303,6 @@ class RAGContextResponse(BaseModel):
     project_scope: Optional[str] = None
 
 
-def _snippet_from_text(text_val: str, max_len: int = 300) -> str:
-    """Extract a snippet from text content."""
-    if not text_val:
-        return ""
-    cleaned = " ".join(text_val.split())
-    if len(cleaned) <= max_len:
-        return cleaned
-    return cleaned[:max_len].rsplit(" ", 1)[0] + "..."
-
-
 @router.get("/search", response_model=SearchResponse)
 async def fulltext_search(
     q: str,
@@ -2204,130 +1311,18 @@ async def fulltext_search(
     limit: int = 20,
     db: Session = Depends(get_db),
 ):
-    """Full-text search across CME documents, intake fields, and source references.
-
-    Uses PostgreSQL ts_query with ts_rank scoring. Supports filtering by
-    project_id and source table type.
-
-    Args:
-        q: Search query (supports PostgreSQL websearch syntax)
-        project_id: Optional project UUID to scope the search
-        source_type: Optional filter — 'documents', 'intake_fields', 'references'
-        limit: Max results (1-100, default 20)
-    """
+    """Full-text search across CME documents, intake fields, and source references."""
     start = time.time()
-    if limit < 1 or limit > 100:
-        limit = 20
 
-    results: List[SearchResultItem] = []
-    ts_query = func.websearch_to_tsquery("english", q)
-
-    # --- Search cme_documents ---
-    if source_type in (None, "documents"):
-        doc_query = db.query(
-            CMEDocument.id,
-            CMEDocument.project_id,
-            CMEDocument.title,
-            CMEDocument.content_text,
-            CMEDocument.document_type,
-            CMEDocument.version,
-            CMEDocument.quality_score,
-            CMEDocument.word_count,
-            func.ts_rank(CMEDocument.search_vector, ts_query).label("rank"),
-        ).filter(
-            CMEDocument.search_vector.op("@@")(ts_query),
-            CMEDocument.is_current.is_(True),
-        )
-        if project_id:
-            doc_query = doc_query.filter(CMEDocument.project_id == project_id)
-        doc_query = doc_query.order_by(text("rank DESC")).limit(limit)
-
-        for row in doc_query.all():
-            results.append(SearchResultItem(
-                id=str(row.id),
-                source_table="cme_documents",
-                project_id=str(row.project_id),
-                title=row.title,
-                snippet=_snippet_from_text(row.content_text),
-                score=float(row.rank),
-                metadata={
-                    "document_type": row.document_type,
-                    "version": row.version,
-                    "quality_score": row.quality_score,
-                    "word_count": row.word_count,
-                },
-            ))
-
-    # --- Search cme_intake_fields ---
-    if source_type in (None, "intake_fields"):
-        field_query = db.query(
-            CMEIntakeField.id,
-            CMEIntakeField.project_id,
-            CMEIntakeField.section,
-            CMEIntakeField.field_label,
-            CMEIntakeField.value_text,
-            func.ts_rank(CMEIntakeField.search_vector, ts_query).label("rank"),
-        ).filter(
-            CMEIntakeField.search_vector.op("@@")(ts_query),
-        )
-        if project_id:
-            field_query = field_query.filter(CMEIntakeField.project_id == project_id)
-        field_query = field_query.order_by(text("rank DESC")).limit(limit)
-
-        for row in field_query.all():
-            results.append(SearchResultItem(
-                id=str(row.id),
-                source_table="cme_intake_fields",
-                project_id=str(row.project_id),
-                title=f"{row.section}: {row.field_label}",
-                snippet=_snippet_from_text(row.value_text or ""),
-                score=float(row.rank),
-                metadata={"section": row.section, "field_label": row.field_label},
-            ))
-
-    # --- Search cme_source_references ---
-    if source_type in (None, "references"):
-        ref_query = db.query(
-            CMESourceReference.id,
-            CMESourceReference.project_id,
-            CMESourceReference.title,
-            CMESourceReference.abstract,
-            CMESourceReference.ref_type,
-            CMESourceReference.ref_id,
-            CMESourceReference.journal,
-            CMESourceReference.authors,
-            func.ts_rank(CMESourceReference.search_vector, ts_query).label("rank"),
-        ).filter(
-            CMESourceReference.search_vector.op("@@")(ts_query),
-        )
-        if project_id:
-            ref_query = ref_query.filter(CMESourceReference.project_id == project_id)
-        ref_query = ref_query.order_by(text("rank DESC")).limit(limit)
-
-        for row in ref_query.all():
-            results.append(SearchResultItem(
-                id=str(row.id),
-                source_table="cme_source_references",
-                project_id=str(row.project_id),
-                title=row.title or "Untitled Reference",
-                snippet=_snippet_from_text(row.abstract or ""),
-                score=float(row.rank),
-                metadata={
-                    "ref_type": row.ref_type,
-                    "ref_id": row.ref_id,
-                    "journal": row.journal,
-                    "authors": row.authors,
-                },
-            ))
-
-    # Sort all results by score descending, then trim to limit
-    results.sort(key=lambda r: r.score, reverse=True)
-    results = results[:limit]
+    results_data = search_svc.fulltext_search(
+        db, q, project_id=project_id, source_type=source_type, limit=limit,
+    )
 
     elapsed = (time.time() - start) * 1000
     registry_read_latency.observe(elapsed)
     registry_read_operations.labels(operation="cme_fulltext_search").inc()
 
+    results = [SearchResultItem(**r) for r in results_data]
     return SearchResponse(query=q, results=results, total=len(results))
 
 
@@ -2336,98 +1331,26 @@ async def vector_similarity_search(
     req: SimilarSearchRequest,
     db: Session = Depends(get_db),
 ):
-    """Vector similarity search using pgvector cosine distance.
-
-    Embeds the query via Ollama nomic-embed-text, then finds the closest
-    vectors in cme_documents and cme_source_references.
-    """
+    """Vector similarity search using pgvector cosine distance."""
     start = time.time()
 
-    query_embedding = await _generate_embedding(req.query)
+    query_embedding = await sync_svc.generate_embedding(req.query)
     if query_embedding is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Embedding service unavailable — could not embed query",
         )
 
-    embedding_literal = f"[{','.join(str(v) for v in query_embedding)}]"
-    results: List[SearchResultItem] = []
-
-    # --- Documents ---
-    if "cme_documents" in req.source_tables:
-        sql = text("""
-            SELECT id, project_id, title, content_text, document_type, version,
-                   quality_score, word_count,
-                   1 - (embedding <=> CAST(:emb AS vector)) AS similarity
-            FROM cme_documents
-            WHERE embedding IS NOT NULL AND is_current = true
-              AND (CAST(:pid AS uuid) IS NULL OR project_id = CAST(:pid AS uuid))
-            ORDER BY embedding <=> CAST(:emb AS vector)
-            LIMIT :lim
-        """)
-        rows = db.execute(sql, {
-            "emb": embedding_literal,
-            "pid": req.project_id,
-            "lim": req.limit,
-        }).fetchall()
-
-        for row in rows:
-            results.append(SearchResultItem(
-                id=str(row.id),
-                source_table="cme_documents",
-                project_id=str(row.project_id),
-                title=row.title,
-                snippet=_snippet_from_text(row.content_text),
-                score=float(row.similarity),
-                metadata={
-                    "document_type": row.document_type,
-                    "version": row.version,
-                    "quality_score": row.quality_score,
-                    "word_count": row.word_count,
-                },
-            ))
-
-    # --- Source References ---
-    if "cme_source_references" in req.source_tables:
-        sql = text("""
-            SELECT id, project_id, title, abstract, ref_type, ref_id,
-                   journal, authors,
-                   1 - (embedding <=> CAST(:emb AS vector)) AS similarity
-            FROM cme_source_references
-            WHERE embedding IS NOT NULL
-              AND (CAST(:pid AS uuid) IS NULL OR project_id = CAST(:pid AS uuid))
-            ORDER BY embedding <=> CAST(:emb AS vector)
-            LIMIT :lim
-        """)
-        rows = db.execute(sql, {
-            "emb": embedding_literal,
-            "pid": req.project_id,
-            "lim": req.limit,
-        }).fetchall()
-
-        for row in rows:
-            results.append(SearchResultItem(
-                id=str(row.id),
-                source_table="cme_source_references",
-                project_id=str(row.project_id),
-                title=row.title or "Untitled Reference",
-                snippet=_snippet_from_text(row.abstract or ""),
-                score=float(row.similarity),
-                metadata={
-                    "ref_type": row.ref_type,
-                    "ref_id": row.ref_id,
-                    "journal": row.journal,
-                    "authors": row.authors,
-                },
-            ))
-
-    results.sort(key=lambda r: r.score, reverse=True)
-    results = results[:req.limit]
+    results_data = search_svc.vector_similarity_search(
+        db, query_embedding,
+        project_id=req.project_id, source_tables=req.source_tables, limit=req.limit,
+    )
 
     elapsed = (time.time() - start) * 1000
     registry_read_latency.observe(elapsed)
     registry_read_operations.labels(operation="cme_vector_search").inc()
 
+    results = [SearchResultItem(**r) for r in results_data]
     return SearchResponse(query=req.query, results=results, total=len(results))
 
 
@@ -2436,146 +1359,21 @@ async def hybrid_search(
     req: HybridSearchRequest,
     db: Session = Depends(get_db),
 ):
-    """Hybrid search combining full-text and vector similarity with reciprocal rank fusion.
-
-    Runs both full-text (ts_query) and vector (cosine similarity) searches in parallel,
-    then fuses results using RRF: score = sum(1 / (k + rank)) across both methods.
-    """
+    """Hybrid search combining full-text and vector similarity with reciprocal rank fusion."""
     start = time.time()
-    RRF_K = 60  # Standard RRF constant
 
-    query_embedding = await _generate_embedding(req.query)
-    ts_query = func.websearch_to_tsquery("english", req.query)
+    query_embedding = await sync_svc.generate_embedding(req.query)
 
-    # Track results by (source_table, id) -> {data, ranks}
-    fused: Dict[str, Dict[str, Any]] = {}
-
-    def _add_to_fused(key: str, item_data: Dict[str, Any], rank: int, method: str):
-        if key not in fused:
-            fused[key] = {"data": item_data, "rrf_score": 0.0}
-        fused[key]["rrf_score"] += 1.0 / (RRF_K + rank)
-
-    # --- Full-text search ---
-    if "cme_documents" in req.source_tables:
-        q = db.query(
-            CMEDocument.id, CMEDocument.project_id, CMEDocument.title,
-            CMEDocument.content_text, CMEDocument.document_type, CMEDocument.version,
-            CMEDocument.quality_score, CMEDocument.word_count,
-            func.ts_rank(CMEDocument.search_vector, ts_query).label("rank"),
-        ).filter(
-            CMEDocument.search_vector.op("@@")(ts_query),
-            CMEDocument.is_current.is_(True),
-        )
-        if req.project_id:
-            q = q.filter(CMEDocument.project_id == req.project_id)
-        for rank_idx, row in enumerate(q.order_by(text("rank DESC")).limit(req.limit).all()):
-            key = f"cme_documents:{row.id}"
-            _add_to_fused(key, {
-                "id": str(row.id), "source_table": "cme_documents",
-                "project_id": str(row.project_id), "title": row.title,
-                "snippet": _snippet_from_text(row.content_text),
-                "metadata": {"document_type": row.document_type, "version": row.version,
-                             "quality_score": row.quality_score, "word_count": row.word_count},
-            }, rank_idx + 1, "fulltext")
-
-    if "cme_intake_fields" in req.source_tables:
-        q = db.query(
-            CMEIntakeField.id, CMEIntakeField.project_id, CMEIntakeField.section,
-            CMEIntakeField.field_label, CMEIntakeField.value_text,
-            func.ts_rank(CMEIntakeField.search_vector, ts_query).label("rank"),
-        ).filter(CMEIntakeField.search_vector.op("@@")(ts_query))
-        if req.project_id:
-            q = q.filter(CMEIntakeField.project_id == req.project_id)
-        for rank_idx, row in enumerate(q.order_by(text("rank DESC")).limit(req.limit).all()):
-            key = f"cme_intake_fields:{row.id}"
-            _add_to_fused(key, {
-                "id": str(row.id), "source_table": "cme_intake_fields",
-                "project_id": str(row.project_id),
-                "title": f"{row.section}: {row.field_label}",
-                "snippet": _snippet_from_text(row.value_text or ""),
-                "metadata": {"section": row.section, "field_label": row.field_label},
-            }, rank_idx + 1, "fulltext")
-
-    if "cme_source_references" in req.source_tables:
-        q = db.query(
-            CMESourceReference.id, CMESourceReference.project_id, CMESourceReference.title,
-            CMESourceReference.abstract, CMESourceReference.ref_type, CMESourceReference.ref_id,
-            CMESourceReference.journal, CMESourceReference.authors,
-            func.ts_rank(CMESourceReference.search_vector, ts_query).label("rank"),
-        ).filter(CMESourceReference.search_vector.op("@@")(ts_query))
-        if req.project_id:
-            q = q.filter(CMESourceReference.project_id == req.project_id)
-        for rank_idx, row in enumerate(q.order_by(text("rank DESC")).limit(req.limit).all()):
-            key = f"cme_source_references:{row.id}"
-            _add_to_fused(key, {
-                "id": str(row.id), "source_table": "cme_source_references",
-                "project_id": str(row.project_id),
-                "title": row.title or "Untitled Reference",
-                "snippet": _snippet_from_text(row.abstract or ""),
-                "metadata": {"ref_type": row.ref_type, "ref_id": row.ref_id,
-                             "journal": row.journal, "authors": row.authors},
-            }, rank_idx + 1, "fulltext")
-
-    # --- Vector search (documents + references only) ---
-    if query_embedding is not None:
-        embedding_literal = f"[{','.join(str(v) for v in query_embedding)}]"
-
-        if "cme_documents" in req.source_tables:
-            sql = text("""
-                SELECT id, project_id, title, content_text, document_type, version,
-                       quality_score, word_count
-                FROM cme_documents
-                WHERE embedding IS NOT NULL AND is_current = true
-                  AND (CAST(:pid AS uuid) IS NULL OR project_id = CAST(:pid AS uuid))
-                ORDER BY embedding <=> CAST(:emb AS vector)
-                LIMIT :lim
-            """)
-            rows = db.execute(sql, {"emb": embedding_literal, "pid": req.project_id, "lim": req.limit}).fetchall()
-            for rank_idx, row in enumerate(rows):
-                key = f"cme_documents:{row.id}"
-                _add_to_fused(key, {
-                    "id": str(row.id), "source_table": "cme_documents",
-                    "project_id": str(row.project_id), "title": row.title,
-                    "snippet": _snippet_from_text(row.content_text),
-                    "metadata": {"document_type": row.document_type, "version": row.version,
-                                 "quality_score": row.quality_score, "word_count": row.word_count},
-                }, rank_idx + 1, "vector")
-
-        if "cme_source_references" in req.source_tables:
-            sql = text("""
-                SELECT id, project_id, title, abstract, ref_type, ref_id, journal, authors
-                FROM cme_source_references
-                WHERE embedding IS NOT NULL
-                  AND (CAST(:pid AS uuid) IS NULL OR project_id = CAST(:pid AS uuid))
-                ORDER BY embedding <=> CAST(:emb AS vector)
-                LIMIT :lim
-            """)
-            rows = db.execute(sql, {"emb": embedding_literal, "pid": req.project_id, "lim": req.limit}).fetchall()
-            for rank_idx, row in enumerate(rows):
-                key = f"cme_source_references:{row.id}"
-                _add_to_fused(key, {
-                    "id": str(row.id), "source_table": "cme_source_references",
-                    "project_id": str(row.project_id),
-                    "title": row.title or "Untitled Reference",
-                    "snippet": _snippet_from_text(row.abstract or ""),
-                    "metadata": {"ref_type": row.ref_type, "ref_id": row.ref_id,
-                                 "journal": row.journal, "authors": row.authors},
-                }, rank_idx + 1, "vector")
-
-    # Build final results sorted by RRF score
-    results = []
-    for entry in sorted(fused.values(), key=lambda e: e["rrf_score"], reverse=True)[:req.limit]:
-        d = entry["data"]
-        results.append(SearchResultItem(
-            id=d["id"], source_table=d["source_table"], project_id=d["project_id"],
-            title=d["title"], snippet=d["snippet"], score=entry["rrf_score"],
-            metadata=d.get("metadata", {}),
-        ))
+    results_data = search_svc.hybrid_search(
+        db, req.query, query_embedding,
+        project_id=req.project_id, source_tables=req.source_tables, limit=req.limit,
+    )
 
     elapsed = (time.time() - start) * 1000
     registry_read_latency.observe(elapsed)
     registry_read_operations.labels(operation="cme_hybrid_search").inc()
 
+    results = [SearchResultItem(**r) for r in results_data]
     return SearchResponse(query=req.query, results=results, total=len(results))
 
 
@@ -2584,111 +1382,30 @@ async def get_rag_context(
     req: RAGContextRequest,
     db: Session = Depends(get_db),
 ):
-    """Retrieve relevant context chunks for LLM RAG augmentation.
-
-    Uses hybrid search (vector + full-text) to find the most relevant content,
-    then returns formatted chunks within the specified token budget. Each chunk
-    includes source attribution for citation.
-    """
+    """Retrieve relevant context chunks for LLM RAG augmentation."""
     start = time.time()
 
-    # Use hybrid search internally
-    hybrid_req = HybridSearchRequest(
-        query=req.query,
+    query_embedding = await sync_svc.generate_embedding(req.query)
+
+    result = search_svc.get_rag_context(
+        db, req.query, query_embedding,
         project_id=req.project_id,
-        source_tables=["cme_documents", "cme_source_references"],
-        limit=req.max_chunks * 2,  # Over-fetch to account for token budget trimming
+        max_chunks=req.max_chunks,
+        max_tokens=req.max_tokens,
+        include_citations=req.include_citations,
     )
-    search_results = await hybrid_search(hybrid_req, db)
-
-    chunks: List[RAGChunk] = []
-    estimated_tokens = 0
-    chars_per_token = 4  # Conservative estimate
-
-    for result in search_results.results:
-        if len(chunks) >= req.max_chunks:
-            break
-
-        # Fetch full content for the chunk
-        content = ""
-        if result.source_table == "cme_documents":
-            doc = db.query(CMEDocument).filter(CMEDocument.id == result.id).first()
-            if doc:
-                content = doc.content_text or ""
-        elif result.source_table == "cme_source_references":
-            ref = db.query(CMESourceReference).filter(CMESourceReference.id == result.id).first()
-            if ref:
-                parts = []
-                if ref.title:
-                    parts.append(f"Title: {ref.title}")
-                if ref.authors:
-                    parts.append(f"Authors: {ref.authors}")
-                if ref.journal:
-                    parts.append(f"Journal: {ref.journal}")
-                if ref.abstract:
-                    parts.append(f"Abstract: {ref.abstract}")
-                content = "\n".join(parts)
-
-        if not content:
-            continue
-
-        # Check token budget
-        chunk_tokens = len(content) // chars_per_token
-        if estimated_tokens + chunk_tokens > req.max_tokens:
-            # Truncate to fit remaining budget
-            remaining_chars = (req.max_tokens - estimated_tokens) * chars_per_token
-            if remaining_chars < 200:
-                break
-            content = content[:remaining_chars].rsplit(" ", 1)[0] + "..."
-            chunk_tokens = len(content) // chars_per_token
-
-        estimated_tokens += chunk_tokens
-
-        chunk_meta = dict(result.metadata)
-        chunk_meta["search_score"] = result.score
-
-        chunks.append(RAGChunk(
-            source_table=result.source_table,
-            document_id=result.id,
-            title=result.title,
-            content=content,
-            score=result.score,
-            metadata=chunk_meta,
-        ))
-
-    # Optionally append citation block
-    if req.include_citations and chunks:
-        citation_refs = []
-        for i, chunk in enumerate(chunks, 1):
-            if chunk.source_table == "cme_source_references":
-                ref = db.query(CMESourceReference).filter(
-                    CMESourceReference.id == chunk.document_id
-                ).first()
-                if ref:
-                    cite = f"[{i}] {ref.title}"
-                    if ref.authors:
-                        cite += f" — {ref.authors}"
-                    if ref.journal:
-                        cite += f", {ref.journal}"
-                    if ref.ref_id:
-                        cite += f" (PMID: {ref.ref_id})"
-                    citation_refs.append(cite)
-
-        if citation_refs:
-            citation_block = "\n\n---\nCitations:\n" + "\n".join(citation_refs)
-            citation_tokens = len(citation_block) // chars_per_token
-            estimated_tokens += citation_tokens
 
     elapsed = (time.time() - start) * 1000
     registry_read_latency.observe(elapsed)
     registry_read_operations.labels(operation="cme_rag_context").inc()
 
+    chunks = [RAGChunk(**c) for c in result["chunks"]]
     return RAGContextResponse(
-        query=req.query,
+        query=result["query"],
         chunks=chunks,
-        total_chunks=len(chunks),
-        estimated_tokens=estimated_tokens,
-        project_scope=req.project_id,
+        total_chunks=result["total_chunks"],
+        estimated_tokens=result["estimated_tokens"],
+        project_scope=result["project_scope"],
     )
 
 
@@ -2907,7 +1624,7 @@ async def create_document(
 
 async def _generate_embedding_and_save(table_name: str, record_id, text_content: str):
     """Background task: generate embedding and update the record."""
-    emb = await _generate_embedding(text_content)
+    emb = await sync_svc.generate_embedding(text_content)
     if emb is None:
         return
 
@@ -2954,32 +1671,4 @@ async def fetch_latest_document_for_thread(thread_id: str) -> dict | None:
     Acceptable at current registry QPS; revisit when the registry moves to an
     async session.
     """
-    from sqlalchemy import select as _select
-    from database import SessionLocal as _SessionLocal
-    from models import CMEDocument as _CMEDocument, CMEProject as _CMEProject
-
-    with _SessionLocal() as session:
-        stmt = (
-            _select(_CMEDocument, _CMEProject)
-            .join(_CMEProject, _CMEDocument.project_id == _CMEProject.id)
-            .where(_CMEProject.pipeline_thread_id == thread_id)
-            .order_by(_CMEDocument.created_at.desc())
-            .limit(1)
-        )
-        row = session.execute(stmt).first()
-        if not row:
-            return None
-        doc, project = row
-        quality_details = doc.quality_details or {}
-        review_round = 0
-        if isinstance(quality_details, dict):
-            try:
-                review_round = int(quality_details.get("review_round", 0) or 0)
-            except (TypeError, ValueError):
-                review_round = 0
-        return {
-            "title": project.name,
-            "graph_label": doc.document_type or "CME Document",
-            "review_round": review_round,
-            "document_text": doc.content_text or "",
-        }
+    return project_svc.fetch_latest_document_for_thread(thread_id)
