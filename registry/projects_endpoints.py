@@ -9,11 +9,10 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import CMEDocument, CMEProject
+import projects_service as svc
 from project_schemas import (
     ProjectDocumentItem,
     ProjectDocumentsResponse,
@@ -32,37 +31,7 @@ def list_projects(
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ) -> ProjectListResponse:
-    doc_count_sq = (
-        db.query(
-            CMEDocument.project_id.label("pid"),
-            func.count(CMEDocument.id).label("cnt"),
-            func.max(CMEDocument.created_at).label("last_activity"),
-        )
-        .filter(CMEDocument.is_current.is_(True))
-        .group_by(CMEDocument.project_id)
-        .subquery()
-    )
-
-    q = db.query(
-        CMEProject,
-        func.coalesce(doc_count_sq.c.cnt, 0).label("cnt"),
-        doc_count_sq.c.last_activity,
-    ).outerjoin(doc_count_sq, CMEProject.id == doc_count_sq.c.pid)
-
-    if search:
-        term = f"%{search.strip()}%"
-        q = q.filter(CMEProject.name.ilike(term))
-    if status:
-        q = q.filter(CMEProject.status == status)
-
-    total = q.count()
-    rows = (
-        q.order_by(CMEProject.created_at.desc())
-        .limit(limit)
-        .offset(offset)
-        .all()
-    )
-
+    rows, total = svc.list_projects(db, search=search, status=status, limit=limit, offset=offset)
     projects = [
         ProjectListItem(
             id=row[0].id,
@@ -85,20 +54,11 @@ def list_project_documents(
     project_id: UUID,
     db: Session = Depends(get_db),
 ) -> ProjectDocumentsResponse:
-    project = db.query(CMEProject).filter(CMEProject.id == project_id).first()
+    project = svc.get_project(db, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="project not found")
 
-    docs = (
-        db.query(CMEDocument)
-        .filter(
-            CMEDocument.project_id == project_id,
-            CMEDocument.is_current.is_(True),
-        )
-        .order_by(CMEDocument.document_type, CMEDocument.version.desc())
-        .all()
-    )
-
+    docs = svc.list_project_documents(db, project_id)
     items = [
         ProjectDocumentItem(
             id=d.id,
