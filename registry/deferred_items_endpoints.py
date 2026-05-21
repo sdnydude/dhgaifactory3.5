@@ -121,7 +121,7 @@ def _upsert_deferred_item(
                 existing.embedding = embedding
                 existing.embedding_model = "nomic-embed-text"
             return existing, False
-        raise
+        raise HTTPException(status_code=409, detail="Conflict: duplicate record")
 
 
 @router.post("", response_model=DeferredItemResponse, status_code=status.HTTP_201_CREATED)
