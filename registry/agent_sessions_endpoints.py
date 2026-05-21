@@ -16,12 +16,12 @@ from sqlalchemy.orm import Session
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from database import get_db
-from models import AgentSession
 from agent_sessions_schemas import (
     AgentSessionCreate,
     AgentSessionResponse,
     AgentSessionList,
 )
+import agent_sessions_service as svc
 
 logger = logging.getLogger(__name__)
 
@@ -64,19 +64,10 @@ async def create_agent_session(
 ) -> AgentSessionResponse:
     start = time.time()
     try:
-        existing = db.query(AgentSession).filter(
-            AgentSession.session_id == payload.session_id
-        ).first()
-        if existing:
-            raise HTTPException(
-                status_code=409,
-                detail=f"Session {payload.session_id} already exists",
-            )
-
-        row = AgentSession(**payload.model_dump())
-        db.add(row)
-        db.commit()
-        db.refresh(row)
+        try:
+            row = svc.create_agent_session(db, payload)
+        except RuntimeError as re:
+            raise HTTPException(status_code=409, detail=str(re))
 
         registry_write_operations.labels(operation="create_agent_session").inc()
         registry_write_latency.observe((time.time() - start) * 1000)
@@ -99,19 +90,9 @@ async def list_agent_sessions(
 ) -> AgentSessionList:
     start = time.time()
     try:
-        query = db.query(AgentSession)
-        if project:
-            query = query.filter(AgentSession.project == project)
-        if source:
-            query = query.filter(AgentSession.source == source)
-
-        total = query.count()
-        rows = (
-            query
-            .order_by(AgentSession.created_at.desc())
-            .offset(offset)
-            .limit(limit)
-            .all()
+        rows, total = svc.list_agent_sessions(
+            db, project=project, source=source,
+            limit=limit, offset=offset,
         )
 
         registry_read_operations.labels(operation="list_agent_sessions").inc()
@@ -129,9 +110,7 @@ async def get_agent_session(
 ) -> AgentSessionResponse:
     start = time.time()
     try:
-        row = db.query(AgentSession).filter(
-            AgentSession.session_id == session_id
-        ).first()
+        row = svc.get_agent_session(db, session_id)
         if not row:
             raise HTTPException(status_code=404, detail="Session not found")
 

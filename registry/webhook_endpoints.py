@@ -16,13 +16,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import CMEProject, DownloadJob
+import webhook_service as svc
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/cme/webhook", tags=["cme-webhook"])
-
-_ACTIVE_STATUSES = ("pending", "running")
 
 
 def _check_secret(x_webhook_secret: str | None) -> None:
@@ -61,20 +59,11 @@ def enqueue_drive_sync(
 ) -> DriveSyncEnqueueResponse:
     _check_secret(x_webhook_secret)
 
-    project = db.query(CMEProject).filter(CMEProject.id == body.project_id).first()
+    project = svc.get_project(db, body.project_id)
     if not project:
         raise HTTPException(status_code=404, detail="project not found")
 
-    existing = (
-        db.query(DownloadJob)
-        .filter(
-            DownloadJob.project_id == body.project_id,
-            DownloadJob.scope == "drive_sync",
-            DownloadJob.status.in_(_ACTIVE_STATUSES),
-        )
-        .order_by(DownloadJob.created_at.desc())
-        .first()
-    )
+    existing = svc.find_active_drive_sync(db, body.project_id)
     if existing is not None:
         logger.info(
             "drive_sync dedupe project=%s milestone=%s existing_job=%s",
@@ -83,17 +72,7 @@ def enqueue_drive_sync(
         response.status_code = 200
         return DriveSyncEnqueueResponse(job_id=str(existing.id), status=existing.status)
 
-    job = DownloadJob(
-        thread_id=project.pipeline_thread_id or "",
-        graph_id="drive_sync",
-        scope="drive_sync",
-        status="pending",
-        project_id=project.id,
-        created_by=f"webhook:{body.milestone}",
-    )
-    db.add(job)
-    db.commit()
-    db.refresh(job)
+    job = svc.enqueue_drive_sync_job(db, project, body.milestone)
     logger.info(
         "drive_sync enqueued project=%s milestone=%s job=%s",
         body.project_id, body.milestone, job.id,

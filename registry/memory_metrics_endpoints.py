@@ -15,12 +15,12 @@ from sqlalchemy.orm import Session
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from database import get_db
-from models import MemoryMetrics
 from memory_metrics_schemas import (
     MemoryMetricsCreate,
     MemoryMetricsResponse,
     MemoryMetricsList,
 )
+import memory_metrics_service as svc
 
 logger = logging.getLogger(__name__)
 
@@ -63,10 +63,7 @@ async def create_memory_metrics(
 ) -> MemoryMetricsResponse:
     start = time.time()
     try:
-        row = MemoryMetrics(**payload.model_dump())
-        db.add(row)
-        db.commit()
-        db.refresh(row)
+        row = svc.create_memory_metrics(db, payload)
 
         registry_write_operations.labels(operation="create_memory_metrics").inc()
         registry_write_latency.observe((time.time() - start) * 1000)
@@ -88,17 +85,8 @@ async def list_memory_metrics(
 ) -> MemoryMetricsList:
     start = time.time()
     try:
-        query = db.query(MemoryMetrics)
-        if project:
-            query = query.filter(MemoryMetrics.project == project)
-
-        total = query.count()
-        rows = (
-            query
-            .order_by(MemoryMetrics.created_at.desc())
-            .offset(offset)
-            .limit(limit)
-            .all()
+        rows, total = svc.list_memory_metrics(
+            db, project=project, limit=limit, offset=offset,
         )
 
         registry_read_operations.labels(operation="list_memory_metrics").inc()
