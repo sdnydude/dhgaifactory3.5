@@ -16,6 +16,7 @@ from export_schemas import (
     BundleJobResponse,
     DocumentPrintPayload,
 )
+import export_service as svc
 from export_service import (
     build_print_url,
     load_document_for_thread,
@@ -26,7 +27,6 @@ from export_signing import (
     PrintTokenInvalid,
     verify_print_token,
 )
-from models import CMEDocument, CMEProject, DownloadJob
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +97,7 @@ async def sync_download_document(thread_id: str) -> Response:
     )
 
 
-def _serialize_job(job: DownloadJob) -> BundleJobResponse:
+def _serialize_job(job) -> BundleJobResponse:
     selected = job.selected_document_ids
     if selected is not None:
         selected = [UUID(str(x)) for x in selected]
@@ -119,7 +119,7 @@ def create_bundle_job(
     body: BundleJobCreate,
     db: Session = Depends(get_db),
 ) -> BundleJobResponse:
-    project = db.query(CMEProject).filter(CMEProject.id == body.project_id).first()
+    project = svc.get_project(db, body.project_id)
     if not project:
         raise HTTPException(status_code=404, detail="project not found")
 
@@ -128,35 +128,14 @@ def create_bundle_job(
             raise HTTPException(
                 status_code=400, detail="document_ids may not be empty list"
             )
-        count = (
-            db.query(CMEDocument)
-            .filter(
-                CMEDocument.id.in_(body.document_ids),
-                CMEDocument.project_id == body.project_id,
-                CMEDocument.is_current.is_(True),
-            )
-            .count()
-        )
+        count = svc.validate_document_ids(db, body.project_id, body.document_ids)
         if count != len(body.document_ids):
             raise HTTPException(
                 status_code=400,
                 detail="one or more document_ids do not belong to this project",
             )
 
-    job = DownloadJob(
-        thread_id=project.pipeline_thread_id or "",
-        graph_id="bundle",
-        scope="project_bundle",
-        status="pending",
-        project_id=project.id,
-        selected_document_ids=(
-            [str(x) for x in body.document_ids] if body.document_ids else None
-        ),
-        created_by=None,
-    )
-    db.add(job)
-    db.commit()
-    db.refresh(job)
+    job = svc.create_bundle_job(db, project, body.document_ids)
     return _serialize_job(job)
 
 
@@ -165,7 +144,7 @@ def get_job(
     job_id: UUID,
     db: Session = Depends(get_db),
 ) -> BundleJobResponse:
-    job = db.query(DownloadJob).filter(DownloadJob.id == job_id).first()
+    job = svc.get_job(db, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="job not found")
     return _serialize_job(job)
@@ -176,7 +155,7 @@ def stream_artifact(
     job_id: UUID,
     db: Session = Depends(get_db),
 ) -> FileResponse:
-    job = db.query(DownloadJob).filter(DownloadJob.id == job_id).first()
+    job = svc.get_job(db, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="job not found")
     if job.status != "succeeded" or not job.artifact_path:
@@ -193,10 +172,5 @@ def list_jobs(
     limit: int = 20,
     db: Session = Depends(get_db),
 ) -> list[BundleJobResponse]:
-    rows = (
-        db.query(DownloadJob)
-        .order_by(DownloadJob.created_at.desc())
-        .limit(limit)
-        .all()
-    )
+    rows = svc.list_jobs(db, limit=limit)
     return [_serialize_job(j) for j in rows]
