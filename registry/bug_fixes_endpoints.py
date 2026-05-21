@@ -14,13 +14,10 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from sqlalchemy import func as sa_func
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from database import get_db
-from models import BugFix
 from bug_fixes_schemas import (
     BugFixCreate,
     BugFixResponse,
@@ -29,98 +26,20 @@ from bug_fixes_schemas import (
     VALID_SEVERITIES,
     VALID_CATEGORIES,
 )
+import bug_fixes_service as svc
 
 logger = logging.getLogger(__name__)
 
-try:
-    from api import (
-        registry_read_latency,
-        registry_read_operations,
-        registry_write_latency,
-        registry_write_operations,
-        registry_errors,
-    )
-except ImportError:
-    from prometheus_client import Counter, Histogram
-    registry_read_latency = Histogram(
-        "registry_read_latency", "Read latency",
-        buckets=[1, 5, 10, 25, 50, 100, 250, 500, 1000],
-    )
-    registry_read_operations = Counter(
-        "registry_read_operations", "Read operations", ["operation"],
-    )
-    registry_write_latency = Histogram(
-        "registry_write_latency", "Write latency",
-        buckets=[1, 5, 10, 25, 50, 100, 250, 500, 1000],
-    )
-    registry_write_operations = Counter(
-        "registry_write_operations", "Write operations", ["operation"],
-    )
-    registry_errors = Counter(
-        "registry_errors", "Registry errors", ["error_type"],
-    )
+from metrics import (
+    registry_read_latency,
+    registry_read_operations,
+    registry_write_latency,
+    registry_write_operations,
+    registry_errors,
+)
 
 
 router = APIRouter(prefix="/api/bug-fixes", tags=["bug-fixes"])
-
-
-def _upsert_bug_fix(
-    db: Session, payload: BugFixCreate, embedding=None,
-) -> tuple[BugFix, bool]:
-    """Upsert by (project_name, tldr). Returns (row, created)."""
-    existing = db.query(BugFix).filter(
-        BugFix.project_name == payload.project_name,
-        BugFix.tldr == payload.tldr,
-    ).first()
-
-    if existing:
-        existing.symptom = payload.symptom
-        existing.root_cause = payload.root_cause
-        existing.fix_applied = payload.fix_applied
-        existing.files_affected = payload.files_affected
-        existing.severity = payload.severity
-        existing.category = payload.category
-        existing.source_file = payload.source_file
-        existing.tags = payload.tags
-        existing.session_id = payload.session_id
-        existing.model_name = payload.model_name
-        existing.meta_data = payload.meta_data
-        if embedding:
-            existing.embedding = embedding
-            existing.embedding_model = "nomic-embed-text"
-        return existing, False
-
-    row = BugFix(**payload.model_dump())
-    if embedding:
-        row.embedding = embedding
-        row.embedding_model = "nomic-embed-text"
-    try:
-        db.add(row)
-        db.flush()
-        return row, True
-    except IntegrityError:
-        db.rollback()
-        existing = db.query(BugFix).filter(
-            BugFix.project_name == payload.project_name,
-            BugFix.tldr == payload.tldr,
-        ).first()
-        if existing:
-            existing.symptom = payload.symptom
-            existing.root_cause = payload.root_cause
-            existing.fix_applied = payload.fix_applied
-            existing.files_affected = payload.files_affected
-            existing.severity = payload.severity
-            existing.category = payload.category
-            existing.source_file = payload.source_file
-            existing.tags = payload.tags
-            existing.session_id = payload.session_id
-            existing.model_name = payload.model_name
-            existing.meta_data = payload.meta_data
-            if embedding:
-                existing.embedding = embedding
-                existing.embedding_model = "nomic-embed-text"
-            return existing, False
-        raise HTTPException(status_code=409, detail="Conflict: duplicate record")
 
 
 @router.post("", response_model=BugFixResponse, status_code=status.HTTP_201_CREATED)
@@ -149,9 +68,7 @@ async def create_bug_fix(
         except Exception as embed_err:
             logger.warning("Bug fix embedding failed: %s", embed_err)
 
-        row, created = _upsert_bug_fix(db, payload, embedding)
-        db.commit()
-        db.refresh(row)
+        row, created = svc.upsert_bug_fix(db, payload, embedding)
 
         if not created:
             response.status_code = status.HTTP_200_OK
@@ -179,21 +96,9 @@ async def list_bug_fixes(
 ) -> BugFixList:
     start = time.time()
     try:
-        query = db.query(BugFix)
-        if project_name:
-            query = query.filter(BugFix.project_name == project_name)
-        if category:
-            query = query.filter(BugFix.category == category)
-        if severity:
-            query = query.filter(BugFix.severity == severity)
-
-        total = query.count()
-        rows = (
-            query
-            .order_by(BugFix.created_at.desc())
-            .offset(offset)
-            .limit(limit)
-            .all()
+        rows, total = svc.list_bug_fixes(
+            db, project_name=project_name, category=category,
+            severity=severity, limit=limit, offset=offset,
         )
 
         registry_read_operations.labels(operation="list_bug_fixes").inc()
@@ -212,24 +117,10 @@ async def search_bug_fixes(
 ) -> BugFixList:
     start = time.time()
     try:
-        ts_query = sa_func.plainto_tsquery("english", body.query)
-        query = (
-            db.query(BugFix)
-            .filter(BugFix.search_vector.op("@@")(ts_query))
-        )
-        if body.project_name:
-            query = query.filter(BugFix.project_name == body.project_name)
-        if body.category:
-            query = query.filter(BugFix.category == body.category)
-        if body.severity:
-            query = query.filter(BugFix.severity == body.severity)
-
-        total = query.count()
-        rows = (
-            query
-            .order_by(sa_func.ts_rank(BugFix.search_vector, ts_query).desc())
-            .limit(body.limit)
-            .all()
+        rows, total = svc.search_bug_fixes(
+            db, body.query,
+            project_name=body.project_name, category=body.category,
+            severity=body.severity, limit=body.limit,
         )
 
         registry_read_operations.labels(operation="search_bug_fixes").inc()
@@ -247,11 +138,9 @@ async def delete_bug_fix(
     db: Session = Depends(get_db),
 ):
     try:
-        row = db.query(BugFix).filter(BugFix.id == item_id).first()
+        row = svc.delete_bug_fix(db, item_id)
         if not row:
             raise HTTPException(status_code=404, detail="Not found")
-        db.delete(row)
-        db.commit()
     except HTTPException:
         raise
     except Exception as e:

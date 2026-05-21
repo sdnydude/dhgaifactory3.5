@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import FrontendDesignSpec
+import frontend_specs_service as svc
 
 logger = logging.getLogger("dhg.frontend_specs")
 
@@ -66,13 +66,13 @@ class SpecResponse(BaseModel):
 
 @router.get("", response_model=List[SpecResponse])
 async def list_specs(skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):
-    specs = db.query(FrontendDesignSpec).offset(skip).limit(limit).all()
+    specs = svc.list_specs(db, skip=skip, limit=limit)
     return [_to_response(s) for s in specs]
 
 
 @router.get("/{slug}", response_model=SpecResponse)
 async def get_spec_by_slug(slug: str, db: Session = Depends(get_db)):
-    spec = db.query(FrontendDesignSpec).filter(FrontendDesignSpec.slug == slug).first()
+    spec = svc.get_spec_by_slug(db, slug)
     if not spec:
         raise HTTPException(status_code=404, detail=f"Spec with slug '{slug}' not found")
     return _to_response(spec)
@@ -80,30 +80,23 @@ async def get_spec_by_slug(slug: str, db: Session = Depends(get_db)):
 
 @router.post("", response_model=SpecResponse, status_code=status.HTTP_201_CREATED)
 async def create_spec(payload: SpecCreate, db: Session = Depends(get_db)):
-    existing = db.query(FrontendDesignSpec).filter(FrontendDesignSpec.slug == payload.slug).first()
-    if existing:
-        raise HTTPException(status_code=409, detail=f"Spec with slug '{payload.slug}' already exists")
-    spec = FrontendDesignSpec(**payload.model_dump())
-    db.add(spec)
-    db.commit()
-    db.refresh(spec)
+    try:
+        spec = svc.create_spec(db, payload.model_dump())
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e))
     return _to_response(spec)
 
 
 @router.patch("/{slug}", response_model=SpecResponse)
 async def update_spec(slug: str, payload: SpecUpdate, db: Session = Depends(get_db)):
-    spec = db.query(FrontendDesignSpec).filter(FrontendDesignSpec.slug == slug).first()
+    update_data = payload.model_dump(exclude_unset=True)
+    spec = svc.update_spec(db, slug, update_data)
     if not spec:
         raise HTTPException(status_code=404, detail=f"Spec with slug '{slug}' not found")
-    update_data = payload.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(spec, field, value)
-    db.commit()
-    db.refresh(spec)
     return _to_response(spec)
 
 
-def _to_response(spec: FrontendDesignSpec) -> dict:
+def _to_response(spec) -> dict:
     return {
         "id": str(spec.id),
         "feature_name": spec.feature_name,

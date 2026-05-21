@@ -17,7 +17,6 @@ from prometheus_client.metrics import MetricWrapperBase
 sys.path.insert(0, os.path.dirname(__file__))
 
 collect_ignore = [
-    "test_coverage_endpoints.py",
     "test_coverage_schemas.py",
 ]
 

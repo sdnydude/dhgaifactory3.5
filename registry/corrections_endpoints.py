@@ -5,29 +5,24 @@ Routes:
   GET    /api/corrections              list with filters (project/category/since)
   POST   /api/corrections/search       FTS + vector RRF search
   GET    /api/corrections/stats        aggregate counts by category for briefing
+  DELETE /api/corrections/{item_id}    delete a correction
 
 The corrections table captures user pushback patterns so Claude can learn
 what behaviors to avoid. Queryable via the unified KB search endpoint and
 surfaced in SessionStart briefing Section 8.
 """
-import hashlib
 import os
 import sys
 import time
 import logging
-from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from sqlalchemy import func as sa_func
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from database import get_db
-from embedding_utils import get_embedding
-from models import Correction
 from corrections_schemas import (
     CorrectionCreate,
     CorrectionResponse,
@@ -35,97 +30,20 @@ from corrections_schemas import (
     CorrectionSearch,
     VALID_CATEGORIES,
 )
+import corrections_service as svc
 
 logger = logging.getLogger(__name__)
 
-try:
-    from api import (
-        registry_read_latency,
-        registry_read_operations,
-        registry_write_latency,
-        registry_write_operations,
-        registry_errors,
-    )
-except ImportError:
-    from prometheus_client import Counter, Histogram
-    registry_read_latency = Histogram(
-        "registry_read_latency", "Read latency",
-        buckets=[1, 5, 10, 25, 50, 100, 250, 500, 1000],
-    )
-    registry_read_operations = Counter(
-        "registry_read_operations", "Read operations", ["operation"],
-    )
-    registry_write_latency = Histogram(
-        "registry_write_latency", "Write latency",
-        buckets=[1, 5, 10, 25, 50, 100, 250, 500, 1000],
-    )
-    registry_write_operations = Counter(
-        "registry_write_operations", "Write operations", ["operation"],
-    )
-    registry_errors = Counter(
-        "registry_errors", "Registry errors", ["error_type"],
-    )
+from metrics import (
+    registry_read_latency,
+    registry_read_operations,
+    registry_write_latency,
+    registry_write_operations,
+    registry_errors,
+)
 
 
 router = APIRouter(prefix="/api/corrections", tags=["corrections"])
-
-
-def _compute_upsert_hash(user_message: str) -> str:
-    return hashlib.md5(user_message.encode("utf-8")).hexdigest()
-
-
-def _upsert_correction(
-    db: Session, payload: CorrectionCreate, upsert_hash: str, embedding=None,
-) -> tuple[Correction, bool]:
-    """Upsert by (project_name, category, upsert_key_hash). Returns (row, created)."""
-    existing = db.query(Correction).filter(
-        Correction.project_name == payload.project_name,
-        Correction.category == payload.category,
-        Correction.upsert_key_hash == upsert_hash,
-    ).first()
-
-    if existing:
-        existing.user_message = payload.user_message
-        existing.context = payload.context
-        existing.claude_action = payload.claude_action
-        existing.session_id = payload.session_id
-        existing.tags = payload.tags
-        existing.model_name = payload.model_name
-        existing.meta_data = payload.meta_data
-        if embedding:
-            existing.embedding = embedding
-            existing.embedding_model = "nomic-embed-text"
-        return existing, False
-
-    row = Correction(**payload.model_dump())
-    row.upsert_key_hash = upsert_hash
-    if embedding:
-        row.embedding = embedding
-        row.embedding_model = "nomic-embed-text"
-    try:
-        db.add(row)
-        db.flush()
-        return row, True
-    except IntegrityError:
-        db.rollback()
-        existing = db.query(Correction).filter(
-            Correction.project_name == payload.project_name,
-            Correction.category == payload.category,
-            Correction.upsert_key_hash == upsert_hash,
-        ).first()
-        if existing:
-            existing.user_message = payload.user_message
-            existing.context = payload.context
-            existing.claude_action = payload.claude_action
-            existing.session_id = payload.session_id
-            existing.tags = payload.tags
-            existing.model_name = payload.model_name
-            existing.meta_data = payload.meta_data
-            if embedding:
-                existing.embedding = embedding
-                existing.embedding_model = "nomic-embed-text"
-            return existing, False
-        raise
 
 
 @router.post("", response_model=CorrectionResponse, status_code=201)
@@ -141,18 +59,17 @@ async def create_correction(
             detail=f"Invalid category '{payload.category}'. Valid: {sorted(VALID_CATEGORIES)}",
         )
     try:
-        upsert_hash = _compute_upsert_hash(payload.user_message)
+        upsert_hash = svc.compute_upsert_hash(payload.user_message)
 
         embedding = None
         try:
+            from embedding_utils import get_embedding
             embed_text = f"{payload.category} {payload.user_message} {payload.context or ''}"
             embedding = await get_embedding(embed_text)
         except Exception as embed_err:
             logger.warning("Correction embedding failed: %s", embed_err)
 
-        row, created = _upsert_correction(db, payload, upsert_hash, embedding)
-        db.commit()
-        db.refresh(row)
+        row, created = svc.upsert_correction(db, payload, upsert_hash, embedding)
 
         if not created:
             response.status_code = 200
@@ -181,17 +98,10 @@ async def list_corrections(
 ):
     start = time.time()
     try:
-        q = db.query(Correction)
-        if project_name:
-            q = q.filter(Correction.project_name == project_name)
-        if category:
-            q = q.filter(Correction.category == category)
-        if since_days:
-            cutoff = datetime.now(timezone.utc) - timedelta(days=since_days)
-            q = q.filter(Correction.created_at >= cutoff)
-
-        total = q.count()
-        rows = q.order_by(Correction.created_at.desc()).offset(offset).limit(limit).all()
+        rows, total = svc.list_corrections(
+            db, project_name=project_name, category=category,
+            since_days=since_days, limit=limit, offset=offset,
+        )
 
         registry_read_operations.labels(operation="list_corrections").inc()
         registry_read_latency.observe((time.time() - start) * 1000)
@@ -209,18 +119,10 @@ async def search_corrections(
 ):
     start = time.time()
     try:
-        ts_query = sa_func.plainto_tsquery("english", body.query)
-        q = db.query(Correction).filter(Correction.search_vector.op("@@")(ts_query))
-        if body.project_name:
-            q = q.filter(Correction.project_name == body.project_name)
-        if body.category:
-            q = q.filter(Correction.category == body.category)
-
-        total = q.count()
-        rows = (
-            q.order_by(sa_func.ts_rank(Correction.search_vector, ts_query).desc())
-            .limit(body.limit)
-            .all()
+        rows, total = svc.search_corrections(
+            db, body.query,
+            project_name=body.project_name, category=body.category,
+            limit=body.limit,
         )
 
         registry_read_operations.labels(operation="search_corrections").inc()
@@ -241,16 +143,9 @@ async def correction_stats(
     """Aggregate stats for briefing — total + per-category counts in last N days."""
     start = time.time()
     try:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=since_days)
-        q = db.query(
-            Correction.category,
-            sa_func.count(Correction.id).label("count"),
-        ).filter(Correction.created_at >= cutoff)
-        if project_name:
-            q = q.filter(Correction.project_name == project_name)
-
-        rows = q.group_by(Correction.category).order_by(sa_func.count(Correction.id).desc()).all()
-        by_category = [{"category": r.category, "count": r.count} for r in rows]
+        by_category = svc.correction_stats(
+            db, project_name=project_name, since_days=since_days,
+        )
         total = sum(r["count"] for r in by_category)
 
         registry_read_operations.labels(operation="correction_stats").inc()
@@ -273,11 +168,9 @@ async def delete_correction(
     db: Session = Depends(get_db),
 ):
     try:
-        row = db.query(Correction).filter(Correction.id == item_id).first()
+        row = svc.delete_correction(db, item_id)
         if not row:
             raise HTTPException(status_code=404, detail="Not found")
-        db.delete(row)
-        db.commit()
     except HTTPException:
         raise
     except Exception as e:

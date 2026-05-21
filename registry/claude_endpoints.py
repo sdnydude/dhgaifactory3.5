@@ -13,17 +13,9 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from database import get_db
-from models import Project, Conversation, Message, Artifact
+import claude_service as svc
 
-# Import metrics from main API
-try:
-    from api import registry_read_latency, registry_read_operations, registry_errors
-except ImportError:
-    # Fallback if running standalone
-    from prometheus_client import Counter, Histogram
-    registry_read_latency = Histogram('registry_read_latency', 'Read latency', buckets=[1, 5, 10, 25, 50, 100, 250, 500, 1000])
-    registry_read_operations = Counter('registry_read_operations', 'Read operations', ['operation'])
-    registry_errors = Counter('registry_errors', 'Registry errors', ['error_type'])
+from metrics import registry_read_latency, registry_read_operations, registry_errors
 
 
 router = APIRouter(prefix="/api/v1", tags=["claude"])
@@ -93,6 +85,15 @@ class ArtifactResponse(BaseModel):
         from_attributes = True
 
 
+def _conv_response(conv, msg_count: int, art_count: int) -> ConversationResponse:
+    return ConversationResponse(
+        id=conv.id, title=conv.title, conversation_id=conv.conversation_id,
+        export_source=conv.export_source, model_name=conv.model_name,
+        project_id=conv.project_id, created_at=conv.created_at,
+        updated_at=conv.updated_at, message_count=msg_count, artifact_count=art_count,
+    )
+
+
 # =============================================================================
 # PROJECT ENDPOINTS
 # =============================================================================
@@ -102,24 +103,15 @@ async def list_projects(skip: int = 0, limit: int = 100, db: Session = Depends(g
     """List all Claude projects"""
     start = time.time()
     try:
-        projects = db.query(Project).offset(skip).limit(limit).all()
-
-        # Add conversation count
+        rows = svc.list_projects(db, skip=skip, limit=limit)
         result = []
-        for project in projects:
-            conv_count = db.query(Conversation).filter(Conversation.project_id == project.id).count()
-            proj_dict = {
-                'id': project.id,
-                'name': project.name,
-                'project_id': project.project_id,
-                'description': project.description,
-                'custom_instructions': project.custom_instructions,
-                'knowledge_files': project.knowledge_files,
-                'created_at': project.created_at,
-                'updated_at': project.updated_at,
-                'conversation_count': conv_count
-            }
-            result.append(ProjectResponse(**proj_dict))
+        for project, conv_count in rows:
+            result.append(ProjectResponse(
+                id=project.id, name=project.name, project_id=project.project_id,
+                description=project.description, custom_instructions=project.custom_instructions,
+                knowledge_files=project.knowledge_files, created_at=project.created_at,
+                updated_at=project.updated_at, conversation_count=conv_count,
+            ))
 
         registry_read_latency.observe((time.time() - start) * 1000)
         registry_read_operations.labels(operation="list_projects").inc()
@@ -134,26 +126,19 @@ async def get_project(project_id: UUID4, db: Session = Depends(get_db)):
     """Get a specific Claude project"""
     start = time.time()
     try:
-        project = db.query(Project).filter(Project.id == project_id).first()
-        if not project:
+        result = svc.get_project(db, project_id)
+        if not result:
             raise HTTPException(status_code=404, detail="Project not found")
 
-        conv_count = db.query(Conversation).filter(Conversation.project_id == project.id).count()
-        proj_dict = {
-            'id': project.id,
-            'name': project.name,
-            'project_id': project.project_id,
-            'description': project.description,
-            'custom_instructions': project.custom_instructions,
-            'knowledge_files': project.knowledge_files,
-            'created_at': project.created_at,
-            'updated_at': project.updated_at,
-            'conversation_count': conv_count
-        }
-
+        project, conv_count = result
         registry_read_latency.observe((time.time() - start) * 1000)
         registry_read_operations.labels(operation="get_project").inc()
-        return ProjectResponse(**proj_dict)
+        return ProjectResponse(
+            id=project.id, name=project.name, project_id=project.project_id,
+            description=project.description, custom_instructions=project.custom_instructions,
+            knowledge_files=project.knowledge_files, created_at=project.created_at,
+            updated_at=project.updated_at, conversation_count=conv_count,
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -176,33 +161,11 @@ async def list_conversations(
     """List Claude conversations with optional filtering"""
     start = time.time()
     try:
-        query = db.query(Conversation)
-
-        if project_id:
-            query = query.filter(Conversation.project_id == project_id)
-        if export_source:
-            query = query.filter(Conversation.export_source == export_source)
-
-        conversations = query.order_by(Conversation.created_at.desc()).offset(skip).limit(limit).all()
-
-        # Add counts
-        result = []
-        for conv in conversations:
-            msg_count = db.query(Message).filter(Message.conversation_id == conv.id).count()
-            art_count = db.query(Artifact).filter(Artifact.conversation_id == conv.id).count()
-            conv_dict = {
-                'id': conv.id,
-                'title': conv.title,
-                'conversation_id': conv.conversation_id,
-                'export_source': conv.export_source,
-                'model_name': conv.model_name,
-                'project_id': conv.project_id,
-                'created_at': conv.created_at,
-                'updated_at': conv.updated_at,
-                'message_count': msg_count,
-                'artifact_count': art_count
-            }
-            result.append(ConversationResponse(**conv_dict))
+        rows = svc.list_conversations(
+            db, project_id=project_id, export_source=export_source,
+            skip=skip, limit=limit,
+        )
+        result = [_conv_response(conv, msg_count, art_count) for conv, msg_count, art_count in rows]
 
         registry_read_latency.observe((time.time() - start) * 1000)
         registry_read_operations.labels(operation="list_conversations").inc()
@@ -217,28 +180,14 @@ async def get_conversation(conversation_id: UUID4, db: Session = Depends(get_db)
     """Get a specific Claude conversation"""
     start = time.time()
     try:
-        conv = db.query(Conversation).filter(Conversation.id == conversation_id).first()
-        if not conv:
+        result = svc.get_conversation(db, conversation_id)
+        if not result:
             raise HTTPException(status_code=404, detail="Conversation not found")
 
-        msg_count = db.query(Message).filter(Message.conversation_id == conv.id).count()
-        art_count = db.query(Artifact).filter(Artifact.conversation_id == conv.id).count()
-        conv_dict = {
-            'id': conv.id,
-            'title': conv.title,
-            'conversation_id': conv.conversation_id,
-            'export_source': conv.export_source,
-            'model_name': conv.model_name,
-            'project_id': conv.project_id,
-            'created_at': conv.created_at,
-            'updated_at': conv.updated_at,
-            'message_count': msg_count,
-            'artifact_count': art_count
-        }
-
+        conv, msg_count, art_count = result
         registry_read_latency.observe((time.time() - start) * 1000)
         registry_read_operations.labels(operation="get_conversation").inc()
-        return ConversationResponse(**conv_dict)
+        return _conv_response(conv, msg_count, art_count)
     except HTTPException:
         raise
     except Exception as e:
@@ -256,28 +205,8 @@ async def search_conversations(
     """Search Claude conversations by title or content"""
     start = time.time()
     try:
-        # Search in conversation titles
-        conversations = db.query(Conversation).filter(
-            Conversation.title.ilike(f'%{q}%')
-        ).order_by(Conversation.created_at.desc()).offset(skip).limit(limit).all()
-
-        result = []
-        for conv in conversations:
-            msg_count = db.query(Message).filter(Message.conversation_id == conv.id).count()
-            art_count = db.query(Artifact).filter(Artifact.conversation_id == conv.id).count()
-            conv_dict = {
-                'id': conv.id,
-                'title': conv.title,
-                'conversation_id': conv.conversation_id,
-                'export_source': conv.export_source,
-                'model_name': conv.model_name,
-                'project_id': conv.project_id,
-                'created_at': conv.created_at,
-                'updated_at': conv.updated_at,
-                'message_count': msg_count,
-                'artifact_count': art_count
-            }
-            result.append(conv_dict)
+        rows = svc.search_conversations(db, q, skip=skip, limit=limit)
+        result = [_conv_response(conv, msg_count, art_count) for conv, msg_count, art_count in rows]
 
         registry_read_latency.observe((time.time() - start) * 1000)
         registry_read_operations.labels(operation="search_conversations").inc()
@@ -296,10 +225,7 @@ async def list_messages(conversation_id: UUID4, db: Session = Depends(get_db)):
     """List messages for a Claude conversation"""
     start = time.time()
     try:
-        messages = db.query(Message).filter(
-            Message.conversation_id == conversation_id
-        ).order_by(Message.message_index).all()
-
+        messages = svc.list_messages(db, conversation_id)
         registry_read_latency.observe((time.time() - start) * 1000)
         registry_read_operations.labels(operation="list_messages").inc()
         return messages
@@ -322,13 +248,7 @@ async def list_artifacts(
     """List Claude artifacts with optional filtering"""
     start = time.time()
     try:
-        query = db.query(Artifact)
-
-        if artifact_type:
-            query = query.filter(Artifact.artifact_type == artifact_type)
-
-        artifacts = query.order_by(Artifact.created_at.desc()).offset(skip).limit(limit).all()
-
+        artifacts = svc.list_artifacts(db, artifact_type=artifact_type, skip=skip, limit=limit)
         registry_read_latency.observe((time.time() - start) * 1000)
         registry_read_operations.labels(operation="list_artifacts").inc()
         return artifacts
@@ -342,10 +262,7 @@ async def list_artifacts_by_conversation(conversation_id: UUID4, db: Session = D
     """List artifacts for a specific Claude conversation"""
     start = time.time()
     try:
-        artifacts = db.query(Artifact).filter(
-            Artifact.conversation_id == conversation_id
-        ).order_by(Artifact.created_at).all()
-
+        artifacts = svc.list_artifacts_by_conversation(db, conversation_id)
         registry_read_latency.observe((time.time() - start) * 1000)
         registry_read_operations.labels(operation="list_artifacts_by_conversation").inc()
         return artifacts
@@ -359,10 +276,9 @@ async def get_artifact(artifact_id: UUID4, db: Session = Depends(get_db)):
     """Get a specific Claude artifact"""
     start = time.time()
     try:
-        artifact = db.query(Artifact).filter(Artifact.id == artifact_id).first()
+        artifact = svc.get_artifact(db, artifact_id)
         if not artifact:
             raise HTTPException(status_code=404, detail="Artifact not found")
-
         registry_read_latency.observe((time.time() - start) * 1000)
         registry_read_operations.labels(operation="get_artifact").inc()
         return artifact

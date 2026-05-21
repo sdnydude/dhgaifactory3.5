@@ -3,7 +3,8 @@
 Routes:
   POST   /api/insights          create an insight
   GET    /api/insights          list with filters (project_name, category, limit, offset)
-  GET    /api/insights/search   full-text search across insights
+  POST   /api/insights/search   full-text search across insights
+  DELETE /api/insights/{item_id} delete an insight
 """
 import os
 import sys
@@ -13,109 +14,30 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from sqlalchemy import func as sa_func
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from database import get_db
-from models import Insight
 from insights_schemas import (
     InsightCreate,
     InsightResponse,
     InsightList,
     InsightSearch,
 )
+import insights_service as svc
 
 logger = logging.getLogger(__name__)
 
-try:
-    from api import (
-        registry_read_latency,
-        registry_read_operations,
-        registry_write_latency,
-        registry_write_operations,
-        registry_errors,
-    )
-except ImportError:
-    from prometheus_client import Counter, Histogram
-    registry_read_latency = Histogram(
-        "registry_read_latency", "Read latency",
-        buckets=[1, 5, 10, 25, 50, 100, 250, 500, 1000],
-    )
-    registry_read_operations = Counter(
-        "registry_read_operations", "Read operations", ["operation"],
-    )
-    registry_write_latency = Histogram(
-        "registry_write_latency", "Write latency",
-        buckets=[1, 5, 10, 25, 50, 100, 250, 500, 1000],
-    )
-    registry_write_operations = Counter(
-        "registry_write_operations", "Write operations", ["operation"],
-    )
-    registry_errors = Counter(
-        "registry_errors", "Registry errors", ["error_type"],
-    )
+from metrics import (
+    registry_read_latency,
+    registry_read_operations,
+    registry_write_latency,
+    registry_write_operations,
+    registry_errors,
+)
 
 
 router = APIRouter(prefix="/api/insights", tags=["insights"])
-
-
-def _upsert_insight(
-    db: Session, payload: InsightCreate, embedding=None,
-) -> tuple[Insight, bool]:
-    """Upsert by (project_name, tldr). Returns (row, created)."""
-    existing = db.query(Insight).filter(
-        Insight.project_name == payload.project_name,
-        Insight.tldr == payload.tldr,
-    ).first()
-
-    if existing:
-        existing.insight_statement = payload.insight_statement
-        existing.category = payload.category
-        existing.subcategory = payload.subcategory
-        existing.source_file = payload.source_file
-        existing.source_language = payload.source_language
-        existing.source_framework = payload.source_framework
-        existing.tags = payload.tags
-        existing.session_id = payload.session_id
-        existing.model_name = payload.model_name
-        existing.meta_data = payload.meta_data
-        if embedding:
-            existing.embedding = embedding
-            existing.embedding_model = "nomic-embed-text"
-        return existing, False
-
-    row = Insight(**payload.model_dump())
-    if embedding:
-        row.embedding = embedding
-        row.embedding_model = "nomic-embed-text"
-    try:
-        db.add(row)
-        db.flush()
-        return row, True
-    except IntegrityError:
-        db.rollback()
-        existing = db.query(Insight).filter(
-            Insight.project_name == payload.project_name,
-            Insight.tldr == payload.tldr,
-        ).first()
-        if existing:
-            existing.insight_statement = payload.insight_statement
-            existing.category = payload.category
-            existing.subcategory = payload.subcategory
-            existing.source_file = payload.source_file
-            existing.source_language = payload.source_language
-            existing.source_framework = payload.source_framework
-            existing.tags = payload.tags
-            existing.session_id = payload.session_id
-            existing.model_name = payload.model_name
-            existing.meta_data = payload.meta_data
-            if embedding:
-                existing.embedding = embedding
-                existing.embedding_model = "nomic-embed-text"
-            return existing, False
-        raise
 
 
 @router.post("", response_model=InsightResponse, status_code=status.HTTP_201_CREATED)
@@ -134,9 +56,7 @@ async def create_insight(
         except Exception as embed_err:
             logger.warning("Embedding generation failed: %s", embed_err)
 
-        row, created = _upsert_insight(db, payload, embedding)
-        db.commit()
-        db.refresh(row)
+        row, created = svc.upsert_insight(db, payload, embedding)
 
         if not created:
             response.status_code = status.HTTP_200_OK
@@ -163,19 +83,9 @@ async def list_insights(
 ) -> InsightList:
     start = time.time()
     try:
-        query = db.query(Insight)
-        if project_name:
-            query = query.filter(Insight.project_name == project_name)
-        if category:
-            query = query.filter(Insight.category == category)
-
-        total = query.count()
-        rows = (
-            query
-            .order_by(Insight.created_at.desc())
-            .offset(offset)
-            .limit(limit)
-            .all()
+        rows, total = svc.list_insights(
+            db, project_name=project_name, category=category,
+            limit=limit, offset=offset,
         )
 
         registry_read_operations.labels(operation="list_insights").inc()
@@ -194,22 +104,10 @@ async def search_insights(
 ) -> InsightList:
     start = time.time()
     try:
-        ts_query = sa_func.plainto_tsquery("english", body.query)
-        query = (
-            db.query(Insight)
-            .filter(Insight.search_vector.op("@@")(ts_query))
-        )
-        if body.project_name:
-            query = query.filter(Insight.project_name == body.project_name)
-        if body.category:
-            query = query.filter(Insight.category == body.category)
-
-        total = query.count()
-        rows = (
-            query
-            .order_by(sa_func.ts_rank(Insight.search_vector, ts_query).desc())
-            .limit(body.limit)
-            .all()
+        rows, total = svc.search_insights(
+            db, body.query,
+            project_name=body.project_name, category=body.category,
+            limit=body.limit,
         )
 
         registry_read_operations.labels(operation="search_insights").inc()
@@ -227,11 +125,9 @@ async def delete_insight(
     db: Session = Depends(get_db),
 ):
     try:
-        row = db.query(Insight).filter(Insight.id == item_id).first()
+        row = svc.delete_insight(db, item_id)
         if not row:
             raise HTTPException(status_code=404, detail="Not found")
-        db.delete(row)
-        db.commit()
     except HTTPException:
         raise
     except Exception as e:

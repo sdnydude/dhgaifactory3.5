@@ -12,13 +12,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import (
-    SecurityUser,
-    SecurityRole,
-    SecurityUserRole,
-    SecurityProjectAccess,
-    SecurityAuditLog,
-)
 from auth import (
     AuthenticatedUser,
     get_current_user,
@@ -42,6 +35,7 @@ from security_schemas import (
     AuditLogListResponse,
     AuthInfoResponse,
 )
+import security_service as svc
 
 logger = logging.getLogger("dhg.security.endpoints")
 
@@ -52,7 +46,7 @@ router = APIRouter(prefix="/api/v1/security", tags=["security"])
 # HELPERS
 # =============================================================================
 
-def _user_to_response(user: SecurityUser) -> UserResponse:
+def _user_to_response(user) -> UserResponse:
     """Convert a SecurityUser ORM object to a UserResponse schema."""
     roles = [ur.role.name for ur in user.user_roles]
     return UserResponse(
@@ -67,9 +61,9 @@ def _user_to_response(user: SecurityUser) -> UserResponse:
     )
 
 
-def _resolve_role(db: Session, role_name: str) -> SecurityRole:
+def _resolve_role(db: Session, role_name: str):
     """Look up a role by name or raise 404."""
-    role = db.query(SecurityRole).filter(SecurityRole.name == role_name).first()
+    role = svc.resolve_role(db, role_name)
     if not role:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -112,12 +106,7 @@ async def list_users(
     db: Session = Depends(get_db),
 ):
     """List all registered users. Requires users.read permission."""
-    query = db.query(SecurityUser)
-    if is_active is not None:
-        query = query.filter(SecurityUser.is_active == is_active)
-
-    total = query.count()
-    users = query.order_by(SecurityUser.email).offset(skip).limit(limit).all()
+    users, total = svc.list_users(db, is_active=is_active, skip=skip, limit=limit)
     return UserListResponse(
         users=[_user_to_response(u) for u in users],
         total=total,
@@ -132,28 +121,19 @@ async def create_user(
     db: Session = Depends(get_db),
 ):
     """Create a new user and optionally assign roles. Requires users.write permission."""
-    existing = db.query(SecurityUser).filter(SecurityUser.email == body.email).first()
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"User with email '{body.email}' already exists",
+    try:
+        user = svc.create_user(
+            db, email=body.email, display_name=body.display_name,
+            is_active=body.is_active, role_names=body.role_names,
+            granted_by=admin.id,
         )
-
-    user = SecurityUser(
-        email=body.email,
-        display_name=body.display_name,
-        is_active=body.is_active,
-    )
-    db.add(user)
-    db.flush()  # get user.id before assigning roles
-
-    # Assign requested roles
-    for role_name in body.role_names:
-        role = _resolve_role(db, role_name)
-        db.add(SecurityUserRole(user_id=user.id, role_id=role.id, granted_by=admin.id))
-
-    db.commit()
-    db.refresh(user)
+    except RuntimeError as e:
+        detail = str(e)
+        if "already exists" in detail:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
+        if "not found" in detail:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+        raise
 
     write_audit_log(
         db, admin.email, "user_created",
@@ -189,7 +169,7 @@ async def get_user(
     db: Session = Depends(get_db),
 ):
     """Get a specific user by ID. Requires users.read permission."""
-    user = db.query(SecurityUser).filter(SecurityUser.id == user_id).first()
+    user = svc.get_user(db, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return _user_to_response(user)
@@ -204,20 +184,15 @@ async def update_user(
     db: Session = Depends(get_db),
 ):
     """Update user display name or active status. Requires users.write permission."""
-    user = db.query(SecurityUser).filter(SecurityUser.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-
     changes = {}
     if body.display_name is not None:
         changes["display_name"] = body.display_name
-        user.display_name = body.display_name
     if body.is_active is not None:
         changes["is_active"] = body.is_active
-        user.is_active = body.is_active
 
-    db.commit()
-    db.refresh(user)
+    user = svc.update_user(db, user_id, changes)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     write_audit_log(
         db, admin.email, "user_updated",
@@ -239,18 +214,15 @@ async def delete_user(
     db: Session = Depends(get_db),
 ):
     """Deactivate a user (soft delete). Requires users.delete permission."""
-    user = db.query(SecurityUser).filter(SecurityUser.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-
-    if user.id == admin.id:
+    if user_id == admin.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot delete your own account",
         )
 
-    user.is_active = False
-    db.commit()
+    user = svc.deactivate_user(db, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     write_audit_log(
         db, admin.email, "user_deactivated",
@@ -272,7 +244,7 @@ async def list_roles(
     db: Session = Depends(get_db),
 ):
     """List all available roles. Any authenticated user can view roles."""
-    roles = db.query(SecurityRole).order_by(SecurityRole.name).all()
+    roles = svc.list_roles(db)
     return RoleListResponse(
         roles=[
             RoleResponse(
@@ -297,26 +269,21 @@ async def assign_role(
     db: Session = Depends(get_db),
 ):
     """Assign a role to a user. Requires roles.write permission."""
-    user = db.query(SecurityUser).filter(SecurityUser.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-
     role = _resolve_role(db, body.role_name)
 
-    existing = (
-        db.query(SecurityUserRole)
-        .filter(SecurityUserRole.user_id == user_id, SecurityUserRole.role_id == role.id)
-        .first()
-    )
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"User already has role '{body.role_name}'",
-        )
+    try:
+        result = svc.assign_role(db, user_id, role.id, granted_by=admin.id)
+    except RuntimeError as e:
+        if "already_assigned" in str(e):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"User already has role '{body.role_name}'",
+            )
+        raise
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    db.add(SecurityUserRole(user_id=user_id, role_id=role.id, granted_by=admin.id))
-    db.commit()
-    db.refresh(user)
+    user = svc.get_user(db, user_id)
 
     write_audit_log(
         db, admin.email, "role_assigned",
@@ -339,26 +306,18 @@ async def remove_role(
     db: Session = Depends(get_db),
 ):
     """Remove a role from a user. Requires roles.write permission."""
-    user = db.query(SecurityUser).filter(SecurityUser.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-
     role = _resolve_role(db, role_name)
 
-    assignment = (
-        db.query(SecurityUserRole)
-        .filter(SecurityUserRole.user_id == user_id, SecurityUserRole.role_id == role.id)
-        .first()
-    )
-    if not assignment:
+    removed = svc.remove_role(db, user_id, role.id)
+    if not removed:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"User does not have role '{role_name}'",
         )
 
-    db.delete(assignment)
-    db.commit()
-    db.refresh(user)
+    user = svc.get_user(db, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     write_audit_log(
         db, admin.email, "role_removed",
@@ -383,12 +342,7 @@ async def list_user_project_access(
     db: Session = Depends(get_db),
 ):
     """List all project access grants for a user. Requires users.read permission."""
-    grants = (
-        db.query(SecurityProjectAccess)
-        .filter(SecurityProjectAccess.user_id == user_id)
-        .order_by(SecurityProjectAccess.granted_at.desc())
-        .all()
-    )
+    grants = svc.list_user_project_access(db, user_id)
     return ProjectAccessListResponse(
         grants=[
             ProjectAccessResponse(
@@ -414,7 +368,7 @@ async def grant_project_access(
     db: Session = Depends(get_db),
 ):
     """Grant a user access to a project. Requires users.write permission."""
-    user = db.query(SecurityUser).filter(SecurityUser.id == user_id).first()
+    user = svc.get_user(db, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
@@ -424,30 +378,9 @@ async def grant_project_access(
             detail="access_level must be one of: viewer, editor, admin",
         )
 
-    existing = (
-        db.query(SecurityProjectAccess)
-        .filter(
-            SecurityProjectAccess.user_id == user_id,
-            SecurityProjectAccess.project_id == body.project_id,
-        )
-        .first()
+    grant = svc.grant_project_access(
+        db, user_id, body.project_id, body.access_level, granted_by=admin.id,
     )
-    if existing:
-        existing.access_level = body.access_level
-        existing.granted_by = admin.id
-        db.commit()
-        db.refresh(existing)
-        grant = existing
-    else:
-        grant = SecurityProjectAccess(
-            user_id=user_id,
-            project_id=body.project_id,
-            access_level=body.access_level,
-            granted_by=admin.id,
-        )
-        db.add(grant)
-        db.commit()
-        db.refresh(grant)
 
     write_audit_log(
         db, admin.email, "project_access_granted",
@@ -477,22 +410,12 @@ async def revoke_project_access(
     db: Session = Depends(get_db),
 ):
     """Revoke a user's access to a project. Requires users.write permission."""
-    grant = (
-        db.query(SecurityProjectAccess)
-        .filter(
-            SecurityProjectAccess.user_id == user_id,
-            SecurityProjectAccess.project_id == project_id,
-        )
-        .first()
-    )
-    if not grant:
+    revoked = svc.revoke_project_access(db, user_id, project_id)
+    if not revoked:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Project access grant not found",
         )
-
-    db.delete(grant)
-    db.commit()
 
     write_audit_log(
         db, admin.email, "project_access_revoked",
@@ -518,21 +441,9 @@ async def list_audit_logs(
     db: Session = Depends(get_db),
 ):
     """Query the immutable audit log. Requires audit.read permission."""
-    query = db.query(SecurityAuditLog)
-
-    if action:
-        query = query.filter(SecurityAuditLog.action == action)
-    if user_email:
-        query = query.filter(SecurityAuditLog.user_email == user_email)
-
-    total = query.count()
-    entries = (
-        query.order_by(SecurityAuditLog.created_at.desc())
-        .offset(skip)
-        .limit(limit)
-        .all()
+    entries, total = svc.list_audit_logs(
+        db, action=action, user_email=user_email, skip=skip, limit=limit,
     )
-
     return AuditLogListResponse(
         entries=[
             AuditLogEntry(
@@ -558,16 +469,4 @@ async def list_audit_logs(
 
 def seed_roles(db: Session) -> None:
     """Ensure all defined roles exist in the database with current permissions."""
-    for role_name, definition in ROLE_DEFINITIONS.items():
-        existing = db.query(SecurityRole).filter(SecurityRole.name == role_name).first()
-        if existing:
-            existing.description = definition["description"]
-            existing.permissions = definition["permissions"]
-        else:
-            db.add(SecurityRole(
-                name=role_name,
-                description=definition["description"],
-                permissions=definition["permissions"],
-            ))
-    db.commit()
-    logger.info("Security roles seeded: %s", list(ROLE_DEFINITIONS.keys()))
+    svc.seed_roles(db, ROLE_DEFINITIONS)

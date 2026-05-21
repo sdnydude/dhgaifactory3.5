@@ -15,42 +15,22 @@ from sqlalchemy.orm import Session
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from database import get_db
-from models import MemoryMetrics
 from memory_metrics_schemas import (
     MemoryMetricsCreate,
     MemoryMetricsResponse,
     MemoryMetricsList,
 )
+import memory_metrics_service as svc
 
 logger = logging.getLogger(__name__)
 
-try:
-    from api import (
-        registry_read_latency,
-        registry_read_operations,
-        registry_write_latency,
-        registry_write_operations,
-        registry_errors,
-    )
-except ImportError:
-    from prometheus_client import Counter, Histogram
-    registry_read_latency = Histogram(
-        "registry_read_latency", "Read latency",
-        buckets=[1, 5, 10, 25, 50, 100, 250, 500, 1000],
-    )
-    registry_read_operations = Counter(
-        "registry_read_operations", "Read operations", ["operation"],
-    )
-    registry_write_latency = Histogram(
-        "registry_write_latency", "Write latency",
-        buckets=[1, 5, 10, 25, 50, 100, 250, 500, 1000],
-    )
-    registry_write_operations = Counter(
-        "registry_write_operations", "Write operations", ["operation"],
-    )
-    registry_errors = Counter(
-        "registry_errors", "Registry errors", ["error_type"],
-    )
+from metrics import (
+    registry_read_latency,
+    registry_read_operations,
+    registry_write_latency,
+    registry_write_operations,
+    registry_errors,
+)
 
 
 router = APIRouter(prefix="/api/memory-metrics", tags=["memory-metrics"])
@@ -63,10 +43,7 @@ async def create_memory_metrics(
 ) -> MemoryMetricsResponse:
     start = time.time()
     try:
-        row = MemoryMetrics(**payload.model_dump())
-        db.add(row)
-        db.commit()
-        db.refresh(row)
+        row = svc.create_memory_metrics(db, payload)
 
         registry_write_operations.labels(operation="create_memory_metrics").inc()
         registry_write_latency.observe((time.time() - start) * 1000)
@@ -88,17 +65,8 @@ async def list_memory_metrics(
 ) -> MemoryMetricsList:
     start = time.time()
     try:
-        query = db.query(MemoryMetrics)
-        if project:
-            query = query.filter(MemoryMetrics.project == project)
-
-        total = query.count()
-        rows = (
-            query
-            .order_by(MemoryMetrics.created_at.desc())
-            .offset(offset)
-            .limit(limit)
-            .all()
+        rows, total = svc.list_memory_metrics(
+            db, project=project, limit=limit, offset=offset,
         )
 
         registry_read_operations.labels(operation="list_memory_metrics").inc()

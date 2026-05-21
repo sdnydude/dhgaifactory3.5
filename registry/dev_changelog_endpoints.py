@@ -17,12 +17,11 @@ from datetime import date, datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from database import get_db
-from models import DevChangelog
+import dev_changelog_service as svc
 from dev_changelog_schemas import (
     DevChangelogEntry,
     DevChangelogList,
@@ -31,33 +30,13 @@ from dev_changelog_schemas import (
 
 logger = logging.getLogger(__name__)
 
-try:
-    from api import (
-        registry_read_latency,
-        registry_read_operations,
-        registry_write_latency,
-        registry_write_operations,
-        registry_errors,
-    )
-except ImportError:
-    from prometheus_client import Counter, Histogram
-    registry_read_latency = Histogram(
-        "registry_read_latency", "Read latency",
-        buckets=[1, 5, 10, 25, 50, 100, 250, 500, 1000],
-    )
-    registry_read_operations = Counter(
-        "registry_read_operations", "Read operations", ["operation"],
-    )
-    registry_write_latency = Histogram(
-        "registry_write_latency", "Write latency",
-        buckets=[1, 5, 10, 25, 50, 100, 250, 500, 1000],
-    )
-    registry_write_operations = Counter(
-        "registry_write_operations", "Write operations", ["operation"],
-    )
-    registry_errors = Counter(
-        "registry_errors", "Registry errors", ["error_type"],
-    )
+from metrics import (
+    registry_read_latency,
+    registry_read_operations,
+    registry_write_latency,
+    registry_write_operations,
+    registry_errors,
+)
 
 
 router = APIRouter(prefix="/api/dev-changelog", tags=["dev-changelog"])
@@ -76,33 +55,10 @@ async def list_dev_changelog(
 ) -> DevChangelogList:
     start = time.time()
     try:
-        query = db.query(DevChangelog)
-
-        if status:
-            display_status = func.coalesce(DevChangelog.declared_status, DevChangelog.detected_status)
-            query = query.filter(display_status == status)
-        if category:
-            query = query.filter(DevChangelog.category == category)
-        if window_start:
-            query = query.filter(DevChangelog.window_start >= window_start)
-        if window_end:
-            query = query.filter(DevChangelog.window_start <= window_end)
-        if q:
-            needle = f"%{q}%"
-            query = query.filter(
-                or_(
-                    DevChangelog.epic.ilike(needle),
-                    DevChangelog.key_insight.ilike(needle),
-                    DevChangelog.notes.ilike(needle),
-                )
-            )
-
-        total = query.count()
-        rows = (
-            query.order_by(DevChangelog.window_start.desc(), DevChangelog.slug.asc())
-            .offset(offset)
-            .limit(limit)
-            .all()
+        rows, total = svc.list_dev_changelog(
+            db, status=status, category=category,
+            window_start=window_start, window_end=window_end,
+            q=q, limit=limit, offset=offset,
         )
 
         registry_read_operations.labels(operation="list_dev_changelog").inc()
@@ -122,7 +78,7 @@ async def list_dev_changelog(
 async def get_dev_changelog(slug: str, db: Session = Depends(get_db)) -> DevChangelogEntry:
     start = time.time()
     try:
-        row = db.query(DevChangelog).filter(DevChangelog.slug == slug).first()
+        row = svc.get_by_slug(db, slug)
         if not row:
             raise HTTPException(status_code=404, detail=f"dev_changelog entry '{slug}' not found")
 
@@ -146,23 +102,13 @@ async def patch_dev_changelog(
 ) -> DevChangelogEntry:
     start = time.time()
     try:
-        row = db.query(DevChangelog).filter(DevChangelog.slug == slug).first()
-        if not row:
-            raise HTTPException(status_code=404, detail=f"dev_changelog entry '{slug}' not found")
-
         updates = patch.model_dump(exclude_unset=True)
         if not updates:
             raise HTTPException(status_code=400, detail="PATCH body must include at least one human-owned field")
 
-        for field, value in updates.items():
-            setattr(row, field, value)
-
-        now = datetime.now(timezone.utc)
-        row.last_human_edit_at = now
-        row.updated_at = now
-
-        db.commit()
-        db.refresh(row)
+        row = svc.patch_by_slug(db, slug, updates)
+        if not row:
+            raise HTTPException(status_code=404, detail=f"dev_changelog entry '{slug}' not found")
 
         registry_write_operations.labels(operation="patch_dev_changelog").inc()
         registry_write_latency.observe((time.time() - start) * 1000)

@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+import logging
 import os
 import time
 from typing import Any
 from urllib.parse import quote
+from uuid import UUID
 
 import httpx
+from sqlalchemy.orm import Session
 
 from export_signing import PrintTokenPayload, sign_print_token
+from models import CMEDocument, CMEProject, DownloadJob
+
+logger = logging.getLogger(__name__)
 
 
 def _secret() -> str:
@@ -67,3 +73,55 @@ async def render_via_renderer(
         )
         resp.raise_for_status()
         return resp.content
+
+
+def get_project(db: Session, project_id: UUID) -> CMEProject | None:
+    return db.query(CMEProject).filter(CMEProject.id == project_id).first()
+
+
+def validate_document_ids(
+    db: Session, project_id: UUID, document_ids: list[UUID],
+) -> int:
+    """Return the count of valid current documents matching the given IDs."""
+    return (
+        db.query(CMEDocument)
+        .filter(
+            CMEDocument.id.in_(document_ids),
+            CMEDocument.project_id == project_id,
+            CMEDocument.is_current.is_(True),
+        )
+        .count()
+    )
+
+
+def create_bundle_job(
+    db: Session, project: CMEProject, document_ids: list[UUID] | None,
+) -> DownloadJob:
+    job = DownloadJob(
+        thread_id=project.pipeline_thread_id or "",
+        graph_id="bundle",
+        scope="project_bundle",
+        status="pending",
+        project_id=project.id,
+        selected_document_ids=(
+            [str(x) for x in document_ids] if document_ids else None
+        ),
+        created_by=None,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def get_job(db: Session, job_id: UUID) -> DownloadJob | None:
+    return db.query(DownloadJob).filter(DownloadJob.id == job_id).first()
+
+
+def list_jobs(db: Session, *, limit: int = 20) -> list[DownloadJob]:
+    return (
+        db.query(DownloadJob)
+        .order_by(DownloadJob.created_at.desc())
+        .limit(limit)
+        .all()
+    )
