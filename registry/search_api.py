@@ -178,7 +178,8 @@ async def list_sources(user_id: str, db: Session = Depends(get_db)):
             sources_info[display_name] = {"table": table, "count": result}
         except Exception as e:
             db.rollback()
-            sources_info[display_name] = {"table": table, "count": 0, "error": str(e)}
+            logger.exception("search source %s unavailable", table)
+            sources_info[display_name] = {"table": table, "count": 0, "error": "unavailable"}
 
     for table, display_name in shared_tables:
         try:
@@ -186,6 +187,7 @@ async def list_sources(user_id: str, db: Session = Depends(get_db)):
             sources_info[display_name] = {"table": table, "count": result}
         except Exception as e:
             db.rollback()
-            sources_info[display_name] = {"table": table, "count": 0, "error": str(e)}
+            logger.exception("search source %s unavailable", table)
+            sources_info[display_name] = {"table": table, "count": 0, "error": "unavailable"}
 
     return {"user_id": user_id, "sources": sources_info}

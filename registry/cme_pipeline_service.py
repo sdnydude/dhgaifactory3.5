@@ -356,8 +356,13 @@ def create_document(
     return str(new_doc.id), new_version, "created"
 
 
+_EMBEDDING_TABLES = frozenset({"cme_documents", "cme_projects"})
+
+
 def save_embedding(table_name: str, record_id, embedding: list[float]) -> None:
     """Save embedding to a record. Uses its own session (for background tasks)."""
+    if table_name not in _EMBEDDING_TABLES:
+        raise ValueError(f"table_name '{table_name}' not in embedding allowlist")
     from database import SessionLocal
     db = SessionLocal()
     try:

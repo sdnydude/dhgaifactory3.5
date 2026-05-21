@@ -678,7 +678,7 @@ class TestCMERerunPipeline:
         mock_db.query.return_value.filter.return_value.first.return_value = mock_project
         response = client.post(f"/api/cme/projects/{fake_id}/rerun", json={})
         assert response.status_code == 502
-        assert "langgraph" in response.json()["detail"].lower()
+        assert "pipeline trigger failed" in response.json()["detail"].lower()
 
     def test_rerun_reason_validation(self, client):
         """Reason over 500 chars rejected by Pydantic."""

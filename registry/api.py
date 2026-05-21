@@ -267,7 +267,8 @@ async def health():
         return "OK"
     except Exception as e:
         registry_db_errors.inc()
-        raise HTTPException(status_code=503, detail=f"Database unhealthy: {str(e)}")
+        logger.exception("healthz database check failed")
+        raise HTTPException(status_code=503, detail="Database unavailable")
 
 
 @app.get("/metrics", response_class=PlainTextResponse)
@@ -392,6 +393,7 @@ async def create_media(media: MediaCreate, db: Session = Depends(get_db)):
 
         return db_media
     except Exception as e:
+        db.rollback()
         registry_errors.labels(error_type='create_media_failed').inc()
         logger.exception("create_media failed")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -470,6 +472,7 @@ async def create_transcript(transcript: TranscriptCreate, db: Session = Depends(
     except HTTPException:
         raise
     except Exception as e:
+        db.rollback()
         registry_errors.labels(error_type='create_transcript_failed').inc()
         logger.exception("create_transcript failed")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -523,6 +526,7 @@ async def create_segment(segment: SegmentCreate, db: Session = Depends(get_db)):
 
         return db_segment
     except Exception as e:
+        db.rollback()
         registry_errors.labels(error_type='create_segment_failed').inc()
         logger.exception("create_segment failed")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -561,6 +565,7 @@ async def create_event(event: EventCreate, db: Session = Depends(get_db)):
 
         return db_event
     except Exception as e:
+        db.rollback()
         registry_errors.labels(error_type='create_event_failed').inc()
         logger.exception("create_event failed")
         raise HTTPException(status_code=500, detail="Internal server error")

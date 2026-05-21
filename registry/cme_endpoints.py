@@ -835,7 +835,8 @@ async def rerun_cme_pipeline(
         lg = await trigger_langgraph_pipeline(str(project.id), project.intake)
     except Exception as e:
         registry_errors.labels(error_type="rerun_cme_pipeline").inc()
-        raise HTTPException(status_code=502, detail=f"LangGraph trigger failed: {e}")
+        logger.exception("rerun_cme_pipeline LangGraph trigger failed")
+        raise HTTPException(status_code=502, detail="Pipeline trigger failed")
 
     run = pipeline_svc.rerun_pipeline(
         db, project, lg["thread_id"], lg["run_id"],
