@@ -5,8 +5,6 @@ Routes:
                          Sources: doc_pages, insights, decision_logs, ship_sessions,
                          agent_sessions, corrections, dev_changelog, bug_fixes, deferred_items.
 """
-import os
-import sys
 import time
 import logging
 from typing import Optional
@@ -14,7 +12,6 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from database import get_db
 from embedding_utils import get_embedding
 import kb_service as svc

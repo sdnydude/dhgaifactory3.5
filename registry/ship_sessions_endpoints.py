@@ -6,8 +6,6 @@ Routes:
   POST   /api/ship-sessions/search   full-text search across ship sessions
   DELETE /api/ship-sessions/{item_id} delete a ship session
 """
-import os
-import sys
 import time
 import logging
 from typing import Optional
@@ -16,7 +14,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from database import get_db
 from ship_sessions_schemas import (
     ShipSessionCreate,

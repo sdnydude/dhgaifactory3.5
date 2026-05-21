@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from models import Project, Conversation, Message, Artifact
@@ -12,25 +13,43 @@ def list_projects(
     db: Session, *, skip: int = 0, limit: int = 100,
 ) -> list[tuple]:
     """Return list of (Project, conversation_count) tuples."""
-    projects = db.query(Project).offset(skip).limit(limit).all()
-    result = []
-    for project in projects:
-        conv_count = db.query(Conversation).filter(
-            Conversation.project_id == project.id,
-        ).count()
-        result.append((project, conv_count))
-    return result
+    return (
+        db.query(Project, func.count(Conversation.id))
+        .outerjoin(Conversation, Conversation.project_id == Project.id)
+        .group_by(Project.id)
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
 
 
 def get_project(db: Session, project_id: UUID) -> tuple | None:
     """Return (Project, conversation_count) or None."""
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        return None
-    conv_count = db.query(Conversation).filter(
-        Conversation.project_id == project.id,
-    ).count()
-    return (project, conv_count)
+    result = (
+        db.query(Project, func.count(Conversation.id))
+        .outerjoin(Conversation, Conversation.project_id == Project.id)
+        .filter(Project.id == project_id)
+        .group_by(Project.id)
+        .first()
+    )
+    return result
+
+
+def _conversations_with_counts(query):
+    """Subquery-based conversation listing with message + artifact counts."""
+    msg_counts = (
+        func.count(Message.id).label("msg_count")
+    )
+    art_counts = (
+        func.count(Artifact.id).label("art_count")
+    )
+    return (
+        query
+        .outerjoin(Message, Message.conversation_id == Conversation.id)
+        .outerjoin(Artifact, Artifact.conversation_id == Conversation.id)
+        .group_by(Conversation.id)
+        .with_entities(Conversation, msg_counts, art_counts)
+    )
 
 
 def list_conversations(
@@ -48,44 +67,28 @@ def list_conversations(
     if export_source:
         query = query.filter(Conversation.export_source == export_source)
 
-    conversations = query.order_by(Conversation.created_at.desc()).offset(skip).limit(limit).all()
-
-    result = []
-    for conv in conversations:
-        msg_count = db.query(Message).filter(Message.conversation_id == conv.id).count()
-        art_count = db.query(Artifact).filter(Artifact.conversation_id == conv.id).count()
-        result.append((conv, msg_count, art_count))
-    return result
+    query = query.order_by(Conversation.created_at.desc()).offset(skip).limit(limit)
+    return _conversations_with_counts(query).all()
 
 
 def get_conversation(db: Session, conversation_id: UUID) -> tuple | None:
     """Return (Conversation, message_count, artifact_count) or None."""
-    conv = db.query(Conversation).filter(Conversation.id == conversation_id).first()
-    if not conv:
-        return None
-    msg_count = db.query(Message).filter(Message.conversation_id == conv.id).count()
-    art_count = db.query(Artifact).filter(Artifact.conversation_id == conv.id).count()
-    return (conv, msg_count, art_count)
+    query = db.query(Conversation).filter(Conversation.id == conversation_id)
+    return _conversations_with_counts(query).first()
 
 
 def search_conversations(
     db: Session, q: str, *, skip: int = 0, limit: int = 50,
 ) -> list[tuple]:
     """Search conversations by title. Returns list of (Conversation, msg_count, art_count)."""
-    conversations = (
+    query = (
         db.query(Conversation)
         .filter(Conversation.title.ilike(f"%{q}%"))
         .order_by(Conversation.created_at.desc())
         .offset(skip)
         .limit(limit)
-        .all()
     )
-    result = []
-    for conv in conversations:
-        msg_count = db.query(Message).filter(Message.conversation_id == conv.id).count()
-        art_count = db.query(Artifact).filter(Artifact.conversation_id == conv.id).count()
-        result.append((conv, msg_count, art_count))
-    return result
+    return _conversations_with_counts(query).all()
 
 
 def list_messages(db: Session, conversation_id: UUID) -> list[Message]:

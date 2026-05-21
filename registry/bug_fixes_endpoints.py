@@ -6,8 +6,6 @@ Routes:
   POST   /api/bug-fixes/search       full-text search across bug fixes
   DELETE /api/bug-fixes/{item_id}    delete a bug fix record
 """
-import os
-import sys
 import time
 import logging
 from typing import Optional
@@ -16,7 +14,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from database import get_db
 from bug_fixes_schemas import (
     BugFixCreate,

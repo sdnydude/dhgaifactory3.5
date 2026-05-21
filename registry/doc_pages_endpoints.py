@@ -7,8 +7,6 @@ Routes:
   POST   /api/doc-pages/search       hybrid FTS + vector search with RRF
   DELETE /api/doc-pages/project/:name  delete all pages for a project
 """
-import os
-import sys
 import time
 import logging
 from typing import Optional
@@ -16,7 +14,6 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from database import get_db
 from embedding_utils import get_embedding
 import doc_pages_service as svc

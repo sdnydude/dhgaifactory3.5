@@ -9,8 +9,6 @@ Routes:
 Agent-owned fields cannot be written through this API — DevChangelogPatch enforces
 extra='forbid' at the schema layer, rejecting agent-owned keys before the handler runs.
 """
-import os
-import sys
 import time
 import logging
 from datetime import date, datetime, timezone
@@ -19,7 +17,6 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from database import get_db
 import dev_changelog_service as svc
 from dev_changelog_schemas import (

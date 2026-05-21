@@ -8,9 +8,6 @@ from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session
 
 # Import get_db from main API
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from database import get_db
 
 

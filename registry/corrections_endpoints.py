@@ -11,8 +11,6 @@ The corrections table captures user pushback patterns so Claude can learn
 what behaviors to avoid. Queryable via the unified KB search endpoint and
 surfaced in SessionStart briefing Section 8.
 """
-import os
-import sys
 import time
 import logging
 from typing import Optional
@@ -21,7 +19,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from database import get_db
 from corrections_schemas import (
     CorrectionCreate,

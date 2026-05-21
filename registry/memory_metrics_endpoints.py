@@ -4,8 +4,6 @@ Routes:
   POST   /api/memory-metrics   create a memory metrics snapshot
   GET    /api/memory-metrics   list with filters (project, limit, offset)
 """
-import os
-import sys
 import time
 import logging
 from typing import Optional
@@ -13,7 +11,6 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from database import get_db
 from memory_metrics_schemas import (
     MemoryMetricsCreate,
