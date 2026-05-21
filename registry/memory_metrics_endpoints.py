@@ -24,33 +24,13 @@ import memory_metrics_service as svc
 
 logger = logging.getLogger(__name__)
 
-try:
-    from api import (
-        registry_read_latency,
-        registry_read_operations,
-        registry_write_latency,
-        registry_write_operations,
-        registry_errors,
-    )
-except ImportError:
-    from prometheus_client import Counter, Histogram
-    registry_read_latency = Histogram(
-        "registry_read_latency", "Read latency",
-        buckets=[1, 5, 10, 25, 50, 100, 250, 500, 1000],
-    )
-    registry_read_operations = Counter(
-        "registry_read_operations", "Read operations", ["operation"],
-    )
-    registry_write_latency = Histogram(
-        "registry_write_latency", "Write latency",
-        buckets=[1, 5, 10, 25, 50, 100, 250, 500, 1000],
-    )
-    registry_write_operations = Counter(
-        "registry_write_operations", "Write operations", ["operation"],
-    )
-    registry_errors = Counter(
-        "registry_errors", "Registry errors", ["error_type"],
-    )
+from metrics import (
+    registry_read_latency,
+    registry_read_operations,
+    registry_write_latency,
+    registry_write_operations,
+    registry_errors,
+)
 
 
 router = APIRouter(prefix="/api/memory-metrics", tags=["memory-metrics"])

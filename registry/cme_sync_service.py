@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import httpx
 from sqlalchemy.orm import Session
@@ -161,7 +161,7 @@ FIELD_LABELS = {
 }
 
 
-def extract_document_text(agent_name: str, content: Dict[str, Any]) -> Optional[str]:
+def extract_document_text(agent_name: str, content: dict[str, Any]) -> str | None:
     if not isinstance(content, dict):
         return None
 
@@ -185,7 +185,7 @@ def extract_document_text(agent_name: str, content: Dict[str, Any]) -> Optional[
     return None
 
 
-def extract_quality_score(agent_name: str, content: Dict[str, Any]) -> Optional[float]:
+def extract_quality_score(agent_name: str, content: dict[str, Any]) -> float | None:
     if not isinstance(content, dict):
         return None
 
@@ -212,7 +212,7 @@ def extract_quality_score(agent_name: str, content: Dict[str, Any]) -> Optional[
     return None
 
 
-def extract_quality_details(agent_name: str, content: Dict[str, Any]) -> Optional[Dict]:
+def extract_quality_details(agent_name: str, content: dict[str, Any]) -> dict | None:
     if not isinstance(content, dict):
         return None
 
@@ -246,7 +246,7 @@ def extract_quality_details(agent_name: str, content: Dict[str, Any]) -> Optiona
     return None
 
 
-def extract_word_count(agent_name: str, content: Dict[str, Any]) -> Optional[int]:
+def extract_word_count(agent_name: str, content: dict[str, Any]) -> int | None:
     if not isinstance(content, dict):
         return None
 
@@ -265,7 +265,7 @@ def extract_word_count(agent_name: str, content: Dict[str, Any]) -> Optional[int
     return None
 
 
-def extract_citations(agent_name: str, content: Dict[str, Any]) -> List[Dict[str, Any]]:
+def extract_citations(agent_name: str, content: dict[str, Any]) -> list[dict[str, Any]]:
     if agent_name not in CITATION_PATHS or not isinstance(content, dict):
         return []
 
@@ -281,7 +281,7 @@ def extract_citations(agent_name: str, content: Dict[str, Any]) -> List[Dict[str
     return citations
 
 
-def extract_intake_fields(project_id, intake_jsonb: Dict[str, Any], db: Session) -> int:
+def extract_intake_fields(project_id, intake_jsonb: dict[str, Any], db: Session) -> int:
     if not isinstance(intake_jsonb, dict):
         return 0
 
@@ -331,7 +331,7 @@ def extract_intake_fields(project_id, intake_jsonb: Dict[str, Any], db: Session)
     return count
 
 
-async def generate_embedding(text: str) -> Optional[List[float]]:
+async def generate_embedding(text: str) -> list[float] | None:
     if not text or len(text.strip()) < 10:
         return None
 
@@ -358,11 +358,56 @@ def calculate_progress(agents_completed: list[str]) -> int:
     return int((len(agents_completed) / total_agents) * 100)
 
 
+async def _backfill_embeddings(db: Session, project_id) -> None:
+    """Generate embeddings for agent outputs, documents, and references missing them."""
+    outputs = db.query(CMEAgentOutput).filter(
+        CMEAgentOutput.project_id == project_id,
+        CMEAgentOutput.document_text.isnot(None),
+        CMEAgentOutput.embedding.is_(None),
+    ).all()
+    for ao in outputs:
+        emb = await generate_embedding(ao.document_text)
+        if emb:
+            db.execute(
+                CMEAgentOutput.__table__.update()
+                .where(CMEAgentOutput.id == ao.id)
+                .values(embedding=emb)
+            )
+
+    docs = db.query(CMEDocument).filter(
+        CMEDocument.project_id == project_id,
+        CMEDocument.embedding.is_(None),
+    ).all()
+    for doc in docs:
+        emb = await generate_embedding(doc.content_text)
+        if emb:
+            db.execute(
+                CMEDocument.__table__.update()
+                .where(CMEDocument.id == doc.id)
+                .values(embedding=emb)
+            )
+
+    refs = db.query(CMESourceReference).filter(
+        CMESourceReference.project_id == project_id,
+        CMESourceReference.embedding.is_(None),
+        CMESourceReference.abstract.isnot(None),
+    ).all()
+    for ref in refs:
+        ref_text = f"{ref.title} {ref.authors or ''} {ref.abstract or ''}"
+        emb = await generate_embedding(ref_text)
+        if emb:
+            db.execute(
+                CMESourceReference.__table__.update()
+                .where(CMESourceReference.id == ref.id)
+                .values(embedding=emb)
+            )
+
+
 async def sync_project_from_thread(
     project: CMEProject,
-    thread_data: Dict[str, Any],
+    thread_data: dict[str, Any],
     db: Session,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     thread_info = thread_data["thread"]
     thread_state = thread_data["state"]
     values = thread_state.get("values") or {}
@@ -508,57 +553,15 @@ async def sync_project_from_thread(
     db.refresh(project)
 
     try:
-        outputs_needing_embeddings = db.query(CMEAgentOutput).filter(
-            CMEAgentOutput.project_id == project.id,
-            CMEAgentOutput.document_text.isnot(None),
-            CMEAgentOutput.embedding.is_(None),
-        ).all()
-
-        for ao in outputs_needing_embeddings:
-            emb = await generate_embedding(ao.document_text)
-            if emb:
-                db.execute(
-                    CMEAgentOutput.__table__.update()
-                    .where(CMEAgentOutput.id == ao.id)
-                    .values(embedding=emb)
-                )
-
-        docs_needing_embeddings = db.query(CMEDocument).filter(
-            CMEDocument.project_id == project.id,
-            CMEDocument.embedding.is_(None),
-        ).all()
-
-        for doc in docs_needing_embeddings:
-            emb = await generate_embedding(doc.content_text)
-            if emb:
-                db.execute(
-                    CMEDocument.__table__.update()
-                    .where(CMEDocument.id == doc.id)
-                    .values(embedding=emb)
-                )
-
-        refs_needing_embeddings = db.query(CMESourceReference).filter(
-            CMESourceReference.project_id == project.id,
-            CMESourceReference.embedding.is_(None),
-            CMESourceReference.abstract.isnot(None),
-        ).all()
-
-        for ref in refs_needing_embeddings:
-            ref_text = f"{ref.title} {ref.authors or ''} {ref.abstract or ''}"
-            emb = await generate_embedding(ref_text)
-            if emb:
-                db.execute(
-                    CMESourceReference.__table__.update()
-                    .where(CMESourceReference.id == ref.id)
-                    .values(embedding=emb)
-                )
-
+        await _backfill_embeddings(db, project.id)
         db.commit()
+        embedding_error = None
     except Exception as e:
         db.rollback()
+        embedding_error = str(e)
         logger.error(f"Embedding generation failed for project {project.id}: {e}")
 
-    return {
+    result = {
         "project_id": str(project.id),
         "old_status": old_status,
         "new_status": new_status,
@@ -569,3 +572,6 @@ async def sync_project_from_thread(
         "intake_fields_created": intake_fields_created,
         "progress_percent": project.progress_percent,
     }
+    if embedding_error:
+        result["embedding_error"] = embedding_error
+    return result

@@ -56,6 +56,13 @@ def get_project(db: Session, project_id: str) -> CMEProject | None:
     return db.query(CMEProject).filter(CMEProject.id == project_id).first()
 
 
+def list_active_syncable(db: Session) -> list[CMEProject]:
+    return db.query(CMEProject).filter(
+        CMEProject.status.in_(["processing", "review", "awaiting_review"]),
+        CMEProject.pipeline_thread_id.isnot(None),
+    ).all()
+
+
 def update_project_intake(
     db: Session,
     project: CMEProject,

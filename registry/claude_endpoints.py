@@ -15,15 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from database import get_db
 import claude_service as svc
 
-# Import metrics from main API
-try:
-    from api import registry_read_latency, registry_read_operations, registry_errors
-except ImportError:
-    # Fallback if running standalone
-    from prometheus_client import Counter, Histogram
-    registry_read_latency = Histogram('registry_read_latency', 'Read latency', buckets=[1, 5, 10, 25, 50, 100, 250, 500, 1000])
-    registry_read_operations = Counter('registry_read_operations', 'Read operations', ['operation'])
-    registry_errors = Counter('registry_errors', 'Registry errors', ['error_type'])
+from metrics import registry_read_latency, registry_read_operations, registry_errors
 
 
 router = APIRouter(prefix="/api/v1", tags=["claude"])

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict
+from typing import Any
 
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
@@ -12,6 +12,50 @@ from models import CMEDocument, CMEIntakeField, CMESourceReference
 logger = logging.getLogger(__name__)
 
 _RRF_K = 60
+
+
+def _doc_result(row, *, score: float = 0.0) -> dict:
+    d: dict[str, Any] = {
+        "id": str(row.id), "source_table": "cme_documents",
+        "project_id": str(row.project_id), "title": row.title,
+        "snippet": snippet_from_text(row.content_text),
+        "metadata": {
+            "document_type": row.document_type, "version": row.version,
+            "quality_score": row.quality_score, "word_count": row.word_count,
+        },
+    }
+    if score:
+        d["score"] = score
+    return d
+
+
+def _ref_result(row, *, score: float = 0.0) -> dict:
+    d: dict[str, Any] = {
+        "id": str(row.id), "source_table": "cme_source_references",
+        "project_id": str(row.project_id),
+        "title": row.title or "Untitled Reference",
+        "snippet": snippet_from_text(row.abstract or ""),
+        "metadata": {
+            "ref_type": row.ref_type, "ref_id": row.ref_id,
+            "journal": row.journal, "authors": row.authors,
+        },
+    }
+    if score:
+        d["score"] = score
+    return d
+
+
+def _intake_result(row, *, score: float = 0.0) -> dict:
+    d: dict[str, Any] = {
+        "id": str(row.id), "source_table": "cme_intake_fields",
+        "project_id": str(row.project_id),
+        "title": f"{row.section}: {row.field_label}",
+        "snippet": snippet_from_text(row.value_text or ""),
+        "metadata": {"section": row.section, "field_label": row.field_label},
+    }
+    if score:
+        d["score"] = score
+    return d
 
 
 def snippet_from_text(text_val: str, max_len: int = 300) -> str:
@@ -57,20 +101,7 @@ def fulltext_search(
         doc_query = doc_query.order_by(text("rank DESC")).limit(limit)
 
         for row in doc_query.all():
-            results.append({
-                "id": str(row.id),
-                "source_table": "cme_documents",
-                "project_id": str(row.project_id),
-                "title": row.title,
-                "snippet": snippet_from_text(row.content_text),
-                "score": float(row.rank),
-                "metadata": {
-                    "document_type": row.document_type,
-                    "version": row.version,
-                    "quality_score": row.quality_score,
-                    "word_count": row.word_count,
-                },
-            })
+            results.append(_doc_result(row, score=float(row.rank)))
 
     if source_type in (None, "intake_fields"):
         field_query = db.query(
@@ -88,15 +119,7 @@ def fulltext_search(
         field_query = field_query.order_by(text("rank DESC")).limit(limit)
 
         for row in field_query.all():
-            results.append({
-                "id": str(row.id),
-                "source_table": "cme_intake_fields",
-                "project_id": str(row.project_id),
-                "title": f"{row.section}: {row.field_label}",
-                "snippet": snippet_from_text(row.value_text or ""),
-                "score": float(row.rank),
-                "metadata": {"section": row.section, "field_label": row.field_label},
-            })
+            results.append(_intake_result(row, score=float(row.rank)))
 
     if source_type in (None, "references"):
         ref_query = db.query(
@@ -117,20 +140,7 @@ def fulltext_search(
         ref_query = ref_query.order_by(text("rank DESC")).limit(limit)
 
         for row in ref_query.all():
-            results.append({
-                "id": str(row.id),
-                "source_table": "cme_source_references",
-                "project_id": str(row.project_id),
-                "title": row.title or "Untitled Reference",
-                "snippet": snippet_from_text(row.abstract or ""),
-                "score": float(row.rank),
-                "metadata": {
-                    "ref_type": row.ref_type,
-                    "ref_id": row.ref_id,
-                    "journal": row.journal,
-                    "authors": row.authors,
-                },
-            })
+            results.append(_ref_result(row, score=float(row.rank)))
 
     results.sort(key=lambda r: r["score"], reverse=True)
     return results[:limit]
@@ -168,20 +178,7 @@ def vector_similarity_search(
         }).fetchall()
 
         for row in rows:
-            results.append({
-                "id": str(row.id),
-                "source_table": "cme_documents",
-                "project_id": str(row.project_id),
-                "title": row.title,
-                "snippet": snippet_from_text(row.content_text),
-                "score": float(row.similarity),
-                "metadata": {
-                    "document_type": row.document_type,
-                    "version": row.version,
-                    "quality_score": row.quality_score,
-                    "word_count": row.word_count,
-                },
-            })
+            results.append(_doc_result(row, score=float(row.similarity)))
 
     if "cme_source_references" in source_tables:
         sql = text("""
@@ -201,20 +198,7 @@ def vector_similarity_search(
         }).fetchall()
 
         for row in rows:
-            results.append({
-                "id": str(row.id),
-                "source_table": "cme_source_references",
-                "project_id": str(row.project_id),
-                "title": row.title or "Untitled Reference",
-                "snippet": snippet_from_text(row.abstract or ""),
-                "score": float(row.similarity),
-                "metadata": {
-                    "ref_type": row.ref_type,
-                    "ref_id": row.ref_id,
-                    "journal": row.journal,
-                    "authors": row.authors,
-                },
-            })
+            results.append(_ref_result(row, score=float(row.similarity)))
 
     results.sort(key=lambda r: r["score"], reverse=True)
     return results[:limit]
@@ -233,7 +217,7 @@ def hybrid_search(
         source_tables = ["cme_documents", "cme_intake_fields", "cme_source_references"]
 
     ts_query = func.websearch_to_tsquery("english", query)
-    fused: Dict[str, Dict[str, Any]] = {}
+    fused: dict[str, dict[str, Any]] = {}
 
     def _add_to_fused(key: str, item_data: dict, rank: int):
         if key not in fused:
@@ -254,14 +238,7 @@ def hybrid_search(
         if project_id:
             q = q.filter(CMEDocument.project_id == project_id)
         for rank_idx, row in enumerate(q.order_by(text("rank DESC")).limit(limit).all()):
-            key = f"cme_documents:{row.id}"
-            _add_to_fused(key, {
-                "id": str(row.id), "source_table": "cme_documents",
-                "project_id": str(row.project_id), "title": row.title,
-                "snippet": snippet_from_text(row.content_text),
-                "metadata": {"document_type": row.document_type, "version": row.version,
-                             "quality_score": row.quality_score, "word_count": row.word_count},
-            }, rank_idx + 1)
+            _add_to_fused(f"cme_documents:{row.id}", _doc_result(row), rank_idx + 1)
 
     if "cme_intake_fields" in source_tables:
         q = db.query(
@@ -272,14 +249,7 @@ def hybrid_search(
         if project_id:
             q = q.filter(CMEIntakeField.project_id == project_id)
         for rank_idx, row in enumerate(q.order_by(text("rank DESC")).limit(limit).all()):
-            key = f"cme_intake_fields:{row.id}"
-            _add_to_fused(key, {
-                "id": str(row.id), "source_table": "cme_intake_fields",
-                "project_id": str(row.project_id),
-                "title": f"{row.section}: {row.field_label}",
-                "snippet": snippet_from_text(row.value_text or ""),
-                "metadata": {"section": row.section, "field_label": row.field_label},
-            }, rank_idx + 1)
+            _add_to_fused(f"cme_intake_fields:{row.id}", _intake_result(row), rank_idx + 1)
 
     if "cme_source_references" in source_tables:
         q = db.query(
@@ -291,15 +261,7 @@ def hybrid_search(
         if project_id:
             q = q.filter(CMESourceReference.project_id == project_id)
         for rank_idx, row in enumerate(q.order_by(text("rank DESC")).limit(limit).all()):
-            key = f"cme_source_references:{row.id}"
-            _add_to_fused(key, {
-                "id": str(row.id), "source_table": "cme_source_references",
-                "project_id": str(row.project_id),
-                "title": row.title or "Untitled Reference",
-                "snippet": snippet_from_text(row.abstract or ""),
-                "metadata": {"ref_type": row.ref_type, "ref_id": row.ref_id,
-                             "journal": row.journal, "authors": row.authors},
-            }, rank_idx + 1)
+            _add_to_fused(f"cme_source_references:{row.id}", _ref_result(row), rank_idx + 1)
 
     # --- Vector search (documents + references only) ---
     if query_embedding is not None:
@@ -317,14 +279,7 @@ def hybrid_search(
             """)
             rows = db.execute(sql, {"emb": embedding_literal, "pid": project_id, "lim": limit}).fetchall()
             for rank_idx, row in enumerate(rows):
-                key = f"cme_documents:{row.id}"
-                _add_to_fused(key, {
-                    "id": str(row.id), "source_table": "cme_documents",
-                    "project_id": str(row.project_id), "title": row.title,
-                    "snippet": snippet_from_text(row.content_text),
-                    "metadata": {"document_type": row.document_type, "version": row.version,
-                                 "quality_score": row.quality_score, "word_count": row.word_count},
-                }, rank_idx + 1)
+                _add_to_fused(f"cme_documents:{row.id}", _doc_result(row), rank_idx + 1)
 
         if "cme_source_references" in source_tables:
             sql = text("""
@@ -337,15 +292,7 @@ def hybrid_search(
             """)
             rows = db.execute(sql, {"emb": embedding_literal, "pid": project_id, "lim": limit}).fetchall()
             for rank_idx, row in enumerate(rows):
-                key = f"cme_source_references:{row.id}"
-                _add_to_fused(key, {
-                    "id": str(row.id), "source_table": "cme_source_references",
-                    "project_id": str(row.project_id),
-                    "title": row.title or "Untitled Reference",
-                    "snippet": snippet_from_text(row.abstract or ""),
-                    "metadata": {"ref_type": row.ref_type, "ref_id": row.ref_id,
-                                 "journal": row.journal, "authors": row.authors},
-                }, rank_idx + 1)
+                _add_to_fused(f"cme_source_references:{row.id}", _ref_result(row), rank_idx + 1)
 
     results = []
     for entry in sorted(fused.values(), key=lambda e: e["rrf_score"], reverse=True)[:limit]:
@@ -425,6 +372,7 @@ def get_rag_context(
             "metadata": chunk_meta,
         })
 
+    citation_block = ""
     if include_citations and chunks:
         citation_refs = []
         for i, chunk in enumerate(chunks, 1):
@@ -453,4 +401,5 @@ def get_rag_context(
         "total_chunks": len(chunks),
         "estimated_tokens": estimated_tokens,
         "project_scope": project_id,
+        "citations": citation_block,
     }

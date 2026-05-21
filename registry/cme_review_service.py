@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from models import CMEProject, CMEReviewerConfig, CMEReviewAssignment
 
@@ -174,6 +174,7 @@ def get_my_reviews(
     query = (
         db.query(CMEReviewAssignment)
         .join(CMEReviewerConfig)
+        .options(joinedload(CMEReviewAssignment.project))
         .filter(CMEReviewerConfig.email == reviewer_email)
     )
     if status_filter:
@@ -183,11 +184,10 @@ def get_my_reviews(
 
     result = []
     for a in assignments:
-        project = db.query(CMEProject).filter(CMEProject.id == a.project_id).first()
         result.append({
             "assignment_id": str(a.id),
             "project_id": str(a.project_id),
-            "project_name": project.name if project else "Unknown",
+            "project_name": a.project.name if a.project else "Unknown",
             "order": a.reviewer_order,
             "status": a.status,
             "assigned_at": a.assigned_at.isoformat() if a.assigned_at else None,

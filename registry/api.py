@@ -18,48 +18,17 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from prometheus_client import Counter, Histogram, generate_latest
+from prometheus_client import generate_latest
 
 from database import engine, SessionLocal, get_db
 from models import Media, Transcript, Segment, Event
-
-
-# ============================================================================
-# Prometheus Metrics
-# ============================================================================
-registry_write_latency = Histogram(
-    'registry_write_latency',
-    'Database write latency in milliseconds',
-    buckets=[1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000]
-)
-
-registry_read_latency = Histogram(
-    'registry_read_latency',
-    'Database read latency in milliseconds',
-    buckets=[1, 5, 10, 25, 50, 100, 250, 500, 1000]
-)
-
-registry_write_operations = Counter(
-    'registry_write_operations',
-    'Total number of write operations',
-    ['operation']
-)
-
-registry_read_operations = Counter(
-    'registry_read_operations',
-    'Total number of read operations',
-    ['operation']
-)
-
-registry_errors = Counter(
-    'registry_errors',
-    'Total number of registry errors',
-    ['error_type']
-)
-
-registry_db_errors = Counter(
-    'registry_db_errors',
-    'Total number of database connection errors'
+from metrics import (
+    registry_write_latency,
+    registry_read_latency,
+    registry_write_operations,
+    registry_read_operations,
+    registry_errors,
+    registry_db_errors,
 )
 
 
@@ -239,6 +208,7 @@ from corrections_endpoints import router as corrections_router
 from bug_fixes_endpoints import router as bug_fixes_router
 from deferred_items_endpoints import router as deferred_items_router
 from test_coverage_endpoints import router as test_coverage_router
+from cme_stats_endpoints import router as cme_stats_router
 
 # Include routers
 app.include_router(agent_router)
@@ -267,6 +237,7 @@ app.include_router(corrections_router)
 app.include_router(bug_fixes_router)
 app.include_router(deferred_items_router)
 app.include_router(test_coverage_router)
+app.include_router(cme_stats_router)
 
 # Add CORS middleware — locked to production origin + localhost for development
 ALLOWED_ORIGINS = [
