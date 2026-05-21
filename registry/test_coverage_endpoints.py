@@ -14,13 +14,10 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from sqlalchemy import func as sa_func
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from database import get_db
-from models import TestCoverage
 from test_coverage_schemas import (
     TestCoverageCreate,
     TestCoverageResponse,
@@ -28,6 +25,7 @@ from test_coverage_schemas import (
     TestCoverageSearch,
     VALID_CATEGORIES,
 )
+import test_coverage_service as svc
 
 logger = logging.getLogger(__name__)
 
@@ -63,69 +61,6 @@ except ImportError:
 router = APIRouter(prefix="/api/test-coverage", tags=["test-coverage"])
 
 
-def _upsert_test_coverage(
-    db: Session, payload: TestCoverageCreate, embedding=None,
-) -> tuple[TestCoverage, bool]:
-    """Upsert by (project_name, title). Returns (row, created)."""
-    existing = db.query(TestCoverage).filter(
-        TestCoverage.project_name == payload.project_name,
-        TestCoverage.title == payload.title,
-    ).first()
-
-    if existing:
-        existing.test_count_before = payload.test_count_before
-        existing.test_count_after = payload.test_count_after
-        existing.delta = payload.delta
-        existing.tests_added = payload.tests_added
-        existing.tests_removed = payload.tests_removed
-        existing.tests_modified = payload.tests_modified
-        existing.files_affected = payload.files_affected
-        existing.category = payload.category
-        existing.trigger = payload.trigger
-        existing.tags = payload.tags
-        existing.session_id = payload.session_id
-        existing.model_name = payload.model_name
-        existing.meta_data = payload.meta_data
-        if embedding:
-            existing.embedding = embedding
-            existing.embedding_model = "nomic-embed-text"
-        return existing, False
-
-    row = TestCoverage(**payload.model_dump())
-    if embedding:
-        row.embedding = embedding
-        row.embedding_model = "nomic-embed-text"
-    try:
-        db.add(row)
-        db.flush()
-        return row, True
-    except IntegrityError:
-        db.rollback()
-        existing = db.query(TestCoverage).filter(
-            TestCoverage.project_name == payload.project_name,
-            TestCoverage.title == payload.title,
-        ).first()
-        if existing:
-            existing.test_count_before = payload.test_count_before
-            existing.test_count_after = payload.test_count_after
-            existing.delta = payload.delta
-            existing.tests_added = payload.tests_added
-            existing.tests_removed = payload.tests_removed
-            existing.tests_modified = payload.tests_modified
-            existing.files_affected = payload.files_affected
-            existing.category = payload.category
-            existing.trigger = payload.trigger
-            existing.tags = payload.tags
-            existing.session_id = payload.session_id
-            existing.model_name = payload.model_name
-            existing.meta_data = payload.meta_data
-            if embedding:
-                existing.embedding = embedding
-                existing.embedding_model = "nomic-embed-text"
-            return existing, False
-        raise HTTPException(status_code=409, detail="Conflict: duplicate record")
-
-
 @router.post("", response_model=TestCoverageResponse, status_code=status.HTTP_201_CREATED)
 async def create_test_coverage(
     payload: TestCoverageCreate,
@@ -147,9 +82,7 @@ async def create_test_coverage(
         except Exception as embed_err:
             logger.warning("Test coverage embedding failed: %s", embed_err)
 
-        row, created = _upsert_test_coverage(db, payload, embedding)
-        db.commit()
-        db.refresh(row)
+        row, created = svc.upsert_test_coverage(db, payload, embedding)
 
         if not created:
             response.status_code = status.HTTP_200_OK
@@ -176,19 +109,9 @@ async def list_test_coverage(
 ) -> TestCoverageList:
     start = time.time()
     try:
-        query = db.query(TestCoverage)
-        if project_name:
-            query = query.filter(TestCoverage.project_name == project_name)
-        if category:
-            query = query.filter(TestCoverage.category == category)
-
-        total = query.count()
-        rows = (
-            query
-            .order_by(TestCoverage.created_at.desc())
-            .offset(offset)
-            .limit(limit)
-            .all()
+        rows, total = svc.list_test_coverage(
+            db, project_name=project_name, category=category,
+            limit=limit, offset=offset,
         )
 
         registry_read_operations.labels(operation="list_test_coverage").inc()
@@ -207,22 +130,10 @@ async def search_test_coverage(
 ) -> TestCoverageList:
     start = time.time()
     try:
-        ts_query = sa_func.plainto_tsquery("english", body.query)
-        query = (
-            db.query(TestCoverage)
-            .filter(TestCoverage.search_vector.op("@@")(ts_query))
-        )
-        if body.project_name:
-            query = query.filter(TestCoverage.project_name == body.project_name)
-        if body.category:
-            query = query.filter(TestCoverage.category == body.category)
-
-        total = query.count()
-        rows = (
-            query
-            .order_by(sa_func.ts_rank(TestCoverage.search_vector, ts_query).desc())
-            .limit(body.limit)
-            .all()
+        rows, total = svc.search_test_coverage(
+            db, body.query,
+            project_name=body.project_name, category=body.category,
+            limit=body.limit,
         )
 
         registry_read_operations.labels(operation="search_test_coverage").inc()
@@ -240,11 +151,9 @@ async def delete_test_coverage(
     db: Session = Depends(get_db),
 ):
     try:
-        row = db.query(TestCoverage).filter(TestCoverage.id == item_id).first()
+        row = svc.delete_test_coverage(db, item_id)
         if not row:
             raise HTTPException(status_code=404, detail="Not found")
-        db.delete(row)
-        db.commit()
     except HTTPException:
         raise
     except Exception as e:

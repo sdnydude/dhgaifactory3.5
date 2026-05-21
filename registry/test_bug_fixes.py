@@ -72,11 +72,10 @@ class TestBugFixCreate:
         r = client.post("/api/bug-fixes", json=payload)
         assert r.status_code == 422
 
-    @patch("bug_fixes_endpoints._upsert_bug_fix")
-    def test_create_success_returns_201(self, mock_upsert, client, mock_db):
+    @patch("bug_fixes_endpoints.svc")
+    def test_create_success_returns_201(self, mock_svc, client):
         row = _mock_bug_fix_row()
-        mock_upsert.return_value = (row, True)
-        mock_db.refresh = MagicMock()
+        mock_svc.upsert_bug_fix.return_value = (row, True)
 
         r = client.post("/api/bug-fixes", json=VALID_PAYLOAD)
 
@@ -85,13 +84,12 @@ class TestBugFixCreate:
         assert body["tldr"] == "Test bug fix"
         assert body["severity"] == "medium"
         assert body["category"] == "frontend"
-        mock_upsert.assert_called_once()
+        mock_svc.upsert_bug_fix.assert_called_once()
 
-    @patch("bug_fixes_endpoints._upsert_bug_fix")
-    def test_create_upsert_existing_returns_200(self, mock_upsert, client, mock_db):
+    @patch("bug_fixes_endpoints.svc")
+    def test_create_upsert_existing_returns_200(self, mock_svc, client):
         row = _mock_bug_fix_row()
-        mock_upsert.return_value = (row, False)
-        mock_db.refresh = MagicMock()
+        mock_svc.upsert_bug_fix.return_value = (row, False)
 
         r = client.post("/api/bug-fixes", json=VALID_PAYLOAD)
 
@@ -101,9 +99,9 @@ class TestBugFixCreate:
 
 
 class TestBugFixList:
-    def test_list_empty_returns_200(self, client, mock_db):
-        mock_db.query.return_value.count.return_value = 0
-        mock_db.query.return_value.order_by.return_value.offset.return_value.limit.return_value.all.return_value = []
+    @patch("bug_fixes_endpoints.svc")
+    def test_list_empty_returns_200(self, mock_svc, client):
+        mock_svc.list_bug_fixes.return_value = ([], 0)
 
         r = client.get("/api/bug-fixes")
 
@@ -112,11 +110,10 @@ class TestBugFixList:
         assert body["total"] == 0
         assert body["bug_fixes"] == []
 
-    def test_list_with_project_filter(self, client, mock_db):
+    @patch("bug_fixes_endpoints.svc")
+    def test_list_with_project_filter(self, mock_svc, client):
         row = _mock_bug_fix_row(project_name="filtered-project")
-        filtered_q = mock_db.query.return_value.filter.return_value
-        filtered_q.count.return_value = 1
-        filtered_q.order_by.return_value.offset.return_value.limit.return_value.all.return_value = [row]
+        mock_svc.list_bug_fixes.return_value = ([row], 1)
 
         r = client.get("/api/bug-fixes?project_name=filtered-project")
 
@@ -125,11 +122,10 @@ class TestBugFixList:
         assert body["total"] == 1
         assert body["bug_fixes"][0]["project_name"] == "filtered-project"
 
-    def test_list_with_severity_filter(self, client, mock_db):
+    @patch("bug_fixes_endpoints.svc")
+    def test_list_with_severity_filter(self, mock_svc, client):
         row = _mock_bug_fix_row(severity="critical")
-        filtered_q = mock_db.query.return_value.filter.return_value
-        filtered_q.count.return_value = 1
-        filtered_q.order_by.return_value.offset.return_value.limit.return_value.all.return_value = [row]
+        mock_svc.list_bug_fixes.return_value = ([row], 1)
 
         r = client.get("/api/bug-fixes?severity=critical")
 
@@ -138,11 +134,10 @@ class TestBugFixList:
         assert body["total"] == 1
         assert body["bug_fixes"][0]["severity"] == "critical"
 
-    def test_list_pagination(self, client, mock_db):
+    @patch("bug_fixes_endpoints.svc")
+    def test_list_pagination(self, mock_svc, client):
         rows = [_mock_bug_fix_row(tldr=f"Bug {i}") for i in range(5)]
-        filtered_q = mock_db.query.return_value
-        filtered_q.count.return_value = 50
-        filtered_q.order_by.return_value.offset.return_value.limit.return_value.all.return_value = rows
+        mock_svc.list_bug_fixes.return_value = (rows, 50)
 
         r = client.get("/api/bug-fixes?limit=5&offset=10")
 
@@ -157,11 +152,10 @@ class TestBugFixSearch:
         r = client.post("/api/bug-fixes/search", json={"query": ""})
         assert r.status_code == 422
 
-    def test_search_returns_results(self, client, mock_db):
+    @patch("bug_fixes_endpoints.svc")
+    def test_search_returns_results(self, mock_svc, client):
         row = _mock_bug_fix_row(tldr="null pointer fix")
-        fts_q = mock_db.query.return_value.filter.return_value
-        fts_q.count.return_value = 1
-        fts_q.order_by.return_value.limit.return_value.all.return_value = [row]
+        mock_svc.search_bug_fixes.return_value = ([row], 1)
 
         r = client.post(
             "/api/bug-fixes/search",
@@ -175,22 +169,21 @@ class TestBugFixSearch:
 
 
 class TestBugFixDelete:
-    def test_delete_success_returns_204(self, client, mock_db):
-        row_id = uuid.uuid4()
-        mock_row = _mock_bug_fix_row(id=row_id)
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_row
+    @patch("bug_fixes_endpoints.svc")
+    def test_delete_success_returns_204(self, mock_svc, client):
+        row = _mock_bug_fix_row()
+        mock_svc.delete_bug_fix.return_value = row
 
-        r = client.delete(f"/api/bug-fixes/{row_id}")
+        r = client.delete(f"/api/bug-fixes/{row.id}")
 
         assert r.status_code == 204
-        mock_db.delete.assert_called_once_with(mock_row)
-        mock_db.commit.assert_called_once()
+        mock_svc.delete_bug_fix.assert_called_once()
 
-    def test_delete_not_found_returns_404(self, client, mock_db):
-        missing_id = uuid.uuid4()
-        mock_db.query.return_value.filter.return_value.first.return_value = None
+    @patch("bug_fixes_endpoints.svc")
+    def test_delete_not_found_returns_404(self, mock_svc, client):
+        mock_svc.delete_bug_fix.return_value = None
 
-        r = client.delete(f"/api/bug-fixes/{missing_id}")
+        r = client.delete(f"/api/bug-fixes/{uuid.uuid4()}")
 
         assert r.status_code == 404
 

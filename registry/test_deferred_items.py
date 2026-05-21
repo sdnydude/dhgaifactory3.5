@@ -13,7 +13,7 @@ import os
 import sys
 import uuid
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -89,9 +89,8 @@ class TestDeferredItemCreate:
         assert r.status_code == 422
         assert "status" in r.json()["detail"].lower()
 
-    @patch("deferred_items_endpoints.get_embedding", new_callable=AsyncMock, create=True)
-    @patch("deferred_items_endpoints._upsert_deferred_item")
-    def test_create_success_returns_201(self, mock_upsert, mock_embed, client):
+    @patch("deferred_items_endpoints.svc")
+    def test_create_success_returns_201(self, mock_svc, client):
         row = _mock_row(
             title=VALID_PAYLOAD["title"],
             description=VALID_PAYLOAD["description"],
@@ -104,8 +103,7 @@ class TestDeferredItemCreate:
             project_name=VALID_PAYLOAD["project_name"],
             tags=VALID_PAYLOAD["tags"],
         )
-        mock_upsert.return_value = (row, True)
-        mock_embed.return_value = [0.0] * 768
+        mock_svc.upsert_deferred_item.return_value = (row, True)
 
         r = client.post("/api/deferred-items", json=VALID_PAYLOAD)
 
@@ -117,15 +115,13 @@ class TestDeferredItemCreate:
         assert body["category"] == "api"
         assert body["status"] == "open"
 
-    @patch("deferred_items_endpoints.get_embedding", new_callable=AsyncMock, create=True)
-    @patch("deferred_items_endpoints._upsert_deferred_item")
-    def test_create_upsert_existing_returns_200(self, mock_upsert, mock_embed, client):
+    @patch("deferred_items_endpoints.svc")
+    def test_create_upsert_existing_returns_200(self, mock_svc, client):
         row = _mock_row(
             title=VALID_PAYLOAD["title"],
             project_name=VALID_PAYLOAD["project_name"],
         )
-        mock_upsert.return_value = (row, False)
-        mock_embed.return_value = [0.0] * 768
+        mock_svc.upsert_deferred_item.return_value = (row, False)
 
         r = client.post("/api/deferred-items", json=VALID_PAYLOAD)
 
@@ -140,9 +136,9 @@ class TestDeferredItemCreate:
 
 
 class TestDeferredItemList:
-    def test_list_empty_returns_200(self, client, mock_db):
-        mock_db.query.return_value.count.return_value = 0
-        mock_db.query.return_value.order_by.return_value.offset.return_value.limit.return_value.all.return_value = []
+    @patch("deferred_items_endpoints.svc")
+    def test_list_empty_returns_200(self, mock_svc, client):
+        mock_svc.list_deferred_items.return_value = ([], 0)
 
         r = client.get("/api/deferred-items")
 
@@ -151,11 +147,10 @@ class TestDeferredItemList:
         assert body["total"] == 0
         assert body["deferred_items"] == []
 
-    def test_list_with_project_filter(self, client, mock_db):
+    @patch("deferred_items_endpoints.svc")
+    def test_list_with_project_filter(self, mock_svc, client):
         rows = [_mock_row(project_name="my-proj")]
-        filtered_q = mock_db.query.return_value.filter.return_value
-        filtered_q.count.return_value = 1
-        filtered_q.order_by.return_value.offset.return_value.limit.return_value.all.return_value = rows
+        mock_svc.list_deferred_items.return_value = (rows, 1)
 
         r = client.get("/api/deferred-items?project_name=my-proj")
 
@@ -164,11 +159,10 @@ class TestDeferredItemList:
         assert body["total"] == 1
         assert body["deferred_items"][0]["project_name"] == "my-proj"
 
-    def test_list_with_priority_filter(self, client, mock_db):
+    @patch("deferred_items_endpoints.svc")
+    def test_list_with_priority_filter(self, mock_svc, client):
         rows = [_mock_row(priority="critical")]
-        filtered_q = mock_db.query.return_value.filter.return_value
-        filtered_q.count.return_value = 1
-        filtered_q.order_by.return_value.offset.return_value.limit.return_value.all.return_value = rows
+        mock_svc.list_deferred_items.return_value = (rows, 1)
 
         r = client.get("/api/deferred-items?priority=critical")
 
@@ -177,11 +171,10 @@ class TestDeferredItemList:
         assert body["total"] == 1
         assert body["deferred_items"][0]["priority"] == "critical"
 
-    def test_list_with_status_filter(self, client, mock_db):
+    @patch("deferred_items_endpoints.svc")
+    def test_list_with_status_filter(self, mock_svc, client):
         rows = [_mock_row(status="resolved")]
-        filtered_q = mock_db.query.return_value.filter.return_value
-        filtered_q.count.return_value = 1
-        filtered_q.order_by.return_value.offset.return_value.limit.return_value.all.return_value = rows
+        mock_svc.list_deferred_items.return_value = (rows, 1)
 
         r = client.get("/api/deferred-items?status=resolved")
 
@@ -190,11 +183,10 @@ class TestDeferredItemList:
         assert body["total"] == 1
         assert body["deferred_items"][0]["status"] == "resolved"
 
-    def test_list_pagination(self, client, mock_db):
+    @patch("deferred_items_endpoints.svc")
+    def test_list_pagination(self, mock_svc, client):
         rows = [_mock_row(title=f"Item {i}") for i in range(5)]
-        filtered_q = mock_db.query.return_value
-        filtered_q.count.return_value = 50
-        filtered_q.order_by.return_value.offset.return_value.limit.return_value.all.return_value = rows
+        mock_svc.list_deferred_items.return_value = (rows, 50)
 
         r = client.get("/api/deferred-items?limit=5&offset=10")
 
@@ -214,11 +206,10 @@ class TestDeferredItemSearch:
         r = client.post("/api/deferred-items/search", json={"query": ""})
         assert r.status_code == 422
 
-    def test_search_returns_results(self, client, mock_db):
+    @patch("deferred_items_endpoints.svc")
+    def test_search_returns_results(self, mock_svc, client):
         rows = [_mock_row(title="Frobnicator validation missing")]
-        search_q = mock_db.query.return_value.filter.return_value
-        search_q.count.return_value = 1
-        search_q.order_by.return_value.limit.return_value.all.return_value = rows
+        mock_svc.search_deferred_items.return_value = (rows, 1)
 
         r = client.post("/api/deferred-items/search", json={"query": "frobnicator"})
 
@@ -227,12 +218,10 @@ class TestDeferredItemSearch:
         assert body["total"] == 1
         assert body["deferred_items"][0]["title"] == "Frobnicator validation missing"
 
-    def test_search_with_status_filter(self, client, mock_db):
+    @patch("deferred_items_endpoints.svc")
+    def test_search_with_status_filter(self, mock_svc, client):
         rows = [_mock_row(status="in_progress")]
-        search_q = mock_db.query.return_value.filter.return_value
-        filtered_q = search_q.filter.return_value
-        filtered_q.count.return_value = 1
-        filtered_q.order_by.return_value.limit.return_value.all.return_value = rows
+        mock_svc.search_deferred_items.return_value = (rows, 1)
 
         r = client.post(
             "/api/deferred-items/search",
@@ -251,18 +240,19 @@ class TestDeferredItemSearch:
 
 
 class TestDeferredItemDelete:
-    def test_delete_success_returns_204(self, client, mock_db):
+    @patch("deferred_items_endpoints.svc")
+    def test_delete_success_returns_204(self, mock_svc, client):
         row = _mock_row()
-        mock_db.query.return_value.filter.return_value.first.return_value = row
+        mock_svc.delete_deferred_item.return_value = row
 
         r = client.delete(f"/api/deferred-items/{row.id}")
 
         assert r.status_code == 204
-        mock_db.delete.assert_called_once_with(row)
-        mock_db.commit.assert_called_once()
+        mock_svc.delete_deferred_item.assert_called_once()
 
-    def test_delete_not_found_returns_404(self, client, mock_db):
-        mock_db.query.return_value.filter.return_value.first.return_value = None
+    @patch("deferred_items_endpoints.svc")
+    def test_delete_not_found_returns_404(self, mock_svc, client):
+        mock_svc.delete_deferred_item.return_value = None
         fake_id = uuid.uuid4()
 
         r = client.delete(f"/api/deferred-items/{fake_id}")

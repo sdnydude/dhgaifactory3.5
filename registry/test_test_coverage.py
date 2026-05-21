@@ -8,7 +8,7 @@ import os
 import sys
 import uuid
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -70,13 +70,10 @@ class TestTestCoverageCreate:
         r = client.post("/api/test-coverage", json=payload)
         assert r.status_code == 422
 
-    @patch("test_coverage_endpoints.get_embedding", new_callable=AsyncMock, create=True)
-    @patch("test_coverage_endpoints._upsert_test_coverage")
-    def test_create_success_returns_201(self, mock_upsert, mock_embed, client, mock_db):
+    @patch("test_coverage_endpoints.svc")
+    def test_create_success_returns_201(self, mock_svc, client):
         row = _mock_row()
-        mock_upsert.return_value = (row, True)
-        mock_embed.return_value = [0.1] * 768
-        mock_db.refresh = MagicMock()
+        mock_svc.upsert_test_coverage.return_value = (row, True)
 
         r = client.post("/api/test-coverage", json=VALID_PAYLOAD)
 
@@ -86,13 +83,10 @@ class TestTestCoverageCreate:
         assert body["category"] == "api"
         assert body["project_name"] == "test-project"
 
-    @patch("test_coverage_endpoints.get_embedding", new_callable=AsyncMock, create=True)
-    @patch("test_coverage_endpoints._upsert_test_coverage")
-    def test_create_upsert_existing_returns_200(self, mock_upsert, mock_embed, client, mock_db):
+    @patch("test_coverage_endpoints.svc")
+    def test_create_upsert_existing_returns_200(self, mock_svc, client):
         row = _mock_row()
-        mock_upsert.return_value = (row, False)
-        mock_embed.return_value = [0.1] * 768
-        mock_db.refresh = MagicMock()
+        mock_svc.upsert_test_coverage.return_value = (row, False)
 
         r = client.post("/api/test-coverage", json=VALID_PAYLOAD)
 
@@ -102,9 +96,9 @@ class TestTestCoverageCreate:
 
 
 class TestTestCoverageList:
-    def test_list_empty_returns_200(self, client, mock_db):
-        mock_db.query.return_value.count.return_value = 0
-        mock_db.query.return_value.order_by.return_value.offset.return_value.limit.return_value.all.return_value = []
+    @patch("test_coverage_endpoints.svc")
+    def test_list_empty_returns_200(self, mock_svc, client):
+        mock_svc.list_test_coverage.return_value = ([], 0)
 
         r = client.get("/api/test-coverage")
 
@@ -113,11 +107,10 @@ class TestTestCoverageList:
         assert body["test_coverage_events"] == []
         assert body["total"] == 0
 
-    def test_list_with_project_filter(self, client, mock_db):
+    @patch("test_coverage_endpoints.svc")
+    def test_list_with_project_filter(self, mock_svc, client):
         rows = [_mock_row(project_name="proj-a")]
-        filtered_q = mock_db.query.return_value.filter.return_value
-        filtered_q.count.return_value = 1
-        filtered_q.order_by.return_value.offset.return_value.limit.return_value.all.return_value = rows
+        mock_svc.list_test_coverage.return_value = (rows, 1)
 
         r = client.get("/api/test-coverage?project_name=proj-a")
 
@@ -126,11 +119,10 @@ class TestTestCoverageList:
         assert body["total"] == 1
         assert body["test_coverage_events"][0]["project_name"] == "proj-a"
 
-    def test_list_with_category_filter(self, client, mock_db):
+    @patch("test_coverage_endpoints.svc")
+    def test_list_with_category_filter(self, mock_svc, client):
         rows = [_mock_row(category="e2e")]
-        filtered_q = mock_db.query.return_value.filter.return_value
-        filtered_q.count.return_value = 1
-        filtered_q.order_by.return_value.offset.return_value.limit.return_value.all.return_value = rows
+        mock_svc.list_test_coverage.return_value = (rows, 1)
 
         r = client.get("/api/test-coverage?category=e2e")
 
@@ -139,10 +131,10 @@ class TestTestCoverageList:
         assert body["total"] == 1
         assert body["test_coverage_events"][0]["category"] == "e2e"
 
-    def test_list_pagination(self, client, mock_db):
+    @patch("test_coverage_endpoints.svc")
+    def test_list_pagination(self, mock_svc, client):
         rows = [_mock_row(title=f"Event {i}") for i in range(5)]
-        mock_db.query.return_value.count.return_value = 50
-        mock_db.query.return_value.order_by.return_value.offset.return_value.limit.return_value.all.return_value = rows
+        mock_svc.list_test_coverage.return_value = (rows, 50)
 
         r = client.get("/api/test-coverage?limit=5&offset=10")
 
@@ -157,11 +149,10 @@ class TestTestCoverageSearch:
         r = client.post("/api/test-coverage/search", json={"query": ""})
         assert r.status_code == 422
 
-    def test_search_returns_results(self, client, mock_db):
+    @patch("test_coverage_endpoints.svc")
+    def test_search_returns_results(self, mock_svc, client):
         rows = [_mock_row(title="Coverage for auth tests")]
-        search_q = mock_db.query.return_value.filter.return_value
-        search_q.count.return_value = 1
-        search_q.order_by.return_value.limit.return_value.all.return_value = rows
+        mock_svc.search_test_coverage.return_value = (rows, 1)
 
         r = client.post("/api/test-coverage/search", json={"query": "auth tests"})
 
@@ -172,16 +163,18 @@ class TestTestCoverageSearch:
 
 
 class TestTestCoverageDelete:
-    def test_delete_success_returns_204(self, client, mock_db):
+    @patch("test_coverage_endpoints.svc")
+    def test_delete_success_returns_204(self, mock_svc, client):
         row = _mock_row()
-        mock_db.query.return_value.filter.return_value.first.return_value = row
+        mock_svc.delete_test_coverage.return_value = row
 
         r = client.delete(f"/api/test-coverage/{row.id}")
 
         assert r.status_code == 204
 
-    def test_delete_not_found_returns_404(self, client, mock_db):
-        mock_db.query.return_value.filter.return_value.first.return_value = None
+    @patch("test_coverage_endpoints.svc")
+    def test_delete_not_found_returns_404(self, mock_svc, client):
+        mock_svc.delete_test_coverage.return_value = None
 
         r = client.delete(f"/api/test-coverage/{uuid.uuid4()}")
 
