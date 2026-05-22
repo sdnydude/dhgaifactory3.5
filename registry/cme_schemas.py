@@ -198,3 +198,52 @@ class AgentOutput(BaseModel):
     created_at: datetime
     quality_score: Optional[float]
     document_text: Optional[str] = None
+
+
+# =============================================================================
+# STATS RESPONSE MODELS
+# =============================================================================
+
+class AgentCompletionItem(BaseModel):
+    agent: str
+    count: int
+    avg_quality: Optional[float] = None
+
+
+class DocumentThroughputItem(BaseModel):
+    type: str
+    count: int
+    avg_words: int = 0
+    avg_quality: Optional[float] = None
+
+
+class ActivePipelineItem(BaseModel):
+    project_id: str
+    name: str
+    status: str
+    current_agent: Optional[str] = None
+    progress_percent: int = 0
+
+
+class PipelineStatsResponse(BaseModel):
+    projects_by_status: Dict[str, int]
+    total_projects: int
+    total_runs: int
+    total_documents: int
+    total_references: int
+    agent_completion: List[AgentCompletionItem]
+    document_throughput: List[DocumentThroughputItem]
+    avg_run_duration_sec: Optional[float] = None
+    active_pipelines: List[ActivePipelineItem]
+
+
+class ServiceItem(BaseModel):
+    name: str
+    domain: str
+
+
+class ServiceHealthResponse(BaseModel):
+    service_count: int
+    services: List[ServiceItem]
+    db_active_connections: int
+    table_counts: Dict[str, int]

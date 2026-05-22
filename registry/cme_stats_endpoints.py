@@ -7,6 +7,7 @@ import time
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from cme_schemas import PipelineStatsResponse, ServiceHealthResponse
 from database import get_db
 from metrics import registry_errors, registry_read_latency, registry_read_operations
 import cme_stats_service as svc
@@ -16,7 +17,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/cme/stats", tags=["cme-stats"])
 
 
-@router.get("/pipeline")
+@router.get("/pipeline", response_model=PipelineStatsResponse)
 async def pipeline_stats(db: Session = Depends(get_db)):
     start = time.time()
     try:
@@ -31,7 +32,7 @@ async def pipeline_stats(db: Session = Depends(get_db)):
         registry_read_latency.observe((time.time() - start) * 1000)
 
 
-@router.get("/services")
+@router.get("/services", response_model=ServiceHealthResponse)
 async def service_health(db: Session = Depends(get_db)):
     start = time.time()
     try:
