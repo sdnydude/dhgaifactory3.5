@@ -1,0 +1,54 @@
+# Auto-capture test coverage changes to registry
+
+After any work that **adds, removes, or modifies test files**, immediately post a test coverage change event to the registry.
+
+## When to trigger
+
+- After any commit that adds, removes, or modifies test files (files matching `test_*.py`, `*_test.py`, `*.spec.ts`, `*.test.ts`, `__tests__/`)
+- After a `/ship` build phase that includes test changes
+- After a code health review that changes test counts
+- After a bug fix that adds regression tests
+- After a new feature that includes test coverage
+
+## When NOT to trigger
+
+- Trivial test file formatting or comment-only changes
+- Renaming a test without changing behavior
+- Changes to test infrastructure (conftest.py, fixtures) with no test count change
+
+## What to capture
+
+```bash
+~/.claude/scripts/post-test-coverage.sh '{"title":"<short description, max 280 chars>","test_count_before":<int>,"test_count_after":<int>,"delta":<int, can be negative>,"tests_added":["<test name/description>"],"tests_removed":["<test name/description>"],"tests_modified":["<test name/description>"],"files_affected":["<file path>"],"category":"<category>","trigger":"<what prompted this change>","project_name":"dhg-ai-factory","tags":["<tag1>","<tag2>"],"model_name":"claude-opus-4-6"}'
+```
+
+### Field guide
+
+| Field | Description |
+|-------|-------------|
+| `title` | Short summary of what changed (max 280 chars). E.g., "Add CME stats endpoint tests" |
+| `test_count_before` | Total test count before this change. Get from `pytest` output or last known count |
+| `test_count_after` | Total test count after this change |
+| `delta` | Net change (`test_count_after - test_count_before`). Can be negative for test removals |
+| `tests_added` | Array of new test names/descriptions |
+| `tests_removed` | Array of removed test names. Empty array `[]` if none removed |
+| `tests_modified` | Array of modified test names. Empty array `[]` if none modified |
+| `files_affected` | Array of file paths that were modified |
+| `category` | One of the valid categories below |
+| `trigger` | What prompted this change. E.g., "/ship advisor fix C8", "new feature: CME stats" |
+
+## Category values
+
+Use one of: `unit`, `integration`, `e2e`, `api`, `auth`, `cme`, `registry`, `langgraph`, `security`, `performance`, `other`
+
+## Rules
+
+- Fire-and-forget -- don't stop work if the registry is down
+- Don't ask permission to post -- this is automated capture
+- Keep title under 280 chars
+- Escape quotes in the JSON payload
+- Always include `files_affected` -- even a single file
+- Use the actual test count from test runner output when available; if not, use the last known count (271 for registry as of 2026-05-21)
+- For bulk changes, capture as a single event with the aggregate delta
+- Include tags that would help future semantic search
+- The `trigger` field helps correlate test changes with the work that caused them -- always fill it in

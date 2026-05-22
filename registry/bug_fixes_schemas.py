@@ -11,16 +11,20 @@ VALID_SEVERITIES = {"low", "medium", "high", "critical"}
 VALID_CATEGORIES = {
     "auth",
     "api",
-    "frontend",
+    "cme",
+    "config",
     "database",
+    "frontend",
     "infra",
+    "langgraph",
     "marketplace",
+    "observability",
+    "other",
+    "performance",
+    "registry",
+    "security",
     "shared",
     "testing",
-    "security",
-    "performance",
-    "config",
-    "other",
 }
 
 

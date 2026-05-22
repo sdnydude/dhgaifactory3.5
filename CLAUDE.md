@@ -78,9 +78,9 @@ All agents have dual tracing: LangSmith (@traceable) + OpenTelemetry (@traced_no
 |---------|------|--------|
 | dhg-prometheus | 9090 | 6 scrape targets, all UP |
 | dhg-grafana | 3001 | Dashboards: core golden signals, Docker overview |
-| dhg-loki | 3100 | Log aggregation via Promtail |
+| dhg-loki | 3100 | Log aggregation via Promtail. All running containers auto-discovered (DHG core, observability, Plane, Portage). |
 | dhg-tempo | 3200 | Distributed tracing (OTel gRPC :4317, HTTP :4318) |
-| dhg-promtail | — | Docker container log shipping to Loki |
+| dhg-promtail | — | Docker SD auto-discovers all containers. Healthcheck/metrics lines dropped. Labels: container, compose_service, compose_project, job, level. |
 | dhg-alertmanager | 9093 | Alert routing (webhook to registry-api) |
 | dhg-cadvisor | 8080 | Container metrics (v0.51.0) |
 | dhg-node-exporter | 9100 | Host metrics |

@@ -39,22 +39,27 @@ SERVICES = [
 ]
 
 
+def _float_or_none(val: object) -> float | None:
+    return float(val) if val is not None else None
+
+
+def _int_or_zero(val: object) -> int:
+    return int(val) if val is not None else 0
+
+
 def get_pipeline_stats(db: Session) -> dict:
     status_rows = db.execute(text(
-        "SELECT status, count(*) FROM cme_projects GROUP BY status"
+        "SELECT status, count(*) as cnt FROM cme_projects GROUP BY status"
     )).fetchall()
-    projects_by_status = {row[0]: row[1] for row in status_rows}
+    projects_by_status = {r.status: r.cnt for r in status_rows}
     total_projects = sum(projects_by_status.values())
 
-    counts_row = db.execute(text("""
+    counts = db.execute(text("""
         SELECT
             (SELECT count(*) FROM cme_pipeline_runs) as runs,
             (SELECT count(*) FROM cme_documents) as docs,
             (SELECT count(*) FROM cme_source_references) as refs
     """)).fetchone()
-    total_runs = counts_row[0] if counts_row else 0
-    total_documents = counts_row[1] if counts_row else 0
-    total_references = counts_row[2] if counts_row else 0
 
     agent_rows = db.execute(text("""
         SELECT agent_name, count(*) as cnt,
@@ -63,7 +68,7 @@ def get_pipeline_stats(db: Session) -> dict:
         GROUP BY agent_name ORDER BY agent_name
     """)).fetchall()
     agent_completion = [
-        {"agent": r[0], "count": r[1], "avg_quality": float(r[2]) if r[2] is not None else None}
+        {"agent": r.agent_name, "count": r.cnt, "avg_quality": _float_or_none(r.avg_quality)}
         for r in agent_rows
     ]
 
@@ -76,18 +81,18 @@ def get_pipeline_stats(db: Session) -> dict:
     """)).fetchall()
     document_throughput = [
         {
-            "type": r[0], "count": r[1],
-            "avg_words": int(r[2]) if r[2] is not None else 0,
-            "avg_quality": float(r[3]) if r[3] is not None else None,
+            "type": r.document_type,
+            "count": r.cnt,
+            "avg_words": _int_or_zero(r.avg_words),
+            "avg_quality": _float_or_none(r.avg_quality),
         }
         for r in doc_rows
     ]
 
-    dur_row = db.execute(text("""
+    avg_run_duration_sec = _float_or_none(db.execute(text("""
         SELECT round(avg(EXTRACT(EPOCH FROM (completed_at - triggered_at)))::numeric, 1)
         FROM cme_pipeline_runs WHERE completed_at IS NOT NULL
-    """)).scalar()
-    avg_run_duration_sec = float(dur_row) if dur_row is not None else None
+    """)).scalar())
 
     active_projects = (
         db.query(CMEProject)
@@ -108,9 +113,9 @@ def get_pipeline_stats(db: Session) -> dict:
     return {
         "projects_by_status": projects_by_status,
         "total_projects": total_projects,
-        "total_runs": total_runs,
-        "total_documents": total_documents,
-        "total_references": total_references,
+        "total_runs": counts.runs if counts else 0,
+        "total_documents": counts.docs if counts else 0,
+        "total_references": counts.refs if counts else 0,
         "agent_completion": agent_completion,
         "document_throughput": document_throughput,
         "avg_run_duration_sec": avg_run_duration_sec,
@@ -129,7 +134,7 @@ def get_service_health(db: Session) -> dict:
         WHERE schemaname = 'public'
         ORDER BY n_live_tup DESC
     """)).fetchall()
-    table_counts = {r[0]: r[1] for r in table_rows}
+    table_counts = {r.relname: r.n_live_tup for r in table_rows}
 
     return {
         "service_count": len(SERVICES),

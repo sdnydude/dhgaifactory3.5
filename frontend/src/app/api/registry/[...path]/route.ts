@@ -29,9 +29,13 @@ async function proxyRequest(
     headers["content-type"] = contentType;
   }
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+
   const fetchOptions: RequestInit = {
     method: req.method,
     headers,
+    signal: controller.signal,
   };
 
   if (req.method !== "GET" && req.method !== "HEAD") {
@@ -54,11 +58,15 @@ async function proxyRequest(
       status: response.status,
       headers: outHeaders,
     });
-  } catch {
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown";
+    console.error(`[registry-proxy] ${req.method} /${targetPath} failed: ${message}`);
     return NextResponse.json(
       { error: "Registry API unavailable" },
       { status: 503 },
     );
+  } finally {
+    clearTimeout(timeout);
   }
 }
 

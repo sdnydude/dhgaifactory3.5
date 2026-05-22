@@ -10,10 +10,11 @@ VALID_CATEGORIES = {
     "docker-guessing",
     "fabrication",
     "missed-context",
-    "wrong-assumption",
+    "other",
+    "premature-action",
     "repeated-instruction",
     "workflow-violation",
-    "other",
+    "wrong-assumption",
 }
 
 

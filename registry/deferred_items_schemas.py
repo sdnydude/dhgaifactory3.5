@@ -11,16 +11,20 @@ VALID_PRIORITIES = {"low", "medium", "high", "critical"}
 VALID_CATEGORIES = {
     "auth",
     "api",
-    "frontend",
-    "database",
-    "infra",
-    "marketplace",
-    "testing",
-    "security",
-    "performance",
+    "cme",
     "config",
+    "database",
     "docs",
+    "frontend",
+    "infra",
+    "langgraph",
+    "marketplace",
+    "observability",
     "other",
+    "performance",
+    "registry",
+    "security",
+    "testing",
 }
 
 VALID_STATUSES = {"open", "in_progress", "resolved", "wont_fix"}

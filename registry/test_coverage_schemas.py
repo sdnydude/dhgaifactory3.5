@@ -7,16 +7,19 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 VALID_CATEGORIES = {
-    "unit",
-    "integration",
-    "e2e",
+    "admin",
     "api",
     "auth",
-    "admin",
+    "cme",
+    "e2e",
+    "integration",
+    "langgraph",
     "marketplace",
-    "security",
-    "performance",
     "other",
+    "performance",
+    "registry",
+    "security",
+    "unit",
 }
 
 
