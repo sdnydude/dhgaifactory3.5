@@ -400,3 +400,46 @@ class TestDeferredItemIntegration:
 
         finally:
             self._cleanup(SessionLocal, title)
+
+    def test_capture_script_payload_format(self, real_client):
+        """Verify the exact JSON shape used by post-deferred-items.sh works."""
+        client, SessionLocal = real_client
+        unique_suffix = uuid.uuid4().hex[:8]
+        title = f"pytest-di-capture-{unique_suffix}"
+        project_name = f"pytest-di-capture-proj-{unique_suffix}"
+
+        capture_payload = {
+            "title": title,
+            "description": "Capture script E2E test",
+            "reason": "Verifying memreg pipeline end-to-end",
+            "source_context": "/ship advisor fix",
+            "priority": "medium",
+            "category": "testing",
+            "project_name": project_name,
+            "affected_files": ["registry/test_deferred_items.py"],
+            "tags": ["memreg", "e2e", "capture-script"],
+            "model_name": "claude-opus-4-6",
+        }
+
+        try:
+            r = client.post("/api/deferred-items", json=capture_payload)
+            assert r.status_code == 201, r.text
+            body = r.json()
+            assert body["title"] == title
+            assert body["project_name"] == project_name
+            assert body["tags"] == ["memreg", "e2e", "capture-script"]
+            assert body["category"] == "testing"
+            assert "id" in body
+            assert "created_at" in body
+
+            r_verify = client.get(
+                f"/api/deferred-items?project_name={project_name}"
+            )
+            assert r_verify.status_code == 200
+            items = r_verify.json()["deferred_items"]
+            assert len(items) == 1
+            assert items[0]["title"] == title
+
+            client.delete(f"/api/deferred-items/{body['id']}")
+        finally:
+            self._cleanup(SessionLocal, title)

@@ -24,21 +24,49 @@ type PromTarget = {
   scrapeUrl: string;
 };
 
+// Mirrors registry/cme_schemas.py — PipelineStatsResponse + sub-models
+interface AgentCompletionItem {
+  agent: string;
+  count: number;
+  avg_quality: number | null;
+}
+
+interface DocumentThroughputItem {
+  type: string;
+  count: number;
+  avg_words: number;
+  avg_quality: number | null;
+}
+
+interface ActivePipelineItem {
+  project_id: string;
+  name: string;
+  status: string;
+  current_agent: string | null;
+  progress_percent: number;
+}
+
 interface CmePipelineStats {
   projects_by_status: Record<string, number>;
   total_projects: number;
   total_runs: number;
   total_documents: number;
   total_references: number;
-  agent_completion: { agent: string; count: number; avg_quality: number | null }[];
-  document_throughput: { type: string; count: number; avg_words: number; avg_quality: number | null }[];
+  agent_completion: AgentCompletionItem[];
+  document_throughput: DocumentThroughputItem[];
   avg_run_duration_sec: number | null;
-  active_pipelines: { project_id: string; name: string; status: string; current_agent: string; progress_percent: number }[];
+  active_pipelines: ActivePipelineItem[];
+}
+
+// Mirrors registry/cme_schemas.py — ServiceHealthResponse + sub-models
+interface ServiceItem {
+  name: string;
+  domain: string;
 }
 
 interface CmeServiceStats {
   service_count: number;
-  services: { name: string; domain: string }[];
+  services: ServiceItem[];
   db_active_connections: number;
   table_counts: Record<string, number>;
 }
@@ -51,11 +79,18 @@ async function promQuery<T = PromVectorResult[]>(
       `/api/prometheus/api/v1/query?query=${encodeURIComponent(query)}`,
       { cache: "no-store" },
     );
-    if (!r.ok) return null;
+    if (!r.ok) {
+      console.warn(`[dashboard] promQuery ${query} returned ${r.status}`);
+      return null;
+    }
     const j = await r.json();
-    if (j.status !== "success") return null;
+    if (j.status !== "success") {
+      console.warn(`[dashboard] promQuery ${query} status: ${j.status}`);
+      return null;
+    }
     return j.data.result as T;
-  } catch {
+  } catch (err) {
+    console.warn(`[dashboard] promQuery ${query} failed:`, err);
     return null;
   }
 }
@@ -70,11 +105,18 @@ async function promRange(
       `/api/prometheus/api/v1/query_range?query=${encodeURIComponent(query)}&start=${start}&end=${end}&step=${RANGE_STEP_SECONDS}`,
       { cache: "no-store" },
     );
-    if (!r.ok) return null;
+    if (!r.ok) {
+      console.warn(`[dashboard] promRange ${query} returned ${r.status}`);
+      return null;
+    }
     const j = await r.json();
-    if (j.status !== "success") return null;
+    if (j.status !== "success") {
+      console.warn(`[dashboard] promRange ${query} status: ${j.status}`);
+      return null;
+    }
     return j.data.result as PromMatrixResult[];
-  } catch {
+  } catch (err) {
+    console.warn(`[dashboard] promRange ${query} failed:`, err);
     return null;
   }
 }
@@ -85,10 +127,14 @@ async function fetchTargets(): Promise<PromTarget[] | null> {
       "/api/prometheus/api/v1/targets?state=active",
       { cache: "no-store" },
     );
-    if (!r.ok) return null;
+    if (!r.ok) {
+      console.warn(`[dashboard] fetchTargets returned ${r.status}`);
+      return null;
+    }
     const j = await r.json();
     return j.data.activeTargets as PromTarget[];
-  } catch {
+  } catch (err) {
+    console.warn("[dashboard] fetchTargets failed:", err);
     return null;
   }
 }
@@ -98,10 +144,14 @@ async function fetchAlerts(): Promise<number | null> {
     const r = await fetch("/api/alertmanager/api/v2/alerts", {
       cache: "no-store",
     });
-    if (!r.ok) return null;
+    if (!r.ok) {
+      console.warn(`[dashboard] fetchAlerts returned ${r.status}`);
+      return null;
+    }
     const j = (await r.json()) as { status: { state: string } }[];
     return j.filter((a) => a.status?.state === "active").length;
-  } catch {
+  } catch (err) {
+    console.warn("[dashboard] fetchAlerts failed:", err);
     return null;
   }
 }
