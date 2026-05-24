@@ -148,51 +148,84 @@ def deferred_item_stats(
     *,
     project_name: str | None = None,
 ) -> dict:
-    q = db.query(DeferredItem)
-    if project_name:
-        q = q.filter(DeferredItem.project_name == project_name)
+    from sqlalchemy import literal_column, text
 
-    items = q.all()
     now = datetime.now(timezone.utc)
+    cutoff_7d = now - timedelta(days=7)
+    cutoff_14d = now - timedelta(days=14)
+    cutoff_30d = now - timedelta(days=30)
 
-    by_status: dict[str, int] = {}
-    by_priority: dict[str, int] = {}
-    by_category: dict[str, int] = {}
-    age_bins = {"0-7d": 0, "7-14d": 0, "14-30d": 0, "30+d": 0}
-    stale_count = 0
+    filters = []
+    if project_name:
+        filters.append(DeferredItem.project_name == project_name)
 
-    for item in items:
-        s = item.status or "open"
-        p = item.priority or "medium"
-        c = item.category or "other"
-        by_status[s] = by_status.get(s, 0) + 1
-        by_priority[p] = by_priority.get(p, 0) + 1
-        by_category[c] = by_category.get(c, 0) + 1
+    base = db.query(DeferredItem.id)
+    for f in filters:
+        base = base.filter(f)
+    total = base.count()
 
-        created = item.created_at
-        if created.tzinfo is None:
-            created = created.replace(tzinfo=timezone.utc)
-        age = now - created
+    status_q = (
+        db.query(
+            sa_func.coalesce(DeferredItem.status, literal_column("'open'")).label("status"),
+            sa_func.count(DeferredItem.id),
+        )
+    )
+    for f in filters:
+        status_q = status_q.filter(f)
+    by_status = {r[0]: r[1] for r in status_q.group_by(text("1")).all()}
 
-        if age <= timedelta(days=7):
-            age_bins["0-7d"] += 1
-        elif age <= timedelta(days=14):
-            age_bins["7-14d"] += 1
-        elif age <= timedelta(days=30):
-            age_bins["14-30d"] += 1
-        else:
-            age_bins["30+d"] += 1
+    priority_q = (
+        db.query(
+            sa_func.coalesce(DeferredItem.priority, literal_column("'medium'")).label("priority"),
+            sa_func.count(DeferredItem.id),
+        )
+    )
+    for f in filters:
+        priority_q = priority_q.filter(f)
+    by_priority = {r[0]: r[1] for r in priority_q.group_by(text("1")).all()}
 
-        if item.status == "open" and age > timedelta(days=14):
-            stale_count += 1
+    category_q = (
+        db.query(
+            sa_func.coalesce(DeferredItem.category, literal_column("'other'")).label("category"),
+            sa_func.count(DeferredItem.id),
+        )
+    )
+    for f in filters:
+        category_q = category_q.filter(f)
+    by_category = {r[0]: r[1] for r in category_q.group_by(text("1")).all()}
+
+    age_q = db.query(
+        sa_func.count(DeferredItem.id).filter(DeferredItem.created_at >= cutoff_7d).label("d0_7"),
+        sa_func.count(DeferredItem.id).filter(
+            DeferredItem.created_at >= cutoff_14d,
+            DeferredItem.created_at < cutoff_7d,
+        ).label("d7_14"),
+        sa_func.count(DeferredItem.id).filter(
+            DeferredItem.created_at >= cutoff_30d,
+            DeferredItem.created_at < cutoff_14d,
+        ).label("d14_30"),
+        sa_func.count(DeferredItem.id).filter(DeferredItem.created_at < cutoff_30d).label("d30plus"),
+        sa_func.count(DeferredItem.id).filter(
+            DeferredItem.status == "open",
+            DeferredItem.created_at < cutoff_14d,
+        ).label("stale"),
+    )
+    for f in filters:
+        age_q = age_q.filter(f)
+    age_row = age_q.one()
 
     return {
-        "total": len(items),
+        "total": total,
         "by_status": by_status,
         "by_priority": by_priority,
         "by_category": by_category,
-        "age_histogram": age_bins,
-        "stale_candidates": stale_count,
+        "age_histogram": {
+            "0-7d": age_row.d0_7 or 0,
+            "7-14d": age_row.d7_14 or 0,
+            "14-30d": age_row.d14_30 or 0,
+            "30+d": age_row.d30plus or 0,
+        },
+        "stale_candidates": age_row.stale or 0,
     }
 
 

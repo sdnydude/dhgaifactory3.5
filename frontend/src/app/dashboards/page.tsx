@@ -17,6 +17,8 @@ import { LangGraphPanel } from "@/components/dashboards/langgraph-panel";
 import { CmePipelinePanel } from "@/components/dashboards/cme-pipeline-panel";
 import { ServiceLayerPanel } from "@/components/dashboards/service-layer-panel";
 import { ExternalRefsPanel } from "@/components/dashboards/external-refs-panel";
+import { FeedbackLoopPanel } from "@/components/dashboards/feedback-loop-panel";
+import { DeferredIntelligencePanel } from "@/components/dashboards/deferred-intelligence-panel";
 
 export default function DashboardsPage() {
   const [t, setT] = useState<Telemetry>(EMPTY);
@@ -124,6 +126,8 @@ export default function DashboardsPage() {
         <LangGraphPanel t={t} />
         <CmePipelinePanel t={t} />
         <ServiceLayerPanel t={t} />
+        <FeedbackLoopPanel t={t} />
+        <DeferredIntelligencePanel t={t} />
         <ExternalRefsPanel />
       </main>
 

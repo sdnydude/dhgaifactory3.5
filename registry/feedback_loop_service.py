@@ -41,20 +41,18 @@ def feedback_loop_health(
     healthy_count = 0
 
     for type_name, model in MEMREG_TYPES:
-        q_total = db.query(sa_func.count(model.id))
-        q_7d = db.query(
-            sa_func.count(model.id),
-            sa_func.max(model.created_at),
-        ).filter(model.created_at >= cutoff_7d)
-
+        q = db.query(
+            sa_func.count(model.id).label("total"),
+            sa_func.count(model.id).filter(model.created_at >= cutoff_7d).label("count_7d"),
+            sa_func.max(model.created_at).label("last_ever"),
+        )
         if project_name:
-            q_total = q_total.filter(model.project_name == project_name)
-            q_7d = q_7d.filter(model.project_name == project_name)
+            q = q.filter(model.project_name == project_name)
 
-        total = q_total.scalar() or 0
-        row_7d = q_7d.one()
-        count_7d = row_7d[0] or 0
-        last_capture = row_7d[1]
+        row = q.one()
+        total = row.total or 0
+        count_7d = row.count_7d or 0
+        last_capture = row.last_ever
 
         if count_7d > 0:
             healthy_count += 1

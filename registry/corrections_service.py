@@ -138,56 +138,64 @@ def correction_stats_enhanced(
     cutoff_30d = now - timedelta(days=30)
     cutoff_prev_7d = now - timedelta(days=14)
 
-    q = db.query(Correction)
+    filters = []
     if project_name:
-        q = q.filter(Correction.project_name == project_name)
+        filters.append(Correction.project_name == project_name)
 
-    all_corrections = q.order_by(Correction.created_at.desc()).all()
+    q = db.query(
+        Correction.category,
+        sa_func.count(Correction.id).label("count_all"),
+        sa_func.count(Correction.id).filter(Correction.created_at >= cutoff_7d).label("count_7d"),
+        sa_func.count(Correction.id).filter(Correction.created_at >= cutoff_30d).label("count_30d"),
+        sa_func.count(Correction.id).filter(
+            Correction.created_at >= cutoff_prev_7d,
+            Correction.created_at < cutoff_7d,
+        ).label("prev_7d"),
+        sa_func.max(Correction.created_at).label("most_recent"),
+    )
+    for f in filters:
+        q = q.filter(f)
+    rows = q.group_by(Correction.category).all()
 
-    categories: dict[str, dict] = {}
-    for c in all_corrections:
-        cat = c.category
-        if cat not in categories:
-            categories[cat] = {
-                "category": cat,
-                "count_7d": 0,
-                "count_30d": 0,
-                "count_all": 0,
-                "most_recent": None,
-                "most_recent_message": None,
-                "repeat_flag": False,
-                "trend": "stable",
-                "_prev_7d": 0,
-            }
-
-        entry = categories[cat]
-        entry["count_all"] += 1
-
-        created = c.created_at
-        if created.tzinfo is None:
-            from datetime import timezone as tz
-            created = created.replace(tzinfo=tz.utc)
-
-        if created >= cutoff_30d:
-            entry["count_30d"] += 1
-        if created >= cutoff_7d:
-            entry["count_7d"] += 1
-        if cutoff_prev_7d <= created < cutoff_7d:
-            entry["_prev_7d"] += 1
-
-        if entry["most_recent"] is None or created > entry["most_recent"]:
-            entry["most_recent"] = created
-            entry["most_recent_message"] = (c.user_message or "")[:200]
+    most_recent_msgs: dict[str, str] = {}
+    if rows:
+        cats_with_data = [r.category for r in rows if r.most_recent is not None]
+        if cats_with_data:
+            from sqlalchemy import tuple_
+            sub = db.query(
+                Correction.category,
+                sa_func.substring(Correction.user_message, 1, 200).label("msg"),
+            ).filter(
+                tuple_(Correction.category, Correction.created_at).in_(
+                    db.query(Correction.category, sa_func.max(Correction.created_at))
+                    .filter(Correction.category.in_(cats_with_data), *filters)
+                    .group_by(Correction.category)
+                )
+            ).all()
+            for s in sub:
+                most_recent_msgs[s.category] = s.msg or ""
 
     result = []
-    for entry in categories.values():
-        entry["repeat_flag"] = entry["count_7d"] > 2
-        prev = entry.pop("_prev_7d")
-        if entry["count_7d"] > prev:
-            entry["trend"] = "increasing"
-        elif entry["count_7d"] < prev:
-            entry["trend"] = "decreasing"
-        result.append(entry)
+    for r in rows:
+        count_7d = r.count_7d or 0
+        prev = r.prev_7d or 0
+        if count_7d > prev:
+            trend = "increasing"
+        elif count_7d < prev:
+            trend = "decreasing"
+        else:
+            trend = "stable"
+
+        result.append({
+            "category": r.category,
+            "count_7d": count_7d,
+            "count_30d": r.count_30d or 0,
+            "count_all": r.count_all or 0,
+            "most_recent": r.most_recent,
+            "most_recent_message": most_recent_msgs.get(r.category),
+            "repeat_flag": count_7d > 2,
+            "trend": trend,
+        })
 
     result.sort(key=lambda x: x["count_7d"], reverse=True)
 

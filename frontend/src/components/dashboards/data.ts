@@ -4,6 +4,9 @@ import type {
   PromTarget,
   CmePipelineStats,
   CmeServiceStats,
+  CorrectionStats,
+  FeedbackLoopHealth,
+  DeferredItemStats,
   LgTopNode,
   Telemetry,
 } from "./types";
@@ -40,6 +43,9 @@ export const EMPTY: Telemetry = {
   regReqRateSpark: [],
   regLatencySpark: [],
   nodeLoadSpark: [],
+  correctionStats: null,
+  feedbackHealth: null,
+  deferredStats: null,
   lastUpdated: null,
   reachable: true,
 };
@@ -227,6 +233,9 @@ export async function fetchTelemetry(): Promise<Telemetry> {
     lgCallsMatrix,
     cmePipelineRaw,
     cmeServicesRaw,
+    correctionStatsRaw,
+    feedbackHealthRaw,
+    deferredStatsRaw,
   ] = await Promise.all([
     fetchTargets(),
     fetchAlerts(),
@@ -271,6 +280,9 @@ export async function fetchTelemetry(): Promise<Telemetry> {
     ),
     fetchRegistryJson<CmePipelineStats>("/api/cme/stats/pipeline"),
     fetchRegistryJson<CmeServiceStats>("/api/cme/stats/services"),
+    fetchRegistryJson<CorrectionStats>("/api/corrections/stats"),
+    fetchRegistryJson<FeedbackLoopHealth>("/api/feedback-loop/health"),
+    fetchRegistryJson<DeferredItemStats>("/api/deferred-items/stats"),
   ]);
 
   const reachable = targets !== null;
@@ -308,6 +320,9 @@ export async function fetchTelemetry(): Promise<Telemetry> {
     regReqRateSpark: toSpark(regReqMatrix),
     regLatencySpark: toSpark(regLatMatrix),
     nodeLoadSpark: toSpark(loadMatrix),
+    correctionStats: correctionStatsRaw,
+    feedbackHealth: feedbackHealthRaw,
+    deferredStats: deferredStatsRaw,
     lastUpdated: new Date(),
     reachable,
   };
