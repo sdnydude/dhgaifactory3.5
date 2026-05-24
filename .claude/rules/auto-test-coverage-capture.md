@@ -1,14 +1,21 @@
 # Auto-capture test coverage changes to registry
 
-After any work that **adds, removes, or modifies test files**, immediately post a test coverage change event to the registry.
+After any work that **adds, removes, or modifies test files**, immediately post a test coverage change event to the registry. This rule has historically been under-fired — be aggressive about triggering it.
 
 ## When to trigger
 
-- After any commit that adds, removes, or modifies test files (files matching `test_*.py`, `*_test.py`, `*.spec.ts`, `*.test.ts`, `__tests__/`)
+- **After ANY commit** that touches files matching `test_*.py`, `*_test.py`, `*.spec.ts`, `*.test.ts`, `__tests__/`
 - After a `/ship` build phase that includes test changes
 - After a code health review that changes test counts
 - After a bug fix that adds regression tests
 - After a new feature that includes test coverage
+- **After running pytest or vitest** and observing the test count — if the count differs from the last known baseline, fire
+
+**Self-check:** Before committing, scan staged files for test patterns. If any match, fire this rule.
+
+**Baseline counts (update after each capture):**
+- Registry: 514 tests (as of 2026-05-22)
+- Frontend: check via `npm --prefix frontend run test -- --reporter=verbose 2>&1 | tail -5`
 
 ## When NOT to trigger
 

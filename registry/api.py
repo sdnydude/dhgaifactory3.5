@@ -209,6 +209,7 @@ from bug_fixes_endpoints import router as bug_fixes_router
 from deferred_items_endpoints import router as deferred_items_router
 from test_coverage_endpoints import router as test_coverage_router
 from cme_stats_endpoints import router as cme_stats_router
+from feedback_loop_endpoints import router as feedback_loop_router
 
 # Include routers
 app.include_router(agent_router)
@@ -238,6 +239,7 @@ app.include_router(bug_fixes_router)
 app.include_router(deferred_items_router)
 app.include_router(test_coverage_router)
 app.include_router(cme_stats_router)
+app.include_router(feedback_loop_router)
 
 # Add CORS middleware — locked to production origin + localhost for development
 ALLOWED_ORIGINS = [

@@ -4,6 +4,8 @@ Routes:
   POST   /api/deferred-items              capture a deferred item
   GET    /api/deferred-items              list with filters (project/category/priority/status/limit/offset)
   POST   /api/deferred-items/search       full-text search across deferred items
+  GET    /api/deferred-items/stats        aggregate stats (status/priority/category/age distributions)
+  PATCH  /api/deferred-items/{item_id}    update status/priority with optional resolution reason
   DELETE /api/deferred-items/{item_id}    delete a deferred item record
 """
 import time
@@ -20,6 +22,8 @@ from deferred_items_schemas import (
     DeferredItemResponse,
     DeferredItemList,
     DeferredItemSearch,
+    DeferredItemUpdate,
+    DeferredItemStatsResponse,
     VALID_PRIORITIES,
     VALID_CATEGORIES,
     VALID_STATUSES,
@@ -135,6 +139,60 @@ async def search_deferred_items(
     except Exception as e:
         registry_errors.labels(error_type="search_deferred_items_failed").inc()
         logger.error("%s failed: %s", "deferred_items_op", e)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/stats", response_model=DeferredItemStatsResponse)
+async def deferred_item_stats(
+    project_name: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Aggregate stats: status/priority/category distributions, age histogram, stale count."""
+    start = time.time()
+    try:
+        result = svc.deferred_item_stats(db, project_name=project_name)
+
+        registry_read_operations.labels(operation="deferred_item_stats").inc()
+        registry_read_latency.observe((time.time() - start) * 1000)
+        return result
+    except Exception as e:
+        registry_errors.labels(error_type="deferred_item_stats_failed").inc()
+        logger.error("%s failed: %s", "deferred_items_op", e)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.patch("/{item_id}", response_model=DeferredItemResponse)
+async def update_deferred_item(
+    item_id: UUID,
+    payload: DeferredItemUpdate,
+    db: Session = Depends(get_db),
+):
+    """Update status/priority with optional resolution reason."""
+    start = time.time()
+    if payload.status is not None and payload.status not in VALID_STATUSES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid status '{payload.status}'. Valid: {sorted(VALID_STATUSES)}",
+        )
+    if payload.priority is not None and payload.priority not in VALID_PRIORITIES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid priority '{payload.priority}'. Valid: {sorted(VALID_PRIORITIES)}",
+        )
+    try:
+        row = svc.update_deferred_item(db, item_id, payload)
+        if not row:
+            raise HTTPException(status_code=404, detail="Not found")
+
+        registry_write_operations.labels(operation="update_deferred_item").inc()
+        registry_write_latency.observe((time.time() - start) * 1000)
+        return row
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        registry_errors.labels(error_type="update_deferred_item_failed").inc()
+        logger.error("update_deferred_item failed: %s", e)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
