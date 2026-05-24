@@ -25,6 +25,7 @@ from corrections_schemas import (
     CorrectionResponse,
     CorrectionList,
     CorrectionSearch,
+    CorrectionStatsEnhanced,
     VALID_CATEGORIES,
 )
 import corrections_service as svc
@@ -131,28 +132,19 @@ async def search_corrections(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.get("/stats")
+@router.get("/stats", response_model=CorrectionStatsEnhanced)
 async def correction_stats(
     project_name: Optional[str] = Query(None),
-    since_days: int = Query(7, ge=1, le=365),
     db: Session = Depends(get_db),
 ):
-    """Aggregate stats for briefing — total + per-category counts in last N days."""
+    """Enhanced stats: per-category counts (7d/30d/all), repeat flags, trends, top pattern."""
     start = time.time()
     try:
-        by_category = svc.correction_stats(
-            db, project_name=project_name, since_days=since_days,
-        )
-        total = sum(r["count"] for r in by_category)
+        result = svc.correction_stats_enhanced(db, project_name=project_name)
 
         registry_read_operations.labels(operation="correction_stats").inc()
         registry_read_latency.observe((time.time() - start) * 1000)
-        return {
-            "since_days": since_days,
-            "project_name": project_name,
-            "total": total,
-            "by_category": by_category,
-        }
+        return result
     except Exception as e:
         registry_errors.labels(error_type="correction_stats_failed").inc()
         logger.error("%s failed: %s", "corrections_op", e)

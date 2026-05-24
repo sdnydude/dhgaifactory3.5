@@ -83,3 +83,20 @@ class DeferredItemSearch(BaseModel):
     priority: Optional[str] = None
     status: Optional[str] = None
     limit: int = Field(default=10, ge=1, le=100)
+
+
+class DeferredItemUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Optional[str] = Field(default=None, max_length=20)
+    priority: Optional[str] = Field(default=None, max_length=20)
+    resolution_reason: Optional[str] = None
+
+
+class DeferredItemStatsResponse(BaseModel):
+    total: int
+    by_status: dict[str, int]
+    by_priority: dict[str, int]
+    by_category: dict[str, int]
+    age_histogram: dict[str, int]
+    stale_candidates: int

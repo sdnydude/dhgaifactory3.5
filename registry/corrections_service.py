@@ -128,6 +128,87 @@ def correction_stats(
     return [{"category": r.category, "count": r.count} for r in rows]
 
 
+def correction_stats_enhanced(
+    db: Session,
+    *,
+    project_name: str | None = None,
+) -> dict:
+    now = datetime.now(timezone.utc)
+    cutoff_7d = now - timedelta(days=7)
+    cutoff_30d = now - timedelta(days=30)
+    cutoff_prev_7d = now - timedelta(days=14)
+
+    q = db.query(Correction)
+    if project_name:
+        q = q.filter(Correction.project_name == project_name)
+
+    all_corrections = q.order_by(Correction.created_at.desc()).all()
+
+    categories: dict[str, dict] = {}
+    for c in all_corrections:
+        cat = c.category
+        if cat not in categories:
+            categories[cat] = {
+                "category": cat,
+                "count_7d": 0,
+                "count_30d": 0,
+                "count_all": 0,
+                "most_recent": None,
+                "most_recent_message": None,
+                "repeat_flag": False,
+                "trend": "stable",
+                "_prev_7d": 0,
+            }
+
+        entry = categories[cat]
+        entry["count_all"] += 1
+
+        created = c.created_at
+        if created.tzinfo is None:
+            from datetime import timezone as tz
+            created = created.replace(tzinfo=tz.utc)
+
+        if created >= cutoff_30d:
+            entry["count_30d"] += 1
+        if created >= cutoff_7d:
+            entry["count_7d"] += 1
+        if cutoff_prev_7d <= created < cutoff_7d:
+            entry["_prev_7d"] += 1
+
+        if entry["most_recent"] is None or created > entry["most_recent"]:
+            entry["most_recent"] = created
+            entry["most_recent_message"] = (c.user_message or "")[:200]
+
+    result = []
+    for entry in categories.values():
+        entry["repeat_flag"] = entry["count_7d"] > 2
+        prev = entry.pop("_prev_7d")
+        if entry["count_7d"] > prev:
+            entry["trend"] = "increasing"
+        elif entry["count_7d"] < prev:
+            entry["trend"] = "decreasing"
+        result.append(entry)
+
+    result.sort(key=lambda x: x["count_7d"], reverse=True)
+
+    total_7d = sum(e["count_7d"] for e in result)
+    total_30d = sum(e["count_30d"] for e in result)
+    total_all = sum(e["count_all"] for e in result)
+    active_repeats = [e["category"] for e in result if e["repeat_flag"]]
+    top = result[0] if result else None
+
+    return {
+        "total_7d": total_7d,
+        "total_30d": total_30d,
+        "total_all": total_all,
+        "categories": result,
+        "active_repeats": active_repeats,
+        "top_pattern": top["category"] if top and top["count_7d"] > 0 else None,
+        "top_pattern_count": top["count_7d"] if top else None,
+        "top_pattern_example": top["most_recent_message"] if top and top["count_7d"] > 0 else None,
+    }
+
+
 def delete_correction(db: Session, item_id: UUID) -> Correction | None:
     row = db.query(Correction).filter(Correction.id == item_id).first()
     if not row:

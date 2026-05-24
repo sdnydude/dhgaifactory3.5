@@ -62,3 +62,25 @@ class CorrectionSearch(BaseModel):
     project_name: Optional[str] = None
     category: Optional[str] = None
     limit: int = Field(default=10, ge=1, le=100)
+
+
+class CategoryStats(BaseModel):
+    category: str
+    count_7d: int
+    count_30d: int
+    count_all: int
+    most_recent: Optional[datetime] = None
+    most_recent_message: Optional[str] = None
+    repeat_flag: bool = False
+    trend: str = "stable"
+
+
+class CorrectionStatsEnhanced(BaseModel):
+    total_7d: int
+    total_30d: int
+    total_all: int
+    categories: list[CategoryStats]
+    active_repeats: list[str] = Field(default_factory=list)
+    top_pattern: Optional[str] = None
+    top_pattern_count: Optional[int] = None
+    top_pattern_example: Optional[str] = None
