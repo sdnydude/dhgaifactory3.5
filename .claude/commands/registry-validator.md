@@ -10,10 +10,9 @@ The user may have provided a domain name: $ARGUMENTS
 
 **If $ARGUMENTS is empty (no-args mode):**
 
-1. Run these two commands and combine their output, deduplicating any file that appears in both:
+1. Run this command to get all changed files, automatically deduplicated:
    ```bash
-   git diff --name-only HEAD 2>/dev/null
-   git diff --name-only 2>/dev/null
+   { git diff --name-only HEAD 2>/dev/null; git diff --name-only 2>/dev/null; } | sort -u
    ```
 2. Filter to files matching `registry/*.py`. Exclude files starting with `test_`.
 3. If no registry files remain, print this and stop:
@@ -35,7 +34,7 @@ The user may have provided a domain name: $ARGUMENTS
 
 For the domain being checked:
 
-1. **Read the schema file** (`registry/{domain}_schemas.py`). If the file does not exist, print `[WARN] No schema file for domain "{domain}" — Check 1 skipped` and proceed to Check 2 only. Otherwise, find all classes ending in `Response` (e.g., `InsightResponse`, `CorrectionResponse`). For each Response class, extract the list of field names (lines matching the pattern `field_name: type` or `field_name: Optional[type]` inside the class body).
+1. **Read the schema file** (`registry/{domain}_schemas.py`). If the file does not exist, print `[WARN] No schema file for domain "{domain}" — Check 1 skipped` and proceed to Check 2 only. Otherwise, find all classes ending in `Response` (e.g., `InsightResponse`, `CorrectionResponse`). For each Response class, extract the list of field names (lines matching the pattern `field_name: type` or `field_name: type = default` inside the class body — the field name is everything before the first colon).
 
 2. **Find the model class** in `registry/models.py`. Search for SQLAlchemy model classes related to this domain:
    - Grep for `class {Name}(Base):` where `Name` is the singular form of the domain (e.g., domain `insights` → class `Insight`, domain `corrections` → class `Correction`)
@@ -86,7 +85,7 @@ For the domain being checked:
 Print the report in this format. Order: `[FAIL]` first, then `[WARN]`, then `[ok]`.
 
 ```
-Registry Validation Report
+Registry Validation Report ({current date and time in ET})
 ==========================
 Scope: {describe scope — "git diff (N registry files)" or "domain: insights"}
 
