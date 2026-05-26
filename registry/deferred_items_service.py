@@ -195,16 +195,24 @@ def deferred_item_stats(
     by_category = {r[0]: r[1] for r in category_q.group_by(text("1")).all()}
 
     age_q = db.query(
-        sa_func.count(DeferredItem.id).filter(DeferredItem.created_at >= cutoff_7d).label("d0_7"),
         sa_func.count(DeferredItem.id).filter(
+            DeferredItem.status == "open",
+            DeferredItem.created_at >= cutoff_7d,
+        ).label("d0_7"),
+        sa_func.count(DeferredItem.id).filter(
+            DeferredItem.status == "open",
             DeferredItem.created_at >= cutoff_14d,
             DeferredItem.created_at < cutoff_7d,
         ).label("d7_14"),
         sa_func.count(DeferredItem.id).filter(
+            DeferredItem.status == "open",
             DeferredItem.created_at >= cutoff_30d,
             DeferredItem.created_at < cutoff_14d,
         ).label("d14_30"),
-        sa_func.count(DeferredItem.id).filter(DeferredItem.created_at < cutoff_30d).label("d30plus"),
+        sa_func.count(DeferredItem.id).filter(
+            DeferredItem.status == "open",
+            DeferredItem.created_at < cutoff_30d,
+        ).label("d30plus"),
         sa_func.count(DeferredItem.id).filter(
             DeferredItem.status == "open",
             DeferredItem.created_at < cutoff_14d,

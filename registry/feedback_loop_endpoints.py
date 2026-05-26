@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 import feedback_loop_service as svc
+from feedback_loop_schemas import FeedbackLoopHealthResponse
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ from metrics import (
 router = APIRouter(prefix="/api/feedback-loop", tags=["feedback-loop"])
 
 
-@router.get("/health")
+@router.get("/health", response_model=FeedbackLoopHealthResponse)
 async def feedback_loop_health(
     project_name: Optional[str] = Query(None),
     db: Session = Depends(get_db),
