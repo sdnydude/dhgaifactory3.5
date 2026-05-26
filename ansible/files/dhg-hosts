@@ -1,0 +1,58 @@
+# DHG LAN Hosts — managed by ansible/files/dhg-hosts
+# Install: sudo bash ansible/files/install-hosts.sh
+# Source: LAN scan 2026-05-19 (dhg lan devices.csv)
+
+# --- DHG Servers ---
+10.0.0.251    g700data1 g700data1.local
+10.0.0.179    dh40801 dh40801.local
+10.0.0.54     dhg5090 DHG5090
+
+# --- Workstations ---
+10.0.0.235    dudem3 macbook stephens-macbook-pro Stephen's-MacBook-Pro.local
+10.0.0.80     jason jj JJ.local
+10.0.0.11     fafaudiodesk FAFaudiodesk.local
+
+# --- Network Infrastructure ---
+10.0.0.1      gateway GT-BE98_Pro-5B28.local
+10.0.0.4      sidecar-switch Sidecar-4250-12-port-1gb.local
+10.0.0.7      livingroom-switch Living-room-4250-12.local
+10.0.0.87     rt-be92u RT-BE92U-DF00.local
+10.0.0.96     netgear-96
+10.0.0.133    studiodesk-switch Studiodesk-apollo-rack-netgear-4250-24-1gb-sec.local
+
+# --- IoT / Shenzhen Bilian (likely APs or smart devices) ---
+10.0.0.2      bilian-02
+10.0.0.40     bilian-40
+
+# --- Mobile Devices ---
+10.0.0.52     ipad iPad.local
+10.0.0.77     srw-iphone Srw-iphone-17-orange.local
+10.0.0.116    eleanors-ipad Eleanors-iPad-9.local
+10.0.0.193    eof-iphone EoF-iPhone.local
+
+# --- Media / AV ---
+10.0.0.55     sony-tv Android-2.local
+10.0.0.57     ip-module IP-module-4919.local
+10.0.0.187    dante-device
+10.0.0.196    apple-tv Home-Theater-3.local
+10.0.0.210    samsung-tv Samsung.local
+
+# --- Sonos ---
+10.0.0.60     sonos-move Sonos-F0F6C15F73B4.local
+10.0.0.68     sonos-arc Sonos-38420BE111E4.local
+10.0.0.123    sonos-one-1 Sonos-7828CA1243D8.local
+10.0.0.161    sonos-5caa-1 Sonos-5CAAFD5B619E.local
+10.0.0.171    sonos-5caa-2 Sonos-5CAAFD5B61A8.local
+10.0.0.224    sonos-one-2 Sonos-7828CAC541B6.local
+10.0.0.234    sonos-beam Sonos-347E5C94BC99.local
+10.0.0.248    sonos-949f Sonos-949F3E48D114.local
+
+# --- Smart Home ---
+10.0.0.163    amazon-echo 10-0-0-163.local
+10.0.0.194    hue-bridge ecb5faa2e537.local
+10.0.0.205    printer NPI6F59F8.local
+
+# --- Unidentified ---
+10.0.0.45     unknown-45
+10.0.0.199    unknown-199
+10.0.0.236    unknown-236
