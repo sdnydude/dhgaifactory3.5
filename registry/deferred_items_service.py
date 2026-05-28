@@ -55,6 +55,9 @@ def upsert_deferred_item(
     return row, True
 
 
+VALID_SORTS = {"created_at_desc", "created_at_asc"}
+
+
 def list_deferred_items(
     db: Session,
     *,
@@ -64,7 +67,20 @@ def list_deferred_items(
     status_filter: str | None = None,
     limit: int = 20,
     offset: int = 0,
+    sort: str = "created_at_desc",
+    min_age_days: int | None = None,
+    last_surfaced_before_hours: int | None = None,
 ) -> tuple[list[DeferredItem], int]:
+    """List deferred items with filters and sort.
+
+    Default sort is created_at DESC (newest first) for backward compatibility.
+    Pass sort="created_at_asc" to surface oldest open items — the briefing
+    materialization uses this to recall items that fell behind the limit window.
+
+    Pass min_age_days=N to filter for items older than N days. Pass
+    last_surfaced_before_hours=H to filter for items not surfaced in the
+    last H hours (or never surfaced — NULL last_surfaced_at qualifies).
+    """
     query = db.query(DeferredItem)
     if project_name:
         query = query.filter(DeferredItem.project_name == project_name)
@@ -74,16 +90,42 @@ def list_deferred_items(
         query = query.filter(DeferredItem.priority == priority)
     if status_filter:
         query = query.filter(DeferredItem.status == status_filter)
+    if min_age_days is not None:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=min_age_days)
+        query = query.filter(DeferredItem.created_at <= cutoff)
+    if last_surfaced_before_hours is not None:
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=last_surfaced_before_hours)
+        query = query.filter(
+            (DeferredItem.last_surfaced_at.is_(None)) |
+            (DeferredItem.last_surfaced_at <= cutoff)
+        )
 
     total = query.count()
+
+    if sort == "created_at_asc":
+        ordering = DeferredItem.created_at.asc()
+    else:
+        ordering = DeferredItem.created_at.desc()
+
     rows = (
         query
-        .order_by(DeferredItem.created_at.desc())
+        .order_by(ordering)
         .offset(offset)
         .limit(limit)
         .all()
     )
     return rows, total
+
+
+def mark_surfaced(db: Session, item_id: UUID) -> DeferredItem | None:
+    """Set last_surfaced_at = now(). Called when the daemon includes an item in a briefing."""
+    row = db.query(DeferredItem).filter(DeferredItem.id == item_id).first()
+    if not row:
+        return None
+    row.last_surfaced_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(row)
+    return row
 
 
 def search_deferred_items(

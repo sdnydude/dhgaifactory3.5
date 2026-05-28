@@ -53,6 +53,7 @@ def _mock_row(**overrides):
         meta_data=None,
         created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         updated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        last_surfaced_at=None,
     )
     defaults.update(overrides)
     row = MagicMock()
@@ -261,6 +262,100 @@ class TestDeferredItemDelete:
 
 
 # ---------------------------------------------------------------------------
+# SORT + STALENESS (mock-based — verifies endpoint passes new params to service)
+# ---------------------------------------------------------------------------
+
+
+class TestDeferredItemSortAndStaleness:
+    """Verify the endpoint passes the new sort/age/last_surfaced params through to svc.
+
+    Real SQL behavior is covered by the integration tests below; these check
+    only that the endpoint signature accepts the new query params and forwards
+    them correctly. Added 2026-05-28 as the registry-side fix for the
+    'lost deferred items' bug — see migration 026 and the daemon's Step 6/8.
+    """
+
+    @patch("deferred_items_endpoints.svc")
+    def test_default_sort_is_created_at_desc(self, mock_svc, client):
+        mock_svc.list_deferred_items.return_value = ([], 0)
+        r = client.get("/api/deferred-items")
+        assert r.status_code == 200
+        kwargs = mock_svc.list_deferred_items.call_args.kwargs
+        assert kwargs["sort"] == "created_at_desc"
+
+    @patch("deferred_items_endpoints.svc")
+    def test_sort_created_at_asc_forwarded(self, mock_svc, client):
+        mock_svc.list_deferred_items.return_value = ([], 0)
+        r = client.get("/api/deferred-items?sort=created_at_asc")
+        assert r.status_code == 200
+        kwargs = mock_svc.list_deferred_items.call_args.kwargs
+        assert kwargs["sort"] == "created_at_asc"
+
+    def test_invalid_sort_value_returns_422(self, client):
+        r = client.get("/api/deferred-items?sort=random_order")
+        assert r.status_code == 422
+
+    @patch("deferred_items_endpoints.svc")
+    def test_min_age_days_forwarded(self, mock_svc, client):
+        mock_svc.list_deferred_items.return_value = ([], 0)
+        r = client.get("/api/deferred-items?min_age_days=7")
+        assert r.status_code == 200
+        kwargs = mock_svc.list_deferred_items.call_args.kwargs
+        assert kwargs["min_age_days"] == 7
+
+    @patch("deferred_items_endpoints.svc")
+    def test_last_surfaced_before_hours_forwarded(self, mock_svc, client):
+        mock_svc.list_deferred_items.return_value = ([], 0)
+        r = client.get("/api/deferred-items?last_surfaced_before_hours=24")
+        assert r.status_code == 200
+        kwargs = mock_svc.list_deferred_items.call_args.kwargs
+        assert kwargs["last_surfaced_before_hours"] == 24
+
+    def test_min_age_days_must_be_non_negative(self, client):
+        r = client.get("/api/deferred-items?min_age_days=-1")
+        assert r.status_code == 422
+
+    @patch("deferred_items_endpoints.svc")
+    def test_briefing_query_combination(self, mock_svc, client):
+        """The exact query the daemon's Step 6/8 will issue."""
+        mock_svc.list_deferred_items.return_value = ([], 0)
+        r = client.get(
+            "/api/deferred-items?project_name=dhg-ai-factory"
+            "&status=open&priority=high"
+            "&sort=created_at_asc"
+            "&last_surfaced_before_hours=24"
+            "&limit=5"
+        )
+        assert r.status_code == 200
+        kwargs = mock_svc.list_deferred_items.call_args.kwargs
+        assert kwargs["project_name"] == "dhg-ai-factory"
+        assert kwargs["status_filter"] == "open"
+        assert kwargs["priority"] == "high"
+        assert kwargs["sort"] == "created_at_asc"
+        assert kwargs["last_surfaced_before_hours"] == 24
+        assert kwargs["limit"] == 5
+
+
+class TestDeferredItemMarkSurfaced:
+    @patch("deferred_items_endpoints.svc")
+    def test_mark_surfaced_returns_200_with_updated_row(self, mock_svc, client):
+        row = _mock_row(last_surfaced_at=datetime(2026, 5, 28, tzinfo=timezone.utc))
+        mock_svc.mark_surfaced.return_value = row
+        r = client.post(f"/api/deferred-items/{row.id}/surfaced")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["last_surfaced_at"] is not None
+        mock_svc.mark_surfaced.assert_called_once()
+
+    @patch("deferred_items_endpoints.svc")
+    def test_mark_surfaced_unknown_id_returns_404(self, mock_svc, client):
+        mock_svc.mark_surfaced.return_value = None
+        fake_id = uuid.uuid4()
+        r = client.post(f"/api/deferred-items/{fake_id}/surfaced")
+        assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
 # INTEGRATION (real DB, skipped when unreachable)
 # ---------------------------------------------------------------------------
 
@@ -443,3 +538,45 @@ class TestDeferredItemIntegration:
             client.delete(f"/api/deferred-items/{body['id']}")
         finally:
             self._cleanup(SessionLocal, title)
+
+    def test_stats_age_histogram_counts_open_only(self, real_client):
+        """Age histogram buckets must count only open items, not resolved."""
+        client, SessionLocal = real_client
+        unique_suffix = uuid.uuid4().hex[:8]
+        project_name = f"pytest-di-stats-{unique_suffix}"
+        title_open = f"pytest-di-stats-open-{unique_suffix}"
+        title_resolved = f"pytest-di-stats-resolved-{unique_suffix}"
+
+        try:
+            for title, status in [
+                (title_open, "open"),
+                (title_resolved, "resolved"),
+            ]:
+                r = client.post("/api/deferred-items", json={
+                    "title": title,
+                    "description": "Stats test item",
+                    "reason": "Testing age histogram filter",
+                    "priority": "medium",
+                    "category": "testing",
+                    "status": status,
+                    "project_name": project_name,
+                    "tags": ["pytest", "stats"],
+                })
+                assert r.status_code == 201, r.text
+
+            r_stats = client.get(
+                f"/api/deferred-items/stats?project_name={project_name}"
+            )
+            assert r_stats.status_code == 200
+            stats = r_stats.json()
+
+            assert stats["total"] == 2
+            assert stats["by_status"]["open"] == 1
+            assert stats["by_status"]["resolved"] == 1
+
+            histogram_total = sum(stats["age_histogram"].values())
+            assert histogram_total == 1, (
+                f"Age histogram should count only open items (1), got {histogram_total}"
+            )
+        finally:
+            self._cleanup(SessionLocal, title_open, title_resolved)

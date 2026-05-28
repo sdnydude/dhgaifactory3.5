@@ -67,6 +67,7 @@ class DeferredItemResponse(BaseModel):
     meta_data: Optional[dict[str, Any]]
     created_at: datetime
     updated_at: datetime
+    last_surfaced_at: Optional[datetime] = None
 
 
 class DeferredItemList(BaseModel):

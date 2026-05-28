@@ -100,6 +100,9 @@ async def list_deferred_items(
     status_filter: Optional[str] = Query(None, alias="status"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    sort: str = Query("created_at_desc", pattern="^(created_at_desc|created_at_asc)$"),
+    min_age_days: Optional[int] = Query(None, ge=0),
+    last_surfaced_before_hours: Optional[int] = Query(None, ge=0),
     db: Session = Depends(get_db),
 ) -> DeferredItemList:
     start = time.time()
@@ -108,6 +111,9 @@ async def list_deferred_items(
             db, project_name=project_name, category=category,
             priority=priority, status_filter=status_filter,
             limit=limit, offset=offset,
+            sort=sort,
+            min_age_days=min_age_days,
+            last_surfaced_before_hours=last_surfaced_before_hours,
         )
 
         registry_read_operations.labels(operation="list_deferred_items").inc()
@@ -193,6 +199,31 @@ async def update_deferred_item(
         db.rollback()
         registry_errors.labels(error_type="update_deferred_item_failed").inc()
         logger.error("update_deferred_item failed: %s", e)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/{item_id}/surfaced", response_model=DeferredItemResponse)
+async def mark_surfaced(
+    item_id: UUID,
+    db: Session = Depends(get_db),
+):
+    """Bump last_surfaced_at to now(). Called by the daemon when an item is included
+    in a materialized briefing — lets future queries filter out recently-surfaced
+    items via last_surfaced_before_hours."""
+    start = time.time()
+    try:
+        row = svc.mark_surfaced(db, item_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Not found")
+        registry_write_operations.labels(operation="mark_surfaced").inc()
+        registry_write_latency.observe((time.time() - start) * 1000)
+        return row
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        registry_errors.labels(error_type="mark_surfaced_failed").inc()
+        logger.error("mark_surfaced failed: %s", e)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 

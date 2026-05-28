@@ -1463,6 +1463,7 @@ class DeferredItem(Base):
 
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+    last_surfaced_at = Column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         UniqueConstraint("project_name", "title", name="uq_deferred_items_project_title"),
@@ -1472,6 +1473,7 @@ class DeferredItem(Base):
         Index("ix_deferred_items_created", "created_at"),
         Index("ix_deferred_items_tags", "tags", postgresql_using="gin"),
         Index("ix_deferred_items_search", "search_vector", postgresql_using="gin"),
+        Index("ix_deferred_items_status_priority_created", "status", "priority", "created_at"),
     )
 
 
