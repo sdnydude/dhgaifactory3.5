@@ -24,7 +24,7 @@ Additionally:
 
 ## Solution
 
-A Python polling daemon that watches Claude Code session transcript growth and runs a 9-step sweep when activity crosses a configurable token threshold. The daemon runs as the main process in the existing `dhg-memreg` Docker container.
+A Python polling daemon that watches Claude Code session transcript token growth and runs a 9-step sweep when activity crosses a configurable token threshold. The daemon runs as the main process in the existing `dhg-memreg` Docker container.
 
 ---
 
@@ -33,15 +33,21 @@ A Python polling daemon that watches Claude Code session transcript growth and r
 ```
 ~/.claude/projects/<slug>/<session>.jsonl
      ↓ poll every 30s
-daemon tracks file sizes per active session
-     ↓ cumulative growth ≥ 500KB since last sweep
-SWEEP fires (steps 1-9)
+daemon reads new JSONL lines since last poll
+     ↓ extract text from human/assistant messages
+     ↓ tokenize via tiktoken (cl100k_base encoding)
+     ↓ accumulate per-session token count
+     ↓ when cumulative ≥ 100K tokens since last sweep
+SWEEP fires (steps 1-9), per-session counter resets
 ```
 
 - No file watchers (proven unreliable — CodeGraph watcher bug).
-- Pure polling + size-based threshold.
-- Threshold configurable via `SWEEP_THRESHOLD_BYTES` env var (default: 512000).
-- Per-session baselines persisted to `~/.claude/run/memreg-sweep-state.json` so daemon restarts don't reset tracking.
+- Pure polling + token-based threshold.
+- Threshold configurable via `SWEEP_THRESHOLD_TOKENS` env var (default: 100000).
+- Tokenizer: tiktoken `cl100k_base` — closest local approximation to Claude's tokenizer. Documented choice; do not change without re-tuning the threshold.
+- Incremental counting: poller stores last-parsed byte offset (always at a newline boundary) and only tokenizes new bytes since last check. Avoids re-parsing the full transcript every 30s.
+- Per-session baselines persisted to `~/.claude/run/memreg-sweep-state.json` via atomic temp-file + `os.replace()` (crash-safe).
+- On restart, daemon honors existing offsets rather than re-baselining — prevents crash-loops from resetting threshold progress.
 - On first run with no state file, current sizes become baseline (no-fire first pass).
 
 ### Compaction handling
@@ -203,9 +209,10 @@ dhg-memreg-agent:
     - /home/swebber64/.claude:/home/swebber64/.claude
     - /home/swebber64/DHG:/home/swebber64/DHG
   restart: unless-stopped
+  user: "1000:1000"  # match host swebber64 UID — files in volumes are owned by host user
   environment:
     - REGISTRY_URL=http://10.0.0.251:8011
-    - SWEEP_THRESHOLD_BYTES=512000
+    - SWEEP_THRESHOLD_TOKENS=100000
     - DLQ_MAX_AGE_DAYS=7
     - DLQ_MAX_ENTRIES=1000
 ```
@@ -292,7 +299,7 @@ All configurable via environment variables:
 | Var | Default | Purpose |
 |-----|---------|---------|
 | `REGISTRY_URL` | `http://10.0.0.251:8011` | Registry API base URL |
-| `SWEEP_THRESHOLD_BYTES` | `512000` | Transcript growth threshold to trigger sweep (~100K tokens) |
+| `SWEEP_THRESHOLD_TOKENS` | `100000` | Token growth threshold to trigger sweep (tiktoken cl100k_base) |
 | `SWEEP_INTERVAL_SECONDS` | `30` | How often to poll transcript sizes |
 | `SWEEP_TIMEOUT_SECONDS` | `180` | Max total sweep duration before abandoning |
 | `DLQ_MAX_AGE_DAYS` | `7` | Drop DLQ entries older than this |
