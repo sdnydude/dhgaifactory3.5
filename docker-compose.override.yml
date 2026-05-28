@@ -352,9 +352,10 @@ services:
       - /home/swebber64/.claude:/home/swebber64/.claude
       - /home/swebber64/DHG:/home/swebber64/DHG
     restart: unless-stopped
+    mem_limit: 256m
     environment:
       - REGISTRY_URL=http://10.0.0.251:8011
-      - SWEEP_THRESHOLD_TOKENS=100000
+      - SWEEP_THRESHOLD_TOKENS=10000
       - SWEEP_INTERVAL_SECONDS=30
       - SWEEP_TIMEOUT_SECONDS=180
       - DLQ_MAX_AGE_DAYS=7
