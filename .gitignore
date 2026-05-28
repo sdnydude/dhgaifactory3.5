@@ -78,6 +78,7 @@ swincoming/
 # Claude Code / agent state
 .claude/scheduled_tasks.lock
 .claude/worktrees/
+.claude/rules/00-daemon-live-briefing.md
 .worktrees/
 .superpowers/
 .playwright-mcp/
