@@ -262,97 +262,28 @@ class TestDeferredItemDelete:
 
 
 # ---------------------------------------------------------------------------
-# SORT + STALENESS (mock-based — verifies endpoint passes new params to service)
+# REQUEST VALIDATION (parameter validation — no service stubbing needed)
 # ---------------------------------------------------------------------------
 
 
-class TestDeferredItemSortAndStaleness:
-    """Verify the endpoint passes the new sort/age/last_surfaced params through to svc.
+class TestDeferredItemRequestValidation:
+    """422 cases for the new query params (Task 0 of memreg-daemon plan).
 
-    Real SQL behavior is covered by the integration tests below; these check
-    only that the endpoint signature accepts the new query params and forwards
-    them correctly. Added 2026-05-28 as the registry-side fix for the
-    'lost deferred items' bug — see migration 026 and the daemon's Step 6/8.
+    These only exercise FastAPI's request validation — no service or DB call.
+    Real sort/staleness behavior is in TestDeferredItemIntegration below.
     """
-
-    @patch("deferred_items_endpoints.svc")
-    def test_default_sort_is_created_at_desc(self, mock_svc, client):
-        mock_svc.list_deferred_items.return_value = ([], 0)
-        r = client.get("/api/deferred-items")
-        assert r.status_code == 200
-        kwargs = mock_svc.list_deferred_items.call_args.kwargs
-        assert kwargs["sort"] == "created_at_desc"
-
-    @patch("deferred_items_endpoints.svc")
-    def test_sort_created_at_asc_forwarded(self, mock_svc, client):
-        mock_svc.list_deferred_items.return_value = ([], 0)
-        r = client.get("/api/deferred-items?sort=created_at_asc")
-        assert r.status_code == 200
-        kwargs = mock_svc.list_deferred_items.call_args.kwargs
-        assert kwargs["sort"] == "created_at_asc"
 
     def test_invalid_sort_value_returns_422(self, client):
         r = client.get("/api/deferred-items?sort=random_order")
         assert r.status_code == 422
 
-    @patch("deferred_items_endpoints.svc")
-    def test_min_age_days_forwarded(self, mock_svc, client):
-        mock_svc.list_deferred_items.return_value = ([], 0)
-        r = client.get("/api/deferred-items?min_age_days=7")
-        assert r.status_code == 200
-        kwargs = mock_svc.list_deferred_items.call_args.kwargs
-        assert kwargs["min_age_days"] == 7
-
-    @patch("deferred_items_endpoints.svc")
-    def test_last_surfaced_before_hours_forwarded(self, mock_svc, client):
-        mock_svc.list_deferred_items.return_value = ([], 0)
-        r = client.get("/api/deferred-items?last_surfaced_before_hours=24")
-        assert r.status_code == 200
-        kwargs = mock_svc.list_deferred_items.call_args.kwargs
-        assert kwargs["last_surfaced_before_hours"] == 24
-
     def test_min_age_days_must_be_non_negative(self, client):
         r = client.get("/api/deferred-items?min_age_days=-1")
         assert r.status_code == 422
 
-    @patch("deferred_items_endpoints.svc")
-    def test_briefing_query_combination(self, mock_svc, client):
-        """The exact query the daemon's Step 6/8 will issue."""
-        mock_svc.list_deferred_items.return_value = ([], 0)
-        r = client.get(
-            "/api/deferred-items?project_name=dhg-ai-factory"
-            "&status=open&priority=high"
-            "&sort=created_at_asc"
-            "&last_surfaced_before_hours=24"
-            "&limit=5"
-        )
-        assert r.status_code == 200
-        kwargs = mock_svc.list_deferred_items.call_args.kwargs
-        assert kwargs["project_name"] == "dhg-ai-factory"
-        assert kwargs["status_filter"] == "open"
-        assert kwargs["priority"] == "high"
-        assert kwargs["sort"] == "created_at_asc"
-        assert kwargs["last_surfaced_before_hours"] == 24
-        assert kwargs["limit"] == 5
-
-
-class TestDeferredItemMarkSurfaced:
-    @patch("deferred_items_endpoints.svc")
-    def test_mark_surfaced_returns_200_with_updated_row(self, mock_svc, client):
-        row = _mock_row(last_surfaced_at=datetime(2026, 5, 28, tzinfo=timezone.utc))
-        mock_svc.mark_surfaced.return_value = row
-        r = client.post(f"/api/deferred-items/{row.id}/surfaced")
-        assert r.status_code == 200
-        body = r.json()
-        assert body["last_surfaced_at"] is not None
-        mock_svc.mark_surfaced.assert_called_once()
-
-    @patch("deferred_items_endpoints.svc")
-    def test_mark_surfaced_unknown_id_returns_404(self, mock_svc, client):
-        mock_svc.mark_surfaced.return_value = None
-        fake_id = uuid.uuid4()
-        r = client.post(f"/api/deferred-items/{fake_id}/surfaced")
-        assert r.status_code == 404
+    def test_last_surfaced_before_hours_must_be_non_negative(self, client):
+        r = client.get("/api/deferred-items?last_surfaced_before_hours=-1")
+        assert r.status_code == 422
 
 
 # ---------------------------------------------------------------------------
@@ -580,3 +511,179 @@ class TestDeferredItemIntegration:
             )
         finally:
             self._cleanup(SessionLocal, title_open, title_resolved)
+
+    # -----------------------------------------------------------------------
+    # Task 0 (memreg-daemon): sort + last_surfaced_at behavior against real DB
+    # -----------------------------------------------------------------------
+
+    def _seed_with_created_at(self, SessionLocal, *, title, project_name, age_days):
+        """Insert a deferred item with a backdated created_at."""
+        from datetime import datetime, timezone, timedelta
+        from models import DeferredItem
+        import uuid as _uuid
+        db = SessionLocal()
+        try:
+            row = DeferredItem(
+                id=_uuid.uuid4(),
+                title=title,
+                description="Sort/staleness integration test",
+                reason="Testing Task 0",
+                priority="high",
+                category="testing",
+                status="open",
+                project_name=project_name,
+                tags=["pytest", "task-0"],
+                created_at=datetime.now(timezone.utc) - timedelta(days=age_days),
+            )
+            db.add(row)
+            db.commit()
+            db.refresh(row)
+            return str(row.id)
+        finally:
+            db.close()
+
+    def test_sort_created_at_asc_returns_oldest_first(self, real_client):
+        """The whole point of Task 0: oldest open items must come first when sort=asc."""
+        client, SessionLocal = real_client
+        suffix = uuid.uuid4().hex[:8]
+        project = f"pytest-di-sort-{suffix}"
+        titles = [
+            f"pytest-di-sort-old-{suffix}",
+            f"pytest-di-sort-mid-{suffix}",
+            f"pytest-di-sort-new-{suffix}",
+        ]
+        try:
+            self._seed_with_created_at(SessionLocal, title=titles[0], project_name=project, age_days=30)
+            self._seed_with_created_at(SessionLocal, title=titles[1], project_name=project, age_days=15)
+            self._seed_with_created_at(SessionLocal, title=titles[2], project_name=project, age_days=1)
+
+            r = client.get(
+                f"/api/deferred-items?project_name={project}"
+                "&status=open&priority=high&sort=created_at_asc&limit=5"
+            )
+            assert r.status_code == 200, r.text
+            returned = [item["title"] for item in r.json()["deferred_items"]]
+            assert returned == titles, (
+                f"sort=created_at_asc must return oldest-first; got {returned}"
+            )
+        finally:
+            self._cleanup(SessionLocal, *titles)
+
+    def test_default_sort_is_created_at_desc(self, real_client):
+        """Backward compatibility: default sort must remain newest-first."""
+        client, SessionLocal = real_client
+        suffix = uuid.uuid4().hex[:8]
+        project = f"pytest-di-default-{suffix}"
+        titles = [
+            f"pytest-di-default-old-{suffix}",
+            f"pytest-di-default-new-{suffix}",
+        ]
+        try:
+            self._seed_with_created_at(SessionLocal, title=titles[0], project_name=project, age_days=30)
+            self._seed_with_created_at(SessionLocal, title=titles[1], project_name=project, age_days=1)
+
+            r = client.get(
+                f"/api/deferred-items?project_name={project}&status=open&priority=high&limit=5"
+            )
+            assert r.status_code == 200, r.text
+            returned = [item["title"] for item in r.json()["deferred_items"]]
+            assert returned[0] == titles[1], (
+                f"default sort must remain DESC (newest-first); got {returned}"
+            )
+        finally:
+            self._cleanup(SessionLocal, *titles)
+
+    def test_min_age_days_filter_excludes_recent(self, real_client):
+        client, SessionLocal = real_client
+        suffix = uuid.uuid4().hex[:8]
+        project = f"pytest-di-age-{suffix}"
+        old_title = f"pytest-di-age-old-{suffix}"
+        new_title = f"pytest-di-age-new-{suffix}"
+        try:
+            self._seed_with_created_at(SessionLocal, title=old_title, project_name=project, age_days=30)
+            self._seed_with_created_at(SessionLocal, title=new_title, project_name=project, age_days=1)
+
+            r = client.get(
+                f"/api/deferred-items?project_name={project}&status=open&min_age_days=7&limit=10"
+            )
+            assert r.status_code == 200, r.text
+            titles = {item["title"] for item in r.json()["deferred_items"]}
+            assert old_title in titles
+            assert new_title not in titles
+        finally:
+            self._cleanup(SessionLocal, old_title, new_title)
+
+    def test_last_surfaced_at_starts_null(self, real_client):
+        client, SessionLocal = real_client
+        suffix = uuid.uuid4().hex[:8]
+        title = f"pytest-di-surf-init-{suffix}"
+        project = f"pytest-di-surf-{suffix}"
+        try:
+            r_create = client.post("/api/deferred-items", json={
+                "title": title, "description": "test", "reason": "test",
+                "priority": "high", "category": "testing", "status": "open",
+                "project_name": project, "tags": ["pytest"],
+            })
+            assert r_create.status_code == 201
+            assert r_create.json()["last_surfaced_at"] is None
+        finally:
+            self._cleanup(SessionLocal, title)
+
+    def test_mark_surfaced_bumps_timestamp(self, real_client):
+        """POST /api/deferred-items/{id}/surfaced sets last_surfaced_at = now()."""
+        client, SessionLocal = real_client
+        suffix = uuid.uuid4().hex[:8]
+        title = f"pytest-di-bump-{suffix}"
+        project = f"pytest-di-bump-{suffix}"
+        try:
+            r_create = client.post("/api/deferred-items", json={
+                "title": title, "description": "test", "reason": "test",
+                "priority": "high", "category": "testing", "status": "open",
+                "project_name": project, "tags": ["pytest"],
+            })
+            assert r_create.status_code == 201
+            item_id = r_create.json()["id"]
+            assert r_create.json()["last_surfaced_at"] is None
+
+            r_surf = client.post(f"/api/deferred-items/{item_id}/surfaced")
+            assert r_surf.status_code == 200, r_surf.text
+            assert r_surf.json()["last_surfaced_at"] is not None
+        finally:
+            self._cleanup(SessionLocal, title)
+
+    def test_mark_surfaced_unknown_id_returns_404(self, real_client):
+        client, _ = real_client
+        fake_id = uuid.uuid4()
+        r = client.post(f"/api/deferred-items/{fake_id}/surfaced")
+        assert r.status_code == 404
+
+    def test_last_surfaced_before_hours_filter_excludes_recently_surfaced(self, real_client):
+        """The exact daemon Step 6/8 filter: only surface items not seen in the last N hours."""
+        client, SessionLocal = real_client
+        suffix = uuid.uuid4().hex[:8]
+        project = f"pytest-di-lsb-{suffix}"
+        surfaced_title = f"pytest-di-lsb-surfaced-{suffix}"
+        unsurfaced_title = f"pytest-di-lsb-unsurfaced-{suffix}"
+        try:
+            sid = self._seed_with_created_at(
+                SessionLocal, title=surfaced_title, project_name=project, age_days=10,
+            )
+            self._seed_with_created_at(
+                SessionLocal, title=unsurfaced_title, project_name=project, age_days=10,
+            )
+
+            # Mark one as just-surfaced
+            r_surf = client.post(f"/api/deferred-items/{sid}/surfaced")
+            assert r_surf.status_code == 200
+
+            # Query for items not surfaced in last 1 hour — should exclude the one we just bumped
+            r = client.get(
+                f"/api/deferred-items?project_name={project}&status=open"
+                "&sort=created_at_asc&last_surfaced_before_hours=1&limit=10"
+            )
+            assert r.status_code == 200, r.text
+            titles = {item["title"] for item in r.json()["deferred_items"]}
+            assert unsurfaced_title in titles  # never surfaced (NULL passes filter)
+            assert surfaced_title not in titles  # just-surfaced is filtered out
+        finally:
+            self._cleanup(SessionLocal, surfaced_title, unsurfaced_title)
