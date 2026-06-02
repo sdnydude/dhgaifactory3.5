@@ -25,7 +25,7 @@
 ## Phase 12: Close the Loop (May 2026)
 
 64. [x] ~~**V1 — Dashboard panels + backend stats + hook scripts**~~ — DONE (May 24, `25bf09d`). See Completed (May 2026) section.
-65. [ ] **Register 3 hook scripts in `~/.claude/settings.json`** — `session-briefing.sh` (SessionStart), `check-corrections.sh` (PostToolUse on Bash), `check-auto-resolution.sh` (PostToolUse on Edit/Write). Scripts exist; wiring does not.
+65. [x] ~~**Register 3 hook scripts in `~/.claude/settings.json`**~~ — DEPRECATED Jun 2. All three superseded by memreg daemon hooks (`~/DHG/dhg-memreg/hooks/`): `session-briefing.sh` → `session-start-kb-briefing.sh` + `session-briefing.sh` (richer coverage); `check-corrections.sh` → wired at PreToolUse on Write|Edit + `user-prompt-kb-inject.sh`; `check-auto-resolution.sh` → replaced by `check-deferred-resolution.sh` (already wired PostToolUse on git commit).
 66. [x] ~~**N1: Age histogram universe mismatch**~~ — DONE May 26. Added `status == "open"` filter to all 4 age histogram buckets in `deferred_items_service.py` to match `stale_candidates` universe.
 67. [x] ~~**N3: Missing `response_model` on `/api/feedback-loop/health`**~~ — DONE May 26. Created `feedback_loop_schemas.py` with `FeedbackLoopHealthResponse` + `TypeStat` models, wired to endpoint.
 
