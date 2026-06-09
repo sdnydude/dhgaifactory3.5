@@ -13,6 +13,12 @@ const config: Config = {
   onBrokenLinks: 'warn',
   onBrokenMarkdownLinks: 'warn',
 
+  markdown: {
+    hooks: {
+      onBrokenMarkdownImages: 'warn',
+    },
+  },
+
   i18n: {
     defaultLocale: 'en',
     locales: ['en'],
@@ -52,9 +58,11 @@ const config: Config = {
         {
           title: 'Projects',
           items: [
+            {label: 'Infrastructure', to: '/infrastructure/getting-started'},
             {label: 'AI Factory', to: '/dhg-ai-factory/getting-started'},
             {label: 'Memreg', to: '/dhg-memreg/getting-started'},
             {label: 'Memory Pipeline', to: '/memory-pipeline/getting-started'},
+            {label: 'Open WebUI', to: '/open-webui/getting-started'},
             {label: 'Portage', to: '/portage/getting-started'},
           ],
         },

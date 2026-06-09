@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 140" font-family="sans-serif" role="img" aria-label="Claude Code SessionStart hook flow: session starts, runs doppler-sync.sh, downloads secrets, writes .env">
+  <defs>
+    <marker id="arrow3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1e3a5f"/>
+    </marker>
+  </defs>
+
+  <!-- Session starts -->
+  <rect x="14" y="44" width="150" height="56" rx="8" fill="#dbeafe" stroke="#1e3a5f" stroke-width="1.5"/>
+  <text x="89" y="70" text-anchor="middle" font-size="13" font-weight="700" fill="#1e293b">Session</text>
+  <text x="89" y="88" text-anchor="middle" font-size="13" font-weight="700" fill="#1e293b">starts</text>
+
+  <line x1="164" y1="72" x2="194" y2="72" stroke="#1e3a5f" stroke-width="2" marker-end="url(#arrow3)"/>
+
+  <!-- doppler-sync.sh -->
+  <rect x="196" y="44" width="172" height="56" rx="8" fill="#bfdbfe" stroke="#1e3a5f" stroke-width="2"/>
+  <text x="282" y="68" text-anchor="middle" font-size="13" font-weight="700" fill="#1e293b">doppler-sync.sh</text>
+  <text x="282" y="86" text-anchor="middle" font-size="10" fill="#475569">SessionStart hook</text>
+
+  <line x1="368" y1="72" x2="398" y2="72" stroke="#1e3a5f" stroke-width="2" marker-end="url(#arrow3)"/>
+
+  <!-- downloads secrets -->
+  <rect x="400" y="44" width="160" height="56" rx="8" fill="#dbeafe" stroke="#1e3a5f" stroke-width="1.5"/>
+  <text x="480" y="70" text-anchor="middle" font-size="13" font-weight="700" fill="#1e293b">downloads</text>
+  <text x="480" y="88" text-anchor="middle" font-size="13" font-weight="700" fill="#1e293b">secrets</text>
+
+  <line x1="560" y1="72" x2="590" y2="72" stroke="#1e3a5f" stroke-width="2" marker-end="url(#arrow3)"/>
+
+  <!-- writes .env -->
+  <rect x="592" y="44" width="154" height="56" rx="8" fill="#dcfce7" stroke="#166534" stroke-width="1.5"/>
+  <text x="669" y="70" text-anchor="middle" font-size="13" font-weight="700" fill="#1e293b">writes</text>
+  <text x="669" y="88" text-anchor="middle" font-size="13" font-weight="700" fill="#1e293b">.env</text>
+
+  <text x="380" y="24" text-anchor="middle" font-size="12" font-weight="600" fill="#1e293b">Automatic local cache refresh on every Claude Code session</text>
+</svg>

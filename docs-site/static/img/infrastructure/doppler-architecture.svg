@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 460" font-family="sans-serif" role="img" aria-label="DHG Doppler architecture: Doppler Cloud projects with dev, stg and prd configs feeding secrets to servers at runtime">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1e3a5f"/>
+    </marker>
+  </defs>
+
+  <!-- Cloud container -->
+  <rect x="20" y="20" width="680" height="200" rx="12" fill="#eff6ff" stroke="#1e3a5f" stroke-width="2"/>
+  <text x="360" y="48" text-anchor="middle" font-size="17" font-weight="700" fill="#1e293b">DOPPLER CLOUD</text>
+  <text x="360" y="68" text-anchor="middle" font-size="12" fill="#475569">single source of truth — servers pull at runtime</text>
+
+  <!-- Project cards -->
+  <!-- portage -->
+  <rect x="48" y="86" width="150" height="116" rx="8" fill="#dbeafe" stroke="#1e3a5f" stroke-width="1.5"/>
+  <text x="123" y="108" text-anchor="middle" font-size="13" font-weight="700" fill="#1e293b">portage</text>
+  <line x1="64" y1="118" x2="182" y2="118" stroke="#94a3b8" stroke-width="1"/>
+  <text x="123" y="138" text-anchor="middle" font-size="12" fill="#1e293b">dev</text>
+  <text x="123" y="158" text-anchor="middle" font-size="12" fill="#1e293b">stg</text>
+  <text x="123" y="178" text-anchor="middle" font-size="12" fill="#1e293b">prd</text>
+
+  <!-- aifactory -->
+  <rect x="221" y="86" width="150" height="116" rx="8" fill="#dbeafe" stroke="#1e3a5f" stroke-width="1.5"/>
+  <text x="296" y="108" text-anchor="middle" font-size="13" font-weight="700" fill="#1e293b">aifactory</text>
+  <line x1="237" y1="118" x2="355" y2="118" stroke="#94a3b8" stroke-width="1"/>
+  <text x="296" y="138" text-anchor="middle" font-size="12" fill="#1e293b">dev</text>
+  <text x="296" y="158" text-anchor="middle" font-size="12" fill="#1e293b">stg</text>
+  <text x="296" y="178" text-anchor="middle" font-size="12" fill="#1e293b">prd</text>
+
+  <!-- dhg-infra (shared) -->
+  <rect x="394" y="86" width="150" height="116" rx="8" fill="#bfdbfe" stroke="#1e3a5f" stroke-width="2"/>
+  <text x="469" y="108" text-anchor="middle" font-size="13" font-weight="700" fill="#1e293b">dhg-infra</text>
+  <text x="469" y="124" text-anchor="middle" font-size="10" font-style="italic" fill="#475569">(shared)</text>
+  <line x1="410" y1="132" x2="528" y2="132" stroke="#94a3b8" stroke-width="1"/>
+  <text x="469" y="152" text-anchor="middle" font-size="12" fill="#1e293b">dev</text>
+  <text x="469" y="170" text-anchor="middle" font-size="12" fill="#1e293b">stg</text>
+  <text x="469" y="188" text-anchor="middle" font-size="12" fill="#1e293b">prd</text>
+
+  <!-- + 5 more -->
+  <rect x="567" y="86" width="118" height="116" rx="8" fill="#e2e8f0" stroke="#64748b" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <text x="626" y="140" text-anchor="middle" font-size="13" font-weight="700" fill="#1e293b">. . . 5 more</text>
+  <text x="626" y="160" text-anchor="middle" font-size="10" fill="#475569">dev / stg / prd</text>
+
+  <!-- Arrows down to consumers -->
+  <line x1="123" y1="220" x2="123" y2="290" stroke="#1e3a5f" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="296" y1="220" x2="296" y2="290" stroke="#1e3a5f" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="469" y1="220" x2="469" y2="290" stroke="#1e3a5f" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Consumer boxes -->
+  <rect x="48" y="294" width="150" height="70" rx="8" fill="#dcfce7" stroke="#166534" stroke-width="1.5"/>
+  <text x="123" y="326" text-anchor="middle" font-size="13" font-weight="700" fill="#1e293b">g700data1</text>
+  <text x="123" y="346" text-anchor="middle" font-size="12" fill="#1e293b">CLI</text>
+
+  <rect x="221" y="294" width="150" height="70" rx="8" fill="#dcfce7" stroke="#166534" stroke-width="1.5"/>
+  <text x="296" y="326" text-anchor="middle" font-size="13" font-weight="700" fill="#1e293b">server 2</text>
+  <text x="296" y="346" text-anchor="middle" font-size="12" fill="#1e293b">CLI</text>
+
+  <rect x="394" y="294" width="150" height="70" rx="8" fill="#dcfce7" stroke="#166534" stroke-width="1.5"/>
+  <text x="469" y="326" text-anchor="middle" font-size="13" font-weight="700" fill="#1e293b">CF Workers</text>
+  <text x="469" y="346" text-anchor="middle" font-size="12" fill="#1e293b">API</text>
+
+  <!-- Caption -->
+  <text x="360" y="408" text-anchor="middle" font-size="13" font-weight="600" fill="#1e293b">Change a value in Doppler &#8594; next service start picks it up</text>
+  <text x="360" y="430" text-anchor="middle" font-size="11" fill="#475569">Shared keys live once in dhg-infra and are referenced, never copied per project</text>
+</svg>
