@@ -79,6 +79,11 @@ swincoming/
 .claude/scheduled_tasks.lock
 .claude/worktrees/
 .claude/rules/00-daemon-live-briefing.md
+# Local runtime scratch (manifest + versioned ship-state drafts) — the canonical
+# .claude/ commands/rules/settings stay tracked; only this per-session noise is ignored.
+.claude/session-manifest.json
+.claude/ship-state_v*.md
+.claude/ship_v2-state.md
 .worktrees/
 .superpowers/
 .playwright-mcp/
