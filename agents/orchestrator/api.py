@@ -80,7 +80,7 @@ def get_database_url() -> str:
         with open(db_password_file, "r") as f:
             password = f.read().strip()
     except FileNotFoundError:
-        password = os.getenv("DB_PASSWORD", "weenie64")
+        password = os.getenv("DB_PASSWORD") or os.getenv("POSTGRES_PASSWORD", "")
     
     # 3. Build from components
     user = os.getenv("DB_USER", "dhg")
