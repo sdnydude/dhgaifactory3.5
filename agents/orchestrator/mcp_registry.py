@@ -28,10 +28,14 @@ mcp_router = APIRouter(tags=["MCP Registry"])
 # DATABASE CONNECTION
 # ============================================================================
 
-REGISTRY_DB_URL = os.getenv(
-    "REGISTRY_DB_URL",
-    f"postgresql://dhg:{os.getenv('POSTGRES_PASSWORD', '')}@10.0.0.251:5432/dhg_registry"
-)
+REGISTRY_DB_URL = os.getenv("REGISTRY_DB_URL")
+if not REGISTRY_DB_URL:
+    _db_pw = os.getenv("POSTGRES_PASSWORD")
+    if not _db_pw:
+        raise RuntimeError(
+            "Registry DB not configured: set REGISTRY_DB_URL or POSTGRES_PASSWORD"
+        )
+    REGISTRY_DB_URL = f"postgresql://dhg:{_db_pw}@10.0.0.251:5432/dhg_registry"
 
 try:
     engine = create_engine(REGISTRY_DB_URL, pool_pre_ping=True)
