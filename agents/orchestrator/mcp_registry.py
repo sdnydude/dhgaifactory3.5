@@ -29,8 +29,8 @@ mcp_router = APIRouter(tags=["MCP Registry"])
 # ============================================================================
 
 REGISTRY_DB_URL = os.getenv(
-    "REGISTRY_DB_URL", 
-    "postgresql://dhg:weenie64@10.0.0.251:5432/dhg_registry"
+    "REGISTRY_DB_URL",
+    f"postgresql://dhg:{os.getenv('POSTGRES_PASSWORD', '')}@10.0.0.251:5432/dhg_registry"
 )
 
 try:

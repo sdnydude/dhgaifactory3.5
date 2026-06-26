@@ -59,11 +59,11 @@ services:
       - "8011:8000"
     environment:
       - POSTGRES_USER=dhg
-      - POSTGRES_PASSWORD=weenie64
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
       - POSTGRES_DB=dhg_registry
       - POSTGRES_HOST=registry-db
       - POSTGRES_PORT=5432
-      - DATABASE_URL=postgresql://dhg:weenie64@registry-db:5432/dhg_registry
+      - DATABASE_URL=postgresql://dhg:${POSTGRES_PASSWORD}@registry-db:5432/dhg_registry
       - LANGGRAPH_API_URL=${LANGGRAPH_API_URL:-https://dhg-agents-526554f2bb905517adab9bd53427c745.us.langgraph.app}
       - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
       - EXPORT_SIGNING_SECRET=${EXPORT_SIGNING_SECRET}
@@ -214,7 +214,7 @@ services:
     ports:
       - "9187:9187"
     environment:
-      - DATA_SOURCE_NAME=postgresql://dhg:weenie64@registry-db:5432/dhg_registry?sslmode=disable
+      - DATA_SOURCE_NAME=postgresql://dhg:${POSTGRES_PASSWORD}@registry-db:5432/dhg_registry?sslmode=disable
     depends_on:
       registry-db:
         condition: service_healthy
@@ -374,7 +374,7 @@ services:
 
   dhg-pdf-renderer:
     environment:
-      - DATABASE_URL=postgresql://dhg:weenie64@registry-db:5432/dhg_registry
+      - DATABASE_URL=postgresql://dhg:${POSTGRES_PASSWORD}@registry-db:5432/dhg_registry
       - EXPORTS_DIR=/exports
     volumes:
       - ./registry:/app/registry:ro
