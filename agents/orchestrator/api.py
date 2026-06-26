@@ -80,7 +80,12 @@ def get_database_url() -> str:
         with open(db_password_file, "r") as f:
             password = f.read().strip()
     except FileNotFoundError:
-        password = os.getenv("DB_PASSWORD") or os.getenv("POSTGRES_PASSWORD", "")
+        password = os.getenv("DB_PASSWORD") or os.getenv("POSTGRES_PASSWORD")
+    if not password:
+        raise RuntimeError(
+            "Database password not configured: set DATABASE_URL, DB_PASSWORD_FILE, "
+            "DB_PASSWORD, or POSTGRES_PASSWORD"
+        )
     
     # 3. Build from components
     user = os.getenv("DB_USER", "dhg")
