@@ -1,131 +1,49 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600;700&display=swap');
 
-/* DHG brand tokens — see .claude/rules/dhg-brand.md */
+/* DHG docs theme — amber accent (Patchbay family), graphite ink, no purple.
+   The homepage (Patchbay) styles itself via its CSS module; these tokens
+   recolor the inner documentation pages to match. */
 :root {
   --dhg-graphite: #32374A;
-  --dhg-purple: #663399;
-  --dhg-orange: #F77E2D;
-  --dhg-background: #FAF9F7;
-  --dhg-surface: #FFFFFF;
-  --dhg-text-primary: #32374A;
-  --dhg-text-secondary: #71717A;
-  --dhg-border: #E4E4E7;
+  --dhg-amber: #B45309;        /* burnt amber — readable on light backgrounds */
+  --dhg-amber-bright: #E8A33D; /* Patchbay signal amber (dark mode) */
 
-  --ifm-color-primary: #663399;
-  --ifm-color-primary-dark: #5c2e8a;
-  --ifm-color-primary-darker: #572b82;
-  --ifm-color-primary-darkest: #48246b;
-  --ifm-color-primary-light: #7038a8;
-  --ifm-color-primary-lighter: #753bb0;
-  --ifm-color-primary-lightest: #8449c2;
+  --ifm-color-primary: #B45309;
+  --ifm-color-primary-dark: #a24b08;
+  --ifm-color-primary-darker: #994708;
+  --ifm-color-primary-darkest: #7e3a06;
+  --ifm-color-primary-light: #c65c0a;
+  --ifm-color-primary-lighter: #cf610b;
+  --ifm-color-primary-lightest: #e26d10;
+
   --ifm-font-family-base: 'Inter', system-ui, -apple-system, sans-serif;
-  --ifm-background-color: var(--dhg-background);
-  --ifm-navbar-background-color: var(--dhg-surface);
+  --ifm-heading-font-family: 'Archivo', 'Inter', system-ui, sans-serif;
+  --ifm-font-family-monospace: 'IBM Plex Mono', ui-monospace, monospace;
+  --ifm-background-color: #FAF9F7;      /* warm off-white, never pure white */
   --ifm-heading-color: var(--dhg-graphite);
   --ifm-code-font-size: 95%;
-  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.08);
 }
 
 [data-theme='dark'] {
-  --dhg-background: #1A1D24;
-  --dhg-surface: #27272A;
-  --dhg-text-primary: #FAF9F7;
-  --dhg-text-secondary: #A1A1AA;
-  --dhg-border: #3F3F46;
+  --ifm-color-primary: #E8A33D;
+  --ifm-color-primary-dark: #e39526;
+  --ifm-color-primary-darker: #df8e1b;
+  --ifm-color-primary-darkest: #b87415;
+  --ifm-color-primary-light: #ecb054;
+  --ifm-color-primary-lighter: #eeb761;
+  --ifm-color-primary-lightest: #f3ca8a;
 
-  --ifm-color-primary: #A78BFA;
-  --ifm-color-primary-dark: #9670f9;
-  --ifm-color-primary-darker: #8d63f8;
-  --ifm-color-primary-darkest: #723bf6;
-  --ifm-color-primary-light: #b8a6fb;
-  --ifm-color-primary-lighter: #c1b3fc;
-  --ifm-color-primary-lightest: #dcd4fd;
-  --ifm-background-color: var(--dhg-background);
-  --ifm-navbar-background-color: var(--dhg-surface);
-  --ifm-heading-color: var(--dhg-text-primary);
-  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+  --ifm-background-color: #16181D;      /* Patchbay graphite */
+  --ifm-background-surface-color: #1E2128;
+  --ifm-heading-color: #E9E7E2;
+  --docusaurus-highlighted-code-line-bg: rgba(255, 255, 255, 0.08);
 }
 
-/* Hub homepage */
-.dhgHero {
-  padding: 3rem 1rem 2rem;
-  text-align: center;
-}
-.dhgHero h1 {
-  font-size: 2.2rem;
-  margin-bottom: 0.4rem;
-}
-.dhgHero p {
-  color: var(--dhg-text-secondary);
-  font-size: 1.05rem;
-  margin: 0;
-}
-.dhgSection {
-  max-width: 1140px;
-  margin: 0 auto;
-  padding: 0 1rem 1.5rem;
-}
-.dhgSection h2 {
-  font-size: 1.25rem;
-  border-bottom: 2px solid var(--ifm-color-primary);
-  display: inline-block;
-  padding-bottom: 0.2rem;
-  margin-bottom: 1rem;
-}
-.dhgGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 0.9rem;
-}
-.dhgCard {
-  background: var(--dhg-surface);
-  border: 1px solid var(--dhg-border);
-  border-radius: 8px;
-  padding: 0.9rem 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-}
-.dhgCard:hover {
-  border-color: var(--ifm-color-primary);
-}
-.dhgCardTitle {
-  font-weight: 600;
-  color: var(--dhg-text-primary);
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-.dhgCardTitle a {
-  color: inherit;
-}
-.dhgCardDesc {
-  font-size: 0.85rem;
-  color: var(--dhg-text-secondary);
-  flex-grow: 1;
-}
-.dhgCardLinks {
-  font-size: 0.8rem;
-  display: flex;
-  gap: 0.75rem;
-}
-.dhgBadge {
-  font-size: 0.65rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  padding: 0.1rem 0.45rem;
-  border-radius: 999px;
-  text-transform: uppercase;
-}
-.dhgBadgeLan {
-  background: rgba(102, 51, 153, 0.12);
-  color: var(--ifm-color-primary);
-}
-.dhgBadgeDev {
-  background: rgba(247, 126, 45, 0.15);
-  color: var(--dhg-orange);
-}
-.dhgBadgeStopped {
-  background: rgba(113, 113, 122, 0.15);
-  color: var(--dhg-text-secondary);
+/* Archivo for headings gives inner pages a hint of the Patchbay identity. */
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+  font-variation-settings: 'wght' 680;
+  letter-spacing: -0.01em;
 }

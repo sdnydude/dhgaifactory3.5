@@ -84,14 +84,19 @@ Add a step to `.github/workflows/deploy-docs.yml` in the relevant project repo:
 
 ## 5. Build and verify
 
-`build/` is bind-mounted into the nginx container, so build then restart:
+`build/` is bind-mounted into the nginx container. `npm run build` recreates the
+`build/` directory (new inode), which **orphans the container's bind mount** —
+nginx then serves 403. You MUST restart dhg-docs after every build:
 
 ```bash
 cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/docs-site
 npm run build
-docker restart dhg-docs
+docker restart dhg-docs      # required — remounts build/; skipping it → 403
 curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8017/<project-name>/getting-started/
 ```
+
+dhg-docs is now a compose service (`docker-compose.override.yml`), on
+`dhgaifactory35_dhg-network` so it can proxy `/api/` to `dhg-registry-api`.
 
 Note: `onBrokenLinks` is set to `throw` — a broken internal link fails the
 build. Fix the link; do not downgrade the setting.
@@ -114,8 +119,12 @@ GitHub push → Self-hosted runner → Build Docusaurus → Restart nginx → In
 |------|---------|
 | `docs-site/docusaurus.config.ts` | Single-instance preset config, navbar, footer |
 | `docs-site/sidebars.ts` | ONE sidebar — category per project |
-| `docs-site/src/pages/index.tsx` | Hub homepage: project cards + service launcher |
+| `docs-site/src/pages/index.tsx` | Homepage — renders the Patchbay component |
+| `docs-site/src/components/Patchbay/services.ts` | Rack/tape/offsite data — edit here to add a homepage card. `statusKey` must match `registry/patchbay_service.py` SERVICES |
+| `docs-site/src/components/Patchbay/index.tsx` | Patchbay UI: LEDs, filter, Talkback SSE client |
 | `docs-site/projects/<project>/` | Markdown content |
 | `registry/doc_ingest.py` | Chunking + ingest script |
 | `registry/doc_pages_endpoints.py` | API: upsert, bulk, search, delete |
+| `registry/talkback_endpoints.py` | Talkback assistant: SSE RAG over doc_pages |
+| `registry/patchbay_endpoints.py` | Status LEDs: TCP probes of the service map |
 | `.github/workflows/deploy-docs.yml` | CI/CD pipeline |
