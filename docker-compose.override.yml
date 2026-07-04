@@ -71,6 +71,9 @@ services:
       - PDF_RENDERER_URL=http://dhg-pdf-renderer:8014
       - FRONTEND_INTERNAL_URL=http://dhg-frontend:3000
       - EXPORTS_DIR=/exports
+      - OLLAMA_URL=${OLLAMA_URL:-http://dhg-ollama:11434}
+      - TALKBACK_LOCAL_MODEL=${TALKBACK_LOCAL_MODEL:-qwen3:14b}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
     volumes:
       - dhg_exports:/exports:ro
     depends_on:
@@ -87,6 +90,8 @@ services:
   prometheus:
     image: prom/prometheus:v2.48.0
     container_name: dhg-prometheus
+    group_add:
+      - "125"
     ports:
       - "9090:9090"
     volumes:
@@ -355,7 +360,7 @@ services:
     mem_limit: 256m
     environment:
       - REGISTRY_URL=http://10.0.0.251:8011
-      - SWEEP_THRESHOLD_TOKENS=10000
+      - SWEEP_THRESHOLD_TOKENS=50000
       - SWEEP_INTERVAL_SECONDS=30
       - SWEEP_TIMEOUT_SECONDS=180
       - DLQ_MAX_AGE_DAYS=7
@@ -381,6 +386,18 @@ services:
     depends_on:
       registry-db:
         condition: service_healthy
+
+  dhg-docs:
+    image: nginx:alpine
+    container_name: dhg-docs
+    ports:
+      - "8017:80"
+    volumes:
+      - ./docs-site/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./docs-site/build:/usr/share/nginx/html:ro
+    networks:
+      - dhg-network
+    restart: unless-stopped
 
 volumes:
   prometheus_data:
