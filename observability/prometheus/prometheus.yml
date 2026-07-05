@@ -73,6 +73,11 @@ scrape_configs:
     metrics_path: /metrics
     scrape_interval: 15s
 
+  # Memreg daemon is now discovered dynamically via the docker-sd job below
+  # (container carries prometheus.io/scrape=true, joined to dhg-network).
+  # Previous static_configs target (172.18.0.1:8020, host-gateway route) went
+  # stale once the daemon moved off network_mode:host; removed 2026-07-05.
+
   # Docker Service Discovery — auto-discovers containers with
   # prometheus.io/scrape=true label. Add these Docker labels to any
   # service to opt in:
@@ -90,6 +95,9 @@ scrape_configs:
     relabel_configs:
       - source_labels: [__meta_docker_container_label_prometheus_io_scrape]
         regex: "true"
+        action: keep
+      - source_labels: [__meta_docker_container_label_com_docker_compose_project]
+        regex: "dhgaifactory35|dhg-memreg"
         action: keep
       - source_labels: [__meta_docker_network_ip, __meta_docker_container_label_prometheus_io_port]
         separator: ':'
