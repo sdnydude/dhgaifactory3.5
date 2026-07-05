@@ -2,7 +2,7 @@
 
 You are running an 8-phase workflow to take a feature from idea to merged PR. This is the DHG AI Factory's production shipping process. Every phase builds on the previous one and carries context forward — do NOT re-explore or re-ask what was already established.
 
-**v4 additions over v2:** tdd-guard (TDD enforcement hooks in Phase 3-4), AgentShield (security audit in Phase 5), claudekit doctor (project health pre-build check in Phase 4), ccpm (spec-driven PM, on-demand reference), Dev tool results section in PR template. All v2 capabilities preserved: Phase 0 feedback briefing, divergent-convergent apparatus, advisor reviews, Phase 7 documentation, full memreg read+write integration.
+**This is v5** — the canonical /ship. Lineage in one line: v3 introduced the 8-phase divergent-convergent design; v4 layered dev tools onto it (tdd-guard in Phases 3-4, AgentShield in Phase 5, claudekit doctor in Phase 4, ccpm on-demand, Dev tool results in the PR template); v5 promoted it to `/ship` with capture-path and URL fixes. Full details in Version History at the bottom. Core capabilities: Phase 0 feedback briefing, divergent-convergent apparatus, advisor reviews, Phase 7 documentation, full memreg read+write integration.
 
 The user may have provided a feature description: $ARGUMENTS
 
@@ -12,11 +12,18 @@ If no arguments were provided, ask: **"What are we shipping?"** and wait.
 
 ## Resume Check
 
-Before starting Phase 1, check if `.claude/ship-state.md` exists and contains `status: in_progress` or `status: stopped`. If it does, read the file and ask:
+Before anything else (including Phase 0), check if `.claude/ship-state.md` exists. If it does, read it and branch on its frontmatter `status:`:
 
-**"A previous /ship run was in progress at Phase [N]: [feature description]. Resume or start fresh?"**
+- **`in_progress` or `stopped`:** ask — **"A previous /ship run was [in progress/stopped] at Phase [N]: [feature description]. Resume or start fresh?"**
+- **`deferred`:** this is a deliberately parked ship, not an abandoned one. Ask — **"A deferred ship exists: [feature description], paused at Phase [N] ([deferred_note if present]). Resume it, keep it parked and start fresh, or archive it?"** Never silently overwrite a deferred ship.
+- **`complete`:** previous ship finished — start fresh (versioning still applies below).
+- **Corrupt/unparseable** (status missing, phase missing or non-unique, frontmatter mangled): **halt.** Show Stephen the raw file contents and ask how to proceed. Never overwrite a state file you could not parse.
 
-If resuming, load the state (approach, file map, plan, progress) and continue from the recorded phase. If starting fresh, version the old state file as `ship-state_v{N}.md` and begin Phase 0.
+If resuming, load the state (approach, file map, plan, progress) and continue from the recorded phase. **Resuming into Phase 4 or later additionally requires:** verify the Phase 3 plan artifact actually exists in ship-state.md, and ask Stephen to reconfirm the Phase 3 approval before any code is written — a recorded phase number alone is not approval.
+
+If starting fresh over ANY existing state file (in_progress, stopped, deferred, or complete), first version it as `ship-state_v{N}.md` (N = next unused number), then begin Phase 0. The versioning happens at fresh-start time, before Phase 1's state write — not only on the resume path.
+
+**Compaction re-anchor rule:** after any context compaction mid-run, re-read `.claude/ship-state.md` before the next action — the state file, not compressed memory, is the source of truth for phase/progress.
 
 ---
 
@@ -52,12 +59,12 @@ If resuming, load the state (approach, file map, plan, progress) and continue fr
    ```
    Surface prior architectural decisions that bear on this feature.
 
-5. **Output briefing** (one block, not a conversation):
+5. **Output briefing** (one block, not a conversation). **[Failure protocol]** If any of the four curls above failed (timeout, connection refused, non-JSON response), that line of the briefing must read **"unavailable — registry down"**, never "no corrections" / "0 deferred items". An outage is an unknown, not an absence. Like Phase 1's KB search, this is not blocking — note it and proceed.
    ```
    === SHIP FEEDBACK BRIEFING ===
-   Correction patterns: [top pattern] ([count]x in 7d) — [repeat flags if any]
-   Deferred items: [open count] open, [stale count] stale — [related items if found]
-   Related decisions: [titles of related decision logs if found]
+   Correction patterns: [top pattern] ([count]x in 7d) — [repeat flags if any] | or: unavailable — registry down
+   Deferred items: [open count] open, [stale count] stale — [related items if found] | or: unavailable — registry down
+   Related decisions: [titles of related decision logs if found] | or: unavailable — registry down
    === END BRIEFING ===
    ```
 
@@ -84,6 +91,28 @@ These come from CLAUDE.md and .claude/rules/. The /ship workflow enforces them s
 
 ---
 
+## Advisor Dispatch (shared definition)
+
+All three advisor reviews (Phase 1 step 9, Phase 2 step 4, Phase 3 step 9) use the same dispatch — do not improvise the executor:
+
+- **Agent tool, `subagent_type: general-purpose`** (no dedicated "advisor" agent type exists; general-purpose gets full tool access for verification).
+- **Prompt template:** "You are an independent advisor reviewing a /ship [phase name] output. You did not produce this work — challenge it. Inputs: [the phase-specific inputs listed at the dispatch site]. Your brief: [the phase-specific brief listed at the dispatch site]. Verify claims against the actual codebase where possible instead of taking the inputs' word. Return: numbered advisor notes, each tagged AGREE / CHALLENGE / GAP, with a one-line justification grounded in something specific (code, KB finding, or the input's own text). End with a one-paragraph verdict: is this output ready to present to Stephen?"
+- A failed/empty advisor return is handled per the Failure Protocol (never silently skipped).
+
+---
+
+## Failure Protocol (applies to every external call and agent dispatch)
+
+Every tool step and agent dispatch in this workflow has exactly three possible outcomes — report the one that actually happened:
+
+- **RAN-WITH-FINDINGS** — the step executed and surfaced items to act on.
+- **RAN-CLEAN** — the step executed and genuinely found nothing.
+- **FAILED-TO-RUN** — the invocation itself failed (network error, missing binary, non-zero exit before output, empty/garbage return, agent never returned).
+
+**The rule: FAILED-TO-RUN is never reported as clean.** A failed check is an unknown, not a pass. Default handling unless a site says otherwise: retry once; if it fails again, surface **"STEP FAILED — output unavailable"** in the phase verdict and to Stephen, and record it in ship-state.md. Site-specific handling is marked **[Failure protocol]** at each call site.
+
+---
+
 ## Phase 1: Brainstorm (Grounded Divergence)
 
 **Goal:** Understand the problem, gather what the project already knows about it, diverge from accumulated knowledge, converge on an approach, and produce a spec.
@@ -94,15 +123,17 @@ These come from CLAUDE.md and .claude/rules/. The /ship workflow enforces them s
 
 1. Read CLAUDE.md to load full project context (architecture, known issues, tech stack).
 
-2. **Feasibility check.** Read CLAUDE.md's "Known Issues" section (both Open and Resolved). Check if this feature conflicts with any open issues. If conflicts exist, flag them immediately: "This feature touches [issue]. Here's how we handle it: [approach]."
+2. **Feasibility check.** Read the CONSTRAINTS block in project CLAUDE.md and the `reference_port_map.md` auto-memory file (`~/.claude/projects/-home-swebber64-DHG-aifactory3-5-dhgaifactory3-5/memory/reference_port_map.md`) — these two are the authoritative sources for constraints and port assignments (CLAUDE.md has no other issues section). Check if this feature conflicts with any documented constraint or port assignment. If conflicts exist, flag them immediately: "This feature touches [constraint]. Here's how we handle it: [approach]."
 
 ### Gather Institutional Knowledge
 
 3. **Knowledge base query.** Query accumulated project knowledge for anything relevant to this feature.
 
-   **Current (keyword search):** Hit the registry's KB search endpoint:
+   **Current (keyword search):** Hit the registry's KB search endpoint (POST — the GET /api/v1 form does not exist and 404s):
    ```bash
-   curl -s "http://10.0.0.251:8011/api/v1/kb/search?q=[feature keywords]&limit=10"
+   curl -s -X POST "http://10.0.0.251:8011/api/kb/search" \
+     -H "Content-Type: application/json" \
+     -d '{"query":"[feature keywords]","limit":10}'
    ```
 
    **Future (RAG — when medkb ingestor pipeline is live):** Replace the keyword search above with a semantic RAG query against medkb's `engineering` corpus:
@@ -148,13 +179,15 @@ These come from CLAUDE.md and .claude/rules/. The /ship workflow enforces them s
    - What past corrections or decisions inform this choice
    - Your recommendation and why
 
-9. **Advisor review (mandatory).** Before presenting approaches to Stephen, dispatch an independent advisor agent. The advisor receives: the feature description, the KB findings, the CodeGraph scan results, the divergent lens output, and the 2-3 proposed approaches. The advisor's brief:
+9. **Advisor review (complexity-gated — same gate as Phase 3's advisor).** Assess complexity NOW using step 11's criteria (3+ services, schema change, >5 likely tasks). If **complex**: dispatch an independent advisor agent per the **Advisor Dispatch** definition (`subagent_type: general-purpose`, shared prompt template). If **simple**: skip the dispatch — instead run a main-session feasibility check against the same brief below and record its outcome in ship-state.md as `advisor: main-session check (simple)`. A dispatched advisor receives: the feature description, the KB findings, the CodeGraph scan results, the divergent lens output, and the 2-3 proposed approaches. The advisor's brief:
    - Challenge the approaches — what was missed, what's underestimated, what alternative wasn't considered?
    - Evaluate whether KB findings (corrections, past decisions, park list items) were properly incorporated or ignored
    - Assess whether the recommended approach is genuinely the strongest, or whether the recommendation is defaulting to the most obvious option
    - Flag any concerns as "advisor notes"
 
    Incorporate the advisor's feedback into the approaches. If the advisor identified a genuinely better alternative or a critical gap, update the approaches before presenting to Stephen. Present the advisor's key challenges alongside the approaches — Stephen sees both the recommendation and the independent pushback.
+
+   **[Failure protocol]** When the advisor is dispatched (complex path): if the dispatch errors, times out, or returns empty/off-topic output, retry once; if it fails again, HALT and tell Stephen — "Phase 1 advisor failed twice; proceed without independent review, or retry?" Do not present approaches as advisor-reviewed when no advisor ran.
 
 10. Get user approval on the approach. If the user says "you decide" or "whatever you think", state your recommendation explicitly and confirm: "Going with [approach]. Correct?"
 
@@ -178,7 +211,7 @@ These come from CLAUDE.md and .claude/rules/. The /ship workflow enforces them s
 
 **Output:** Chosen approach + approved spec + explore scope decision + KB findings summary.
 
-Write initial `.claude/ship-state.md`:
+Write initial `.claude/ship-state.md` (if an old state file exists and wasn't already versioned by the Resume Check, version it as `ship-state_v{N}.md` first — never overwrite in place). Frontmatter keys must stay single-line and occur exactly once each — enforce-ship.sh parses them:
 ```
 status: in_progress
 phase: 1
@@ -186,6 +219,7 @@ feature: [description]
 approach: [chosen approach]
 complexity: [simple/complex]
 explore_scope: [full/targeted]
+branch: [not yet created — recorded at Phase 4 step 1]
 kb_findings: [related ship sessions, corrections, park list items found]
 codegraph_scan: [key symbols/files identified near the problem]
 spec: [approved spec content]
@@ -218,7 +252,9 @@ If Phase 1 set `explore_scope: targeted`, skip the 3-agent launch and do a focus
 
    **Agent 3 — Adjacent Systems:** "What adjacent systems connect to this work, and what does touching them surface?" Trace the blast radius outward — not just "what breaks" but "what opportunities does this connection create?" Look at upstream consumers, downstream dependencies, shared infrastructure, and parallel workstreams.
 
-2. **Synthesize into 5 outputs.** When agents return, produce:
+2. **Synthesize into 5 outputs.** When agents return, first verify **N dispatched == N returned with usable output**. **[Failure protocol]** An agent that errored, timed out, or returned empty/off-topic output counts as FAILED-TO-RUN: re-dispatch it once; if it fails again, the synthesis must name the missing perspective ("Assumption Audit did not run — assumptions are UNAUDITED, not verified") rather than synthesizing around the hole. A failed Assumption Audit is never reported as "assumptions verified."
+
+   Then produce:
 
    **A. File map** — what exists, what changes, what can be reused:
    ```
@@ -251,13 +287,15 @@ If Phase 1 set `explore_scope: targeted`, skip the 3-agent launch and do a focus
 
 ### Advisor Review (mandatory)
 
-4. **Dispatch an independent advisor agent.** The advisor receives: the feature description, the chosen approach, and the 5 synthesis outputs. The advisor's brief:
+4. **Dispatch an independent advisor agent** per the **Advisor Dispatch** definition (`subagent_type: general-purpose`, shared prompt template). The advisor receives: the feature description, the chosen approach, and the 5 synthesis outputs. The advisor's brief:
    - Is the approach pressure test (output D) honest? Does the exploration genuinely confirm the approach, or is the synthesis unconsciously rubber-stamping the Phase 1 decision?
    - Is the assumption audit thorough? Were the 4 categories probed seriously, or did the audit surface only obvious assumptions?
    - Is the park list properly separating now from later? Are items parked that should actually influence this feature, or items kept active that should be parked?
    - Are there contradictions between agents that the synthesis glossed over?
 
    If the advisor disagrees with the approach pressure test — e.g., the synthesis says "approach confirmed" but the advisor sees broken assumptions that should force a modification — flag this to Stephen with both perspectives before proceeding to the feedback loop.
+
+   **[Failure protocol]** Same as the Phase 1 advisor: retry once on failure; on second failure, report the synthesis as UN-REVIEWED to Stephen and let him decide — never imply advisor sign-off that didn't happen.
 
 ### Feedback Loop (bounded)
 
@@ -270,7 +308,7 @@ If Phase 1 set `explore_scope: targeted`, skip the 3-agent launch and do a focus
 
 **Output:** File map + assumption audit + unexpected connections + approach pressure test + park list.
 
-Update `.claude/ship-state.md`: add all 5 synthesis outputs, exploration pass count, park list.
+Update `.claude/ship-state.md`: add all 5 synthesis outputs, exploration pass count, park list; **set `phase: 3`**.
 
 > **Phase 2 complete. Continue to Phase 3 (Plan)?**
 
@@ -320,7 +358,7 @@ Update `.claude/ship-state.md`: add all 5 synthesis outputs, exploration pass co
 
 8. **TDD decision.** Ask: "Do you want TDD for this feature?" If yes, Phase 4 writes tests before implementation for each task. Note: **tdd-guard hooks are active** and will enforce test-first ordering when TDD is enabled.
 
-9. **Advisor review (complex features only).** If Phase 1 flagged the feature as complex, dispatch an independent advisor agent before presenting the plan for approval. The advisor receives: the feature description, the approved spec, the Phase 2 synthesis outputs, and the full task list. The advisor's brief:
+9. **Advisor review (complex features only).** If Phase 1 flagged the feature as complex, dispatch an independent advisor agent per the **Advisor Dispatch** definition (`subagent_type: general-purpose`, shared prompt template) before presenting the plan for approval. The advisor receives: the feature description, the approved spec, the Phase 2 synthesis outputs, and the full task list. The advisor's brief:
    - Are there missing tasks? Gaps between tasks where something needs to happen but isn't listed?
    - Is risk underestimated on any task? Especially tasks marked "low" that touch shared state or cross service boundaries.
    - Are rollback plans realistic? Would the rollback command actually work, or does it leave orphaned state?
@@ -329,11 +367,17 @@ Update `.claude/ship-state.md`: add all 5 synthesis outputs, exploration pass co
 
    Incorporate advisor findings into the plan before presenting to Stephen. Note which items came from the advisor review.
 
-**HARD GATE:** Present the plan (or final chunk) and wait for user approval. Do not proceed to Phase 4 without explicit "go", "approved", "build it", or similar.
+**HARD GATE:** Present the plan (or final chunk) and wait for user approval. The accepted approval tokens are exactly: **"go"**, **"approved"**, **"build it"**, **"ship it"**. Neutral acknowledgments — "ok", "sounds good", "makes sense", "sure" — do NOT cross this gate (per the explicit-approval rule in Rules: Stephen must explicitly approve moving to implementation). If the response is ambiguous, ask: "Is that approval to build? (go / approved / build it / ship it)"
+
+Upon approval, write the approval record into `.claude/ship-state.md` frontmatter as a single line:
+```
+approved: "[exact token Stephen used]" [ISO 8601 timestamp]
+```
+enforce-ship.sh requires this `approved:` line before it permits code edits at phase ≥ 4 — a phase number alone no longer opens the Build gate.
 
 **Output:** Approved task list.
 
-Update `.claude/ship-state.md`: add full plan, TDD decision, deploy order.
+Update `.claude/ship-state.md`: add full plan, TDD decision, deploy order; **set `phase: 4`** (this write happens only after the HARD GATE approval above).
 
 > **Phase 3 approved. Continue to Phase 4 (Build)?**
 
@@ -347,9 +391,12 @@ Update `.claude/ship-state.md`: add full plan, TDD decision, deploy order.
    - Derive a slug from the feature description (lowercase, hyphens, ≤40 chars)
    - Prefix with `feat/` for new features, `fix/` for bug fixes, `refactor/` for refactors
    - Example: "Suggested branch: `feat/phase2-divergent-explore`. Create this branch, use a different name, or proceed on master?"
-   Do not proceed without explicit answer.
+   Do not proceed without explicit answer. Note: enforce-ship.sh denies code edits on master/main during an active build — a feature branch is the working default.
+   Once on the working branch, record it in `.claude/ship-state.md`: **set `branch: [name]`** (replaces the Phase 1 placeholder) — resume after a crash needs it.
 
-2. **Pre-build health check.** Run `claudekit doctor` to validate project hook/command configuration before building. Fix any issues flagged.
+2. **Pre-build health check.** First check the binary exists: `command -v claudekit`. **[Failure protocol]** If missing, or if `claudekit doctor` itself crashes/errors, report "pre-build health check FAILED-TO-RUN (claudekit missing/errored)" to Stephen and ask whether to proceed — a tool that didn't run found nothing; do not treat it as a clean bill of health. If it runs and flags issues, fix them before building.
+
+2b. **AgentShield baseline check.** Verify `.claude/agentshield-baseline.json` exists and predates this branch's changes. If missing or stale (master has moved since it was generated), regenerate it from the base branch state: run `npx ecc-agentshield@1.4.0 scan` on master (or against the pre-branch tree), save the findings as `.claude/agentshield-baseline.json`, and commit it. Phase 5 compares against this artifact — without it the "new findings introduced by this feature" gate cannot be evaluated.
 
 3. **Create TodoWrite tasks** for each plan item. This provides persistent in-session state that survives context compression.
 
@@ -369,9 +416,13 @@ Update `.claude/ship-state.md`: add full plan, TDD decision, deploy order.
    - **Unrelated issues:** Log to the **defer list** in `.claude/ship-state.md`. Do NOT fix. Do NOT stop to ask. Log it and keep building.
    - **Related blockers** (e.g., "the table I need doesn't exist"): Stop and ask Stephen. This is not scope creep — it's a blocker.
 
-6. **Parallel execution.** If the plan marked tasks as parallelizable, dispatch them as parallel agents using the Agent tool. Each agent gets: the task description, file paths, verification command, and the instruction "commit when done."
+6. **Parallel execution (worktree-isolated).** If the plan marked tasks as parallelizable AND there are ≥3 such tasks, dispatch them as parallel agents using the Agent tool with **each agent in its own git worktree** under `.claude/worktrees/` (use the installed using-git-worktrees skill, or `Agent` with `isolation: "worktree"`). Shared-working-tree parallel commits race on the git index — never run parallel build agents in one tree. Each agent gets: the task description, file paths, verification command, and the instruction "commit when done on your worktree branch."
 
-7. **Subagent reconciliation.** After parallel agents return, diff their changes against each other. Look for logical conflicts: duplicate functions, inconsistent naming, overlapping concerns — not just merge conflicts. If conflicts exist, resolve them before proceeding.
+   **Serial fallback:** for ≤2 parallelizable tasks, run them serially in the main tree — worktree setup overhead isn't worth it.
+
+7. **Subagent reconciliation (before merge).** After parallel agents return, reconciliation happens **on the worktree branches, before merging into the ship branch** — not as post-hoc history rewrite. Diff the worktree branches against each other; look for logical conflicts: duplicate functions, inconsistent naming, overlapping concerns — not just merge conflicts. Resolve conflicts on the branches, then merge each into the ship branch and remove the worktrees.
+
+   **[Failure protocol]** An agent that never returns, errors out, or returns without committing counts as FAILED-TO-RUN: put its task back on the TodoWrite list and either re-dispatch or do it in the main session. The completion summary (step 9) must cross-check dispatched-agent count against actual commits (`git log` since the branch point) — "Built: N/N" is only claimable when the commit count corroborates it.
 
 8. **Stop when blocked.** If something unexpected happens, do not guess or force through. State what's wrong and ask the user.
 
@@ -385,8 +436,10 @@ Update `.claude/ship-state.md`: add full plan, TDD decision, deploy order.
 
 **Output:** All tasks implemented, verified, and committed.
 
-Update `.claude/ship-state.md`: mark all tasks complete, list commits.
+Update `.claude/ship-state.md`: mark all tasks complete, list commits; **set `phase: 5`**.
 
+> **Checkpoint cadence:** `complexity: complex` — pause here as usual. `complexity: simple` — ask once: **"Phase 4 complete. Continue through Phase 5 (Verify) AND Phase 6 (Review)?"** — one approval covers both phases; do not pause again at the 5→6 boundary.
+>
 > **Phase 4 complete. Continue to Phase 5 (Verify)?**
 
 ---
@@ -397,11 +450,16 @@ Update `.claude/ship-state.md`: mark all tasks complete, list commits.
 
 This phase exists because "it should work" is not verification. Run every check fresh.
 
-1. **Run the full test suite** (if tests exist):
-   ```bash
-   pytest / npm test / whatever applies
-   ```
-   Show the full output. Do not summarize. If tests fail, fix them before proceeding.
+1. **Run the owning test suite(s)** — select by changed paths, not "whatever applies":
+
+   | Changed paths | Suite to run |
+   |---|---|
+   | `registry/` | registry pytest suite |
+   | `frontend/` | vitest (`npm test` in frontend/) |
+   | `langgraph_workflows/` | that workflow package's pytest suite |
+   | multiple of the above | each owning suite |
+
+   **Output discipline (context budget):** show the FULL output for any failure; for passing suites show the summary line only (e.g. `514 passed in 42.1s`). Write the complete run log to the scratchpad and cite its path in the verdict — auditability is preserved in the file, not by dumping thousands of lines into context at the exact point (pre-Phase 6) where compaction risk peaks. If tests fail, fix them before proceeding.
 
 2. **Verify each task's verification command** from the plan. Run them all again, fresh. Show output.
 
@@ -412,11 +470,13 @@ This phase exists because "it should work" is not verification. Run every check 
 
 4. **Regression check.** Did existing functionality break? Spot-check endpoints/features that existed before this work.
 
-5. **AgentShield security scan.** Run the security audit on the project config:
+5. **AgentShield security scan.** Run the security audit on the project config and capture the exit code:
    ```bash
-   npx ecc-agentshield@1.4.0 scan
+   npx ecc-agentshield@1.4.0 scan; echo "exit=$?"
    ```
-   Review findings. If any new Critical or High findings were **introduced by this feature** (compare against the project baseline), fix them before proceeding. Pre-existing findings are acceptable and may be documented as deferred items.
+   **[Failure protocol]** Check the exit code and require an actual findings report before interpreting anything. If npx fails (ENOTFOUND, non-zero exit before a report, empty output), the Phase 5 verdict and the Phase 8 PR "Dev tool results" line must say **"SCAN FAILED — security posture unverified"**, never "no findings". Retry once, then surface to Stephen.
+
+   **Baseline comparison:** the project baseline is the committed `.claude/agentshield-baseline.json` (generated at Phase 4 step 2b). Compare finding identity — rule id + file — via jq set-difference: findings in this scan but not in the baseline are **new**. If any new Critical or High findings were introduced by this feature, fix them before proceeding. Pre-existing findings are acceptable and may be documented as deferred items.
 
 6. **Performance baseline.** For each new endpoint, capture response time:
    ```bash
@@ -428,7 +488,7 @@ This phase exists because "it should work" is not verification. Run every check 
 
 8. **State the verdict with evidence:**
    - "All N verification commands pass. Output: [shown above]"
-   - "Tests: X/Y pass. Failures: [list with details]"
+   - "Tests: X/Y pass. Failures: [list with details]. Full log: [scratchpad path]"
    - "Services: all healthy. Evidence: [docker ps output]"
    - "AgentShield: no new findings / N new findings [details]"
    - "Performance baselines: [endpoint: Xms, endpoint: Yms]"
@@ -437,7 +497,7 @@ This phase exists because "it should work" is not verification. Run every check 
 
 **Output:** Verification evidence showing everything works.
 
-Update `.claude/ship-state.md`: add all verification results and performance baselines.
+Update `.claude/ship-state.md`: add all verification results and performance baselines; **set `phase: 6`**.
 
 > **Phase 5 complete. All checks pass. Continue to Phase 6 (Review)?**
 
@@ -447,13 +507,15 @@ Update `.claude/ship-state.md`: add all verification results and performance bas
 
 **Goal:** Catch issues before shipping. Fix them, don't just report them.
 
-1. **Scale review depth to diff size.** Run `git diff --stat` against the base branch to measure the change.
+1. **Scale review depth to the ship-state `complexity` flag** (written at Phase 1) — file count is the escalation input, not the router. Read `complexity:` from `.claude/ship-state.md` and run `git diff --stat` against the base branch:
 
-   **Small diff (≤3 files changed):** Dispatch a single unified code-reviewer agent that covers all concerns: silent failures, types, style, comments, test coverage, and complexity. One agent, one synthesized report.
+   **`complexity: complex`:** always the 6-agent panel below, regardless of file count.
 
-   **Large diff (4+ files changed):** Dispatch 6 specialized review agents in parallel, each reviewing the full diff (`git diff` against the base branch):
+   **`complexity: simple`:** a single unified code-reviewer agent covering all concerns (silent failures, types, style, comments, test coverage, complexity) — **escalating to the full 6-agent panel if** the diff touches ≥8 files OR any schema/auth/migration path (a mis-classified "simple" ship still gets the heavy gate when the diff says otherwise).
 
-   | Agent | Focus |
+   The 6-agent panel: dispatch 6 specialized review agents in parallel, each reviewing the full diff (`git diff` against the base branch). These six agents are provided by the **pr-review-toolkit plugin** — a named dependency of this workflow alongside tdd-guard/AgentShield/claudekit. **Fallback:** if the plugin is disabled or the named agent types don't resolve, dispatch `general-purpose` agents instead, giving each the corresponding Focus description below as its prompt:
+
+   | Agent (pr-review-toolkit) | Focus |
    |-------|-------|
    | silent-failure-hunter | Swallowed errors, empty catches, bad fallbacks, `return None` in error paths |
    | type-design-analyzer | Weak types, missing invariants, poor encapsulation |
@@ -461,6 +523,8 @@ Update `.claude/ship-state.md`: add all verification results and performance bas
    | comment-analyzer | Stale comments, inaccurate docstrings, comment rot |
    | pr-test-analyzer | Test coverage gaps, missing edge cases, untested paths |
    | code-simplifier | Unnecessary complexity, duplication, readability issues |
+
+   Apply the **Karpathy review lens** (`.claude/review-lenses/karpathy-review.md`) across the review: assumptions surfaced, simplicity-first, surgical diff, verified success criteria. On the single-reviewer path, cite that file in the reviewer's prompt; on the 6-agent path, code-reviewer and code-simplifier carry it.
 
 2. **Grep-based silent-failure scan** (runs in parallel with agents). Fast first pass:
    - `except.*pass` or bare `except:` with no re-raise
@@ -470,10 +534,12 @@ Update `.claude/ship-state.md`: add all verification results and performance bas
 
 3. **Unify agent findings.** When agents return, synthesize into a single prioritized recommendation. If agents conflict (e.g., code-simplifier says "remove this" but code-reviewer says "this follows project patterns"), resolve the conflict and present the unified recommendation with reasoning. Stephen gets a clean view, not 6 competing reports.
 
+   **[Failure protocol]** Each agent's report must state which files it covered. A report that is empty, malformed, truncated, or covers less than the changed-file set counts as FAILED-TO-RUN for that agent: re-dispatch it once before synthesizing. The Phase 6 hard gate may only be evaluated when every dispatched reviewer produced a usable, full-coverage report — a missing report is unreviewed code, not clean code.
+
 4. **Test coverage check.** For each new function added, verify a test exists. If not, flag as Important severity: "Function X is untested."
 
 5. **DHG-specific checks:**
-   - Docker: Does this need a new container? Network membership correct? Port conflict with anything in CLAUDE.md's port table?
+   - Docker: Does this need a new container? Network membership correct? Port conflict with anything in the `reference_port_map.md` memory file (the authoritative port map — not CLAUDE.md)?
    - Database: Migration needed? Backward compatible? ON DELETE behavior correct?
    - CLAUDE.md compliance: Does the change align with documented architecture?
    - Brand: If UI work, does it use semantic tokens (not raw hex)?
@@ -490,6 +556,8 @@ Update `.claude/ship-state.md`: add all verification results and performance bas
    - **Important** — should fix before merge (code quality, missing validation, config concern, untested functions, missing observability)
    - **Minor** — note for later (style nit, optimization opportunity)
 
+8b. **Classification audit (before the gate is evaluated).** The severity assignments must not be self-attested by whoever produced them. On the multi-agent path, dispatch one audit agent (`subagent_type: general-purpose`) that receives the findings list and the three severity definitions verbatim, and validates each Critical/Important/Minor assignment against the definitions. On the single-reviewer path, do an explicit main-session re-check of each assignment against the definitions. Any down-classification (Critical→Important, Important→Minor) must be justified in the audit verdict with a specific reason; unjustified down-classifications revert to the higher severity. The Phase 6 hard gate is evaluated against the audited classifications.
+
 9. **Fix-and-re-verify loop.** For each Critical and Important issue:
    a. State the issue and the fix
    b. Apply the fix
@@ -500,8 +568,10 @@ Update `.claude/ship-state.md`: add all verification results and performance bas
 
 **Output:** Review complete, all issues resolved (or user-approved exceptions).
 
-Update `.claude/ship-state.md`: add review findings, resolutions, and any approved exceptions.
+Update `.claude/ship-state.md`: add review findings, resolutions, and any approved exceptions; **set `phase: 7`**.
 
+> **Checkpoint cadence:** `complexity: complex` — pause here as usual. `complexity: simple` — ask once: **"Phase 6 complete. Continue through Phase 7 (Document) AND Phase 8 (Ship)?"** — one approval covers docs + finalize; do not pause again at the 7→8 boundary. (Simple ships thus need ~4 approvals total: after Phases 1, 2, the Phase 3 HARD GATE, 4→5/6, and 6→7/8.)
+>
 > **Phase 6 complete. Ready to document. Continue to Phase 7 (Document)?**
 
 ---
@@ -607,7 +677,7 @@ This phase produces two categories of output: a **ship log entry** (always) and 
    - **Architecture** — how it fits into the system (data flow, dependencies, network)
    - **Troubleshooting** — common issues and fixes (only if known)
 
-4. **Update the sidebar.** If new doc pages were created, update `docs-site/sidebars/dhg-ai-factory.ts` to include them in the correct category. Create new categories as needed following the Portage sidebar pattern (Architecture, API Reference, Frontend, Ship Log, etc.).
+4. **Sidebar: no edit needed (or possible).** The docs-site sidebar is the single autogenerated `docs-site/sidebars.ts` (`{type:'autogenerated', dirName:...}`) — per-project sidebar files do not exist. New pages are auto-included: just create the doc page under the correct directory in `docs-site/projects/dhg-ai-factory/` and Docusaurus picks it up. Do NOT create a manual sidebar .ts file — Docusaurus never loads it.
 
 ### Memory Pipeline Ingest
 
@@ -628,7 +698,7 @@ This phase produces two categories of output: a **ship log entry** (always) and 
 
 **Output:** Ship log entry + feature docs (if applicable) + sidebar update + registry ingest.
 
-Update `.claude/ship-state.md`: add documentation outputs.
+Update `.claude/ship-state.md`: add documentation outputs; **set `phase: 8`**.
 
 > **Phase 7 complete. Continue to Phase 8 (Ship)?**
 
@@ -644,6 +714,7 @@ Update `.claude/ship-state.md`: add documentation outputs.
 
 3. **Push and create PR:**
    - If not already pushed, push the branch with `-u`
+   - **[Failure protocol]** If the push is rejected (diverged remote): `git fetch`, then rebase onto the updated remote if the divergence is trivial; if the rebase conflicts or the divergence is not trivial, HALT and show Stephen the situation. If `gh pr create` fails (auth, duplicate PR, rate limit): show the exact stderr and HALT for Stephen — do not retry blindly and do not report the ship as complete without a PR URL (mirror the session-logger failure handling in step 5).
    - Create PR using `gh pr create` with this structure:
      ```
      Title: [concise description, under 70 chars]
@@ -719,6 +790,8 @@ The user can say these at any time:
 - **"back"** — return to the previous phase
 - **"status"** — show which phase we're in and what's done
 
+**Gate exception for skip:** skipping INTO Phase 4 or beyond (from "skip" at Phase 3 or "skip to N≥4") is only valid when `.claude/ship-state.md` already contains BOTH the Phase 3 plan artifact AND an `approved:` frontmatter line. If either is missing, refuse: **"Phase 3 gate not crossed — there is no approved plan. Complete Phase 3 or give explicit build approval first."** Skip is navigation, not approval; it cannot cross the hard gate on its own.
+
 ---
 
 ## Dev Tools Reference
@@ -736,5 +809,5 @@ The user can say these at any time:
 - **v1** (2026-03-13): Initial 7-phase workflow. Saved as `ship_v1.md`.
 - **v2** (2026-03-13): Full capability restoration + 14 additions. Restored: spec iterations, divergent thinking, 6 review agents, code in plans, chunk review, TodoWrite, subagent reconciliation. Added: resume detection, state persistence, scope creep guard, rollback fields, debugging escalation, complexity-conditional spec, architecture step, TDD toggle, CLAUDE.md update check, observability check, deploy order, post-merge monitoring, performance baselines, actionable monitor section.
 - **v3** (2026-05-19): Divergent-convergent redesign + documentation phase + grounded brainstorm + advisor review gates. Now 8 phases. Phase 1: dynamic feasibility (reads CLAUDE.md, no hardcoded issues), explore scope gating with recommendation + pause. Phase 2: full rewrite — 3 agents shift from inventory to divergent discovery (analogous solutions + abandoned prior art, assumption audit with 4 category probes, adjacent systems + opportunities), 5 synthesis outputs (file map, assumption audit, unexpected connections, approach pressure test, park list), bounded feedback loop to Phase 1 (2-pass max circuit breaker), prescriptive endings ("This means we should..."), agent conflict resolution. Phase 4: branch naming auto-suggestion (feat/fix/refactor prefix + slug). Phase 6: review depth scales by diff size (single reviewer ≤3 files, 6-agent army for 4+). **Phase 7 (NEW): Document** — auto-generates ship log entry (Portage format), feature documentation (API, architecture, frontend, monitoring pages when warranted), updates docs-site sidebar, pushes to registry memory pipeline. Phase 8 (was 7): session-logger POST error handling (warns on failure, no silent audit trail loss), PR template now includes Explore + Document phases, defer list + park list surfaced together.
-- **v4** (2026-05-24): Dev tools integration on top of v2 baseline (note: aifactory's `ship_v2.md` is the v3 design above — v4 is built on it). Added: tdd-guard rule + Phase 3 TDD-decision awareness + Phase 4 step 4c PreToolUse enforcement; `claudekit doctor` as Phase 4 step 2 (pre-build health check); AgentShield (`npx ecc-agentshield scan`) as Phase 5 step 5 with baseline comparison; AgentShield line in Phase 5 verdict; "Dev tool results" section added to Phase 8 PR template; ccpm referenced as on-demand skill in Dev Tools Reference. **Dependencies:** tdd-guard plugin, ecc-agentshield (npm), claudekit must be installed in aifactory for these steps to run; ccpm skill is already installed.
+- **v4** (2026-05-24): Dev tools integration on top of the v3 design (the file aifactory stored as `ship_v2.md` contained the v3 design; v4 built directly on it). Added: tdd-guard rule + Phase 3 TDD-decision awareness + Phase 4 step 4c PreToolUse enforcement; `claudekit doctor` as Phase 4 step 2 (pre-build health check); AgentShield (`npx ecc-agentshield scan`) as Phase 5 step 5 with baseline comparison; AgentShield line in Phase 5 verdict; "Dev tool results" section added to Phase 8 PR template; ccpm referenced as on-demand skill in Dev Tools Reference. **Dependencies:** tdd-guard plugin, ecc-agentshield (npm), claudekit, and the **pr-review-toolkit plugin** (Phase 6's six named review agents) must be installed/enabled in aifactory for these steps to run; ccpm skill is already installed.
 - **v5** (2026-07-04): Promoted to `/ship` (canonical). ship_v1/v2/v4 + prior ship.md (v2-baseline) archived to `.claude/archive/commands/` — no longer invocable. Fixes: single ship-session capture path via `post-ship-session.sh` with the `auto-ship-session-capture.md` schema (removed raw /api/v1/ship_sessions curl and its drifted field names); `localhost:8009` → `10.0.0.251:8009` (session-logger, verified live) plus remaining localhost URLs; pinned `ecc-agentshield@1.4.0`; renumbered Phase 4 duplicate step 5s (steps now 1–9); capture `model_name` = current session model ID, never a literal.
