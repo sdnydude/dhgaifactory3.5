@@ -111,3 +111,15 @@ groups:
           severity: warning
         annotations:
           summary: "Container {{ $labels.name }} memory > 90% of limit"
+
+  - name: dhg-memreg
+    rules:
+      # Capture dead-letter queue stuck non-empty: registry captures are
+      # failing and the daemon retry is not draining them (refactor item 13R).
+      - alert: MemregDLQBacklog
+        expr: memreg_dlq_depth > 0
+        for: 1h
+        labels:
+          severity: high
+        annotations:
+          summary: "memreg capture DLQ has {{ $value }} entries stuck > 1h — registry captures failing and not draining"

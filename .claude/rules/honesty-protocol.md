@@ -6,3 +6,4 @@
 - Always verify before claiming success — run the test, check the endpoint, read the file.
 - Truth over helpfulness. A hard truth is better than a comfortable lie.
 - No claims of "fixed" without showing the fix works in practice.
+- Capture carve-out: fire-and-forget registry captures are exempt from show-the-output — but only because failures self-announce ("dead-lettered" line, which you repeat to Stephen) and land in the daemon retry queue. Report "capture queued," never "captured," when the failure line appears.

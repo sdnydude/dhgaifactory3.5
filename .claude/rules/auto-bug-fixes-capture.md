@@ -45,7 +45,7 @@ Optional fields:
 - `source_file`: Primary file where the bug was located
 - `tags`: Semantic search tags (e.g., `["sql","service-layer","null-handling"]`)
 - `session_id`: Current session ID if known
-- `model_name`: "claude-opus-4-6" or actual model in use
+- `model_name`: the current session's model ID — never hardcode
 
 ### Severity guide
 
@@ -61,9 +61,11 @@ Optional fields:
 After diagnosing and fixing the bug, call the capture script silently in a bash tool call:
 
 ```bash
-~/.claude/scripts/post-bug-fixes.sh '{"tldr":"<summary>","symptom":"<what was observed>","root_cause":"<what was wrong>","fix_applied":"<what was changed>","files_affected":["<file1>","<file2>"],"severity":"<severity>","category":"<category>","project_name":"dhg-ai-factory","source_file":"<primary file>","tags":["<tag1>","<tag2>"],"model_name":"claude-opus-4-6"}'
+~/.claude/scripts/post-bug-fixes.sh --stdin <<'MEMREG_JSON'
+{"tldr":"<summary>","symptom":"<what was observed>","root_cause":"<what was wrong>","fix_applied":"<what was changed>","files_affected":["<file1>","<file2>"],"severity":"<severity>","category":"<category>","project_name":"dhg-ai-factory","source_file":"<primary file>","tags":["<tag1>","<tag2>"],"model_name":"<current session model ID>"}
+MEMREG_JSON
 ```
 
 ## Do not ask permission
 
-Call this automatically every time the trigger condition is met. Do not announce it. Do not ask "should I save this?" -- just do it. The script exits 0 on failure, so it never blocks the session.
+Call this automatically every time the trigger condition is met. Do not ask "should I save this?" -- just do it. The script exits 0 on failure, so it never blocks the session. Announce only on failure: the script prints a failure line ("...dead-lettered...") when the registry is unreachable — repeat that one line to Stephen so he knows the capture is queued, not landed. Success stays silent.

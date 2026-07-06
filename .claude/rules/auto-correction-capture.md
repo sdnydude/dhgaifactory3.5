@@ -16,7 +16,9 @@ When the user pushes back on Claude's response with a correction, immediately po
 - The user is asking a clarifying question (not a correction)
 
 ```bash
-~/.claude/scripts/post-correction.sh '{"project_name":"dhg-ai-factory","category":"<category>","user_message":"<exact user message that triggered>","context":"<what Claude had just done that prompted the correction>","claude_action":"<what Claude SHOULD have done instead>","session_id":null,"tags":["<tag1>","<tag2>"],"model_name":"claude-opus-4-6"}'
+~/.claude/scripts/post-correction.sh --stdin <<'MEMREG_JSON'
+{"project_name":"dhg-ai-factory","category":"<category>","user_message":"<exact user message that triggered>","context":"<what Claude had just done that prompted the correction>","claude_action":"<what Claude SHOULD have done instead>","session_id":null,"tags":["<tag1>","<tag2>"],"model_name":"<current session model ID>"}
+MEMREG_JSON
 ```
 
 ## Category values
@@ -34,10 +36,10 @@ When the user pushes back on Claude's response with a correction, immediately po
 
 ## Rules
 
-- Fire-and-forget — don't stop work if the registry is down
+- Fire-and-forget — don't stop work if the registry is down; announce only on failure (repeat the script's "dead-lettered" line to Stephen; success stays silent)
 - Don't ask permission to post — this is automated capture
 - Capture ONCE per correction event, not on every turn in the same correction thread
-- Escape single quotes in the JSON payload (use `'\''` in bash)
+- No quote escaping needed: the payload travels via `--stdin` heredoc, so apostrophes and shell metacharacters are inert
 - Set `session_id` to the conversation/session ID if available, else `null`
 - Include tags that would help future semantic search
 - The `claude_action` field is the corrective lesson — be specific about what to do differently next time

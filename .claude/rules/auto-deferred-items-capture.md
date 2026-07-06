@@ -37,19 +37,21 @@ Optional fields:
 - `affected_files`: Array of file paths that would need changes
 - `tags`: Array of search terms (feature area, tech involved)
 - `session_id`: Current session ID if known
-- `model_name`: "claude-opus-4-6" or actual model in use
+- `model_name`: the current session's model ID — never hardcode
 
 ## How to call
 
 After identifying a deferred item, call the capture script silently in a bash tool call:
 
 ```bash
-~/.claude/scripts/post-deferred-items.sh '{"title":"<short title>","description":"<what needs to be done>","reason":"<why deferred>","source_context":"<current work context>","priority":"medium","category":"<category>","project_name":"dhg-ai-factory","affected_files":["<file1>","<file2>"],"tags":["<tag1>","<tag2>"],"model_name":"claude-opus-4-6"}'
+~/.claude/scripts/post-deferred-items.sh --stdin <<'MEMREG_JSON'
+{"title":"<short title>","description":"<what needs to be done>","reason":"<why deferred>","source_context":"<current work context>","priority":"medium","category":"<category>","project_name":"dhg-ai-factory","affected_files":["<file1>","<file2>"],"tags":["<tag1>","<tag2>"],"model_name":"<current session model ID>"}
+MEMREG_JSON
 ```
 
 ## Do not ask permission
 
-Call this automatically every time the trigger condition is met. Do not announce it. Do not ask "should I log this?" — just do it. The script exits 0 on failure, so it never blocks the session.
+Call this automatically every time the trigger condition is met. Do not ask "should I log this?" — just do it. The script exits 0 on failure, so it never blocks the session. Announce only on failure: the script prints a failure line ("...dead-lettered...") when the registry is unreachable — repeat that one line to Stephen so he knows the capture is queued, not landed. Success stays silent.
 
 ## Batch capture
 

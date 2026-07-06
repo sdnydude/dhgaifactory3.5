@@ -26,7 +26,9 @@ After any work that **adds, removes, or modifies test files**, immediately post 
 ## What to capture
 
 ```bash
-~/.claude/scripts/post-test-coverage.sh '{"title":"<short description, max 280 chars>","test_count_before":<int>,"test_count_after":<int>,"delta":<int, can be negative>,"tests_added":["<test name/description>"],"tests_removed":["<test name/description>"],"tests_modified":["<test name/description>"],"files_affected":["<file path>"],"category":"<category>","trigger":"<what prompted this change>","project_name":"dhg-ai-factory","tags":["<tag1>","<tag2>"],"model_name":"claude-opus-4-6"}'
+~/.claude/scripts/post-test-coverage.sh --stdin <<'MEMREG_JSON'
+{"title":"<short description, max 280 chars>","test_count_before":<int>,"test_count_after":<int>,"delta":<int, can be negative>,"tests_added":["<test name/description>"],"tests_removed":["<test name/description>"],"tests_modified":["<test name/description>"],"files_affected":["<file path>"],"category":"<category>","trigger":"<what prompted this change>","project_name":"dhg-ai-factory","tags":["<tag1>","<tag2>"],"model_name":"<current session model ID>"}
+MEMREG_JSON
 ```
 
 ### Field guide
@@ -50,7 +52,7 @@ Use one of: `unit`, `integration`, `e2e`, `api`, `auth`, `cme`, `registry`, `lan
 
 ## Rules
 
-- Fire-and-forget -- don't stop work if the registry is down
+- Fire-and-forget -- don't stop work if the registry is down; announce only on failure (repeat the script's "dead-lettered" line to Stephen; success stays silent)
 - Don't ask permission to post -- this is automated capture
 - Keep title under 280 chars
 - Escape quotes in the JSON payload
