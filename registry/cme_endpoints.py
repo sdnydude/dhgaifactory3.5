@@ -901,7 +901,8 @@ async def submit_for_review(
     try:
         result = review_svc.submit_for_review(db, project, request.reviewer_emails)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.warning("submit_for_review rejected for project %s: %s", project_id, e)
+        raise HTTPException(status_code=400, detail="One or more reviewers not found or inactive")
 
     return {
         "project_id": project_id,

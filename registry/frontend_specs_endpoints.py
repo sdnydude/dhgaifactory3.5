@@ -83,7 +83,8 @@ async def create_spec(payload: SpecCreate, db: Session = Depends(get_db)):
     try:
         spec = svc.create_spec(db, payload.model_dump())
     except RuntimeError as e:
-        raise HTTPException(status_code=409, detail=str(e))
+        logger.warning("create_spec conflict for slug %s: %s", payload.slug, e)
+        raise HTTPException(status_code=409, detail=f"A spec with slug '{payload.slug}' already exists")
     return _to_response(spec)
 
 
