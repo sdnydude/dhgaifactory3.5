@@ -51,7 +51,7 @@ MEMREG_JSON
 
 ## Do not ask permission
 
-Call this automatically every time the trigger condition is met. Do not ask "should I log this?" — just do it. The script exits 0 on failure, so it never blocks the session. Announce only on failure: the script prints a failure line ("...dead-lettered...") when the registry is unreachable — repeat that one line to Stephen so he knows the capture is queued, not landed. Success stays silent.
+Call this automatically every time the trigger condition is met — see [capture-common.md](capture-common.md) for the shared mechanics (automated fire-and-forget, announce-only-on-failure, planning-gate exemption, `model_name`, LAN IP).
 
 ## Batch capture
 

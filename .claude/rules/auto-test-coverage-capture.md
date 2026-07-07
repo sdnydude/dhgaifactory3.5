@@ -52,12 +52,9 @@ Use one of: `unit`, `integration`, `e2e`, `api`, `auth`, `cme`, `registry`, `lan
 
 ## Rules
 
-- Fire-and-forget -- don't stop work if the registry is down; announce only on failure (repeat the script's "dead-lettered" line to Stephen; success stays silent)
-- Don't ask permission to post -- this is automated capture
 - Keep title under 280 chars
-- Escape quotes in the JSON payload
 - Always include `files_affected` -- even a single file
 - Use the actual test count from test runner output when available; if not, use the last known count (271 for registry as of 2026-05-21)
 - For bulk changes, capture as a single event with the aggregate delta
-- Include tags that would help future semantic search
 - The `trigger` field helps correlate test changes with the work that caused them -- always fill it in
+- Shared mechanics (fire-and-forget, announce-only-on-failure, planning-gate exemption, no quote-escaping, `model_name`, `session_id`, LAN IP, tags): see [capture-common.md](capture-common.md)

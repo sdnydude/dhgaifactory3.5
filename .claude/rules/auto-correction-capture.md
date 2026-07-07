@@ -36,11 +36,7 @@ MEMREG_JSON
 
 ## Rules
 
-- Fire-and-forget — don't stop work if the registry is down; announce only on failure (repeat the script's "dead-lettered" line to Stephen; success stays silent)
-- Don't ask permission to post — this is automated capture
+- **Halt orders outrank capture:** if the correction is itself an instruction to stop executing commands ("STOP", "don't run anything else"), do NOT fire the Bash capture this turn — hold it and fire at the user's next go-ahead, or let the Stop-hook sweep capture it. The user's halt order always wins.
 - Capture ONCE per correction event, not on every turn in the same correction thread
-- No quote escaping needed: the payload travels via `--stdin` heredoc, so apostrophes and shell metacharacters are inert
-- Set `session_id` to the conversation/session ID if available, else `null`
-- Include tags that would help future semantic search
 - The `claude_action` field is the corrective lesson — be specific about what to do differently next time
-- Always use LAN IP `10.0.0.251:8011` — never localhost
+- Shared mechanics (fire-and-forget, announce-only-on-failure, planning-gate exemption, no quote-escaping, `session_id`, `model_name`, LAN IP, tags): see [capture-common.md](capture-common.md)

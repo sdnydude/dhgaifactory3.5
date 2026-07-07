@@ -12,4 +12,4 @@ MEMREG_JSON
 
 ## Do not ask permission
 
-Call this automatically at the end of every /ship workflow. The script exits 0 on failure, so it never blocks the session. Announce only on failure: the script prints a failure line ("...dead-lettered...") when the registry is unreachable — repeat that one line to Stephen so he knows the capture is queued, not landed. Success stays silent. Ship-complete reports say "capture queued" on failure — never imply the record landed.
+Call this automatically at the end of every /ship workflow — see [capture-common.md](capture-common.md) for the shared mechanics. Ship-complete reports must say "capture queued" on failure, never imply the record landed.

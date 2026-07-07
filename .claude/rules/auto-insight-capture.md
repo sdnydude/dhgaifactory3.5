@@ -12,4 +12,4 @@ MEMREG_JSON
 
 ## Do not ask permission
 
-Call this automatically. The script exits 0 on failure, so it never blocks the session. Announce only on failure: the script prints a failure line ("...dead-lettered...") when the registry is unreachable — repeat that one line to Stephen so he knows the capture is queued, not landed. Success stays silent.
+Call this automatically whenever an insight is generated — see [capture-common.md](capture-common.md) for the shared mechanics (automated fire-and-forget, announce-only-on-failure, planning-gate exemption, `model_name`, LAN IP).

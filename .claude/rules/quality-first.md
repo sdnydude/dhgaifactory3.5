@@ -6,6 +6,8 @@ Overhead IS the quality — standards, processes, rigor, and thorough planning a
 ## Planning and Building Are Separate Phases
 Do not write files, run commands, or generate code until the design/plan is fully worked through AND Stephen explicitly approves moving to implementation. Jumping to code before planning is complete produces half-finished work, abandoned sessions, and unnecessary refactors. When in doubt, keep planning.
 
+**Exemption — registry capture POSTs.** Automated capture calls (decision-logs, deferred-items, corrections) are metadata writes that change no project or production state; they are exempt from this command gate and may fire during planning. Everything else — project files, infra commands, code — stays gated.
+
 ## How This Applies
 - In /ship: Phases 1-3 are PLANNING. Phase 4 is BUILDING. Never cross that boundary without explicit approval.
 - In any task: Present the full design, iterate until Stephen says it's right, THEN implement.

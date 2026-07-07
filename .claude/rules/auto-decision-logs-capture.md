@@ -17,11 +17,8 @@ MEMREG_JSON
 Use one of: `registry`, `frontend`, `langgraph`, `cme`, `infra`, `observability`, `auth`, `ops`
 
 ## Rules
-- Fire-and-forget — don't stop work if the registry is down; announce only on failure (repeat the script's "dead-lettered" line to Stephen; success stays silent)
-- Don't ask permission to post — this is automated capture
 - Keep title under 280 chars
-- Escape quotes in the JSON payload
 - Include source_file when the decision relates to a specific file
-- Include tags that would help future semantic search
 - Include alternatives_rejected whenever alternatives were discussed
 - Include supersedes if this decision replaces a previous one (use the slug)
+- Shared mechanics (fire-and-forget, announce-only-on-failure, planning-gate exemption, no quote-escaping, `model_name`, `session_id`, LAN IP, tags): see [capture-common.md](capture-common.md)
