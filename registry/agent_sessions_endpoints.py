@@ -2,6 +2,7 @@
 
 Routes:
   POST   /api/agent-sessions              create session record
+  PUT    /api/agent-sessions/{session_id} update existing record (idempotent re-capture)
   GET    /api/agent-sessions              list with filters (project, source, limit, offset)
   GET    /api/agent-sessions/{session_id} get by session_id
 """
@@ -55,6 +56,30 @@ async def create_agent_session(
         db.rollback()
         registry_errors.labels(error_type="create_agent_session_failed").inc()
         logger.exception("create_agent_session failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.put("/{session_id}", response_model=AgentSessionResponse)
+async def update_agent_session(
+    session_id: str,
+    payload: AgentSessionCreate,
+    db: Session = Depends(get_db),
+) -> AgentSessionResponse:
+    start = time.time()
+    try:
+        row = svc.update_agent_session(db, session_id, payload)
+        if row is None:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        registry_write_operations.labels(operation="update_agent_session").inc()
+        registry_write_latency.observe((time.time() - start) * 1000)
+        return row
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        registry_errors.labels(error_type="update_agent_session_failed").inc()
+        logger.exception("update_agent_session failed")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 

@@ -28,6 +28,28 @@ def create_agent_session(
     return row
 
 
+def update_agent_session(
+    db: Session, session_id: str, payload: AgentSessionCreate,
+) -> AgentSession | None:
+    """Update an existing session in place. Empty values (None / "" / [])
+    never overwrite stored data — the Stop hook fires multiple times per
+    session and a later payload can carry less than an earlier capture.
+    Returns None if session_id is unknown."""
+    row = db.query(AgentSession).filter(
+        AgentSession.session_id == session_id,
+    ).first()
+    if row is None:
+        return None
+
+    for field, value in payload.model_dump(exclude={"session_id"}).items():
+        if value is None or value == "" or value == []:
+            continue
+        setattr(row, field, value)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
 def list_agent_sessions(
     db: Session,
     *,
