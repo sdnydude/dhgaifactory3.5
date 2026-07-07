@@ -15,6 +15,9 @@ Modes (REGISTRY_WRITE_AUTH_MODE):
 
 Fail-closed detail: in enforce mode with REGISTRY_WRITE_TOKEN unset, all
 covered writes 401 (loudly logged) rather than silently passing.
+
+Client side: dhg-memreg's memreg_capture.py sends the token from
+REGISTRY_WRITE_TOKEN env or ~/.claude/secrets/registry-write-token.
 """
 import hmac
 import logging
