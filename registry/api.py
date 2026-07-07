@@ -254,6 +254,9 @@ ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
+from write_auth import WriteAuthMiddleware
+app.add_middleware(WriteAuthMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
