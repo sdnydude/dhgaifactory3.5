@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -eo pipefail
 
 # DHG AI Factory - Database Backup Script
 # Creates compressed PostgreSQL backups with timestamp
@@ -9,7 +9,7 @@ BACKUP_DIR="./backups"
 TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
 BACKUP_FILE="$BACKUP_DIR/dhg_registry_$TIMESTAMP.sql.gz"
 CONTAINER_NAME="dhg-registry-db"
-DB_USER="dhg_user"
+DB_USER="dhg"
 DB_NAME="dhg_registry"
 
 # Create backup directory if it doesn't exist

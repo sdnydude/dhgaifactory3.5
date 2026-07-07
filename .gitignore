@@ -109,3 +109,6 @@ swincoming/
 /progress.md
 /progress_*.md
 /dhg-memreg
+
+# DB dumps — never commit (contains full registry/KB data)
+backups/
