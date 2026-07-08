@@ -4,7 +4,7 @@ import uuid
 DHG Registry - SQLAlchemy Models
 Media, Transcripts, Segments, Events tables
 """
-from sqlalchemy import Column, String, Integer, BigInteger, Float, Boolean, Text, DateTime, Date, ForeignKey, Index, UniqueConstraint, Numeric
+from sqlalchemy import Column, String, Integer, BigInteger, Float, Boolean, Text, DateTime, Date, ForeignKey, Index, UniqueConstraint, Numeric, CheckConstraint
 from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY, TSVECTOR
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -1518,4 +1518,41 @@ class TestCoverage(Base):
         Index("ix_test_coverage_created", "created_at"),
         Index("ix_test_coverage_tags", "tags", postgresql_using="gin"),
         Index("ix_test_coverage_search", "search_vector", postgresql_using="gin"),
+    )
+
+
+# =============================================================================
+# BETA REPORTS
+# =============================================================================
+
+class BetaReport(Base):
+    """Beta-tester bug/feedback reports submitted from client apps (e.g. Portage)."""
+    __tablename__ = "beta_reports"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_name = Column(Text, nullable=False)
+    reporter_email = Column(Text, nullable=False)
+    reporter_user_id = Column(Text, nullable=True)
+    page = Column(Text, nullable=False)
+    area = Column(Text, nullable=True)
+    severity = Column(Text, nullable=False)  # low, medium, high, critical
+    description = Column(Text, nullable=False)
+    screenshot_url = Column(Text, nullable=True)
+    status = Column(Text, nullable=False, default="open", server_default="open")  # open, triaged, in_progress, resolved, wont_fix
+
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        CheckConstraint(
+            "severity IN ('low', 'medium', 'high', 'critical')",
+            name="ck_beta_reports_severity",
+        ),
+        CheckConstraint(
+            "status IN ('open', 'triaged', 'in_progress', 'resolved', 'wont_fix')",
+            name="ck_beta_reports_status",
+        ),
+        Index("ix_beta_reports_project_status", "project_name", "status"),
+        Index("ix_beta_reports_severity", "severity"),
+        Index("ix_beta_reports_created", "created_at"),
     )

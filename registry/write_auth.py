@@ -34,6 +34,7 @@ WRITE_PREFIXES = (
     "/api/decision-logs",
     "/api/deferred-items",
     "/api/bug-fixes",
+    "/api/beta-reports",
     "/api/ship-sessions",
     "/api/test-coverage",
     "/api/agent-sessions",

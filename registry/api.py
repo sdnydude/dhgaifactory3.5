@@ -211,6 +211,7 @@ from test_coverage_endpoints import router as test_coverage_router
 from cme_stats_endpoints import router as cme_stats_router
 from feedback_loop_endpoints import router as feedback_loop_router
 from burndown_endpoints import router as burndown_router, item_router as burndown_item_router
+from beta_reports_endpoints import router as beta_reports_router
 from talkback_endpoints import router as talkback_router
 from patchbay_endpoints import router as patchbay_router
 
@@ -245,6 +246,7 @@ app.include_router(cme_stats_router)
 app.include_router(feedback_loop_router)
 app.include_router(burndown_router)
 app.include_router(burndown_item_router)
+app.include_router(beta_reports_router)
 app.include_router(talkback_router)
 app.include_router(patchbay_router)
 
