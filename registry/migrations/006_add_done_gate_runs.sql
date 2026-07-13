@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS done_gate_runs (
     check_version INTEGER NOT NULL DEFAULT 1,
     adjudication VARCHAR(16) CHECK (adjudication IN ('true_positive', 'false_positive', 'false_negative')),
     sampled BOOLEAN NOT NULL DEFAULT false,
+    adjudicated_at TIMESTAMPTZ,
     meta_data JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

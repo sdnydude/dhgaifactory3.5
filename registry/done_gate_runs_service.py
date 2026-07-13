@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
 from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
@@ -95,6 +96,7 @@ def adjudicate_run(db: Session, item_id, adjudication: str) -> DoneGateRun | Non
     if not row:
         return None
     row.adjudication = adjudication
+    row.adjudicated_at = datetime.now(timezone.utc)  # dead-man clock input (§12.4)
     db.commit()
     db.refresh(row)
     return row

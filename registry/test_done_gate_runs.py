@@ -136,6 +136,19 @@ class TestDoneGateAdjudicate:
         )
         assert r.status_code == 422
 
+    def test_adjudicate_sets_adjudicated_at_timestamp(self, mock_db):
+        import done_gate_runs_service as svc
+
+        row = _mock_run_row()
+        row.adjudicated_at = None
+        mock_db.query.return_value.filter.return_value.first.return_value = row
+
+        result = svc.adjudicate_run(mock_db, row.id, "true_positive")
+
+        assert result is row
+        assert result.adjudication == "true_positive"
+        assert result.adjudicated_at is not None
+
     @patch("done_gate_runs_endpoints.svc")
     def test_adjudicate_missing_run_returns_404(self, mock_svc, client):
         mock_svc.adjudicate_run.return_value = None
@@ -186,3 +199,8 @@ class TestFalseDoneCategoryAndModel:
         }
         assert any("false_negative" in text for text in constraints)
         assert "sampled" in DoneGateRun.__table__.columns
+
+    def test_model_has_adjudicated_at_column(self):
+        from models import DoneGateRun
+
+        assert "adjudicated_at" in DoneGateRun.__table__.columns

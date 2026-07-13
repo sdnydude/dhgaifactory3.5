@@ -43,6 +43,7 @@ class DoneGateRunResponse(BaseModel):
     check_version: int
     adjudication: Optional[str]
     sampled: bool
+    adjudicated_at: Optional[datetime] = None
     meta_data: Optional[dict[str, Any]]
     created_at: datetime
 

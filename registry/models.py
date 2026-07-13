@@ -1639,6 +1639,7 @@ class DoneGateRun(Base):
     check_version = Column(Integer, nullable=False, default=1, server_default="1")
     adjudication = Column(String(16), nullable=True)  # true_positive, false_positive, false_negative
     sampled = Column(Boolean, nullable=False, default=False, server_default="false")  # §12.3 recall-sampling row
+    adjudicated_at = Column(DateTime(timezone=True), nullable=True)  # dead-man clock (§12.4)
     meta_data = Column(JSONB, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
