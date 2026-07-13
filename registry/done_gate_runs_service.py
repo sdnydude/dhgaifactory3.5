@@ -67,6 +67,8 @@ def stats(db: Session, *, project: str | None = None) -> list[dict]:
         sa_func.count(DoneGateRun.id).filter(
             DoneGateRun.adjudication == "false_negative").label("false_negatives"),
         sa_func.count(DoneGateRun.id).filter(
+            DoneGateRun.adjudication == "true_negative").label("true_negatives"),
+        sa_func.count(DoneGateRun.id).filter(
             DoneGateRun.sampled.is_(True)).label("sampled_total"),
     )
     if project:
@@ -85,6 +87,7 @@ def stats(db: Session, *, project: str | None = None) -> list[dict]:
             "true_positives": tp,
             "false_positives": fp,
             "false_negatives": r.false_negatives or 0,
+            "true_negatives": r.true_negatives or 0,
             "sampled_total": r.sampled_total or 0,
             "precision": (tp / (tp + fp)) if (tp + fp) > 0 else None,
         })

@@ -55,6 +55,11 @@ class TestDoneGateSchemas:
     def test_false_negative_is_valid_adjudication(self):
         assert "false_negative" in VALID_ADJUDICATIONS
 
+    def test_true_negative_is_valid_adjudication(self):
+        # checked-clean sampled rows (§12.3) — without this value they would
+        # sit in the queue forever or pollute precision as fake fp
+        assert "true_negative" in VALID_ADJUDICATIONS
+
     def test_create_sampled_flag_defaults_false(self):
         from done_gate_runs_schemas import DoneGateRunCreate
 
@@ -167,7 +172,8 @@ class TestDoneGateStats:
         mock_svc.stats.return_value = [
             {"check_version": 3, "total": 10, "passes": 4, "fails": 6,
              "adjudicated": 5, "true_positives": 4, "false_positives": 1,
-             "false_negatives": 0, "sampled_total": 2, "precision": 0.8},
+             "false_negatives": 0, "true_negatives": 2, "sampled_total": 2,
+             "precision": 0.8},
         ]
 
         r = client.get("/api/done-gate-runs/stats",
@@ -180,6 +186,7 @@ class TestDoneGateStats:
         assert v3["check_version"] == 3
         assert v3["precision"] == 0.8
         assert v3["false_negatives"] == 0
+        assert v3["true_negatives"] == 2
         assert v3["sampled_total"] == 2
 
 
@@ -204,3 +211,13 @@ class TestFalseDoneCategoryAndModel:
         from models import DoneGateRun
 
         assert "adjudicated_at" in DoneGateRun.__table__.columns
+
+    def test_model_constraint_allows_true_negative(self):
+        from models import DoneGateRun
+
+        constraints = {
+            c.sqltext.text
+            for c in DoneGateRun.__table__.constraints
+            if hasattr(c, "sqltext")
+        }
+        assert any("true_negative" in text for text in constraints)

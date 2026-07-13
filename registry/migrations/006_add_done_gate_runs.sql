@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS done_gate_runs (
     evidence JSONB,
     gate_mode VARCHAR(16) NOT NULL DEFAULT 'observe',
     check_version INTEGER NOT NULL DEFAULT 1,
-    adjudication VARCHAR(16) CHECK (adjudication IN ('true_positive', 'false_positive', 'false_negative')),
+    adjudication VARCHAR(16) CHECK (adjudication IN ('true_positive', 'false_positive', 'false_negative', 'true_negative')),
     sampled BOOLEAN NOT NULL DEFAULT false,
     adjudicated_at TIMESTAMPTZ,
     meta_data JSONB,

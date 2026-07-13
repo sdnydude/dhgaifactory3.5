@@ -1637,7 +1637,7 @@ class DoneGateRun(Base):
     evidence = Column(JSONB, nullable=True)       # ["test_run", ...]
     gate_mode = Column(String(16), nullable=False, default="observe", server_default="observe")
     check_version = Column(Integer, nullable=False, default=1, server_default="1")
-    adjudication = Column(String(16), nullable=True)  # true_positive, false_positive, false_negative
+    adjudication = Column(String(16), nullable=True)  # true_positive, false_positive, false_negative, true_negative
     sampled = Column(Boolean, nullable=False, default=False, server_default="false")  # §12.3 recall-sampling row
     adjudicated_at = Column(DateTime(timezone=True), nullable=True)  # dead-man clock (§12.4)
     meta_data = Column(JSONB, nullable=True)
@@ -1649,7 +1649,7 @@ class DoneGateRun(Base):
             name="ck_done_gate_runs_verdict",
         ),
         CheckConstraint(
-            "adjudication IN ('true_positive', 'false_positive', 'false_negative')",
+            "adjudication IN ('true_positive', 'false_positive', 'false_negative', 'true_negative')",
             name="ck_done_gate_runs_adjudication",
         ),
         Index("ix_done_gate_runs_project_created", "project", "created_at"),

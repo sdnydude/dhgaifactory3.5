@@ -7,7 +7,12 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 VALID_VERDICTS = {"pass", "fail", "no_claim"}
-VALID_ADJUDICATIONS = {"true_positive", "false_positive", "false_negative"}
+VALID_ADJUDICATIONS = {
+    "true_positive",   # fail row confirmed: real false-done event
+    "false_positive",  # fail row refuted: detector misfired
+    "false_negative",  # sampled row: detector missed a real false-done (§12.3)
+    "true_negative",   # sampled row checked clean — excluded from precision
+}
 
 
 class DoneGateRunCreate(BaseModel):
@@ -63,6 +68,7 @@ class DoneGateStats(BaseModel):
     true_positives: int
     false_positives: int
     false_negatives: int = 0   # from sampled rows (§12.3 recall path)
+    true_negatives: int = 0    # sampled rows checked clean
     sampled_total: int = 0
     precision: Optional[float] = None  # tp / (tp + fp), None until any fail adjudicated
 
