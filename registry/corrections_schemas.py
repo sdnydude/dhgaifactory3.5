@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 VALID_CATEGORIES = {
     "docker-guessing",
     "fabrication",
+    "false-done",  # adjudicated done-gate true_positive (Loop 4, protocol §12)
     "missed-context",
     "other",
     "premature-action",

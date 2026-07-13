@@ -214,6 +214,8 @@ from burndown_endpoints import router as burndown_router, item_router as burndow
 from beta_reports_endpoints import router as beta_reports_router
 from talkback_endpoints import router as talkback_router
 from patchbay_endpoints import router as patchbay_router
+from session_reports_endpoints import router as session_reports_router
+from done_gate_runs_endpoints import router as done_gate_runs_router
 
 # Include routers
 app.include_router(agent_router)
@@ -249,6 +251,8 @@ app.include_router(burndown_item_router)
 app.include_router(beta_reports_router)
 app.include_router(talkback_router)
 app.include_router(patchbay_router)
+app.include_router(session_reports_router)
+app.include_router(done_gate_runs_router)
 
 # Add CORS middleware — locked to production origin + localhost for development
 ALLOWED_ORIGINS = [
