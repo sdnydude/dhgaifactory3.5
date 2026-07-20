@@ -44,7 +44,11 @@ This project has CodeGraph initialized (.codegraph/ exists). Use `codegraph_expl
 
 ## What to report back
 
-Keep the report under ~<<400–600>> words. Structure it as:
+Keep the report under ~<<150 quick | 300 medium | 500 very thorough>> words.
+
+**Never paste source blocks.** Cite `file:line`. Quote ≤3 lines only when a single line is the decisive evidence. Describe behavior in prose — do not reproduce code. The source sections `codegraph_explore` returned are for YOUR reading, not for the report.
+
+Structure it as:
 
 1. <<Primary deliverable — flow diagram / impact list / component map>>
 2. **Key functions** (file:line for each hop)
@@ -61,9 +65,9 @@ Keep the report under ~<<400–600>> words. Structure it as:
 
 ## Thoroughness level guide
 
-- **quick**: 1–2 tool calls, short report (~200 words). Use for "where is X defined" when CodeGraph's main-session tools would suffice but the question has one extra hop.
-- **medium**: moderate exploration, ~400 words. Default for most cross-cutting questions.
-- **very thorough**: comprehensive multi-round exploration, ~600 words, multiple naming conventions checked. Use when the user explicitly asks for depth, or when the question is a benchmark/audit.
+- **quick**: 1–2 tool calls, short report (~150 words). Use for "where is X defined" when CodeGraph's main-session tools would suffice but the question has one extra hop.
+- **medium**: moderate exploration, ~300 words. Default for most cross-cutting questions.
+- **very thorough**: comprehensive multi-round exploration, ~500 words, multiple naming conventions checked. Use when the user explicitly asks for depth, or when the question is a benchmark/audit.
 
 ## When NOT to use this skill
 
