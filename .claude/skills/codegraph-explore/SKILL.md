@@ -44,12 +44,18 @@ This project has CodeGraph initialized (.codegraph/ exists). Use `codegraph_expl
 
 ## What to report back
 
-Keep the report under ~<<400–600>> words. Structure it as:
+**Handback contract — read this first.** Your final message is the ONLY thing passed back to the main session; everything you retrieved with `codegraph_explore` stays in your context, not the caller's. A source dump here is exactly what stalls the main session on handback. So:
+
+- Return a **summary, not source**. Never paste `codegraph_explore` / `codegraph_context` output, whole files, or multi-line source blocks into your report.
+- Cite code as `path/to/file.ext:line`. Quote at most ~10 lines total across the whole report, and only when the exact text IS the answer (a signature, a dispatch key, a regex).
+- Hard cap: keep the report under ~<<400–600>> words (per the thoroughness level) no matter how much source you read to get there.
+
+Structure it as:
 
 1. <<Primary deliverable — flow diagram / impact list / component map>>
-2. **Key functions** (file:line for each hop)
+2. **Key functions** — `file:line` for each hop (reference, don't quote)
 3. <<Secondary deliverables specific to the question>>
-4. **Benchmark notes at the end**: (a) total tool calls, (b) codegraph_* vs grep/read/glob breakdown, (c) whether CodeGraph gave you everything or you needed fallback and WHY, (d) anything CodeGraph missed or got wrong.
+4. **Benchmark notes** (counts only, no transcripts): (a) total tool calls, (b) codegraph_* vs grep/read/glob breakdown, (c) whether CodeGraph gave you everything or you needed fallback and WHY, (d) anything CodeGraph missed or got wrong.
 
 ## Honesty guardrails
 

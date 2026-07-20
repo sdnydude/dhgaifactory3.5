@@ -21,3 +21,5 @@ The graphify hooks are scoped to source-code paths only — grepping or reading 
 ---
 
 Which CodeGraph calls are main-session-safe (`_search`/`_node`/`_callers`/`_impact`) vs Explore-subagent-only (`_explore`/`_context`), the Explore-subagent decision table, and the FileWatcher/`codegraph sync` details all live in the global CLAUDE.md CodeGraph section — not duplicated here.
+
+**Explore handback contract:** an Explore subagent's final message must be a summary — `file:line` citations, not `codegraph_explore` / `codegraph_context` source dumps. Echoing retrieved source back into the main session is what causes the post-Explore stall. The full contract lives in the `codegraph-explore` skill's "What to report back" section.
