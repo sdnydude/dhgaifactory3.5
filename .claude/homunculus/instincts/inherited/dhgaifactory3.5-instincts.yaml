@@ -1,0 +1,533 @@
+# Instincts generated from https://github.com/sdnydude/dhgaifactory3.5
+# Generated: 2026-07-21T18:29:26.828Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: dhgaifactory3.5-commit-conventional
+trigger: "when writing a commit message"
+confidence: 0.85
+domain: git
+source: repo-analysis
+source_repo: https://github.com/sdnydude/dhgaifactory3.5
+---
+
+# Dhgaifactory3.5 Commit Conventional
+
+## Action
+
+Use conventional commit format with prefixes: feat, fix, docs, refactor
+
+## Evidence
+
+- 12 commits analyzed
+- Detected conventional commit pattern
+- Examples: fix(backup): correct DB user (dhg), fail loudly on pg_dump errors; ignore backups/, feat(registry): capture-write bearer-token middleware, mode off (item 14)
+
+---
+id: dhgaifactory3.5-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/sdnydude/dhgaifactory3.5
+---
+
+# Dhgaifactory3.5 Commit Length
+
+## Action
+
+Write moderate-length commit messages (~84 characters)
+
+## Evidence
+
+- Average commit message length: 84 chars
+- Based on 12 commits
+
+---
+id: dhgaifactory3.5-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/sdnydude/dhgaifactory3.5
+---
+
+# Dhgaifactory3.5 Naming Files
+
+## Action
+
+Use snake_case naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: snake_case
+
+---
+id: dhgaifactory3.5-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/sdnydude/dhgaifactory3.5
+---
+
+# Dhgaifactory3.5 Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: dhgaifactory3.5-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/sdnydude/dhgaifactory3.5
+---
+
+# Dhgaifactory3.5 Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: dhgaifactory3.5-test-separate
+trigger: "when writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/sdnydude/dhgaifactory3.5
+---
+
+# Dhgaifactory3.5 Test Separate
+
+## Action
+
+Place tests in the tests/ or __tests__/ directory, mirroring src structure
+
+## Evidence
+
+- Separate test directory pattern detected
+- Tests live in dedicated test folders
+
+---
+id: dhgaifactory3.5-workflow-database-migration
+trigger: "when modifying the database schema or adding tables"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/sdnydude/dhgaifactory3.5
+---
+
+# Dhgaifactory3.5 Workflow Database Migration
+
+## Action
+
+Follow the database-migration workflow:
+1. Create migration file
+2. Update schema definitions
+3. Generate/update types
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~10x per month
+- Files: **/schema.*, migrations/*
+
+---
+id: dhgaifactory3.5-workflow-feature-development
+trigger: "when implementing a new feature"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/sdnydude/dhgaifactory3.5
+---
+
+# Dhgaifactory3.5 Workflow Feature Development
+
+## Action
+
+Follow the feature-development workflow:
+1. Add feature implementation
+2. Add tests for feature
+3. Update documentation
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~20x per month
+- Files: **/*.test.*, **/api/**
+
+---
+id: dhgaifactory3.5-workflow-add-new-capture-module-or-feature-to-registry
+trigger: "when doing add new capture module or feature to registry"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/sdnydude/dhgaifactory3.5
+---
+
+# Dhgaifactory3.5 Workflow Add New Capture Module Or Feature To Registry
+
+## Action
+
+Follow the add-new-capture-module-or-feature-to-registry workflow:
+1. Create or update endpoint file(s) for the new feature (e.g., <feature>_endpoints.py)
+2. Create or update schema file(s) (e.g., <feature>_schemas.py)
+3. Create or update service file(s) (e.g., <feature>_service.py)
+4. Update registry/models.py to add new models or fields
+5. Add or update migration file(s) (e.g., alembic/versions/ or migrations/NNN_<desc>.sql/py)
+6. Update registry/api.py to register new routes or routers
+7. Write or update tests for the new feature (e.g., test_<feature>.py)
+8. Optionally update write_auth.py if the feature involves write protection
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: registry/<feature>_endpoints.py, registry/<feature>_schemas.py, registry/<feature>_service.py
+
+---
+id: dhgaifactory3.5-workflow-extend-existing-capture-module-or-feature-in-registry
+trigger: "when doing extend existing capture module or feature in registry"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/sdnydude/dhgaifactory3.5
+---
+
+# Dhgaifactory3.5 Workflow Extend Existing Capture Module Or Feature In Registry
+
+## Action
+
+Follow the extend-existing-capture-module-or-feature-in-registry workflow:
+1. Update schema file(s) for the feature (e.g., <feature>_schemas.py)
+2. Update service file(s) (e.g., <feature>_service.py)
+3. Update or append to migration file(s) (e.g., migrations/NNN_<desc>.sql/py)
+4. Update registry/models.py for new fields or enums
+5. Update or add tests for the new logic (e.g., test_<feature>.py)
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: registry/<feature>_schemas.py, registry/<feature>_service.py, registry/migrations/*.sql
+
+---
+id: dhgaifactory3.5-workflow-refactor-shared-constants-or-rules-across-agents
+trigger: "when doing refactor shared constants or rules across agents"
+confidence: 0.55
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/sdnydude/dhgaifactory3.5
+---
+
+# Dhgaifactory3.5 Workflow Refactor Shared Constants Or Rules Across Agents
+
+## Action
+
+Follow the refactor-shared-constants-or-rules-across-agents workflow:
+1. Create new shared file(s) (e.g., src/prompts/<name>.py)
+2. Move constants or logic from each agent module to the shared file(s)
+3. Update each agent module to import from the shared location
+4. Update or create rules documentation (e.g., .claude/rules/llm-prompts.md)
+5. Verify all affected modules import-check clean
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~1x per month
+- Files: langgraph_workflows/dhg-agents-cloud/src/prompts/*.py, langgraph_workflows/dhg-agents-cloud/src/*_agent.py, .claude/rules/llm-prompts.md
+
+---
+id: dhgaifactory3.5-naming-files-snake-case
+trigger: "When creating a new file."
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: sdnydude/dhgaifactory3.5
+---
+
+# Dhgaifactory3.5 Naming Files Snake Case
+
+## Action
+
+Name the file using snake_case.
+
+## Evidence
+
+- Pattern in namingConventions.files
+- registry/beta_reports_endpoints.py
+- registry/beta_reports_schemas.py
+
+---
+id: dhgaifactory3.5-naming-functions-camelCase
+trigger: "When defining a new function."
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: sdnydude/dhgaifactory3.5
+---
+
+# Dhgaifactory3.5 Naming Functions CamelCase
+
+## Action
+
+Name the function using camelCase.
+
+## Evidence
+
+- Pattern in namingConventions.functions
+
+---
+id: dhgaifactory3.5-naming-classes-pascal-case
+trigger: "When defining a new class."
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: sdnydude/dhgaifactory3.5
+---
+
+# Dhgaifactory3.5 Naming Classes Pascal Case
+
+## Action
+
+Name the class using PascalCase.
+
+## Evidence
+
+- Pattern in namingConventions.classes
+
+---
+id: dhgaifactory3.5-naming-constants-screaming-snake-case
+trigger: "When defining a constant."
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: sdnydude/dhgaifactory3.5
+---
+
+# Dhgaifactory3.5 Naming Constants Screaming Snake Case
+
+## Action
+
+Name the constant using SCREAMING_SNAKE_CASE.
+
+## Evidence
+
+- Pattern in namingConventions.constants
+
+---
+id: dhgaifactory3.5-imports-relative
+trigger: "When importing modules within the package."
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: sdnydude/dhgaifactory3.5
+---
+
+# Dhgaifactory3.5 Imports Relative
+
+## Action
+
+Use relative imports.
+
+## Evidence
+
+- Pattern in importStyle
+- Seen in registry/*_service.py, registry/api.py
+
+---
+id: dhgaifactory3.5-exports-named
+trigger: "When exporting functions or classes."
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: sdnydude/dhgaifactory3.5
+---
+
+# Dhgaifactory3.5 Exports Named
+
+## Action
+
+Use named exports.
+
+## Evidence
+
+- Pattern in exportStyle
+
+---
+id: dhgaifactory3.5-test-file-naming
+trigger: "When adding tests for a feature."
+confidence: 0.85
+domain: testing
+source: repo-analysis
+source_repo: sdnydude/dhgaifactory3.5
+---
+
+# Dhgaifactory3.5 Test File Naming
+
+## Action
+
+Name the test file as test_<feature>.py and place it alongside or in the test directory.
+
+## Evidence
+
+- Pattern in workflows.feature-development.filesInvolved
+- registry/test_write_auth.py
+- registry/test_<feature>.py
+
+---
+id: dhgaifactory3.5-test-after-feature
+trigger: "When implementing a new feature or extending an existing one."
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: sdnydude/dhgaifactory3.5
+---
+
+# Dhgaifactory3.5 Test After Feature
+
+## Action
+
+Add or update tests for the feature in the corresponding test file.
+
+## Evidence
+
+- Pattern in workflows.feature-development.commitSequence
+- Pattern in workflows.extend-existing-capture-module-or-feature-in-registry.commitSequence
+
+---
+id: dhgaifactory3.5-commit-conventional-format
+trigger: "When writing a commit message."
+confidence: 0.95
+domain: git
+source: repo-analysis
+source_repo: sdnydude/dhgaifactory3.5
+---
+
+# Dhgaifactory3.5 Commit Conventional Format
+
+## Action
+
+Use the conventional commit format: <type>(<scope>): <description>.
+
+## Evidence
+
+- Pattern in commits.type
+- Examples: 'feat(registry): ...', 'fix(backup): ...'
+
+---
+id: dhgaifactory3.5-commit-prefixes
+trigger: "When choosing a commit type."
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: sdnydude/dhgaifactory3.5
+---
+
+# Dhgaifactory3.5 Commit Prefixes
+
+## Action
+
+Use one of the allowed prefixes: feat, fix, docs, refactor.
+
+## Evidence
+
+- Pattern in commits.prefixes
+- Examples: 'feat', 'fix', 'docs', 'refactor'
+
+---
+id: dhgaifactory3.5-commit-length
+trigger: "When composing a commit message."
+confidence: 0.7
+domain: git
+source: repo-analysis
+source_repo: sdnydude/dhgaifactory3.5
+---
+
+# Dhgaifactory3.5 Commit Length
+
+## Action
+
+Aim for a commit message length around 80-90 characters.
+
+## Evidence
+
+- Pattern in commits.averageLength
+
+---
+id: dhgaifactory3.5-add-capture-module
+trigger: "When a new data capture domain or major feature needs to be added to the registry API."
+confidence: 0.95
+domain: workflow
+source: repo-analysis
+source_repo: sdnydude/dhgaifactory3.5
+---
+
+# Dhgaifactory3.5 Add Capture Module
+
+## Action
+
+Follow the workflow: create/update endpoint, schema, service, models, migrations, api registration, tests, and write_auth if needed.
+
+## Evidence
+
+- Workflow: add-new-capture-module-or-feature-to-registry
+- Example commits and files for new capture modules
+
+---
+id: dhgaifactory3.5-extend-capture-module
+trigger: "When extending an existing registry feature with new attributes, endpoints, or logic."
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: sdnydude/dhgaifactory3.5
+---
+
+# Dhgaifactory3.5 Extend Capture Module
+
+## Action
+
+Update schema, service, migrations, models, and tests for the feature.
+
+## Evidence
+
+- Workflow: extend-existing-capture-module-or-feature-in-registry
+- Example commit sequences and files
+
+---
+id: dhgaifactory3.5-refactor-shared-constants
+trigger: "When deduplicating or centralizing shared code or constants used by multiple agents."
+confidence: 0.85
+domain: workflow
+source: repo-analysis
+source_repo: sdnydude/dhgaifactory3.5
+---
+
+# Dhgaifactory3.5 Refactor Shared Constants
+
+## Action
+
+Extract shared logic/constants to a shared file, update imports, and update rules documentation.
+
+## Evidence
+
+- Workflow: refactor-shared-constants-or-rules-across-agents
+- Commit: refactor(agents): extract 17 prompt constants to src/prompts/ + llm-prompts rule (item 21)
+
