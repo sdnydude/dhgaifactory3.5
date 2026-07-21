@@ -15,6 +15,7 @@ export interface Module {
   staticState?: 'on' | 'warn' | 'off';
   tunnel?: string;         // tunnel hostname → the hot (TUNNEL) jack
   path?: string;           // suffix for LAN/TS links, e.g. '/dashboard'
+  href?: string;           // internal same-origin tool page (no port, no probe)
   jacks: Jack[];
   project?: string;        // docs project this module belongs to
   keywords?: string;       // extra filter/citation match terms
@@ -78,6 +79,7 @@ export const racks: Rack[] = [
       {name: 'LangGraph Dev', port: 2026, statusKey: 'langgraph-dev', desc: 'Graph dev server — dev only', jacks: ['LAN'], keywords: 'dev'},
       {name: 'Logo Maker', port: 8012, statusKey: 'logo-maker', desc: 'Stopped — docker start away', jacks: ['LAN']},
       {name: 'Portage Dev', port: 3003, statusKey: 'portage-dev', desc: 'Development instance', jacks: ['LAN'], project: 'portage'},
+      {name: 'Graph Report', href: '/playground/graph-report.html', staticState: 'on', desc: 'Portage codebase graph — communities, god nodes, drilldown', jacks: [], project: 'portage', keywords: 'graphify graph communities god nodes codebase'},
     ],
   },
 ];

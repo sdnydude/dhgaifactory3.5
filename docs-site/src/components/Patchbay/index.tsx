@@ -151,7 +151,7 @@ export default function Patchbay(): React.ReactElement {
   );
 
   const moduleHref = (mod: Module): string =>
-    mod.tunnel ?? `${LAN}:${mod.port}${mod.path ?? ''}`;
+    mod.href ?? mod.tunnel ?? `${LAN}:${mod.port}${mod.path ?? ''}`;
 
   return (
     <div className={styles.frame}>
