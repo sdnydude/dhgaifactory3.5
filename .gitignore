@@ -112,3 +112,13 @@ swincoming/
 
 # DB dumps — never commit (contains full registry/KB data)
 backups/
+
+# macOS AppleDouble metadata junk
+._*
+
+# graphify tool output (regeneratable; graphify-out is 17M)
+/graphify-out/
+/graphify-wiki/
+
+# dated backups of the secrets override (e.g. *.bak.20260713_105003)
+*.bak.*
