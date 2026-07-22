@@ -1700,3 +1700,46 @@ class SessionReport(Base):
         Index("ix_session_reports_tags", "tags", postgresql_using="gin"),
         Index("ix_session_reports_search", "search_vector", postgresql_using="gin"),
     )
+
+
+class Asset(Base):
+    """Design/media asset catalog — visual, vector, font, design-source files grouped by design system."""
+    __tablename__ = "assets"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    filename = Column(String(512), nullable=False)
+    filepath = Column(String(1024), nullable=True)        # consolidated copy path
+    source_path = Column(String(1024), nullable=True)     # original location collected from
+    source_drive = Column(String(32), nullable=True)      # g700data1 | mac | gdrive
+    project_name = Column(String(100), nullable=False)
+    design_system = Column(String(64), nullable=True)     # e.g. portage-forest-green
+    category = Column(String(64), nullable=True)          # brand|product|docs|vector|font|design-source|other
+    mime_type = Column(String(128), nullable=True)
+    file_size_bytes = Column(BigInteger, nullable=True)
+    sha256 = Column(String(64), nullable=False)
+    width = Column(Integer, nullable=True)
+    height = Column(Integer, nullable=True)
+    dominant_color = Column(String(9), nullable=True)     # #RRGGBB
+    alt_text = Column(Text, nullable=True)                # null at ingest; backfill via vision
+    exif = Column(JSONB, nullable=True)
+    tags = Column(ARRAY(Text), nullable=True)
+
+    embedding = Column(Vector(768), nullable=True)
+    embedding_model = Column(String(64), nullable=True)
+    search_vector = Column(TSVECTOR, nullable=True)
+
+    model_name = Column(String(64), nullable=True)
+    meta_data = Column(JSONB, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("project_name", "sha256", name="uq_assets_project_sha256"),
+        Index("ix_assets_project_category", "project_name", "category"),
+        Index("ix_assets_source_drive", "source_drive"),
+        Index("ix_assets_design_system", "design_system"),
+        Index("ix_assets_created", "created_at"),
+        Index("ix_assets_tags", "tags", postgresql_using="gin"),
+        Index("ix_assets_search", "search_vector", postgresql_using="gin"),
+    )

@@ -206,6 +206,7 @@ from ship_sessions_endpoints import router as ship_sessions_router
 from kb_endpoints import router as kb_router
 from corrections_endpoints import router as corrections_router
 from bug_fixes_endpoints import router as bug_fixes_router
+from assets_endpoints import router as assets_router
 from deferred_items_endpoints import router as deferred_items_router
 from test_coverage_endpoints import router as test_coverage_router
 from cme_stats_endpoints import router as cme_stats_router
@@ -242,6 +243,7 @@ app.include_router(ship_sessions_router)
 app.include_router(kb_router)
 app.include_router(corrections_router)
 app.include_router(bug_fixes_router)
+app.include_router(assets_router)
 app.include_router(deferred_items_router)
 app.include_router(test_coverage_router)
 app.include_router(cme_stats_router)
