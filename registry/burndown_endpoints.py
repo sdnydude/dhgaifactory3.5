@@ -16,6 +16,8 @@ import logging
 from typing import Optional
 from uuid import UUID
 
+from html import escape
+from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
@@ -210,12 +212,14 @@ async def view_burndown_list(
         sc = STATUS_COLORS.get(item.status, "#6b7280")
         sev_c = SEVERITY_COLORS.get(item.severity, "#9ca3af")
         res_c = RESOLUTION_COLORS.get(item.resolution, "#6b7280")
-        url_cell = f'<a href="{item.url}" target="_blank" style="color:#3b82f6">{item.url}</a>' if item.url else ""
+        _u = item.url or ""
+        _su = _u if urlparse(_u).scheme in ("http", "https") else ""
+        url_cell = f'<a href="{escape(_su, quote=True)}" target="_blank" rel="noopener noreferrer" style="color:#3b82f6">{escape(_su)}</a>' if _su else ""
         rows_html += f"""<tr data-id="{item.id}">
   <td style="text-align:center">{item.seq}</td>
-  <td><strong>{item.feature}</strong></td>
+  <td><strong>{escape(item.feature or "")}</strong></td>
   <td style="font-size:0.85em">{url_cell}</td>
-  <td style="font-size:0.85em">{item.what_to_check or ""}</td>
+  <td style="font-size:0.85em">{escape(item.what_to_check or "")}</td>
   <td><select class="status-select" onchange="updateItem('{item.id}', 'status', this.value)"
       style="background:{sc};color:#fff;border:none;border-radius:4px;padding:2px 6px;cursor:pointer">
       {status_options.replace(f'value="{item.status}"', f'value="{item.status}" selected')}
@@ -225,18 +229,18 @@ async def view_burndown_list(
       {severity_options.replace(f'value="{item.severity}"', f'value="{item.severity}" selected')}
   </select></td>
   <td><textarea rows="2" style="width:100%;font-size:0.85em;border:1px solid #374151;background:#1f2937;color:#e5e7eb;border-radius:4px;padding:4px"
-      onblur="updateItem('{item.id}', 'user_comment', this.value)">{item.user_comment or ""}</textarea></td>
+      onblur="updateItem('{item.id}', 'user_comment', this.value)">{escape(item.user_comment or "")}</textarea></td>
   <td><textarea rows="2" style="width:100%;font-size:0.85em;font-family:monospace;border:1px solid #374151;background:#1f2937;color:#fbbf24;border-radius:4px;padding:4px"
-      onblur="updateItem('{item.id}', 'console_errors', this.value)">{item.console_errors or ""}</textarea></td>
+      onblur="updateItem('{item.id}', 'console_errors', this.value)">{escape(item.console_errors or "")}</textarea></td>
   <td><textarea rows="2" style="width:100%;font-size:0.85em;border:1px solid #374151;background:#1f2937;color:#a7f3d0;border-radius:4px;padding:4px"
-      onblur="updateItem('{item.id}', 'agent_findings', this.value)">{item.agent_findings or ""}</textarea></td>
+      onblur="updateItem('{item.id}', 'agent_findings', this.value)">{escape(item.agent_findings or "")}</textarea></td>
   <td><textarea rows="2" style="width:100%;font-size:0.85em;border:1px solid #374151;background:#1f2937;color:#bfdbfe;border-radius:4px;padding:4px"
-      onblur="updateItem('{item.id}', 'agent_actions', this.value)">{item.agent_actions or ""}</textarea></td>
+      onblur="updateItem('{item.id}', 'agent_actions', this.value)">{escape(item.agent_actions or "")}</textarea></td>
   <td><select class="resolution-select" onchange="updateItem('{item.id}', 'resolution', this.value)"
       style="background:{res_c};color:#fff;border:none;border-radius:4px;padding:2px 6px;cursor:pointer">
       {resolution_options.replace(f'value="{item.resolution}"', f'value="{item.resolution}" selected')}
   </select></td>
-  <td style="font-size:0.8em;color:#9ca3af">{item.fixed_in_commit or ""}</td>
+  <td style="font-size:0.8em;color:#9ca3af">{escape(item.fixed_in_commit or "")}</td>
 </tr>"""
 
     progress = stats["progress_pct"]
@@ -245,7 +249,7 @@ async def view_burndown_list(
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{bl.title} — Burndown</title>
+<title>{escape(bl.title)} — Burndown</title>
 <style>
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
   body {{ font-family: Inter, -apple-system, sans-serif; background: #111827; color: #e5e7eb; padding: 20px; }}
@@ -269,9 +273,9 @@ async def view_burndown_list(
 </style>
 </head>
 <body>
-<h1>{bl.title}</h1>
-<div class="meta">{bl.project_name} &middot; {bl.list_type} &middot; {bl.status}
-  {(" &middot; " + bl.description) if bl.description else ""}</div>
+<h1>{escape(bl.title)}</h1>
+<div class="meta">{escape(bl.project_name)} &middot; {escape(bl.list_type)} &middot; {escape(bl.status)}
+  {(" &middot; " + escape(bl.description)) if bl.description else ""}</div>
 
 <div class="stats-bar">
   <div class="stat"><div class="num">{stats['total']}</div><div class="label">Total</div></div>
