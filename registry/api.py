@@ -206,13 +206,17 @@ from ship_sessions_endpoints import router as ship_sessions_router
 from kb_endpoints import router as kb_router
 from corrections_endpoints import router as corrections_router
 from bug_fixes_endpoints import router as bug_fixes_router
+from assets_endpoints import router as assets_router
 from deferred_items_endpoints import router as deferred_items_router
 from test_coverage_endpoints import router as test_coverage_router
 from cme_stats_endpoints import router as cme_stats_router
 from feedback_loop_endpoints import router as feedback_loop_router
 from burndown_endpoints import router as burndown_router, item_router as burndown_item_router
+from beta_reports_endpoints import router as beta_reports_router
 from talkback_endpoints import router as talkback_router
 from patchbay_endpoints import router as patchbay_router
+from session_reports_endpoints import router as session_reports_router
+from done_gate_runs_endpoints import router as done_gate_runs_router
 
 # Include routers
 app.include_router(agent_router)
@@ -239,14 +243,18 @@ app.include_router(ship_sessions_router)
 app.include_router(kb_router)
 app.include_router(corrections_router)
 app.include_router(bug_fixes_router)
+app.include_router(assets_router)
 app.include_router(deferred_items_router)
 app.include_router(test_coverage_router)
 app.include_router(cme_stats_router)
 app.include_router(feedback_loop_router)
 app.include_router(burndown_router)
 app.include_router(burndown_item_router)
+app.include_router(beta_reports_router)
 app.include_router(talkback_router)
 app.include_router(patchbay_router)
+app.include_router(session_reports_router)
+app.include_router(done_gate_runs_router)
 
 # Add CORS middleware — locked to production origin + localhost for development
 ALLOWED_ORIGINS = [

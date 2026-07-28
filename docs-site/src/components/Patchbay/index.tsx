@@ -1,5 +1,6 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import Link from '@docusaurus/Link';
+import posthog from 'posthog-js';
 import styles from './patchbay.module.css';
 import {
   racks, tapes, offsite, suggestions, LAN, TS,
@@ -62,6 +63,7 @@ export default function Patchbay(): React.ReactElement {
     setOpen(false);
     setCitedProjects(new Set());
     if (typeof window !== 'undefined') localStorage.setItem('tb-closed', '1');
+    posthog.capture('talkback_closed');
   }, []);
 
   const ask = useCallback(async (text: string) => {
@@ -76,6 +78,11 @@ export default function Patchbay(): React.ReactElement {
     setStreaming(true);
     setQuery('');
 
+    posthog.capture('talkback_question_asked', {
+      question: trimmed,
+      question_length: trimmed.length,
+    });
+
     try {
       const resp = await fetch('/api/talkback', {
         method: 'POST',
@@ -83,6 +90,12 @@ export default function Patchbay(): React.ReactElement {
         body: JSON.stringify({question: trimmed}),
       });
       if (!resp.ok || !resp.body) {
+        const errorReason = resp.status === 429 ? 'rate_limited' : 'unreachable';
+        posthog.capture('talkback_error', {
+          reason: errorReason,
+          status_code: resp.status,
+          question: trimmed,
+        });
         throw new Error(resp.status === 429
           ? 'Too many questions — give it a minute and try again.'
           : 'talkback_unreachable');
@@ -113,14 +126,26 @@ export default function Patchbay(): React.ReactElement {
             acc += parsed.text ?? '';
             setAnswer(acc);
           } else if (event === 'error') {
+            posthog.capture('talkback_error', {
+              reason: 'stream_error',
+              message: parsed.message,
+              question: trimmed,
+            });
             setAnswer(parsed.message ?? 'Talkback is temporarily unavailable.');
           }
         }
       }
     } catch (e) {
+      // 'talkback_unreachable' is a sentinel thrown after capturing the error above.
+      // Other non-sentinel errors are true network failures not yet captured.
+      const isPreCaptured = e instanceof Error && e.message === 'talkback_unreachable';
+      const isUserFacing = e instanceof Error && !!e.message && !isPreCaptured;
+      if (!isUserFacing && !isPreCaptured) {
+        posthog.capture('talkback_error', {reason: 'network_error', question: trimmed});
+      }
       setAnswer(
-        e instanceof Error && e.message && e.message !== 'talkback_unreachable'
-          ? e.message
+        isUserFacing
+          ? (e as Error).message
           : 'Talkback is offline right now — the board still works as a launchpad.',
       );
     } finally {
@@ -144,6 +169,18 @@ export default function Patchbay(): React.ReactElement {
     return () => window.removeEventListener('keydown', onKey);
   }, [open, closeMonitor]);
 
+  // Track filter usage with debounce so we capture intent, not every keystroke.
+  const filterTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleQueryChange = useCallback((value: string) => {
+    setQuery(value);
+    if (filterTimerRef.current) clearTimeout(filterTimerRef.current);
+    if (value.trim()) {
+      filterTimerRef.current = setTimeout(() => {
+        posthog.capture('service_filter_used', {query: value.trim()});
+      }, 800);
+    }
+  }, []);
+
   const modelLabel = 'qwen3:14b · local';
   const liveCount = useMemo(
     () => (status ? Object.values(status).filter((s) => s === 'up').length : null),
@@ -151,7 +188,7 @@ export default function Patchbay(): React.ReactElement {
   );
 
   const moduleHref = (mod: Module): string =>
-    mod.tunnel ?? `${LAN}:${mod.port}${mod.path ?? ''}`;
+    mod.href ?? mod.tunnel ?? `${LAN}:${mod.port}${mod.path ?? ''}`;
 
   return (
     <div className={styles.frame}>
@@ -169,7 +206,7 @@ export default function Patchbay(): React.ReactElement {
             aria-label="Filter services or ask Talkback"
             placeholder="patch into anything — type to filter, Enter to ask talkback"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => handleQueryChange(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && query.trim()) ask(query); }}
           />
           <span className={styles.kbd}>/</span>
@@ -208,7 +245,13 @@ export default function Patchbay(): React.ReactElement {
             {!asked && (
               <div className={styles.chips}>
                 {suggestions.map((s) => (
-                  <button key={s} onClick={() => ask(s)}>{s}</button>
+                  <button
+                    key={s}
+                    onClick={() => {
+                      posthog.capture('suggestion_chip_clicked', {suggestion: s});
+                      ask(s);
+                    }}
+                  >{s}</button>
                 ))}
               </div>
             )}
@@ -230,7 +273,15 @@ export default function Patchbay(): React.ReactElement {
               const lit = mod.project ? citedProjects.has(mod.project) : false;
               const hidden = !matchesQuery(hay, q);
               const primary = moduleHref(mod);
-              const openPrimary = () => window.open(primary, '_blank', 'noopener,noreferrer');
+              const openPrimary = () => {
+                posthog.capture('module_clicked', {
+                  module_name: mod.name,
+                  module_state: state,
+                  rack: rack.title,
+                  url: primary,
+                });
+                window.open(primary, '_blank', 'noopener,noreferrer');
+              };
               return (
                 <div
                   key={mod.name}
@@ -260,6 +311,12 @@ export default function Patchbay(): React.ReactElement {
                           href={href}
                           target="_blank"
                           rel="noopener noreferrer"
+                          onClick={() => posthog.capture('jack_clicked', {
+                            jack_type: jack,
+                            module_name: mod.name,
+                            rack: rack.title,
+                            url: href,
+                          })}
                         >{jack}</a>
                       );
                     })}
@@ -287,6 +344,11 @@ export default function Patchbay(): React.ReactElement {
                 key={tape.project}
                 className={`${styles.tape} ${lit ? styles.cited : ''} ${hidden ? styles.hide : ''}`}
                 to={tape.href}
+                onClick={() => posthog.capture('documentation_tape_clicked', {
+                  project: tape.project,
+                  title: tape.title,
+                  href: tape.href,
+                })}
               >
                 <div className={styles.spine}><span>{tape.spine}</span></div>
                 <div className={styles.tapeBody}>
@@ -309,7 +371,15 @@ export default function Patchbay(): React.ReactElement {
         <ul>
           {offsite.map((link) => (
             <li key={link.href}>
-              <a href={link.href} target="_blank" rel="noopener noreferrer">{link.label}</a>
+              <a
+                href={link.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => posthog.capture('offsite_link_clicked', {
+                  label: link.label,
+                  url: link.href,
+                })}
+              >{link.label}</a>
             </li>
           ))}
         </ul>

@@ -14,6 +14,10 @@ Three lookup regimes coexist in this project; pick by what you are looking up, n
 
 The graphify hooks are scoped to source-code paths only — grepping or reading the instruction layer does not (and should not) trigger a graphify nudge.
 
+## Explore Subagent Return Format
+
+Explore subagents return summaries, not source: cite `file:line`, never paste code blocks, quote ≤3 lines only when a single line is the decisive evidence.
+
 ## Legacy Path Warning
 
 `agents/` is the legacy Docker-based FastAPI agent system, being decommissioned. Current LangGraph agents live in `langgraph_workflows/dhg-agents-cloud/src/`. CodeGraph indexes both; when searching for an agent by name, prefer results from `langgraph_workflows/` and treat `agents/` results as legacy reference.

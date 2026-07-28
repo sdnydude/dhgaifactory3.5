@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" font-family="'Inter', 'Segoe UI', system-ui, sans-serif">
+  <defs>
+    <marker id="up" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#F77E2D"/>
+    </marker>
+    <filter id="sh" x="-2%" y="-2%" width="104%" height="104%">
+      <feDropShadow dx="1" dy="2" stdDeviation="3" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="720" fill="#FAF9F7" rx="8"/>
+  <text x="600" y="40" text-anchor="middle" font-size="23" font-weight="700" fill="#32374A">Model Stack &amp; Escalation Ladder</text>
+  <text x="600" y="62" text-anchor="middle" font-size="13" fill="#71717A">Cost rises bottom → top · escalate only when the cheaper tier cannot resolve the task</text>
+
+  <!-- Tier 1: Local free -->
+  <rect x="80" y="500" width="1040" height="170" rx="12" fill="#EEF2F0" stroke="#32374A" stroke-width="1.6" filter="url(#sh)"/>
+  <text x="100" y="526" font-size="15" font-weight="700" fill="#32374A">TIER 1 · Local (free) — dhg-ollama, RTX 5080 16GB</text>
+  <text x="100" y="546" font-size="11" fill="#71717A">Zero per-token cost · GPU-resident · default working tier</text>
+  <g font-size="11">
+    <rect x="100" y="560" width="150" height="90" rx="8" fill="#fff" stroke="#32374A" stroke-width="1.2"/>
+    <text x="175" y="592" text-anchor="middle" font-weight="600" fill="#32374A">Gemma 4 12B</text>
+    <text x="175" y="612" text-anchor="middle" fill="#71717A">reasoning,</text>
+    <text x="175" y="628" text-anchor="middle" fill="#71717A">code analysis</text>
+    <rect x="266" y="560" width="150" height="90" rx="8" fill="#fff" stroke="#32374A" stroke-width="1.2"/>
+    <text x="341" y="592" text-anchor="middle" font-weight="600" fill="#32374A">GLM-4.7 Flash</text>
+    <text x="341" y="612" text-anchor="middle" fill="#71717A">agentic, tool</text>
+    <text x="341" y="628" text-anchor="middle" fill="#71717A">calling</text>
+    <rect x="432" y="560" width="150" height="90" rx="8" fill="#fff" stroke="#32374A" stroke-width="1.2"/>
+    <text x="507" y="592" text-anchor="middle" font-weight="600" fill="#32374A">Devstral S2 24B</text>
+    <text x="507" y="612" text-anchor="middle" fill="#71717A">code gen,</text>
+    <text x="507" y="628" text-anchor="middle" fill="#71717A">refactor</text>
+    <rect x="598" y="560" width="150" height="90" rx="8" fill="#fff" stroke="#32374A" stroke-width="1.2"/>
+    <text x="673" y="592" text-anchor="middle" font-weight="600" fill="#32374A">Qwen3 14B</text>
+    <text x="673" y="612" text-anchor="middle" fill="#71717A">general,</text>
+    <text x="673" y="628" text-anchor="middle" fill="#71717A">multilingual</text>
+    <rect x="764" y="560" width="150" height="90" rx="8" fill="#fff" stroke="#32374A" stroke-width="1.2"/>
+    <text x="839" y="592" text-anchor="middle" font-weight="600" fill="#32374A">Qwen3-VL</text>
+    <text x="839" y="612" text-anchor="middle" fill="#71717A">vision /</text>
+    <text x="839" y="628" text-anchor="middle" fill="#71717A">diagrams</text>
+    <rect x="930" y="560" width="170" height="90" rx="8" fill="#fff" stroke="#32374A" stroke-width="1.2"/>
+    <text x="1015" y="592" text-anchor="middle" font-weight="600" fill="#32374A">Llama 3.2 Vision</text>
+    <text x="1015" y="612" text-anchor="middle" fill="#71717A">image / UI</text>
+    <text x="1015" y="628" text-anchor="middle" fill="#71717A">review</text>
+  </g>
+
+  <!-- Tier 2: Cloud fee primary -->
+  <rect x="160" y="330" width="880" height="140" rx="12" fill="#F3EEF9" stroke="#663399" stroke-width="1.6" filter="url(#sh)"/>
+  <text x="180" y="356" font-size="15" font-weight="700" fill="#663399">TIER 2 · Cloud (fee) — DeepSeek API · default chat model</text>
+  <text x="180" y="376" font-size="11" fill="#71717A">Used when local depth/accuracy is insufficient · 1M-token context</text>
+  <rect x="180" y="388" width="400" height="68" rx="8" fill="#fff" stroke="#663399" stroke-width="1.3"/>
+  <text x="380" y="414" text-anchor="middle" font-size="12" font-weight="600" fill="#32374A">DeepSeek V4 Flash  ·  $0.14 / $0.28 per M</text>
+  <text x="380" y="436" text-anchor="middle" font-size="10.5" fill="#71717A">default · fast · 284B/13B active · SWE-bench ~79%</text>
+  <rect x="600" y="388" width="420" height="68" rx="8" fill="#fff" stroke="#663399" stroke-width="1.3"/>
+  <text x="810" y="414" text-anchor="middle" font-size="12" font-weight="600" fill="#32374A">DeepSeek V4 Pro  ·  reasoning-heavy</text>
+  <text x="810" y="436" text-anchor="middle" font-size="10.5" fill="#71717A">complex design/analysis · 1.6T/49B active · SWE-bench 80.6%</text>
+
+  <!-- Tier 3: Escalation -->
+  <rect x="320" y="170" width="560" height="120" rx="12" fill="#FDF1E8" stroke="#F77E2D" stroke-width="1.6" filter="url(#sh)"/>
+  <text x="340" y="196" font-size="15" font-weight="700" fill="#C2611B">TIER 3 · Escalation</text>
+  <text x="340" y="216" font-size="11" fill="#71717A">Hardest problems · highest cost · human-in-loop</text>
+  <rect x="340" y="228" width="250" height="48" rx="8" fill="#fff" stroke="#F77E2D" stroke-width="1.3"/>
+  <text x="465" y="257" text-anchor="middle" font-size="12" font-weight="600" fill="#32374A">Claude Opus 4.8</text>
+  <rect x="610" y="228" width="250" height="48" rx="8" fill="#fff" stroke="#F77E2D" stroke-width="1.3" stroke-dasharray="3 2"/>
+  <text x="735" y="251" text-anchor="middle" font-size="11" fill="#71717A">Gemini 3.5 Flash</text>
+  <text x="735" y="267" text-anchor="middle" font-size="9.5" fill="#71717A">(free cloud fallback)</text>
+
+  <line x1="600" y1="500" x2="600" y2="472" stroke="#F77E2D" stroke-width="2" marker-end="url(#up)"/>
+  <line x1="600" y1="330" x2="600" y2="292" stroke="#F77E2D" stroke-width="2" marker-end="url(#up)"/>
+  <text x="620" y="490" font-size="11" fill="#C2611B" font-weight="600">escalate ↑</text>
+  <text x="620" y="320" font-size="11" fill="#C2611B" font-weight="600">escalate ↑</text>
+
+  <text x="600" y="700" text-anchor="middle" font-size="11" fill="#71717A">All 8 in-app models share the same DHG system prompt + tools; the 6 text models also carry the 3 KB attachments. Verified 2026-06-05.</text>
+</svg>

@@ -4,7 +4,7 @@ import uuid
 DHG Registry - SQLAlchemy Models
 Media, Transcripts, Segments, Events tables
 """
-from sqlalchemy import Column, String, Integer, BigInteger, Float, Boolean, Text, DateTime, Date, ForeignKey, Index, UniqueConstraint, Numeric
+from sqlalchemy import Column, String, Integer, BigInteger, Float, Boolean, Text, DateTime, Date, ForeignKey, Index, UniqueConstraint, Numeric, CheckConstraint
 from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY, TSVECTOR
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -1518,4 +1518,228 @@ class TestCoverage(Base):
         Index("ix_test_coverage_created", "created_at"),
         Index("ix_test_coverage_tags", "tags", postgresql_using="gin"),
         Index("ix_test_coverage_search", "search_vector", postgresql_using="gin"),
+    )
+
+
+# =============================================================================
+# BURNDOWN LISTS
+# =============================================================================
+
+class BurndownList(Base):
+    """Project-agnostic burndown list for feature verification, debugging, and release checklists."""
+    __tablename__ = "burndown_lists"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title = Column(String(280), nullable=False)
+    description = Column(Text, nullable=True)
+    project_name = Column(String(100), nullable=False)
+    list_type = Column(String(40), nullable=False, default="debug")
+    status = Column(String(20), nullable=False, default="active")
+    created_by = Column(String(100), nullable=True)
+    meta_data = Column(JSONB, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    items = relationship("BurndownItem", back_populates="burndown_list", cascade="all, delete-orphan",
+                         order_by="BurndownItem.seq")
+
+    __table_args__ = (
+        Index("ix_burndown_lists_project", "project_name"),
+        Index("ix_burndown_lists_status", "status"),
+    )
+
+
+class BurndownItem(Base):
+    """Individual checkable item within a burndown list."""
+    __tablename__ = "burndown_items"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    list_id = Column(UUID(as_uuid=True), ForeignKey("burndown_lists.id", ondelete="CASCADE"), nullable=False)
+    seq = Column(Integer, nullable=False)
+    feature = Column(String(280), nullable=False)
+    url = Column(String(500), nullable=True)
+    what_to_check = Column(Text, nullable=True)
+    status = Column(String(20), nullable=False, default="not_started")
+    severity = Column(String(20), nullable=False, default="none")
+    user_comment = Column(Text, nullable=True)
+    console_errors = Column(Text, nullable=True)
+    assigned_to = Column(String(100), nullable=True)
+    fixed_in_commit = Column(String(100), nullable=True)
+    checked_at = Column(DateTime(timezone=True), nullable=True)
+    agent_findings = Column(Text, nullable=True)
+    agent_actions = Column(Text, nullable=True)
+    resolution = Column(String(20), nullable=False, default="open", server_default="open")
+    meta_data = Column(JSONB, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    burndown_list = relationship("BurndownList", back_populates="items")
+
+    __table_args__ = (
+        Index("ix_burndown_items_list_id", "list_id"),
+        Index("ix_burndown_items_status", "status"),
+        Index("ix_burndown_items_list_seq", "list_id", "seq"),
+    )
+
+
+# =============================================================================
+# BETA REPORTS
+# =============================================================================
+
+class BetaReport(Base):
+    """Beta-tester bug/feedback reports submitted from client apps (e.g. Portage)."""
+    __tablename__ = "beta_reports"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_name = Column(Text, nullable=False)
+    reporter_email = Column(Text, nullable=False)
+    reporter_user_id = Column(Text, nullable=True)
+    page = Column(Text, nullable=False)
+    area = Column(Text, nullable=True)
+    severity = Column(Text, nullable=False)  # low, medium, high, critical
+    description = Column(Text, nullable=False)
+    screenshot_url = Column(Text, nullable=True)
+    status = Column(Text, nullable=False, default="open", server_default="open")  # open, triaged, in_progress, resolved, wont_fix
+
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        CheckConstraint(
+            "severity IN ('low', 'medium', 'high', 'critical')",
+            name="ck_beta_reports_severity",
+        ),
+        CheckConstraint(
+            "status IN ('open', 'triaged', 'in_progress', 'resolved', 'wont_fix')",
+            name="ck_beta_reports_status",
+        ),
+        Index("ix_beta_reports_project_status", "project_name", "status"),
+        Index("ix_beta_reports_severity", "severity"),
+        Index("ix_beta_reports_created", "created_at"),
+    )
+
+
+class DoneGateRun(Base):
+    """Done-gate verdict ledger — Loop 4 self-training (dhg-memreg client half).
+
+    One row per claim-bearing gate run. adjudication is the human ratchet
+    input: precision per check_version decides observe→enforce promotion.
+    """
+    __tablename__ = "done_gate_runs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    session_id = Column(String(128), nullable=False)
+    project = Column(String(100), nullable=False)
+    verdict = Column(String(16), nullable=False)  # pass, fail, no_claim
+    claim = Column(JSONB, nullable=True)          # {terms, snippet} | null
+    evidence = Column(JSONB, nullable=True)       # ["test_run", ...]
+    gate_mode = Column(String(16), nullable=False, default="observe", server_default="observe")
+    check_version = Column(Integer, nullable=False, default=1, server_default="1")
+    adjudication = Column(String(16), nullable=True)  # true_positive, false_positive, false_negative, true_negative
+    sampled = Column(Boolean, nullable=False, default=False, server_default="false")  # §12.3 recall-sampling row
+    adjudicated_at = Column(DateTime(timezone=True), nullable=True)  # dead-man clock (§12.4)
+    meta_data = Column(JSONB, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            "verdict IN ('pass', 'fail', 'no_claim')",
+            name="ck_done_gate_runs_verdict",
+        ),
+        CheckConstraint(
+            "adjudication IN ('true_positive', 'false_positive', 'false_negative', 'true_negative')",
+            name="ck_done_gate_runs_adjudication",
+        ),
+        Index("ix_done_gate_runs_project_created", "project", "created_at"),
+        Index("ix_done_gate_runs_verdict", "verdict"),
+    )
+
+
+# =============================================================================
+# SESSION REPORTS
+# =============================================================================
+
+class SessionReport(Base):
+    """Narrative end-of-session reports — the story of a session's work plus
+    learnings, insights, and deferred items. Source of record is a markdown
+    file in the project repo (docs/session-reports/); this table is the
+    canonical ingest source for registry search and future llmwiki indexing."""
+    __tablename__ = "session_reports"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title = Column(String(280), nullable=False)
+    session_span = Column(Text, nullable=True)  # e.g. "2026-07-09 evening → 2026-07-10 evening"
+    report_md = Column(Text, nullable=False)    # full narrative markdown body
+    prs = Column(ARRAY(Text), nullable=True)        # PR numbers/URLs shipped in the session
+    learnings = Column(ARRAY(Text), nullable=True)
+    insights = Column(ARRAY(Text), nullable=True)
+    deferred = Column(ARRAY(Text), nullable=True)
+    category = Column(String(64), nullable=True)  # feature, bugfix, mixed, infra, docs, release, investigation, other
+
+    project_name = Column(String(100), nullable=False)
+    source_file = Column(String(512), nullable=True)  # repo-relative report file path
+    tags = Column(ARRAY(Text), nullable=True)
+
+    embedding = Column(Vector(768), nullable=True)
+    embedding_model = Column(String(64), nullable=True)
+    search_vector = Column(TSVECTOR, nullable=True)
+
+    session_id = Column(String(128), nullable=True)
+    model_name = Column(String(64), nullable=True)
+    meta_data = Column(JSONB, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("project_name", "title", name="uq_session_reports_project_title"),
+        Index("ix_session_reports_project_category", "project_name", "category"),
+        Index("ix_session_reports_created", "created_at"),
+        Index("ix_session_reports_tags", "tags", postgresql_using="gin"),
+        Index("ix_session_reports_search", "search_vector", postgresql_using="gin"),
+    )
+
+
+class Asset(Base):
+    """Design/media asset catalog — visual, vector, font, design-source files grouped by design system."""
+    __tablename__ = "assets"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    filename = Column(String(512), nullable=False)
+    filepath = Column(String(1024), nullable=True)        # consolidated copy path
+    source_path = Column(String(1024), nullable=True)     # original location collected from
+    source_drive = Column(String(32), nullable=True)      # g700data1 | mac | gdrive
+    project_name = Column(String(100), nullable=False)
+    design_system = Column(String(64), nullable=True)     # e.g. portage-forest-green
+    category = Column(String(64), nullable=True)          # brand|product|docs|vector|font|design-source|other
+    mime_type = Column(String(128), nullable=True)
+    file_size_bytes = Column(BigInteger, nullable=True)
+    sha256 = Column(String(64), nullable=False)
+    width = Column(Integer, nullable=True)
+    height = Column(Integer, nullable=True)
+    dominant_color = Column(String(9), nullable=True)     # #RRGGBB
+    alt_text = Column(Text, nullable=True)                # null at ingest; backfill via vision
+    exif = Column(JSONB, nullable=True)
+    tags = Column(ARRAY(Text), nullable=True)
+
+    embedding = Column(Vector(768), nullable=True)
+    embedding_model = Column(String(64), nullable=True)
+    search_vector = Column(TSVECTOR, nullable=True)
+
+    model_name = Column(String(64), nullable=True)
+    meta_data = Column(JSONB, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("project_name", "sha256", name="uq_assets_project_sha256"),
+        Index("ix_assets_project_category", "project_name", "category"),
+        Index("ix_assets_source_drive", "source_drive"),
+        Index("ix_assets_design_system", "design_system"),
+        Index("ix_assets_created", "created_at"),
+        Index("ix_assets_tags", "tags", postgresql_using="gin"),
+        Index("ix_assets_search", "search_vector", postgresql_using="gin"),
     )

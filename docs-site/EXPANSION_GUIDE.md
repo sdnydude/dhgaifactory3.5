@@ -84,16 +84,20 @@ Add a step to `.github/workflows/deploy-docs.yml` in the relevant project repo:
 
 ## 5. Build and verify
 
-`build/` is bind-mounted into the nginx container. `npm run build` recreates the
-`build/` directory (new inode), which **orphans the container's bind mount** —
-nginx then serves 403. You MUST restart dhg-docs after every build:
+`build/` is bind-mounted into the nginx container. Use **`npm run build:deploy`**,
+NOT `npm run build`. Plain `npm run build` rm-rf's `build/` and recreates it with a
+new inode, which **orphans the container's bind mount** (nginx serves stale content
+or 403) until a restart. `build:deploy` (`build-docs.sh`) builds into a temp dir and
+rsyncs into the existing `build/`, so its inode never changes and no restart is ever
+needed:
 
 ```bash
 cd /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/docs-site
-npm run build
-docker restart dhg-docs      # required — remounts build/; skipping it → 403
+npm run build:deploy         # inode-preserving; no docker restart required
 curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8017/<project-name>/getting-started/
 ```
+
+(If you ever run plain `npm run build`, you must `docker restart dhg-docs` afterward to re-resolve the mount.)
 
 dhg-docs is now a compose service (`docker-compose.override.yml`), on
 `dhgaifactory35_dhg-network` so it can proxy `/api/` to `dhg-registry-api`.

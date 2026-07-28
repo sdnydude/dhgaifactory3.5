@@ -1,6 +1,7 @@
 import {themes as prismThemes} from 'prism-react-renderer';
 import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
+import 'dotenv/config';
 
 const config: Config = {
   title: 'DHG Documentation',
@@ -43,6 +44,20 @@ const config: Config = {
       } satisfies Preset.Options,
     ],
   ],
+
+  // PostHog analytics — only when the key is present so builds never fail
+  // on a missing env. (Was a module.exports block that clobbered the whole
+  // config export and broke every build since 2026-07-22; fixed 2026-07-27.)
+  plugins: process.env.POSTHOG_API_KEY
+    ? [[
+        'posthog-docusaurus',
+        {
+          apiKey: process.env.POSTHOG_API_KEY,
+          appUrl: process.env.POSTHOG_HOST,
+          enableInDevelopment: true,
+        },
+      ]]
+    : [],
 
   themes: [
     [
@@ -131,5 +146,4 @@ const config: Config = {
     },
   } satisfies Preset.ThemeConfig,
 };
-
 export default config;

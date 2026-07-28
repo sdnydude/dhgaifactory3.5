@@ -399,6 +399,19 @@ services:
       - dhg-network
     restart: unless-stopped
 
+
+  dhg-graphify-wiki:
+    image: nginx:alpine
+    container_name: dhg-graphify-wiki
+    ports:
+      - "8021:80"
+    volumes:
+      - /home/swebber64/DHG/portage/graphify-out/wiki:/usr/share/nginx/html:ro
+      - ./graphify-wiki/default.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped
+    networks:
+      - dhg-network
+
 volumes:
   prometheus_data:
   loki_data:
