@@ -3,8 +3,9 @@ Capture-write bearer-token middleware (item 14).
 
 Machine-to-machine auth for the registry's machine write paths — distinct
 from the human-facing Cloudflare Access layer in auth.py. Mutating methods
-(POST/PUT/PATCH/DELETE) on the covered route families (captures, doc-pages,
-cme, v1 agent routes — see WRITE_PREFIXES) require
+(POST/PUT/PATCH/DELETE) on the covered route families (capture tables,
+doc-pages, cme, v1 agents/research — see WRITE_PREFIXES; the read-only
+/api/captures/lookup route is deliberately open) require
 `Authorization: Bearer <REGISTRY_WRITE_TOKEN>`. Reads stay LAN-open, and
 POST <prefix>/search routes are exempt (read-via-POST — ship.md, inject
 hooks, and briefings depend on them).
@@ -43,7 +44,11 @@ WRITE_PREFIXES = (
     "/api/kb",
     "/api/doc-pages",
     "/api/cme",
-    "/api/v1",
+    # Only the v1 families whose clients carry the token (dhg-agents-cloud).
+    # A bare /api/v1 would 401 antigravity/inference/frontend-specs writers
+    # that were never given token support (P2 review finding).
+    "/api/v1/agents",
+    "/api/v1/research",
 )
 
 # Read-via-POST endpoints stay open: every covered family exposes

@@ -36,14 +36,26 @@ PIPELINES = {
 }
 
 
-def lookup_capture(db: Session, pipeline: str, project: str, key: str) -> Optional[object]:
-    """Return the landed row for (pipeline, project, natural key), or None."""
+def lookup_capture(
+    db: Session, pipeline: str, project: str, key: str,
+    category: Optional[str] = None,
+) -> Optional[object]:
+    """Return the landed row for (pipeline, project, natural key), or None.
+
+    corrections' unique key is (project, category, upsert_key_hash) — pass
+    category to avoid conflating different-category corrections that share
+    user_message text. Without it, any-category match is returned (looser,
+    kept for callers that don't know the category).
+    """
     model, key_col = PIPELINES[pipeline]
     if pipeline == "corrections":
-        return db.query(model).filter(
+        criteria = [
             Correction.project_name == project,
             Correction.upsert_key_hash == compute_upsert_hash(key),
-        ).first()
+        ]
+        if category:
+            criteria.append(Correction.category == category)
+        return db.query(model).filter(*criteria).first()
     return db.query(model).filter(
         model.project_name == project,
         getattr(model, key_col) == key,

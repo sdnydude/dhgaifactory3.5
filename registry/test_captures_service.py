@@ -51,3 +51,21 @@ class TestLookupCapture:
         db.query.return_value.filter.return_value.first.return_value = row
         assert lookup_capture(db, pipeline, "portage", "some key") is row
         db.query.assert_called_once_with(model)
+
+    def test_corrections_lookup_includes_category_when_given(self):
+        """The corrections unique key is (project, category, hash) — two
+        different-category corrections can share user_message text; lookup
+        must not conflate them (review important #3)."""
+        from unittest.mock import call, patch
+
+        from captures_service import lookup_capture
+        import models
+
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = None
+        lookup_capture(db, "corrections", "portage", "dont do that", category="docker-guessing")
+        filter_args = db.query.return_value.filter.call_args
+        # the category criterion must be part of the filter expression set
+        assert len(filter_args.args) == 3, (
+            f"expected project+hash+category criteria, got {len(filter_args.args)}"
+        )

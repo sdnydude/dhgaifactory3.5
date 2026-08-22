@@ -29,7 +29,8 @@ router = APIRouter(prefix="/api/captures", tags=["captures"])
 
 
 class CaptureLookupResponse(BaseModel):
-    found: bool
+    # A 200 already means "found" — no boolean field implying an unreachable
+    # found=False state (misses are a 404).
     pipeline: str
     id: UUID
 
@@ -39,6 +40,7 @@ async def lookup_capture(
     pipeline: str = Query(...),
     project: str = Query(..., min_length=1),
     key: str = Query(..., min_length=1),
+    category: str | None = Query(None, description="corrections only — part of its unique key"),
     db: Session = Depends(get_db),
 ) -> CaptureLookupResponse:
     start = time.time()
@@ -48,13 +50,15 @@ async def lookup_capture(
             detail=f"Unknown pipeline; valid: {sorted(svc.PIPELINES)}",
         )
     try:
-        row = svc.lookup_capture(db, pipeline, project, key)
-        registry_read_operations.labels(operation="lookup_capture").inc()
-        registry_read_latency.observe((time.time() - start) * 1000)
+        row = svc.lookup_capture(db, pipeline, project, key, category=category)
     except Exception as e:
         registry_errors.labels(error_type="lookup_capture_failed").inc()
         logger.error("lookup_capture failed: %s", e)
         raise HTTPException(status_code=500, detail="Internal server error")
+    # Metrics outside the try: a prometheus-client hiccup must not turn a
+    # successful DB lookup into a 500 (review minor #7).
+    registry_read_operations.labels(operation="lookup_capture").inc()
+    registry_read_latency.observe((time.time() - start) * 1000)
     if row is None:
         raise HTTPException(status_code=404, detail="Capture not found")
-    return CaptureLookupResponse(found=True, pipeline=pipeline, id=row.id)
+    return CaptureLookupResponse(pipeline=pipeline, id=row.id)

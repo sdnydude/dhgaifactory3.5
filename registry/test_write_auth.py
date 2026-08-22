@@ -44,6 +44,8 @@ def make_client() -> TestClient:
     @app.post("/api/doc-pages")
     @app.post("/api/doc-pages/search")
     @app.post("/api/v1/agents/register")
+    @app.post("/api/v1/research/requests")
+    @app.post("/api/v1/antigravity/chats")
     @app.post("/api/dev-changelog")
     def ok():
         return {"ok": True}
@@ -198,3 +200,21 @@ def test_enforce_mode_still_covers_nested_mutations(monkeypatch):
     monkeypatch.setenv("REGISTRY_WRITE_TOKEN", TOKEN)
     client = make_client()
     assert client.post("/api/deferred-items/abc123/surfaced", json={}).status_code == 401
+
+
+def test_enforce_mode_covers_v1_research_routes(monkeypatch):
+    """agent.py's research request/patch writes carry the token."""
+    monkeypatch.setenv("REGISTRY_WRITE_AUTH_MODE", "enforce")
+    monkeypatch.setenv("REGISTRY_WRITE_TOKEN", TOKEN)
+    client = make_client()
+    assert client.post("/api/v1/research/requests", json={}).status_code == 401
+
+
+def test_enforce_mode_leaves_v1_antigravity_open(monkeypatch):
+    """The bare /api/v1 prefix was too broad (review finding): antigravity /
+    inference / frontend-specs writers send no token — only the v1 families
+    with token-carrying clients (agents, research) are covered."""
+    monkeypatch.setenv("REGISTRY_WRITE_AUTH_MODE", "enforce")
+    monkeypatch.setenv("REGISTRY_WRITE_TOKEN", TOKEN)
+    client = make_client()
+    assert client.post("/api/v1/antigravity/chats", json={}).status_code == 200

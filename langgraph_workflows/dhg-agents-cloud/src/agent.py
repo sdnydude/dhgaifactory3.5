@@ -238,8 +238,10 @@ class AIFactoryRegistry:
                 )
                 if response.status_code == 200:
                     return {"status": "registered", "data": response.json()}
+                logger.warning("registry register failed: HTTP %s", response.status_code)
                 return {"status": "failed", "code": response.status_code}
         except Exception as e:
+            logger.warning("registry register unreachable: %s", e)
             return {"status": "registry_unavailable", "error": str(e)}
 
     async def heartbeat(self, metrics: Optional[dict] = None) -> bool:
@@ -250,8 +252,11 @@ class AIFactoryRegistry:
                     f"{self.registry_url}/api/v1/agents/{self.service_id}/heartbeat",
                     json={"status": "healthy", "models": self._get_model_registry(), "metrics": metrics or {}}
                 )
+                if response.status_code != 200:
+                    logger.warning("registry heartbeat failed: HTTP %s", response.status_code)
                 return response.status_code == 200
-        except Exception:
+        except Exception as e:
+            logger.warning("registry heartbeat unreachable: %s", e)
             return False
 
     async def log_research_request(self, topic: str, user_id: str, input_params: dict) -> Optional[str]:
@@ -268,8 +273,10 @@ class AIFactoryRegistry:
                 )
                 if response.status_code == 201:
                     return response.json().get("request_id")
+                logger.warning("registry research-request log failed: HTTP %s", response.status_code)
                 return None
-        except Exception:
+        except Exception as e:
+            logger.warning("registry research-request log unreachable: %s", e)
             return None
 
     async def update_research_request(self, request_id: str, status: str, output_summary: dict = None, metadata: dict = None, error: str = None) -> bool:
@@ -290,8 +297,11 @@ class AIFactoryRegistry:
                     f"{self.registry_url}/api/v1/research/requests/{request_id}",
                     json=payload
                 )
+                if response.status_code != 200:
+                    logger.warning("registry research-request update failed: HTTP %s", response.status_code)
                 return response.status_code == 200
-        except Exception:
+        except Exception as e:
+            logger.warning("registry research-request update unreachable: %s", e)
             return False
 registry = AIFactoryRegistry()
 
