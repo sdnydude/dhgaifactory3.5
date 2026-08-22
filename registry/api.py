@@ -217,6 +217,7 @@ from talkback_endpoints import router as talkback_router
 from patchbay_endpoints import router as patchbay_router
 from session_reports_endpoints import router as session_reports_router
 from done_gate_runs_endpoints import router as done_gate_runs_router
+from captures_endpoints import router as captures_router
 
 # Include routers
 app.include_router(agent_router)
@@ -255,6 +256,7 @@ app.include_router(talkback_router)
 app.include_router(patchbay_router)
 app.include_router(session_reports_router)
 app.include_router(done_gate_runs_router)
+app.include_router(captures_router)
 
 # Add CORS middleware — locked to production origin + localhost for development
 ALLOWED_ORIGINS = [

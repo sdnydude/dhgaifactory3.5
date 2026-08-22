@@ -26,6 +26,23 @@ MAX_CHUNK_CHARS = 1500
 OVERLAP_CHARS = 200
 
 
+def _auth_headers() -> dict:
+    """Bearer token for registry write auth. Sources, in order: REGISTRY_WRITE_TOKEN
+    env, then the token file (~/.claude/secrets/registry-write-token) — same
+    contract as dhg-memreg's memreg_capture.py. Empty result = no header."""
+    token = os.environ.get("REGISTRY_WRITE_TOKEN", "")
+    if not token:
+        token_file = os.environ.get(
+            "REGISTRY_WRITE_TOKEN_FILE",
+            str(Path.home() / ".claude" / "secrets" / "registry-write-token"),
+        )
+        try:
+            token = Path(token_file).read_text(encoding="utf-8").strip()
+        except OSError:
+            token = ""
+    return {"Authorization": f"Bearer {token}"} if token else {}
+
+
 def extract_heading_path(lines: list[str], end_idx: int) -> str:
     """Walk backwards from end_idx to build the heading hierarchy."""
     headings: dict[int, str] = {}
@@ -153,7 +170,7 @@ def ingest_project(project_name: str, docs_dir: Path, registry_url: str, sweep: 
     url = f"{registry_url}/api/doc-pages/bulk"
     try:
         with httpx.Client(timeout=120.0) as client:
-            resp = client.post(url, json=payload)
+            resp = client.post(url, json=payload, headers=_auth_headers())
             resp.raise_for_status()
             result = resp.json()
             logger.info(

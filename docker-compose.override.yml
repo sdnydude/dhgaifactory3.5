@@ -74,6 +74,8 @@ services:
       - OLLAMA_URL=${OLLAMA_URL:-http://dhg-ollama:11434}
       - TALKBACK_LOCAL_MODEL=${TALKBACK_LOCAL_MODEL:-qwen3:14b}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - REGISTRY_WRITE_AUTH_MODE=${REGISTRY_WRITE_AUTH_MODE:-off}
+      - REGISTRY_WRITE_TOKEN=${REGISTRY_WRITE_TOKEN:-}
     volumes:
       - dhg_exports:/exports:ro
     depends_on:

@@ -1,6 +1,6 @@
 """Tests for the capture-write bearer-token middleware (item 14).
 
-Scope: mutating methods on the 9 KB/capture route families require
+Scope: mutating methods on the covered KB/capture route families (WRITE_PREFIXES) require
 Authorization: Bearer <REGISTRY_WRITE_TOKEN>. Reads stay open.
 /api/kb/search is a read-via-POST and stays open. Modes: off | log | enforce.
 
@@ -40,10 +40,39 @@ def make_client() -> TestClient:
     @app.post("/api/deferred-items/search")
     @app.post("/api/deferred-items/abc123/surfaced")
     @app.post("/api/cme/projects")
+    @app.post("/api/session-reports")
+    @app.post("/api/doc-pages")
+    @app.post("/api/doc-pages/search")
+    @app.post("/api/v1/agents/register")
+    @app.post("/api/v1/research/requests")
+    @app.post("/api/v1/antigravity/chats")
+    @app.post("/api/dev-changelog")
     def ok():
         return {"ok": True}
 
     return TestClient(app)
+
+
+def test_enforce_mode_covers_doc_pages(monkeypatch):
+    monkeypatch.setenv("REGISTRY_WRITE_AUTH_MODE", "enforce")
+    monkeypatch.setenv("REGISTRY_WRITE_TOKEN", TOKEN)
+    client = make_client()
+    assert client.post("/api/doc-pages", json={}).status_code == 401
+
+
+def test_enforce_mode_exempts_doc_pages_search(monkeypatch):
+    """Registry-search rules (portage KB queries) depend on this staying open."""
+    monkeypatch.setenv("REGISTRY_WRITE_AUTH_MODE", "enforce")
+    monkeypatch.setenv("REGISTRY_WRITE_TOKEN", TOKEN)
+    client = make_client()
+    assert client.post("/api/doc-pages/search", json={}).status_code == 200
+
+
+def test_enforce_mode_covers_session_reports(monkeypatch):
+    monkeypatch.setenv("REGISTRY_WRITE_AUTH_MODE", "enforce")
+    monkeypatch.setenv("REGISTRY_WRITE_TOKEN", TOKEN)
+    client = make_client()
+    assert client.post("/api/session-reports", json={}).status_code == 401
 
 
 def test_enforce_mode_rejects_unauthenticated_write(monkeypatch):
@@ -105,11 +134,27 @@ def test_enforce_mode_covers_kb_ingest(monkeypatch):
     assert client.post("/api/kb/ingest", json={}).status_code == 401
 
 
+def test_enforce_mode_covers_cme(monkeypatch):
+    """CME agent writes carry the token (T13 full coverage, operator 2026-08-21)."""
+    monkeypatch.setenv("REGISTRY_WRITE_AUTH_MODE", "enforce")
+    monkeypatch.setenv("REGISTRY_WRITE_TOKEN", TOKEN)
+    client = make_client()
+    assert client.post("/api/cme/projects", json={}).status_code == 401
+
+
 def test_enforce_mode_leaves_uncovered_routes_open(monkeypatch):
     monkeypatch.setenv("REGISTRY_WRITE_AUTH_MODE", "enforce")
     monkeypatch.setenv("REGISTRY_WRITE_TOKEN", TOKEN)
     client = make_client()
-    assert client.post("/api/cme/projects", json={}).status_code == 200
+    assert client.post("/api/dev-changelog", json={}).status_code == 200
+
+
+def test_enforce_mode_covers_v1_agent_routes(monkeypatch):
+    """Orchestrator register/heartbeat/research writes carry the token (T13)."""
+    monkeypatch.setenv("REGISTRY_WRITE_AUTH_MODE", "enforce")
+    monkeypatch.setenv("REGISTRY_WRITE_TOKEN", TOKEN)
+    client = make_client()
+    assert client.post("/api/v1/agents/register", json={}).status_code == 401
 
 
 def test_log_mode_allows_but_logs(monkeypatch, caplog):
@@ -155,3 +200,21 @@ def test_enforce_mode_still_covers_nested_mutations(monkeypatch):
     monkeypatch.setenv("REGISTRY_WRITE_TOKEN", TOKEN)
     client = make_client()
     assert client.post("/api/deferred-items/abc123/surfaced", json={}).status_code == 401
+
+
+def test_enforce_mode_covers_v1_research_routes(monkeypatch):
+    """agent.py's research request/patch writes carry the token."""
+    monkeypatch.setenv("REGISTRY_WRITE_AUTH_MODE", "enforce")
+    monkeypatch.setenv("REGISTRY_WRITE_TOKEN", TOKEN)
+    client = make_client()
+    assert client.post("/api/v1/research/requests", json={}).status_code == 401
+
+
+def test_enforce_mode_leaves_v1_antigravity_open(monkeypatch):
+    """The bare /api/v1 prefix was too broad (review finding): antigravity /
+    inference / frontend-specs writers send no token — only the v1 families
+    with token-carrying clients (agents, research) are covered."""
+    monkeypatch.setenv("REGISTRY_WRITE_AUTH_MODE", "enforce")
+    monkeypatch.setenv("REGISTRY_WRITE_TOKEN", TOKEN)
+    client = make_client()
+    assert client.post("/api/v1/antigravity/chats", json={}).status_code == 200
