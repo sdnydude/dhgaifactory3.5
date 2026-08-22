@@ -30,6 +30,11 @@ from tracing import traced_node
 
 import httpx
 
+try:
+    from src.registry_auth import registry_write_headers
+except ImportError:  # LangGraph Cloud packages src/ as top-level
+    from registry_auth import registry_write_headers
+
 logger = logging.getLogger(__name__)
 
 
@@ -200,7 +205,9 @@ async def execute_save_node(state: RegistryState) -> dict:
     results = []
 
     try:
-        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+        async with httpx.AsyncClient(
+            timeout=HTTP_TIMEOUT, headers=registry_write_headers(),
+        ) as client:
             if route.get("batch") and action == "save_citations":
                 citations = payload.get("citations", [])
                 for cit in citations:

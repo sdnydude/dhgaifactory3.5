@@ -55,6 +55,11 @@ from langchain_core.messages import HumanMessage, SystemMessage
 # HTTP for external APIs
 import httpx
 
+try:
+    from src.registry_auth import registry_write_headers
+except ImportError:  # LangGraph Cloud packages src/ as top-level
+    from registry_auth import registry_write_headers
+
 
 # =============================================================================
 # CONFIGURATION
@@ -226,7 +231,7 @@ class AIFactoryRegistry:
     async def register(self) -> dict:
         """Register with AI Factory central registry"""
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with httpx.AsyncClient(timeout=5.0, headers=registry_write_headers()) as client:
                 response = await client.post(
                     f"{self.registry_url}/api/v1/agents/register",
                     json=self.get_agent_manifest()
@@ -240,7 +245,7 @@ class AIFactoryRegistry:
     async def heartbeat(self, metrics: Optional[dict] = None) -> bool:
         """Send heartbeat with metrics"""
         try:
-            async with httpx.AsyncClient(timeout=2.0) as client:
+            async with httpx.AsyncClient(timeout=2.0, headers=registry_write_headers()) as client:
                 response = await client.post(
                     f"{self.registry_url}/api/v1/agents/{self.service_id}/heartbeat",
                     json={"status": "healthy", "models": self._get_model_registry(), "metrics": metrics or {}}
@@ -252,7 +257,7 @@ class AIFactoryRegistry:
     async def log_research_request(self, topic: str, user_id: str, input_params: dict) -> Optional[str]:
         """Log a new research request to the registry"""
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with httpx.AsyncClient(timeout=5.0, headers=registry_write_headers()) as client:
                 response = await client.post(
                     f"{self.registry_url}/api/v1/research/requests",
                     json={
@@ -280,7 +285,7 @@ class AIFactoryRegistry:
             if status == "completed":
                 payload["completed_at"] = datetime.utcnow().isoformat()
 
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with httpx.AsyncClient(timeout=5.0, headers=registry_write_headers()) as client:
                 response = await client.patch(
                     f"{self.registry_url}/api/v1/research/requests/{request_id}",
                     json=payload
