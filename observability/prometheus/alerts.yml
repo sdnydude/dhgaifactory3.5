@@ -58,6 +58,26 @@ groups:
         annotations:
           summary: "Prometheus target {{ $labels.job }} is down"
 
+      # Ollama unreachable (either path). LAN path down while container path up
+      # = host port mapping lost -> `docker compose up -d --force-recreate --no-deps ollama`.
+      # Consumers (Portage Porter) fail over to paid cloud silently, so this is high.
+      - alert: OllamaDown
+        expr: probe_success{job="blackbox-http", service="ollama"} == 0
+        for: 2m
+        labels:
+          severity: high
+        annotations:
+          summary: "Ollama unreachable via {{ $labels.path }} path ({{ $labels.instance }}) — Porter falling back to Gemini"
+
+      # Portage API down (scrape or synthetic)
+      - alert: PortageApiDown
+        expr: up{job="portage-api"} == 0 or probe_success{job="blackbox-https", service="portage-api"} == 0
+        for: 2m
+        labels:
+          severity: high
+        annotations:
+          summary: "Portage API unreachable"
+
       # T8 special case: Registry API (critical)
       - alert: RegistryApiDown
         expr: up{job="registry-api"} == 0
