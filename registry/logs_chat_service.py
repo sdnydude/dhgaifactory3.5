@@ -96,7 +96,8 @@ async def fetch_context(
     client: httpx.AsyncClient, queries: list[QuerySpec], minutes: int, deadline: float,
 ) -> tuple[list[QuerySpec], list[str]]:
     """Run the queries against Loki; returns (queries+line counts, context lines)."""
-    end = time.time(); start = end - minutes * 60
+    end = time.time()
+    start = end - minutes * 60
     lines: list[str] = []
     budget_chars = MAX_CONTEXT_CHARS
     for spec in queries:
@@ -123,7 +124,9 @@ async def fetch_context(
                 entry = f"[{cname}] {text}"
                 if budget_chars - len(entry) < 0:
                     break
-                lines.append(entry); budget_chars -= len(entry); n += 1
+                lines.append(entry)
+                budget_chars -= len(entry)
+                n += 1
         spec.lines = n
     return queries, lines
 

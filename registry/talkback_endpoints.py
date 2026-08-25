@@ -9,7 +9,6 @@ Response is text/event-stream:
   event: error      → terminal failure (replaces done)
   event: done       → {"model", "elapsed_ms"}
 """
-import json
 import logging
 import time
 

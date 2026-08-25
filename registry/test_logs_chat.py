@@ -67,7 +67,8 @@ def test_token_ok_table():
 
 
 def test_fetch_context_deadline_past_skips_queries():
-    import asyncio, time
+    import asyncio
+    import time
     import logs_chat_service as s
 
     class NoCallClient:
@@ -81,7 +82,8 @@ def test_fetch_context_deadline_past_skips_queries():
 
 
 def test_fetch_context_char_budget_drops_overflow():
-    import asyncio, time
+    import asyncio
+    import time
     import logs_chat_service as s
 
     class FakeResp:

@@ -8,7 +8,6 @@ audit row.
 """
 import asyncio
 import hmac
-import json
 import logging
 import os
 import time
