@@ -11,10 +11,10 @@ interface LogEntry {
 }
 
 const LEVEL_COLORS: Record<string, string> = {
-  info: "text-green-400",
-  warn: "text-yellow-400",
-  error: "text-red-400",
-  debug: "text-blue-400",
+  info: "text-[var(--mc-phosphor)]",
+  warn: "text-[var(--mc-amber)]",
+  error: "text-[var(--mc-alert)]",
+  debug: "text-[var(--mc-cyan)]",
 };
 
 interface LogStreamProps {
@@ -36,7 +36,7 @@ export function LogStream({ logs, footer }: LogStreamProps) {
 
   useEffect(() => {
     if (scrollLocked) {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
   }, [logs.length, scrollLocked]);
 
@@ -45,7 +45,7 @@ export function LogStream({ logs, footer }: LogStreamProps) {
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="bg-[#0d1117] text-[#c9d1d9] rounded-md p-3 font-mono text-[11px] leading-relaxed overflow-auto flex-1"
+        className="bg-[var(--mc-surface)] text-[var(--mc-text)] rounded-md p-3 font-mono text-[11px] leading-relaxed overflow-auto flex-1"
       >
         {logs.length === 0 ? (
           <p className="text-gray-500">Waiting for stream events...</p>
@@ -54,7 +54,7 @@ export function LogStream({ logs, footer }: LogStreamProps) {
             <div key={log.id} className="flex gap-2">
               <span className="text-gray-500 shrink-0">{log.timestamp}</span>
               <span
-                className={`shrink-0 ${LEVEL_COLORS[log.level] ?? "text-gray-400"}`}
+                className={`shrink-0 ${LEVEL_COLORS[log.level] ?? "text-[var(--mc-dim)]"}`}
               >
                 {log.source}
               </span>
@@ -73,7 +73,7 @@ export function LogStream({ logs, footer }: LogStreamProps) {
         <button
           onClick={() => {
             setScrollLocked(true);
-            bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+            bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
           }}
           className="absolute bottom-3 right-3 bg-gray-700 text-gray-300 text-[10px] px-2 py-1 rounded hover:bg-gray-600"
         >

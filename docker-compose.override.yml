@@ -75,6 +75,9 @@ services:
       - TALKBACK_LOCAL_MODEL=${TALKBACK_LOCAL_MODEL:-qwen3:14b}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - REGISTRY_WRITE_AUTH_MODE=${REGISTRY_WRITE_AUTH_MODE:-off}
+      - LOGS_CHAT_TOKEN=${LOGS_CHAT_TOKEN:-}
+      - LOGS_CHAT_MODEL=${LOGS_CHAT_MODEL:-granite4.1:8b}
+      - LOKI_URL=${LOKI_URL:-http://loki:3100}
       - REGISTRY_WRITE_TOKEN=${REGISTRY_WRITE_TOKEN:-}
     volumes:
       - dhg_exports:/exports:ro
@@ -121,6 +124,7 @@ services:
       - "9093:9093"
     volumes:
       - ./observability/alertmanager:/etc/alertmanager
+      - alertmanager_data:/alertmanager
     command:
       - '--config.file=/etc/alertmanager/alertmanager.yml'
       - '--storage.path=/alertmanager'
@@ -134,7 +138,7 @@ services:
     restart: unless-stopped
 
   loki:
-    image: grafana/loki:2.9.0
+    image: grafana/loki:3.7.6
     container_name: dhg-loki
     ports:
       - "3100:3100"
@@ -143,10 +147,9 @@ services:
       - loki_data:/loki
     command: -config.file=/etc/loki/loki-config.yml
     healthcheck:
-      test: ["CMD-SHELL", "wget --spider -q http://localhost:3100/ready"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      # Loki 3.x images ship no shell/wget — container-level probe impossible.
+      # Liveness is monitored via the Prometheus loki scrape (up{job="loki"}).
+      disable: true
     networks:
       - dhg-network
     restart: unless-stopped
@@ -184,6 +187,7 @@ services:
       - /:/host:ro,rslave
     command:
       - '--path.rootfs=/host'
+      - '--collector.textfile.directory=/host/mnt/4tb/observability/textfile'
     healthcheck:
       test: ["CMD-SHELL", "wget --spider -q http://localhost:9100/metrics"]
       interval: 30s
@@ -234,18 +238,48 @@ services:
     networks:
       - dhg-network
 
-  promtail:
-    image: grafana/promtail:2.9.0
-    container_name: dhg-promtail
+  # P5 T5: loki_store_bytes textfile gauge (compose sidecar in lieu of the
+  # systemd du-timer — no sudo tty in the build session; same acceptance).
+  # Reads the loki volume read-only, writes a node-exporter textfile metric
+  # every 5 minutes. Deletes nothing.
+  p5-loki-du:
+    image: alpine:3.20
+    container_name: dhg-p5-loki-du
     volumes:
-      - ./observability/promtail:/etc/promtail
-      - /mnt/4tb/docker/containers:/var/lib/docker/containers:ro
+      - loki_data:/loki:ro
+      - /mnt/4tb/observability/textfile:/textfile
+    command:
+      - sh
+      - -c
+      - |
+        while true; do
+          T=/textfile/loki_store.prom
+          if B=$$(du -sb /loki | cut -f1) && [ -n "$$B" ]; then
+            printf '# HELP loki_store_bytes Size of the Loki keep-all store volume in bytes.\n# TYPE loki_store_bytes gauge\nloki_store_bytes %s\n' "$$B" > "$$T.tmp"
+            mv "$$T.tmp" "$$T"
+          else
+            echo "p5-loki-du: du failed; keeping previous gauge" >&2
+          fi
+          i=0; while [ $$i -lt 300 ]; do sleep 1; i=$$((i+1)); done
+        done
+    restart: unless-stopped
+
+  alloy:
+    image: grafana/alloy:v1.19.0
+    container_name: dhg-alloy
+    volumes:
+      - ./observability/alloy:/etc/alloy:ro
+      - alloy_data:/var/lib/alloy
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    command: -config.file=/etc/promtail/promtail-config.yml
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
     depends_on:
       - loki
     healthcheck:
-      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/9080'"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/12345' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -266,6 +300,8 @@ services:
     ports:
       - "3000:3000"
     environment:
+      - LOGS_CHAT_TOKEN=${LOGS_CHAT_TOKEN:-}
+      - REGISTRY_API_URL=http://dhg-registry-api:8000
       - NODE_ENV=production
       - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
       - EXPORT_SIGNING_SECRET=${EXPORT_SIGNING_SECRET}
@@ -419,3 +455,5 @@ volumes:
   loki_data:
   grafana_data:
   tempo_data:
+  alertmanager_data:
+  alloy_data:

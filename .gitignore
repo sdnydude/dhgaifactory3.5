@@ -122,3 +122,4 @@ backups/
 
 # dated backups of the secrets override (e.g. *.bak.20260713_105003)
 *.bak.*
+!frontend/src/app/logs/

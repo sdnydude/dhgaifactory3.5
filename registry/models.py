@@ -773,6 +773,28 @@ class SecurityAuditLog(Base):
     user = relationship("SecurityUser", foreign_keys=[user_id])
 
 
+class LogsChatAudit(Base):
+    """Immutable audit trail for /api/logs/chat calls (P5 T10).
+
+    Keep-all directive: rows are never deleted by automation; the alembic
+    downgrade that drops this table is operator-only once real rows exist.
+    """
+    __tablename__ = "logs_chat_audit"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    question = Column(Text, nullable=False)
+    resolved_container = Column(String(128), nullable=True)
+    logql_queries = Column(JSONB, nullable=True)
+    context_lines = Column(Integer, nullable=False, default=0)
+    answer_chars = Column(Integer, nullable=False, default=0)
+    status = Column(String(16), nullable=False)  # done | degraded | error
+    model = Column(String(64), nullable=False)
+    elapsed_ms = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+
+    # No updated_at, no relationships — append-only
+
+
 # =============================================================================
 # FRONTEND DESIGN SPEC MODELS
 # =============================================================================

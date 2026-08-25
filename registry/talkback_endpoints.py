@@ -9,7 +9,6 @@ Response is text/event-stream:
   event: error      → terminal failure (replaces done)
   event: done       → {"model", "elapsed_ms"}
 """
-import json
 import logging
 import time
 
@@ -32,8 +31,7 @@ from metrics import (
 router = APIRouter(prefix="/api/talkback", tags=["talkback"])
 
 
-def _sse(event: str, data: dict) -> str:
-    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+from sse_utils import sse as _sse
 
 
 @router.post("")

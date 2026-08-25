@@ -55,7 +55,7 @@ scrape_configs:
       - targets: ['cadvisor:8080']
         labels:
           service: 'cadvisor'
-    scrape_interval: 15s
+    scrape_interval: 30s
 
   # VS Engine (Verbalized Sampling)
   - job_name: 'vs-engine'
@@ -72,6 +72,61 @@ scrape_configs:
       - targets: ['dhg-medkb-api:8015']
     metrics_path: /metrics
     scrape_interval: 15s
+
+  # Portage API (project `portage`, joined to dhg-network). Serves TLS on 8016
+  # with a self-signed cert -> https + skip verify. Not picked up by docker-sd
+  # because that job keeps only compose projects dhgaifactory35|dhg-memreg.
+  - job_name: 'portage-api'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    static_configs:
+      - targets: ['portage-api:8016']
+        labels:
+          service: 'portage-api'
+    metrics_path: /metrics
+    scrape_interval: 15s
+
+  # Blackbox synthetic probes (observability/blackbox/). Ollama exposes no
+  # /metrics; probe it two ways: container DNS (is it serving?) and the LAN
+  # published port (is the host port mapping alive? — this is the path Portage
+  # Porter uses, and the one that silently died on 2026-08-15, bug-fix ef492f28).
+  - job_name: 'blackbox-http'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - http://dhg-ollama:11434/api/tags
+        labels: {service: 'ollama', path: 'container'}
+      - targets:
+          - http://10.0.0.251:11434/api/tags
+        labels: {service: 'ollama', path: 'lan'}
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: dhg-blackbox:9115
+    scrape_interval: 30s
+
+  - job_name: 'blackbox-https'
+    metrics_path: /probe
+    params:
+      module: [http_2xx_insecure_tls]
+    static_configs:
+      - targets:
+          - https://portage-api:8016/health
+        labels: {service: 'portage-api', path: 'container'}
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: dhg-blackbox:9115
+    scrape_interval: 30s
 
   # Memreg daemon is now discovered dynamically via the docker-sd job below
   # (container carries prometheus.io/scrape=true, joined to dhg-network).
@@ -105,6 +160,20 @@ scrape_configs:
       - source_labels: [__meta_docker_container_name]
         regex: /(.+)
         target_label: container
+      - source_labels: [__meta_docker_container_name]
+        regex: "/dhg-memreg-agent"
+        target_label: job
+        replacement: "memreg"
       - source_labels: [__meta_docker_container_label_prometheus_io_path]
         target_label: __metrics_path__
         regex: (.+)
+
+  # P5: Loki self-metrics (T5, ruling e)
+  - job_name: 'loki'
+    static_configs:
+      - targets: ['loki:3100']
+
+  # P5: Alloy self-metrics (T5, ruling e)
+  - job_name: 'alloy'
+    static_configs:
+      - targets: ['alloy:12345']

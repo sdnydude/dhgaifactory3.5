@@ -18,6 +18,7 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
   { path: "/dashboards", label: "Dashboards", section: "observe", roles: ["admin", "operations", "finance"] },
   { path: "/monitoring", label: "Monitoring", section: "observe", roles: ["admin", "operations"] },
   { path: "/studio", label: "Studio", section: "observe", roles: ["admin", "operations"] },
+  { path: "/logs", label: "Logs", section: "observe", roles: ["admin", "operations"] },
   // Manage section
   { path: "/admin", label: "Admin Console", section: "manage", roles: ["admin"] },
   { path: "/admin/reporting", label: "Reporting", section: "manage", roles: ["admin"] },
