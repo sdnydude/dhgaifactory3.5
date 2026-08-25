@@ -44,3 +44,17 @@ groups:
         annotations:
           summary: "No logs received from registry-api for 10+ minutes"
           description: "The registry API container has not emitted any logs. It may be down or Promtail may have lost connectivity."
+
+      # P5 T8: raw secret shapes surviving redaction = redaction-failure signal.
+      # Detects JWT/Doppler token shapes in STORED lines (post-redaction) —
+      # never matches the [REDACTED*] markers themselves.
+      - alert: SecretLeakDetected
+        expr: |
+          sum by (container) (count_over_time({job="dhg-ai-factory"} |~ `eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|dp\.(?:st|ct|pt)\.[A-Za-z0-9_-]{10,}` [5m])) > 0
+        for: 0m
+        labels:
+          severity: critical
+          source: loki
+        annotations:
+          summary: "Raw secret shape stored in logs ({{ $labels.container }})"
+          description: "A JWT or Doppler token shape reached the log store unredacted from container {{ $labels.container }}. Rotate the credential FIRST; never paste the matching line anywhere. Then fix the redaction stage and run the seeded-secret proof."
