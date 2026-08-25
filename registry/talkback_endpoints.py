@@ -32,8 +32,7 @@ from metrics import (
 router = APIRouter(prefix="/api/talkback", tags=["talkback"])
 
 
-def _sse(event: str, data: dict) -> str:
-    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+from sse_utils import sse as _sse
 
 
 @router.post("")

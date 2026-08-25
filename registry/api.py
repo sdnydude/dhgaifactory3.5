@@ -218,6 +218,7 @@ from patchbay_endpoints import router as patchbay_router
 from session_reports_endpoints import router as session_reports_router
 from done_gate_runs_endpoints import router as done_gate_runs_router
 from captures_endpoints import router as captures_router
+from logs_chat_endpoints import router as logs_chat_router
 
 # Include routers
 app.include_router(agent_router)
@@ -257,6 +258,7 @@ app.include_router(patchbay_router)
 app.include_router(session_reports_router)
 app.include_router(done_gate_runs_router)
 app.include_router(captures_router)
+app.include_router(logs_chat_router)
 
 # Add CORS middleware — locked to production origin + localhost for development
 ALLOWED_ORIGINS = [
@@ -333,6 +335,11 @@ ALERT_TRIGGER_MAP: dict = {
     "ContainerMemoryLeak": {"trigger": "T13", "category": "infrastructure"},
     "ContainerHighCPU": {"trigger": "T1", "category": "infrastructure"},
     "ContainerHighMemory": {"trigger": "T13", "category": "infrastructure"},
+    # P5 log program (2026-08-25)
+    "SecretLeakDetected": {"trigger": "T14", "category": "security"},
+    "LokiStoreGrowth": {"trigger": "T15", "category": "infrastructure"},
+    "AlloyDown": {"trigger": "T16", "category": "infrastructure"},
+    "LokiDown": {"trigger": "T17", "category": "infrastructure"},
 }
 
 
