@@ -143,3 +143,35 @@ groups:
           severity: high
         annotations:
           summary: "memreg capture DLQ has {{ $value }} entries stuck > 1h — registry captures failing and not draining"
+
+  # P5 log program (T5): store growth watch + shipper liveness.
+  # Keep-all directive: LokiStoreGrowth is a PROMPT for the operator to decide,
+  # never an automatic action. 20 GB ~= 10x the 2026-08 store (~2 yrs headroom).
+  - name: dhg-logs
+    rules:
+      - alert: LokiStoreGrowth
+        expr: loki_store_bytes > 21474836480
+        for: 30m
+        labels:
+          severity: high
+        annotations:
+          summary: "Loki store exceeds 20 GB ({{ $value | humanize1024 }}B)"
+          description: "The keep-all log store has crossed the growth watermark. Operator decision point: expand headroom or run the documented operator-only deletion procedure. Nothing is deleted automatically."
+
+      - alert: LokiDown
+        expr: up{job="loki"} == 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Loki is down"
+          description: "The log store is unreachable (container healthcheck is impossible on the shell-less 3.x image — this alert IS the liveness probe). Ingestion is buffering in Alloy/json-file; restart dhg-loki."
+
+      - alert: AlloyDown
+        expr: up{job="alloy"} == 0
+        for: 5m
+        labels:
+          severity: high
+        annotations:
+          summary: "Alloy log shipper is down"
+          description: "Grafana Alloy is not being scraped. Container logs are buffering in docker json-file (10m x 3 per container) and will be lost if this persists for days. Restart dhg-alloy."
