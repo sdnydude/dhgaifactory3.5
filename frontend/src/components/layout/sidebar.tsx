@@ -10,6 +10,7 @@ import {
   Activity,
   Search,
   Monitor,
+  ScrollText,
   Sparkles,
   BarChart3,
   Settings,
@@ -40,6 +41,7 @@ const ROUTE_ICONS: Record<string, typeof FolderKanban> = {
   "/dashboards": BarChart3,
   "/monitoring": Monitor,
   "/studio": Sparkles,
+  "/logs": ScrollText,
   "/admin": Settings,
 };
 
