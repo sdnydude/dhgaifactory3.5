@@ -1,4 +1,4 @@
-"""Unified KB search service — hybrid FTS + vector RRF across 9 tables."""
+"""Unified KB search service — hybrid FTS + vector RRF across 10 tables."""
 from __future__ import annotations
 
 import logging
@@ -9,7 +9,7 @@ from sqlalchemy import func as sa_func, text as sa_text
 
 from models import (
     DocPage, Insight, DecisionLog, ShipSession, Correction,
-    AgentSession, DevChangelog, BugFix, DeferredItem,
+    AgentSession, DevChangelog, BugFix, DeferredItem, SessionReport,
 )
 
 logger = logging.getLogger(__name__)
@@ -155,6 +155,26 @@ def _extract_deferred_item(row: DeferredItem) -> tuple[str, str, dict[str, Any]]
     return title, content, metadata
 
 
+def _extract_session_report(row: SessionReport) -> tuple[str, str, dict[str, Any]]:
+    title = row.title
+    parts = [row.report_md]
+    if row.learnings:
+        parts.append("\n\nLearnings: " + "; ".join(row.learnings))
+    if row.insights:
+        parts.append("\n\nInsights: " + "; ".join(row.insights))
+    if row.deferred:
+        parts.append("\n\nDeferred: " + "; ".join(row.deferred))
+    content = "".join(parts)
+    metadata: dict[str, Any] = {
+        "category": row.category,
+        "session_span": row.session_span,
+        "prs": row.prs,
+        "source_file": row.source_file,
+        "tags": row.tags,
+    }
+    return title, content, metadata
+
+
 SOURCE_CONFIG: dict[str, tuple[Any, Callable]] = {
     "docs": (DocPage, _extract_doc_page),
     "insights": (Insight, _extract_insight),
@@ -165,6 +185,7 @@ SOURCE_CONFIG: dict[str, tuple[Any, Callable]] = {
     "dev_changelog": (DevChangelog, _extract_dev_changelog),
     "bug_fixes": (BugFix, _extract_bug_fix),
     "deferred_items": (DeferredItem, _extract_deferred_item),
+    "session_reports": (SessionReport, _extract_session_report),
 }
 
 

@@ -1,9 +1,10 @@
 """Unified Knowledge Base search endpoint.
 
 Routes:
-  POST /api/kb/search  — Hybrid FTS + vector RRF search across 9 tables, searched sequentially.
+  POST /api/kb/search  — Hybrid FTS + vector RRF search across 10 tables, searched sequentially.
                          Sources: doc_pages, insights, decision_logs, ship_sessions,
-                         agent_sessions, corrections, dev_changelog, bug_fixes, deferred_items.
+                         agent_sessions, corrections, dev_changelog, bug_fixes, deferred_items,
+                         session_reports.
 """
 import time
 import logging
@@ -34,7 +35,7 @@ async def kb_search(
     body: KBSearchRequest,
     db: Session = Depends(get_db),
 ) -> KBSearchResponse:
-    """Unified hybrid search across all 9 KB sources.
+    """Unified hybrid search across all 10 KB sources.
 
     Generates one query embedding, delegates to kb_service for per-source hybrid
     FTS + vector search with Reciprocal Rank Fusion (k=60), then constructs the

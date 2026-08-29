@@ -146,11 +146,11 @@ class TestExtractDeferredItem:
 
 
 class TestSourceConfig:
-    def test_all_nine_sources_registered(self):
-        assert len(svc.SOURCE_CONFIG) == 9
+    def test_all_ten_sources_registered(self):
+        assert len(svc.SOURCE_CONFIG) == 10
         expected = {"docs", "insights", "decisions", "ship_sessions",
                     "corrections", "agent_sessions", "dev_changelog",
-                    "bug_fixes", "deferred_items"}
+                    "bug_fixes", "deferred_items", "session_reports"}
         assert set(svc.SOURCE_CONFIG.keys()) == expected
 
 
@@ -294,3 +294,18 @@ class TestKbSearch:
             db, "query", None, sources=["docs"], limit=3,
         )
         assert len(results) <= 3
+
+
+class TestExtractSessionReport:
+    def test_title_report_and_lists(self):
+        from models import SessionReport
+        row = _mock_row(SessionReport, title="P6 wrap", report_md="# Story\nWe shipped Node 24.",
+                        learnings=["vitest 4 mocks"], insights=["npm overrides inert"],
+                        deferred=[], prs=["#336"], category="feature",
+                        session_span="2026-08-27", source_file="docs/session-reports/x.md",
+                        tags=["p6"])
+        title, content, meta = svc._extract_session_report(row)
+        assert title == "P6 wrap"
+        assert "We shipped Node 24." in content
+        assert "Learnings: vitest 4 mocks" in content
+        assert meta["prs"] == ["#336"]
