@@ -5,7 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 
-VALID_SOURCES = {"docs", "insights", "decisions", "ship_sessions", "corrections", "agent_sessions", "dev_changelog", "bug_fixes", "deferred_items"}
+VALID_SOURCES = {"docs", "insights", "decisions", "ship_sessions", "corrections", "agent_sessions", "dev_changelog", "bug_fixes", "deferred_items", "session_reports"}
 
 
 class KBSearchRequest(BaseModel):
@@ -15,7 +15,7 @@ class KBSearchRequest(BaseModel):
     project_name: Optional[str] = Field(default=None, max_length=100)
     sources: Optional[list[str]] = Field(
         default=None,
-        description="Filter to specific sources. Valid values: docs, insights, decisions, ship_sessions",
+        description="Filter to specific sources. Valid values: see VALID_SOURCES (includes session_reports).",
     )
     limit: int = Field(default=10, ge=1, le=100)
 
