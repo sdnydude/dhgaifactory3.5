@@ -1,17 +1,62 @@
+# DHG AI Factory — Prometheus alert rules
+#
+# SEVERITY TAXONOMY (only these three values may appear in this file or in
+# observability/loki/rules/**; anything else is a bug):
+#   critical — page-worthy, service is down or data/security is at risk.
+#              Routed to the registry webhook AND Slack; the registry
+#              auto-creates an incident (registry/api.py:/webhooks/alertmanager).
+#   high     — degraded or actively failing, needs same-day attention.
+#              Routed to the registry webhook AND Slack; also creates an incident.
+#   warning  — informational / trend. Slack only. The registry webhook handler
+#              explicitly skips any severity that is not critical|high, so a
+#              warning never becomes an incident.
+# `medium` is retired: it silently produced no incident and no clear routing.
+# Every former `medium` rule is now `warning`.
+#
+# CONTRACT: every rule carries `for:`, `summary`, `description`, and
+# `runbook_url` = http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#<alertname lowercased>.
+# The anchors are the contract between this file and the runbook page (WP8);
+# do not rename an alert without moving its anchor.
+#
+# CHANGELOG
+# 2026-09-04 (WP2 alert-rules rewrite):
+#   - ContainerCrashLoop now uses changes(container_start_time_seconds[15m]);
+#     cAdvisor does not export container_restart_count on this stack, so the
+#     old expression could never fire. Severity lowered critical -> high: a
+#     restart loop is degradation, not an outage, and RegistryApiDown /
+#     PrometheusTargetDown already cover the outage case.
+#   - ZombieProcessesHigh DELETED. node_processes_zombies on this host tracks
+#     short-lived docker/containerd reaper churn; it is not actionable, has
+#     never corresponded to a real incident, and there is no remediation in
+#     any runbook. Removed rather than downgraded so it stops consuming
+#     alert-review attention. (Its ALERT_TRIGGER_MAP entry T12 in
+#     registry/api.py is now dead but harmless — mapping lookups default.)
+#   - MemregDLQBacklog window shortened 1h -> 15m via max_over_time, plus a new
+#     MemregDLQMetricMissing so a silently-absent gauge cannot masquerade as
+#     "DLQ healthy".
+#   - Added alerting-on-alerting: AlertmanagerDown, PrometheusRuleEvalFailures,
+#     PrometheusNotificationsDropped, AlertmanagerNotificationsFailing,
+#     LokiRulerErrors, TextfileStale.
+#   - Added Portage symptom alerts (error ratio, p95 latency).
+#   - All `medium` severities mapped to `warning`.
+
 groups:
   - name: dhg-infrastructure
     rules:
       # T1: Container unhealthy > 10 min — not directly available via Prometheus
       #     (Docker healthcheck status is not exported by cAdvisor)
 
-      # T2: Container crash loop (>3 restarts in 15 min)
+      # T2: Container crash loop. container_start_time_seconds changes value on
+      # every (re)start, so >3 changes in 15m is >3 restarts in 15m.
       - alert: ContainerCrashLoop
-        expr: increase(container_restart_count{name=~"dhg-.*"}[15m]) > 3
-        for: 1m
+        expr: changes(container_start_time_seconds{name=~"dhg-.*"}[15m]) > 3
+        for: 5m
         labels:
-          severity: critical
+          severity: high
         annotations:
           summary: "Container {{ $labels.name }} restarted >3 times in 15 min"
+          description: "{{ $labels.name }} is in a restart loop. Check `docker logs --tail 200 {{ $labels.name }}` and `docker inspect {{ $labels.name }} --format '{{`{{.State.ExitCode}}`}}'` for the exit reason before restarting anything."
+          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#containercrashloop"
 
       # T3: Host memory > 90%
       - alert: HostMemoryHigh
@@ -21,6 +66,8 @@ groups:
           severity: critical
         annotations:
           summary: "Host memory above 90% ({{ $value | humanizePercentage }})"
+          description: "g700data1 has less than 10% available memory. Identify the top consumer (Ollama model residency and cAdvisor are the usual suspects) before the OOM killer picks a victim."
+          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#hostmemoryhigh"
 
       # T4: Host swap > 80%
       - alert: HostSwapHigh
@@ -30,6 +77,8 @@ groups:
           severity: high
         annotations:
           summary: "Host swap above 80% ({{ $value | humanizePercentage }})"
+          description: "Swap is nearly exhausted with vm.swappiness=10, which means real memory pressure, not lazy paging. Treat as a precursor to HostMemoryHigh."
+          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#hostswaphigh"
 
       # T5: Root disk > 85%
       - alert: RootDiskHigh
@@ -39,15 +88,19 @@ groups:
           severity: high
         annotations:
           summary: "Root disk above 85% ({{ $value | humanizePercentage }})"
+          description: "Root filesystem is filling. Docker image/layer churn and json-file container logs are the usual growth. `docker system df` then prune dangling images only."
+          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#rootdiskhigh"
 
-      # T6: Data disk > 80%
+      # T6: Data disk > 80% (was severity medium — retired, now warning)
       - alert: DataDiskHigh
         expr: (1 - node_filesystem_avail_bytes{mountpoint="/mnt/4tb"} / node_filesystem_size_bytes{mountpoint="/mnt/4tb"}) > 0.8
         for: 5m
         labels:
-          severity: medium
+          severity: warning
         annotations:
           summary: "Data disk /mnt/4tb above 80% ({{ $value | humanizePercentage }})"
+          description: "The 4TB data volume holds the Loki store, backups, and model caches. Trend signal only — no automatic deletion. Review /mnt/4tb/backups first."
+          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#datadiskhigh"
 
       # T8: Prometheus scrape target DOWN
       - alert: PrometheusTargetDown
@@ -57,6 +110,8 @@ groups:
           severity: high
         annotations:
           summary: "Prometheus target {{ $labels.job }} is down"
+          description: "Scrape target {{ $labels.job }} at {{ $labels.instance }} has been unreachable for 2 minutes. This alert inhibits the per-service *Down alerts for the same instance."
+          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#prometheustargetdown"
 
       # Ollama unreachable (either path). LAN path down while container path up
       # = host port mapping lost -> `docker compose up -d --force-recreate --no-deps ollama`.
@@ -68,6 +123,8 @@ groups:
           severity: high
         annotations:
           summary: "Ollama unreachable via {{ $labels.path }} path ({{ $labels.instance }}) — Porter falling back to Gemini"
+          description: "If the LAN path is down while the container path is up, the host port mapping was lost: `docker compose up -d --force-recreate --no-deps ollama`. Every minute down is paid cloud inference."
+          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#ollamadown"
 
       # Portage API down (scrape or synthetic)
       - alert: PortageApiDown
@@ -77,6 +134,8 @@ groups:
           severity: high
         annotations:
           summary: "Portage API unreachable"
+          description: "Either the direct scrape or the public HTTPS probe for the Portage API is failing. If only the HTTPS probe fails, suspect the Cloudflare tunnel rather than the container."
+          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#portageapidown"
 
       # T8 special case: Registry API (critical)
       - alert: RegistryApiDown
@@ -86,6 +145,8 @@ groups:
           severity: critical
         annotations:
           summary: "Registry API is down"
+          description: "The registry API is the incident sink for this alert pipeline — while it is down, no alert creates an incident and memreg captures dead-letter. Restore it first; this alert inhibits other registry-scoped alerts."
+          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#registryapidown"
 
       # T9: DB connection pool > 80% of max_connections
       - alert: PostgresConnectionsHigh
@@ -95,15 +156,8 @@ groups:
           severity: high
         annotations:
           summary: "PostgreSQL connections above 80 ({{ $value }})"
-
-      # T12: Zombie processes > 50
-      - alert: ZombieProcessesHigh
-        expr: node_processes_zombies > 50
-        for: 5m
-        labels:
-          severity: medium
-        annotations:
-          summary: "{{ $value }} zombie processes on host"
+          description: "Registry Postgres is near max_connections. Look for a service leaking sessions (SQLAlchemy pool not returning connections) before raising the limit."
+          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#postgresconnectionshigh"
 
       # T13: Container memory > 16GB (no limit set)
       - alert: ContainerMemoryLeak
@@ -113,6 +167,8 @@ groups:
           severity: high
         annotations:
           summary: "Container {{ $labels.name }} using >16GB with no memory limit"
+          description: "An unbounded container is holding more than 16GB on a 64GB host. Either it leaks or it needs a mem_limit in docker-compose.yml."
+          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#containermemoryleak"
 
       # General: Container high CPU (warning, informational)
       - alert: ContainerHighCPU
@@ -122,6 +178,8 @@ groups:
           severity: warning
         annotations:
           summary: "Container {{ $labels.name }} CPU > 90% for 10m"
+          description: "Sustained single-core saturation. Expected for inference and indexing workloads; investigate only if it is a service that should be idle."
+          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#containerhighcpu"
 
       # General: Container high memory vs limit (warning, informational)
       - alert: ContainerHighMemory
@@ -131,18 +189,137 @@ groups:
           severity: warning
         annotations:
           summary: "Container {{ $labels.name }} memory > 90% of limit"
+          description: "{{ $labels.name }} is close to its configured mem_limit and will be OOM-killed if it crosses. Raise the limit or fix the consumer."
+          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#containerhighmemory"
+
+  # Alerting on the alerting pipeline. Without these, every other rule in this
+  # file fails open: a dead Alertmanager, a broken rule evaluation, or a dropped
+  # notification produces silence that is indistinguishable from health.
+  - name: dhg-alerting-pipeline
+    rules:
+      - alert: AlertmanagerDown
+        expr: up{job="alertmanager"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Alertmanager is down — no alert can be delivered"
+          description: "Prometheus can still evaluate rules but nothing reaches Slack or the registry webhook. Every other alert in this file is silently ineffective until dhg-alertmanager is back."
+          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#alertmanagerdown"
+
+      - alert: PrometheusRuleEvalFailures
+        expr: increase(prometheus_rule_evaluation_failures_total[15m]) > 0
+        for: 5m
+        labels:
+          severity: high
+        annotations:
+          summary: "Prometheus rule evaluation failing in group {{ $labels.rule_group }}"
+          description: "One or more rules in {{ $labels.rule_group }} raised an evaluation error, so the alerts in that group are not being computed. Check the Rules page at http://10.0.0.251:9090/rules for health != ok."
+          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#prometheusruleevalfailures"
+
+      - alert: PrometheusNotificationsDropped
+        expr: increase(prometheus_notifications_dropped_total[15m]) > 0
+        for: 5m
+        labels:
+          severity: high
+        annotations:
+          summary: "Prometheus dropped {{ $value }} alert notifications in 15m"
+          description: "Prometheus could not hand alerts to Alertmanager and gave up on them — those alerts were never delivered anywhere. Usually the Alertmanager queue is full or the target is unreachable."
+          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#prometheusnotificationsdropped"
+
+      - alert: AlertmanagerNotificationsFailing
+        expr: increase(alertmanager_notifications_failed_total[15m]) > 0
+        for: 5m
+        labels:
+          severity: high
+        annotations:
+          summary: "Alertmanager receiver {{ $labels.integration }} failing to deliver"
+          description: "Alertmanager accepted alerts but the {{ $labels.integration }} integration could not deliver them (bad Slack webhook URL, or the registry webhook returning non-2xx). Check `docker logs --tail 100 dhg-alertmanager`."
+          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#alertmanagernotificationsfailing"
+
+      - alert: LokiRulerErrors
+        expr: increase(loki_prometheus_notifications_errors_total[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Loki ruler failing to send alerts to Alertmanager"
+          description: "The Loki ruler evaluated log-based alerts but could not push them to Alertmanager, so every rule in observability/loki/rules/** is currently undelivered. Check the alertmanager_url in the Loki config."
+          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#lokirulererrors"
+
+      # Covers the loki_store.prom exporter today and any future backup-marker
+      # textfile written to /mnt/4tb/observability/textfile.
+      - alert: TextfileStale
+        expr: time() - node_textfile_mtime_seconds > 900
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Textfile metric {{ $labels.file }} is stale ({{ $value | humanizeDuration }} old)"
+          description: "The writer for {{ $labels.file }} has stopped. Any alert reading a metric from that file (e.g. LokiStoreGrowth from loki_store.prom) is now evaluating a frozen value and will not fire on new conditions."
+          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#textfilestale"
+
+  # Symptom-level alerts for Portage. Deliberately aggregate (no `by (route)`):
+  # portage_http_requests_total carries raw ids in the `route` label, so
+  # per-route alerting would be unbounded cardinality. `/metrics` is excluded —
+  # it is a third of all requests, always 200, and would mask a real error
+  # ratio by dilution.
+  - name: dhg-portage-symptoms
+    rules:
+      - alert: PortageHighErrorRate
+        expr: |
+          sum(rate(portage_http_requests_total{status_code=~"5..", route!~"/metrics|/health"}[10m]))
+            /
+          sum(rate(portage_http_requests_total{route!~"/metrics|/health"}[10m]))
+            > 0.05
+        for: 10m
+        labels:
+          severity: high
+          service: portage-api
+        annotations:
+          summary: "Portage API 5xx ratio above 5% ({{ $value | humanizePercentage }})"
+          description: "More than 1 in 20 non-health Portage requests is returning a server error over the last 10 minutes. This is a user-visible symptom — check dhg-portage-api logs and its upstream marketplace adapters."
+          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#portagehigherrorrate"
+
+      - alert: PortageHighLatency
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(portage_http_request_duration_seconds_bucket{route!~"/metrics|/health"}[10m]))) > 2
+        for: 10m
+        labels:
+          severity: warning
+          service: portage-api
+        annotations:
+          summary: "Portage API p95 latency above 2s ({{ $value | humanizeDuration }})"
+          description: "95th percentile request latency has been over 2 seconds for 10 minutes. Usual causes: an eBay/marketplace adapter timing out, or Ollama fallback to a slower cloud model."
+          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#portagehighlatency"
 
   - name: dhg-memreg
     rules:
       # Capture dead-letter queue stuck non-empty: registry captures are
       # failing and the daemon retry is not draining them (refactor item 13R).
       - alert: MemregDLQBacklog
-        expr: memreg_dlq_depth > 0
-        for: 1h
+        expr: max_over_time(memreg_dlq_depth[15m]) > 0
+        for: 15m
         labels:
           severity: high
+          service: memreg
         annotations:
-          summary: "memreg capture DLQ has {{ $value }} entries stuck > 1h — registry captures failing and not draining"
+          summary: "memreg capture DLQ non-empty for 15m ({{ $value }} entries)"
+          description: "Registry captures are failing and the daemon retry loop is not draining the dead-letter queue. Session knowledge is being lost. Check dhg-memreg-agent logs and registry-api availability."
+          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#memregdlqbacklog"
+
+      # A gauge that stops being exported looks exactly like a healthy DLQ.
+      # This is the fail-closed companion to MemregDLQBacklog.
+      - alert: MemregDLQMetricMissing
+        expr: absent(memreg_dlq_depth)
+        for: 30m
+        labels:
+          severity: warning
+          service: memreg
+        annotations:
+          summary: "memreg_dlq_depth is not being exported"
+          description: "The DLQ depth gauge is absent from the memreg scrape, so MemregDLQBacklog cannot fire and a growing dead-letter queue would go unnoticed. Verify dhg-memreg-agent:8020/metrics still exposes memreg_dlq_depth."
+          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#memregdlqmetricmissing"
 
   # P5 log program (T5): store growth watch + shipper liveness.
   # Keep-all directive: LokiStoreGrowth is a PROMPT for the operator to decide,
@@ -154,24 +331,30 @@ groups:
         for: 30m
         labels:
           severity: high
+          service: loki
         annotations:
           summary: "Loki store exceeds 20 GB ({{ $value | humanize1024 }}B)"
           description: "The keep-all log store has crossed the growth watermark. Operator decision point: expand headroom or run the documented operator-only deletion procedure. Nothing is deleted automatically."
+          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#lokistoregrowth"
 
       - alert: LokiDown
         expr: up{job="loki"} == 0
         for: 3m
         labels:
           severity: critical
+          service: loki
         annotations:
           summary: "Loki is down"
           description: "The log store is unreachable (container healthcheck is impossible on the shell-less 3.x image — this alert IS the liveness probe). Ingestion is buffering in Alloy/json-file; restart dhg-loki."
+          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#lokidown"
 
       - alert: AlloyDown
         expr: up{job="alloy"} == 0
         for: 5m
         labels:
           severity: high
+          service: alloy
         annotations:
           summary: "Alloy log shipper is down"
           description: "Grafana Alloy is not being scraped. Container logs are buffering in docker json-file (10m x 3 per container) and will be lost if this persists for days. Restart dhg-alloy."
+          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#alloydown"

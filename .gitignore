@@ -128,3 +128,8 @@ backups/
 /observability/verify/*
 !/observability/verify/.gitkeep
 !/observability/verify/allow-empty/
+
+# Rendered Alertmanager config — embeds the Slack incoming-webhook URL.
+# Tracked source of truth is observability/alertmanager/alertmanager.yml.tmpl;
+# regenerate with observability/scripts/render-alertmanager.sh
+/observability/alertmanager/alertmanager.yml

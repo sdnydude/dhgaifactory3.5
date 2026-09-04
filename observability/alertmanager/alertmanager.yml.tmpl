@@ -1,0 +1,98 @@
+# @DOC Alertmanager configuration TEMPLATE.
+# @DOC
+# @DOC The live file (observability/alertmanager/alertmanager.yml) is RENDERED
+# @DOC from this template by observability/scripts/render-alertmanager.sh and is
+# @DOC gitignored, because it embeds the Slack incoming-webhook URL - which is
+# @DOC itself a credential and must never enter git. Edit THIS file, then
+# @DOC re-render. Lines prefixed "# @DOC" are stripped from the rendered output.
+# @DOC
+# @DOC Render markers understood by render-alertmanager.sh:
+# @DOC   __SLACK_WEBHOOK_URL__        replaced with Doppler SLACK_ALERT_WEBHOOK_URL
+# @DOC   <line> # @SLACK_ONLY         kept only when the secret exists
+# @DOC   # @NO_SLACK <line>           uncommented only when the secret is absent
+# @DOC   @SLACK_BEGIN / @SLACK_END    block kept only when the secret exists
+# @DOC   (the two block markers are column-0 lines further down this file)
+# @DOC
+# @DOC Severity routing contract (see observability/prometheus/alerts.yml header):
+# @DOC   critical, high -> registry webhook (auto-creates an incident) AND Slack
+# @DOC   warning        -> Slack only
+
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: 'slack' # @SLACK_ONLY
+  # @NO_SLACK receiver: 'webhook'
+  group_by: ['alertname', 'service']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    # critical/high must reach BOTH sinks. The registry webhook handler
+    # (registry/api.py, /webhooks/alertmanager) drops every severity that is
+    # not critical|high, so sending warnings there would be pure noise —
+    # hence a dedicated combined receiver rather than `continue: true`.
+    - match_re:
+        severity: critical|high
+      receiver: 'webhook-and-slack' # @SLACK_ONLY
+      # @NO_SLACK receiver: 'webhook'
+      continue: false
+
+receivers:
+  - name: 'webhook'
+    webhook_configs:
+      - url: 'http://dhg-registry-api:8000/webhooks/alertmanager'
+        send_resolved: true
+
+# @SLACK_BEGIN
+  - name: 'slack'
+    slack_configs:
+      - api_url: '__SLACK_WEBHOOK_URL__'
+        channel: '#dhg-alerts'
+        send_resolved: true
+        title: '[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}'
+        text: |-
+          {{ range .Alerts }}*{{ .Labels.alertname }}* · severity `{{ .Labels.severity }}`{{ if .Labels.service }} · service `{{ .Labels.service }}`{{ end }}
+          {{ .Annotations.summary }}
+          {{ if .Annotations.runbook_url }}<{{ .Annotations.runbook_url }}|Runbook>{{ end }}
+          {{ end }}
+
+  - name: 'webhook-and-slack'
+    webhook_configs:
+      - url: 'http://dhg-registry-api:8000/webhooks/alertmanager'
+        send_resolved: true
+    slack_configs:
+      - api_url: '__SLACK_WEBHOOK_URL__'
+        channel: '#dhg-alerts'
+        send_resolved: true
+        title: '[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}'
+        text: |-
+          {{ range .Alerts }}*{{ .Labels.alertname }}* · severity `{{ .Labels.severity }}`{{ if .Labels.service }} · service `{{ .Labels.service }}`{{ end }}
+          {{ .Annotations.summary }}
+          {{ if .Annotations.runbook_url }}<{{ .Annotations.runbook_url }}|Runbook>{{ end }}
+          {{ end }}
+# @SLACK_END
+
+inhibit_rules:
+  # A critical alert suppresses the lower-severity noise for the same service.
+  - source_matchers:
+      - severity = critical
+    target_matchers:
+      - severity =~ "high|warning"
+    equal: ['service']
+
+  # The registry API is the incident sink itself: while it is down, every
+  # registry-scoped alert is a consequence, not new information.
+  - source_matchers:
+      - alertname = RegistryApiDown
+    target_matchers:
+      - service = registry-api
+
+  # A dead scrape target makes every per-service *Down alert for that same
+  # instance redundant. Two-sided matches are excluded by Alertmanager, so
+  # PrometheusTargetDown does not inhibit itself.
+  - source_matchers:
+      - alertname = PrometheusTargetDown
+    target_matchers:
+      - alertname =~ ".*Down"
+    equal: ['instance']
