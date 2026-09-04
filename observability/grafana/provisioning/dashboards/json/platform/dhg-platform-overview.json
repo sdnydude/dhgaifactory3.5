@@ -237,7 +237,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+          "expr": "100 - (avg(rate(node_cpu_seconds_total{job=\"node-exporter\",mode=\"idle\"}[5m])) * 100)",
           "legendFormat": "cpu",
           "refId": "A"
         }
@@ -305,7 +305,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)",
+          "expr": "100 * (1 - node_memory_MemAvailable_bytes{job=\"node-exporter\"} / node_memory_MemTotal_bytes{job=\"node-exporter\"})",
           "legendFormat": "memory",
           "refId": "A"
         }
@@ -373,7 +373,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "100 - 100 * node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"}",
+          "expr": "100 - 100 * node_filesystem_avail_bytes{job=\"node-exporter\",mountpoint=\"/\"} / node_filesystem_size_bytes{job=\"node-exporter\",mountpoint=\"/\"}",
           "legendFormat": "/",
           "refId": "A"
         }
@@ -441,7 +441,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "100 - 100 * node_filesystem_avail_bytes{mountpoint=\"/mnt/4tb\"} / node_filesystem_size_bytes{mountpoint=\"/mnt/4tb\"}",
+          "expr": "100 - 100 * node_filesystem_avail_bytes{job=\"node-exporter\",mountpoint=\"/mnt/4tb\"} / node_filesystem_size_bytes{job=\"node-exporter\",mountpoint=\"/mnt/4tb\"}",
           "legendFormat": "/mnt/4tb",
           "refId": "A"
         }
@@ -716,7 +716,7 @@
       },
       "targets": [
         {
-          "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+          "expr": "100 - (avg(rate(node_cpu_seconds_total{job=\"node-exporter\",mode=\"idle\"}[5m])) * 100)",
           "legendFormat": "CPU",
           "refId": "A",
           "datasource": {
@@ -725,7 +725,7 @@
           }
         },
         {
-          "expr": "100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)",
+          "expr": "100 * (1 - node_memory_MemAvailable_bytes{job=\"node-exporter\"} / node_memory_MemTotal_bytes{job=\"node-exporter\"})",
           "legendFormat": "Memory",
           "refId": "B",
           "datasource": {
@@ -818,7 +818,7 @@
       },
       "targets": [
         {
-          "expr": "100 - 100 * node_filesystem_avail_bytes{mountpoint=~\"/|/mnt/4tb\"} / node_filesystem_size_bytes{mountpoint=~\"/|/mnt/4tb\"}",
+          "expr": "100 - 100 * node_filesystem_avail_bytes{job=\"node-exporter\",mountpoint=~\"/|/mnt/4tb\"} / node_filesystem_size_bytes{job=\"node-exporter\",mountpoint=~\"/|/mnt/4tb\"}",
           "legendFormat": "{{mountpoint}}",
           "refId": "A",
           "datasource": {
@@ -1136,7 +1136,7 @@
       },
       "targets": [
         {
-          "expr": "topk(5, sum by (name) (rate(container_cpu_usage_seconds_total{name=~\"dhg-.*\"}[5m])) * 100)",
+          "expr": "topk(5, sum by (name) (rate(container_cpu_usage_seconds_total{job=\"cadvisor\",name=~\"dhg-.*\"}[5m])) * 100)",
           "legendFormat": "{{name}}",
           "refId": "A",
           "datasource": {
@@ -1227,7 +1227,7 @@
       },
       "targets": [
         {
-          "expr": "topk(5, sum by (name) (container_memory_working_set_bytes{name=~\"dhg-.*\"}))",
+          "expr": "topk(5, sum by (name) (container_memory_working_set_bytes{job=\"cadvisor\",name=~\"dhg-.*\"}))",
           "legendFormat": "{{name}}",
           "refId": "A",
           "datasource": {
