@@ -19,6 +19,8 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from prometheus_client import generate_latest
+from prometheus_fastapi_instrumentator import Instrumentator
+from prometheus_fastapi_instrumentator import metrics as http_metrics
 
 from database import engine, SessionLocal, get_db
 from models import Media, Transcript, Segment, Event
@@ -277,6 +279,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# ============================================================================
+# HTTP RED metrics (rate / errors / duration)
+# ============================================================================
+# Buckets span the latency range actually observed for registry requests:
+# 5 ms (cached reads) up to 5 s (pgvector KB search, CME aggregation), with
+# extra resolution across the 50 ms - 2.5 s band where the DB-bound routes sit.
+HTTP_LATENCY_BUCKETS = (
+    0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, float("inf"),
+)
+
+# Added last, so this middleware is outermost and observes every request,
+# including those short-circuited by WriteAuthMiddleware. `handler` is always
+# the route template ("/api/v1/agents/{service_id}"), never the raw path, so
+# ids and slugs cannot inflate label cardinality; unmatched paths collapse to
+# handler="none". /metrics and /healthz are excluded as pure scrape traffic.
+Instrumentator(
+    should_group_status_codes=False,
+    excluded_handlers=["/metrics", "/healthz"],
+).add(
+    http_metrics.requests(),
+    http_metrics.latency(buckets=HTTP_LATENCY_BUCKETS),
+).instrument(app)
 
 
 # ============================================================================
