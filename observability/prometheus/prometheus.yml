@@ -24,6 +24,8 @@ scrape_configs:
           service: 'prometheus'
 
   # Registry API service
+  # Static is canonical for this service per AUDIT-2026-09 P1 (decision D-B):
+  # docker-sd drop-relabels dhg-registry-api so it is scraped exactly once.
   - job_name: 'registry-api'
     static_configs:
       - targets: ['registry-api:8000']
@@ -56,8 +58,16 @@ scrape_configs:
         labels:
           service: 'cadvisor'
     scrape_interval: 30s
+    # AUDIT-2026-09 P14: container_network_advance_tcp_stats_total was ~22% of
+    # TSDB series and is referenced by no dashboard, alert or query. Dropped at
+    # scrape. Samples already stored stay until the 30d retention expires.
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'container_network_advance_tcp_stats_total'
+        action: drop
 
   # VS Engine (Verbalized Sampling)
+  # Static is canonical for this service per AUDIT-2026-09 P1 (decision D-B).
   - job_name: 'vs-engine'
     static_configs:
       - targets: ['dhg-vs-engine:8000']
@@ -65,6 +75,67 @@ scrape_configs:
           service: 'vs-engine'
     metrics_path: /metrics
     scrape_interval: 15s
+
+  # Session logger. Static is canonical per AUDIT-2026-09 P1 (decision D-B);
+  # docker-sd drop-relabels dhg-session-logger below.
+  - job_name: 'session-logger'
+    static_configs:
+      - targets: ['dhg-session-logger:8009']
+        labels:
+          service: 'session-logger'
+    metrics_path: /metrics
+    scrape_interval: 15s
+
+  # memreg daemon (compose project dhg-memreg, joined to dhg-network).
+  # Static is canonical per AUDIT-2026-09 P1 (decision D-B); docker-sd
+  # drop-relabels dhg-memreg-agent below.
+  # The job name MUST stay 'memreg': the memreg-daemon Grafana dashboard
+  # (uid memreg-daemon) has 13 queries keyed on job="memreg".
+  - job_name: 'memreg'
+    static_configs:
+      - targets: ['dhg-memreg-agent:8020']
+        labels:
+          service: 'memreg'
+    metrics_path: /metrics
+    scrape_interval: 15s
+
+  # Alertmanager self-metrics (AUDIT-2026-09: previously scraped nowhere).
+  - job_name: 'alertmanager'
+    static_configs:
+      - targets: ['dhg-alertmanager:9093']
+        labels:
+          service: 'alertmanager'
+    metrics_path: /metrics
+    scrape_interval: 30s
+
+  # Blackbox exporter self-metrics (probe results come from the blackbox-*
+  # jobs below; this job is the exporter's own health). It runs in the
+  # separate observability/blackbox compose project, so it fails the
+  # docker-sd compose-project keep filter — hence a static job here.
+  - job_name: 'blackbox'
+    static_configs:
+      - targets: ['dhg-blackbox:9115']
+        labels:
+          service: 'blackbox'
+    metrics_path: /metrics
+    scrape_interval: 30s
+
+  # cloudflared tunnels (two host systemd units). AUDIT-2026-09 A5.
+  # WARNING: this job is DOWN until the units are edited as root. Today both
+  # cloudflared processes bind their metrics server to 127.0.0.1 only (ports
+  # auto-assigned: 20241 and 20242 are currently listening on loopback), which
+  # a container cannot reach. Stephen must add to each unit's ExecStart:
+  #   cloudflared.service          -> --metrics 0.0.0.0:20241
+  #   cloudflared-portage.service  -> --metrics 0.0.0.0:20242
+  # then `systemctl daemon-reload && systemctl restart cloudflared cloudflared-portage`.
+  # Until then these two targets report DOWN. This is intentional, not a bug.
+  - job_name: 'cloudflared'
+    static_configs:
+      - targets: ['host.docker.internal:20241', 'host.docker.internal:20242']
+        labels:
+          service: 'cloudflared'
+    metrics_path: /metrics
+    scrape_interval: 30s
 
   # medkb RAG-as-a-Service
   - job_name: 'medkb'
@@ -128,11 +199,6 @@ scrape_configs:
         replacement: dhg-blackbox:9115
     scrape_interval: 30s
 
-  # Memreg daemon is now discovered dynamically via the docker-sd job below
-  # (container carries prometheus.io/scrape=true, joined to dhg-network).
-  # Previous static_configs target (172.18.0.1:8020, host-gateway route) went
-  # stale once the daemon moved off network_mode:host; removed 2026-07-05.
-
   # Docker Service Discovery — auto-discovers containers with
   # prometheus.io/scrape=true label. Add these Docker labels to any
   # service to opt in:
@@ -148,6 +214,12 @@ scrape_configs:
           - name: label
             values: ["prometheus.io/scrape=true"]
     relabel_configs:
+      # AUDIT-2026-09 P1 / decision D-B: these containers have canonical static
+      # jobs above. Drop them here so each is scraped exactly once and the
+      # series carry stable instance labels instead of churning container IPs.
+      - source_labels: [__meta_docker_container_name]
+        regex: '^/?(dhg-registry-api|dhg-vs-engine|dhg-session-logger|dhg-memreg-agent)$'
+        action: drop
       - source_labels: [__meta_docker_container_label_prometheus_io_scrape]
         regex: "true"
         action: keep
@@ -160,10 +232,8 @@ scrape_configs:
       - source_labels: [__meta_docker_container_name]
         regex: /(.+)
         target_label: container
-      - source_labels: [__meta_docker_container_name]
-        regex: "/dhg-memreg-agent"
-        target_label: job
-        replacement: "memreg"
+      # (The former /dhg-memreg-agent -> job="memreg" rewrite was removed with
+      # the drop rule above; memreg now has a canonical static job.)
       - source_labels: [__meta_docker_container_label_prometheus_io_path]
         target_label: __metrics_path__
         regex: (.+)
