@@ -480,7 +480,7 @@
   "refresh": "30s",
   "schemaVersion": 38,
   "style": "dark",
-  "tags": ["dhg", "docker", "cadvisor", "node-exporter"],
+  "tags": ["dhg", "platform", "docker", "cadvisor", "node-exporter"],
   "templating": {
     "list": [
       {

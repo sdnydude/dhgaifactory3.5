@@ -1,12 +1,49 @@
 apiVersion: 1
 
+# One provider per folder. Grafana creates the folder on first provisioning run.
+# Provider config is read at Grafana startup only — restart dhg-grafana after edits here.
+# Dashboard JSON itself re-provisions live every updateIntervalSeconds.
 providers:
-  - name: 'DHG Dashboards'
+  - name: 'DHG Platform'
     orgId: 1
-    folder: ''
+    folder: 'DHG / Platform'
     type: file
     disableDeletion: false
     updateIntervalSeconds: 10
     allowUiUpdates: true
     options:
-      path: /etc/grafana/provisioning/dashboards/json
+      path: /etc/grafana/provisioning/dashboards/json/platform
+      foldersFromFilesStructure: false
+
+  - name: 'DHG Services'
+    orgId: 1
+    folder: 'DHG / Services'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/json/services
+      foldersFromFilesStructure: false
+
+  - name: 'DHG AI'
+    orgId: 1
+    folder: 'DHG / AI'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/json/ai
+      foldersFromFilesStructure: false
+
+  - name: 'DHG Alerting'
+    orgId: 1
+    folder: 'DHG / Alerting'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/json/alerting
+      foldersFromFilesStructure: false

@@ -1,0 +1,2 @@
+# Panels where "no series" is the healthy state.
+40  # Locks by Mode — filtered to pg_locks_count > 0; empty means no locks are held
