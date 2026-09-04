@@ -113,3 +113,29 @@ Current entries:
 - `dhg-log-analytics` 41 — registry-db error/fatal log lines; the DB logs nothing but `LOG` when healthy.
 - `dhg-platform-overview` 10, 11 — targets-down and firing-alerts tables; empty is the goal state.
 - `dhg-postgresql` 40 — lock modes filtered to `> 0`; no rows means no locks held.
+
+## Tracing
+
+Tempo was retired 2026-09-04 (AUDIT-2026-09 section 7, decision D-A): it never received
+a span in production. The service definition still lives in `docker-compose.override.yml`
+but is held out of `docker compose up` by a `profiles: ["retired"]` merge stanza in
+`docker-compose.yml`; its data volume `dhgaifactory35_tempo_data` is left in place.
+Grafana therefore has exactly two datasources — Prometheus and Loki — and no
+`derivedFields` / `exemplarTraceIdDestinations` trace links.
+
+All OTLP now goes to Langfuse at `http://10.0.0.179:3000/api/public/otel`
+(traces: `/v1/traces`), authenticated with a project key pair as HTTP Basic.
+
+To enable medkb trace export:
+
+1. In the Langfuse UI (`http://10.0.0.179:3000`), create the project `dhg-ai-factory`
+   and mint an API key pair. Do not reuse the portage or canary keys.
+2. `doppler secrets set LANGFUSE_AIFACTORY_PUBLIC_KEY` and
+   `LANGFUSE_AIFACTORY_SECRET_KEY` in project `dhg-monitoring`, config `dev`.
+3. `observability/scripts/render-medkb-otel-env.sh` — writes the gitignored
+   `services/medkb/.env.otel` (mode 600). Without the keys it warns and exits 0,
+   and medkb starts with tracing disabled.
+4. `docker compose up -d dhg-medkb-api`.
+
+Pydantic AI agents do not use the legacy `traced_node` decorators: they call
+`Agent.instrument_all()` and inherit the same Langfuse OTLP env.

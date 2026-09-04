@@ -15,7 +15,7 @@ def test_settings_defaults():
     assert s.ollama_url == "http://dhg-ollama:11434"
     assert s.max_total_tokens == 50_000
     assert s.rate_limit_per_minute == 60
-    assert s.otel_endpoint == "http://dhg-tempo:4318"
+    assert s.otel_endpoint == ""  # empty = tracing disabled (Tempo retired)
     assert s.langsmith_project == "dhg-medkb"
 
 

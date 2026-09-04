@@ -138,3 +138,7 @@ backups/
 # Tracked shape reference is observability/postgres-exporter/postgres_exporter.yml.example;
 # regenerate with observability/postgres-exporter/render-postgres-exporter.sh
 /observability/postgres-exporter/postgres_exporter.yml
+
+# Rendered medkb OTLP env — embeds the Langfuse Basic auth header.
+# Regenerate with observability/scripts/render-medkb-otel-env.sh
+/services/medkb/.env.otel

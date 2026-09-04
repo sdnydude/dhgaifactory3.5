@@ -1,5 +1,13 @@
 apiVersion: 1
 
+# Tempo retired 2026-09-04 (AUDIT-2026-09 section 7, decision D-A). The Tempo
+# datasource is deleted on provisioning so it does not linger in Grafana's DB,
+# and exemplarTraceIdDestinations is gone with it — there is no trace backend
+# for Grafana to link to. OTLP now goes to Langfuse (http://10.0.0.179:3000).
+deleteDatasources:
+  - name: Tempo
+    orgId: 1
+
 datasources:
   - name: Prometheus
     type: prometheus
@@ -10,6 +18,3 @@ datasources:
     editable: false
     jsonData:
       timeInterval: "15s"
-      exemplarTraceIdDestinations:
-        - name: trace_id
-          datasourceUid: tempo

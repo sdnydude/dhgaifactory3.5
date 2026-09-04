@@ -331,10 +331,15 @@ services:
       - OLLAMA_URL=http://dhg-ollama:11434
       - EMBEDDING_MODEL=nomic-embed-text
       - DEFAULT_GENERATION_MODEL=claude-sonnet-4-6
-      - LANGSMITH_PROJECT=dhg-medkb
-      - OTEL_ENDPOINT=http://dhg-tempo:4318
-      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    # OTLP export to Langfuse. Rendered from Doppler (dhg-monitoring/dev) by
+    # observability/scripts/render-medkb-otel-env.sh; absent until the
+    # dhg-ai-factory Langfuse project keys exist, in which case medkb starts
+    # with tracing disabled. OTEL_ENDPOINT must NOT be set inline here — an
+    # `environment:` entry would override the env_file value.
+    env_file:
+      - path: services/medkb/.env.otel
+        required: false
     labels:
       - prometheus.scrape=true
       - prometheus.port=8015
@@ -429,6 +434,14 @@ services:
   prometheus:
     extra_hosts:
       - "host.docker.internal:host-gateway"
+
+  # Merge stanza only — the tempo service itself is defined in
+  # docker-compose.override.yml. Tempo is RETIRED (AUDIT-2026-09 section 7,
+  # decision D-A): it never received a span, and OTLP now goes to Langfuse.
+  # The `retired` profile keeps the definition out of a plain `docker compose
+  # up -d` while leaving it recoverable via `--profile retired`.
+  tempo:
+    profiles: ["retired"]
 
 networks:
   dhg-network:
