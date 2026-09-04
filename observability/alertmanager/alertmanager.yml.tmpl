@@ -2,27 +2,28 @@
 # @DOC
 # @DOC The live file (observability/alertmanager/alertmanager.yml) is RENDERED
 # @DOC from this template by observability/scripts/render-alertmanager.sh and is
-# @DOC gitignored, because it embeds the Slack incoming-webhook URL - which is
-# @DOC itself a credential and must never enter git. Edit THIS file, then
+# @DOC gitignored, because it embeds the Telegram bot token - which is itself a
+# @DOC credential and must never enter git. Edit THIS file, then
 # @DOC re-render. Lines prefixed "# @DOC" are stripped from the rendered output.
 # @DOC
 # @DOC Render markers understood by render-alertmanager.sh:
-# @DOC   __SLACK_WEBHOOK_URL__        replaced with Doppler SLACK_ALERT_WEBHOOK_URL
-# @DOC   <line> # @SLACK_ONLY         kept only when the secret exists
-# @DOC   # @NO_SLACK <line>           uncommented only when the secret is absent
-# @DOC   @SLACK_BEGIN / @SLACK_END    block kept only when the secret exists
+# @DOC   __TELEGRAM_BOT_TOKEN__       replaced with Doppler TELEGRAM_BOT_TOKEN
+# @DOC   __TELEGRAM_CHAT_ID__         replaced with Doppler TELEGRAM_CHAT_ID
+# @DOC   <line> # @TG_ONLY            kept only when both secrets exist
+# @DOC   # @NO_TG <line>              uncommented only when a secret is absent
+# @DOC   @TG_BEGIN / @TG_END          block kept only when both secrets exist
 # @DOC   (the two block markers are column-0 lines further down this file)
 # @DOC
 # @DOC Severity routing contract (see observability/prometheus/alerts.yml header):
-# @DOC   critical, high -> registry webhook (auto-creates an incident) AND Slack
-# @DOC   warning        -> Slack only
+# @DOC   critical, high -> registry webhook (auto-creates an incident) AND Telegram
+# @DOC   warning        -> Telegram only
 
 global:
   resolve_timeout: 5m
 
 route:
-  receiver: 'slack' # @SLACK_ONLY
-  # @NO_SLACK receiver: 'webhook'
+  receiver: 'telegram' # @TG_ONLY
+  # @NO_TG receiver: 'webhook'
   group_by: ['alertname', 'service']
   group_wait: 30s
   group_interval: 5m
@@ -34,8 +35,8 @@ route:
     # hence a dedicated combined receiver rather than `continue: true`.
     - match_re:
         severity: critical|high
-      receiver: 'webhook-and-slack' # @SLACK_ONLY
-      # @NO_SLACK receiver: 'webhook'
+      receiver: 'webhook-and-telegram' # @TG_ONLY
+      # @NO_TG receiver: 'webhook'
       continue: false
 
 receivers:
@@ -44,34 +45,36 @@ receivers:
       - url: 'http://dhg-registry-api:8000/webhooks/alertmanager'
         send_resolved: true
 
-# @SLACK_BEGIN
-  - name: 'slack'
-    slack_configs:
-      - api_url: '__SLACK_WEBHOOK_URL__'
-        channel: '#dhg-alerts'
+# @TG_BEGIN
+  - name: 'telegram'
+    telegram_configs:
+      - bot_token: '__TELEGRAM_BOT_TOKEN__'
+        chat_id: __TELEGRAM_CHAT_ID__
+        parse_mode: 'HTML'
         send_resolved: true
-        title: '[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}'
-        text: |-
-          {{ range .Alerts }}*{{ .Labels.alertname }}* · severity `{{ .Labels.severity }}`{{ if .Labels.service }} · service `{{ .Labels.service }}`{{ end }}
+        message: |-
+          <b>[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}</b>
+          {{ range .Alerts }}severity <code>{{ .Labels.severity }}</code>{{ if .Labels.service }} · service <code>{{ .Labels.service }}</code>{{ end }}{{ if .Labels.instance }} · {{ .Labels.instance }}{{ end }}
           {{ .Annotations.summary }}
-          {{ if .Annotations.runbook_url }}<{{ .Annotations.runbook_url }}|Runbook>{{ end }}
+          {{ if .Annotations.runbook_url }}<a href="{{ .Annotations.runbook_url }}">Runbook</a>{{ end }}
           {{ end }}
 
-  - name: 'webhook-and-slack'
+  - name: 'webhook-and-telegram'
     webhook_configs:
       - url: 'http://dhg-registry-api:8000/webhooks/alertmanager'
         send_resolved: true
-    slack_configs:
-      - api_url: '__SLACK_WEBHOOK_URL__'
-        channel: '#dhg-alerts'
+    telegram_configs:
+      - bot_token: '__TELEGRAM_BOT_TOKEN__'
+        chat_id: __TELEGRAM_CHAT_ID__
+        parse_mode: 'HTML'
         send_resolved: true
-        title: '[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}'
-        text: |-
-          {{ range .Alerts }}*{{ .Labels.alertname }}* · severity `{{ .Labels.severity }}`{{ if .Labels.service }} · service `{{ .Labels.service }}`{{ end }}
+        message: |-
+          <b>[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}</b>
+          {{ range .Alerts }}severity <code>{{ .Labels.severity }}</code>{{ if .Labels.service }} · service <code>{{ .Labels.service }}</code>{{ end }}{{ if .Labels.instance }} · {{ .Labels.instance }}{{ end }}
           {{ .Annotations.summary }}
-          {{ if .Annotations.runbook_url }}<{{ .Annotations.runbook_url }}|Runbook>{{ end }}
+          {{ if .Annotations.runbook_url }}<a href="{{ .Annotations.runbook_url }}">Runbook</a>{{ end }}
           {{ end }}
-# @SLACK_END
+# @TG_END
 
 inhibit_rules:
   # A critical alert suppresses the lower-severity noise for the same service.

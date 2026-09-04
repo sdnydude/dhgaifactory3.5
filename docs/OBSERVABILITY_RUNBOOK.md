@@ -76,15 +76,15 @@ docker compose -f observability/blackbox/docker-compose.yml up -d
 the Loki ruler (`observability/loki/rules/fake/alerts.yml`).
 
 Three severities only. `critical` and `high` go to the registry webhook **and**
-Slack `#dhg-alerts`, and the registry auto-creates an incident. `warning` goes to
-Slack only — the handler (`registry/api.py`, `POST /webhooks/alertmanager`) drops
+the Telegram alerts chat, and the registry auto-creates an incident. `warning` goes to
+Telegram only — the handler (`registry/api.py`, `POST /webhooks/alertmanager`) drops
 anything not `critical|high` by design. `medium` is retired.
 
 `observability/alertmanager/alertmanager.yml` is **generated and gitignored** — it
-embeds the Slack webhook URL, a credential. Edit `alertmanager.yml.tmpl`, run
+embeds the Telegram bot token, a credential. Edit `alertmanager.yml.tmpl`, run
 `observability/scripts/render-alertmanager.sh`, then reload. Without
-`SLACK_ALERT_WEBHOOK_URL` in Doppler (`dhg-monitoring`/`dev`) it renders a valid
-Slack-free config and exits 0; alerting still reaches the registry.
+`TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in Doppler (`dhg-monitoring`/`dev`) it renders a valid
+Telegram-free config and exits 0; alerting still reaches the registry.
 
 Every rule carries `for`, `summary`, `description` and a `runbook_url` of
 `http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#<alertname lowercased>`.
@@ -178,7 +178,7 @@ host = timeout, frontend `/api/prometheus` still 200.
 
 | Script | Purpose |
 |---|---|
-| `render-alertmanager.sh` | Renders the gitignored `alertmanager.yml` from template + Doppler Slack webhook |
+| `render-alertmanager.sh` | Renders the gitignored `alertmanager.yml` from template + Doppler Telegram bot token and chat id |
 | `render-medkb-otel-env.sh` | Renders the gitignored `services/medkb/.env.otel` for Langfuse OTLP |
 | `verify-dashboard.sh` | Replays every panel of a board and renders a PNG; exit 0 = all panels answer with data |
 | `langfuse-canary.sh` | Write-then-read Langfuse round-trip; writes the canary textfile metric |

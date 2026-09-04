@@ -1,8 +1,8 @@
 # DHG AI Factory — Loki ruler alert rules
 #
 # Severity taxonomy is shared with observability/prometheus/alerts.yml:
-#   critical / high -> registry webhook (auto-creates an incident) + Slack
-#   warning         -> Slack only (the registry webhook skips non-critical/high)
+#   critical / high -> registry webhook (auto-creates an incident) + Telegram
+#   warning         -> Telegram only (the registry webhook skips non-critical/high)
 # No other severity value may be used here.
 #
 # Every rule carries `for:`, `summary`, `description`, and a `runbook_url`

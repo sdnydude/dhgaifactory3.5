@@ -623,7 +623,7 @@ route:
 
 receivers:
   - name: 'default'
-    # Add Slack, email, or PagerDuty config here
+    # Add Telegram (telegram_configs), Discord, or email config here
 ```
 
 ---

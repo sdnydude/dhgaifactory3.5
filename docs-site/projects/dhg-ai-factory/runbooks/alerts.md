@@ -23,9 +23,9 @@ Only three values are legal. Anything else is a bug in the rule file.
 
 | Severity | Meaning | Where it goes |
 |---|---|---|
-| `critical` | Page-worthy. A service is down, or data / security is at risk. | Registry webhook **and** Slack. The registry auto-creates an incident. |
-| `high` | Degraded or actively failing; needs same-day attention. | Registry webhook **and** Slack. Also creates an incident. |
-| `warning` | Informational or a trend. Not an incident. | Slack only. |
+| `critical` | Page-worthy. A service is down, or data / security is at risk. | Registry webhook **and** Telegram. The registry auto-creates an incident. |
+| `high` | Degraded or actively failing; needs same-day attention. | Registry webhook **and** Telegram. Also creates an incident. |
+| `warning` | Informational or a trend. Not an incident. | Telegram only. |
 
 `medium` is retired. The registry webhook handler
 (`registry/api.py`, `POST /webhooks/alertmanager`) explicitly skips any severity
@@ -36,12 +36,12 @@ that is intentional, not a dropped alert.
 
 ```
 Prometheus (10.0.0.251:9090) ─┐
-                              ├─> Alertmanager (10.0.0.251:9093) ─┬─> Slack #dhg-alerts
+                              ├─> Alertmanager (10.0.0.251:9093) ─┬─> Telegram alerts chat
 Loki ruler (10.0.0.251:3100) ─┘                                   └─> POST http://dhg-registry-api:8000/webhooks/alertmanager
 ```
 
 Routing lives in `observability/alertmanager/alertmanager.yml`, which is
-**generated** — it embeds the Slack incoming-webhook URL, which is a credential,
+**generated** — it embeds the Telegram bot token, which is a credential,
 so the rendered file is gitignored. Edit `alertmanager.yml.tmpl`, then:
 
 ```bash
@@ -49,10 +49,10 @@ observability/scripts/render-alertmanager.sh
 curl -X POST http://10.0.0.251:9093/-/reload
 ```
 
-If `SLACK_ALERT_WEBHOOK_URL` is absent from Doppler (`dhg-monitoring` / `dev`)
+If `TELEGRAM_BOT_TOKEN` or `TELEGRAM_CHAT_ID` is absent from Doppler (`dhg-monitoring` / `dev`)
 the script still renders a valid config and exits 0 — alerting keeps working
-through the registry webhook, with no Slack leg. Until that secret is set,
-"goes to Slack" below means "will go to Slack once the webhook is configured".
+through the registry webhook, with no Telegram leg. Until those secrets are set,
+"goes to Telegram" below means "will go to Telegram once the bot is configured".
 
 Three inhibition rules suppress consequential noise: a `critical` suppresses
 `high`/`warning` for the same `service`; `RegistryApiDown` suppresses everything
@@ -470,7 +470,7 @@ up{job="alertmanager"} == 0
 ```
 
 **Means:** Alertmanager is unreachable. Prometheus still evaluates rules, but
-nothing reaches Slack or the registry webhook. Every alert in the estate is
+nothing reaches Telegram or the registry webhook. Every alert in the estate is
 silently ineffective. `critical`.
 
 **First three checks:**
@@ -550,7 +550,7 @@ failure resolving `dhg-alertmanager` on the compose network.
 
 **Resolve:** restore Alertmanager. Drops are unrecoverable — after the pipeline
 is healthy, re-check `/api/v1/alerts` on Prometheus for anything still firing
-that never reached Slack, and handle it by hand.
+that never reached Telegram, and handle it by hand.
 
 **Dashboard:** [DHG Alerting Pipeline](http://10.0.0.251:3001/d/dhg-alerting-pipeline)
 
@@ -571,13 +571,13 @@ curl -sG http://10.0.0.251:9090/api/v1/query --data-urlencode 'query=sum by (int
 curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: application/json' -d '{"alerts":[]}' http://10.0.0.251:8011/webhooks/alertmanager
 ```
 
-**Likely causes:** `integration="slack"` — a revoked, rotated or malformed
+**Likely causes:** `integration="telegram"` — a revoked or malformed bot token, a wrong chat id, or a
 incoming-webhook URL. `integration="webhook"` — the registry returning non-2xx,
 usually because `dhg-registry-api` is down (expect `RegistryApiDown`) or the
 webhook secret does not match.
 
-**Resolve:** for Slack, re-mint the webhook, `doppler secrets set
-SLACK_ALERT_WEBHOOK_URL --project dhg-monitoring --config dev`, re-run
+**Resolve:** for Telegram, re-check the bot with @BotFather, `doppler secrets set
+TELEGRAM_BOT_TOKEN --project dhg-monitoring --config dev` (and `TELEGRAM_CHAT_ID`), re-run
 `observability/scripts/render-alertmanager.sh`, then reload. Never paste the URL
 into a file in the repo. For the registry leg, fix the registry.
 

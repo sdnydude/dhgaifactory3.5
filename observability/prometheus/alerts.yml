@@ -3,11 +3,11 @@
 # SEVERITY TAXONOMY (only these three values may appear in this file or in
 # observability/loki/rules/**; anything else is a bug):
 #   critical — page-worthy, service is down or data/security is at risk.
-#              Routed to the registry webhook AND Slack; the registry
+#              Routed to the registry webhook AND Telegram; the registry
 #              auto-creates an incident (registry/api.py:/webhooks/alertmanager).
 #   high     — degraded or actively failing, needs same-day attention.
-#              Routed to the registry webhook AND Slack; also creates an incident.
-#   warning  — informational / trend. Slack only. The registry webhook handler
+#              Routed to the registry webhook AND Telegram; also creates an incident.
+#   warning  — informational / trend. Telegram only. The registry webhook handler
 #              explicitly skips any severity that is not critical|high, so a
 #              warning never becomes an incident.
 # `medium` is retired: it silently produced no incident and no clear routing.
@@ -212,7 +212,7 @@ groups:
           severity: critical
         annotations:
           summary: "Alertmanager is down — no alert can be delivered"
-          description: "Prometheus can still evaluate rules but nothing reaches Slack or the registry webhook. Every other alert in this file is silently ineffective until dhg-alertmanager is back."
+          description: "Prometheus can still evaluate rules but nothing reaches Telegram or the registry webhook. Every other alert in this file is silently ineffective until dhg-alertmanager is back."
           runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#alertmanagerdown"
 
       - alert: PrometheusRuleEvalFailures

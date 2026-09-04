@@ -13,7 +13,7 @@ Out of scope for this plan, captured as deferred items in the registry with thei
 | D-A | Trace architecture | **Retire Tempo. OTel goes to Langfuse OTLP only.** | Tempo has 0 spans; Langfuse v3 accepts OTLP; fan-out adds a daemon for a copy nobody reads. [R3] |
 | D-B | Scrape convention | **Static jobs are canonical for in-project services; docker-sd only for opt-in containers with no static job.** | SD instance labels are container IPs that churn; static feeds RegistryApiDown and frontend queries. [R2][R3] |
 | D-C | Registry HTTP instrumentation (code change in `registry/`) in this ship | **Yes, as its own small PR inside Phase 4.** | Without it the registry dashboard cannot show request rate, errors or latency, and the frontend `/dashboards` page stays dead. [R3] |
-| D-D | Human alert channel | **Slack incoming webhook to a new `#dhg-alerts` channel via Alertmanager `slack_configs`.** Alternative: ntfy.sh topic (push to phone, no workspace dependency). | 117 incidents have never reached a human. Alertmanager supports both natively. Secret goes in Doppler `dhg-monitoring`. |
+| D-D | Human alert channel | **Telegram bot via Alertmanager `telegram_configs`** (revised 2026-09-04: DHG does not use Slack; Telegram is free, native in Alertmanager 0.27, phone push). Alternatives: Discord (native), ntfy self-hosted. | 117 incidents have never reached a human. Bot token and chat id go in Doppler `dhg-monitoring`. |
 | D-E | dhg-remediator | **`docker stop dhg-remediator` now, pending its fix.** Production change, needs your yes. | 74K rows/day into the registry DB, no human surface for its "approval required" queue. [R2][R4] |
 | D-F | LAN exposure of Prometheus, Alertmanager, Loki, Tempo, cAdvisor (0.0.0.0, no auth) | **ufw: allow those ports from your Mac and localhost only.** | Grafana stays the UI; frontend reaches them over the Docker network, unaffected. [R4] |
 | D-G | GPU exporter | **`nvidia_gpu_exporter` container with `runtime: nvidia`** (wraps nvidia-smi; no DCGM install). | runc is default runtime, nvidia only for Ollama; this matches that policy. |
@@ -49,10 +49,10 @@ Rules (`alerts.yml`, Loki rules):
 - New: `AlertmanagerDown`, `PrometheusRuleEvalFailures`, `PrometheusNotificationsDropped`, `LokiRulerErrors`, `TextfileStale` (loki_store, backups when they exist).
 - New symptom alerts: `PortageHighErrorRate` (5xx ratio > 5% for 10m), `PortageHighLatency` (p95 > 2s for 10m); registry equivalents once WP6 lands.
 - Every rule gets `runbook_url` pointing at a docs-site page (WP8).
-- Severity taxonomy documented: `critical` and `high` create incidents; `warning` notifies Slack only; nothing else is used.
+- Severity taxonomy documented: `critical` and `high` create incidents; `warning` notifies Telegram only; nothing else is used.
 
 Delivery (`alertmanager.yml`):
-- Receiver `slack` (D-D) for all severities; registry webhook kept for critical/high.
+- Receiver `telegram` (D-D) for all severities; registry webhook kept for critical/high.
 - Fix `inhibit_rules`: `RegistryApiDown` inhibits registry-scoped alerts; `PrometheusTargetDown` inhibits per-service `*Down`.
 
 AC: `p5-baseline.sh` silence round-trip passes; a deliberate test alert (`amtool alert add`) appears in `#dhg-alerts` on your phone within 60s; `/api/v1/rules` shows 0 rules with health != ok and every rule with a `runbook_url`.
@@ -100,7 +100,7 @@ AC: `up{job="gpu"}` = 1 and `nvidia_smi_utilization_gpu_ratio` present; `pg_up` 
 - Synthetic Langfuse round-trip: `observability/scripts/langfuse-canary.sh` posts a trace via public API every 5 min and writes `langfuse_canary_success_timestamp` to node-exporter textfile; alert `LangfuseCanaryStale` > 15m. This is the MinIO silent-drop detector.
 - Alerts: `Dh40801Down`, `LangfuseUnhealthy`, `LangfuseContainerRestart`.
 
-AC: `dhg-ai-langfuse` dashboard shows both hosts and all 6 Langfuse containers; stopping `dhg-langfuse-minio` for 2 minutes fires `LangfuseCanaryStale` in Slack (test executed with your go-ahead, then reverted).
+AC: `dhg-ai-langfuse` dashboard shows both hosts and all 6 Langfuse containers; stopping `dhg-langfuse-minio` for 2 minutes fires `LangfuseCanaryStale` in Telegram (test executed with your go-ahead, then reverted).
 
 ## 7. WP6 — Registry HTTP instrumentation (D-C)
 
