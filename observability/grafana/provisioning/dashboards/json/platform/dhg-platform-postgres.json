@@ -15,7 +15,7 @@
       }
     ]
   },
-  "description": "Platform-wide first-look board for g700data1: what is firing, what is down, how the host, GPU and containers are doing, and the top-line signal from the registry and Portage. Replaces DHG-Core-Golden, which queried ASR and GPU metrics that this stack never exposed. The GPU row is live as of the nvidia_gpu_exporter deployment; the DHG GPU board carries the detail.",
+  "description": "Every PostgreSQL instance the stack scrapes, on one board. registry-db comes from job `postgres` (the standalone exporter) and the other six from job `postgres-multi`; both carry a `service` label, which is what `$service` selects on, so the two jobs sit side by side. For a deep single-instance view of registry-db use the DHG PostgreSQL board instead.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -46,7 +46,7 @@
       },
       "id": 100,
       "panels": [],
-      "title": "Health",
+      "title": "Fleet health",
       "type": "row"
     },
     {
@@ -54,7 +54,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Prometheus alerts currently in the firing state. Guarded with `or vector(0)` so an empty ALERTS series reads 0 rather than 'No data'.",
+      "description": "PostgreSQL instances the exporter can reach and query. Seven is the full fleet: registry-db (job `postgres`) plus the six on `postgres-multi`.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -66,11 +66,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "red",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "green",
                 "value": 1
               }
             ]
@@ -105,12 +105,11 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "count(ALERTS{alertstate=\"firing\"}) or vector(0)",
-          "legendFormat": "firing",
+          "expr": "sum(pg_up{service=~\"$service\"})",
           "refId": "A"
         }
       ],
-      "title": "Firing alerts",
+      "title": "Instances up",
       "type": "stat"
     },
     {
@@ -118,7 +117,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Prometheus scrape targets currently failing. Detail is in the 'Targets down' table below.",
+      "description": "Instances whose exporter probe failed. Anything other than zero means a database is unreachable, not merely idle.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -169,12 +168,11 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "count(up == 0) or vector(0)",
-          "legendFormat": "down",
+          "expr": "count(pg_up{service=~\"$service\"} == 0) or vector(0)",
           "refId": "A"
         }
       ],
-      "title": "Targets down",
+      "title": "Instances down",
       "type": "stat"
     },
     {
@@ -182,14 +180,14 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "g700data1 CPU utilisation, derived from idle time across all cores.",
+      "description": "Backends across the whole selection, all states included. Compare against the headroom panel below before reading a number as high.",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
           },
           "mappings": [],
-          "unit": "percent",
+          "unit": "short",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -199,11 +197,11 @@
               },
               {
                 "color": "yellow",
-                "value": 70
+                "value": 200
               },
               {
                 "color": "red",
-                "value": 90
+                "value": 400
               }
             ]
           }
@@ -237,12 +235,11 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
-          "legendFormat": "cpu",
+          "expr": "sum(pg_stat_activity_count{service=~\"$service\"})",
           "refId": "A"
         }
       ],
-      "title": "Host CPU",
+      "title": "Connections in use",
       "type": "stat"
     },
     {
@@ -250,28 +247,20 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "g700data1 memory in use, measured against MemAvailable (excludes reclaimable cache).",
+      "description": "On-disk size of every database in the selection, summed. Growth without a matching workload change usually means bloat, not data.",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
           },
           "mappings": [],
-          "unit": "percent",
+          "unit": "bytes",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
                 "color": "green",
                 "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 80
-              },
-              {
-                "color": "red",
-                "value": 92
               }
             ]
           }
@@ -305,12 +294,11 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)",
-          "legendFormat": "memory",
+          "expr": "sum(pg_database_size_bytes{service=~\"$service\"})",
           "refId": "A"
         }
       ],
-      "title": "Host memory",
+      "title": "Fleet database size",
       "type": "stat"
     },
     {
@@ -318,14 +306,14 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Used share of the / filesystem on g700data1.",
+      "description": "Deadlocks detected and broken in the last hour. Any non-zero value is a correctness smell: two transactions took locks in opposite orders.",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
           },
           "mappings": [],
-          "unit": "percent",
+          "unit": "short",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -334,12 +322,8 @@
                 "value": null
               },
               {
-                "color": "yellow",
-                "value": 75
-              },
-              {
                 "color": "red",
-                "value": 90
+                "value": 1
               }
             ]
           }
@@ -373,12 +357,11 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "100 - 100 * node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"}",
-          "legendFormat": "/",
+          "expr": "sum(increase(pg_stat_database_deadlocks{service=~\"$service\"}[1h]))",
           "refId": "A"
         }
       ],
-      "title": "Root disk used",
+      "title": "Deadlocks (1h)",
       "type": "stat"
     },
     {
@@ -386,14 +369,14 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Used share of the /mnt/4tb data volume on g700data1.",
+      "description": "Worst replay lag across the selection. Every instance here is a primary, so zero is expected; a non-zero value means one has become a replica.",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
           },
           "mappings": [],
-          "unit": "percent",
+          "unit": "s",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -403,11 +386,11 @@
               },
               {
                 "color": "yellow",
-                "value": 75
+                "value": 60
               },
               {
                 "color": "red",
-                "value": 90
+                "value": 300
               }
             ]
           }
@@ -441,12 +424,11 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "100 - 100 * node_filesystem_avail_bytes{mountpoint=\"/mnt/4tb\"} / node_filesystem_size_bytes{mountpoint=\"/mnt/4tb\"}",
-          "legendFormat": "/mnt/4tb",
+          "expr": "max(pg_replication_lag_seconds{service=~\"$service\"})",
           "refId": "A"
         }
       ],
-      "title": "/mnt/4tb used",
+      "title": "Max replication lag",
       "type": "stat"
     },
     {
@@ -459,7 +441,7 @@
       },
       "id": 101,
       "panels": [],
-      "title": "Alerts and targets",
+      "title": "Instance health",
       "type": "row"
     },
     {
@@ -467,7 +449,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Every scrape target that is currently down, by job and instance. An empty table is the healthy state.",
+      "description": "One row per PostgreSQL instance with its reachability. Up/Down is `pg_up` mapped: 1 means the exporter connected and ran its collectors, 0 means it could not.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -479,7 +461,23 @@
               "type": "auto"
             }
           },
-          "mappings": [],
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "red",
+                  "index": 1,
+                  "text": "Down"
+                },
+                "1": {
+                  "color": "green",
+                  "index": 0,
+                  "text": "Up"
+                }
+              },
+              "type": "value"
+            }
+          ],
           "unit": "short",
           "thresholds": {
             "mode": "absolute",
@@ -487,6 +485,10 @@
               {
                 "color": "red",
                 "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
               }
             ]
           }
@@ -494,8 +496,8 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
-        "w": 12,
+        "h": 10,
+        "w": 24,
         "x": 0,
         "y": 6
       },
@@ -505,7 +507,7 @@
         "sortBy": [
           {
             "desc": false,
-            "displayName": "Job"
+            "displayName": "Service"
           }
         ]
       },
@@ -515,108 +517,38 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "up == 0",
+          "expr": "pg_up{service=~\"$service\"}",
+          "refId": "A",
           "format": "table",
-          "instant": true,
-          "refId": "A"
+          "instant": true
         }
       ],
-      "title": "Targets down",
+      "title": "Instance up/down",
       "type": "table",
       "transformations": [
         {
-          "id": "organize",
+          "id": "filterFieldsByName",
           "options": {
-            "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "Value": true
-            },
-            "renameByName": {
-              "job": "Job",
-              "instance": "Instance",
-              "service": "Service"
+            "include": {
+              "pattern": "^(service|instance|job|Value)$"
             }
-          }
-        }
-      ]
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "Alerts currently firing, with their severity. An empty table is the healthy state.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            }
-          },
-          "mappings": [],
-          "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              }
-            ]
           }
         },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 6
-      },
-      "id": 11,
-      "options": {
-        "showHeader": true,
-        "sortBy": [
-          {
-            "desc": false,
-            "displayName": "Alert"
-          }
-        ]
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "ALERTS{alertstate=\"firing\"}",
-          "format": "table",
-          "instant": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Firing alerts",
-      "type": "table",
-      "transformations": [
         {
           "id": "organize",
           "options": {
-            "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "alertstate": true,
-              "Value": true
+            "excludeByName": {},
+            "indexByName": {
+              "service": 0,
+              "instance": 1,
+              "job": 2,
+              "Value": 3
             },
             "renameByName": {
-              "alertname": "Alert",
-              "severity": "Severity",
+              "service": "Service",
+              "instance": "Instance",
               "job": "Job",
-              "instance": "Instance"
+              "Value": "State"
             }
           }
         }
@@ -628,11 +560,11 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 14
+        "y": 16
       },
       "id": 102,
       "panels": [],
-      "title": "Host",
+      "title": "Connections",
       "type": "row"
     },
     {
@@ -640,7 +572,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "g700data1 CPU and memory utilisation over time.",
+      "description": "Backends per instance, summed across every state and database. A flat line at the connection ceiling is a pool leak; a sawtooth is normal churn.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -649,7 +581,7 @@
           "custom": {
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "%",
+            "axisLabel": "",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -676,7 +608,7 @@
             }
           },
           "mappings": [],
-          "unit": "percent",
+          "unit": "short",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -686,7 +618,6 @@
               }
             ]
           },
-          "max": 100,
           "min": 0
         },
         "overrides": []
@@ -695,7 +626,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 15
+        "y": 17
       },
       "id": 20,
       "options": {
@@ -716,25 +647,16 @@
       },
       "targets": [
         {
-          "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
-          "legendFormat": "CPU",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (service) (pg_stat_activity_count{service=~\"$service\"})",
           "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          }
-        },
-        {
-          "expr": "100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)",
-          "legendFormat": "Memory",
-          "refId": "B",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          }
+          "legendFormat": "{{service}}"
         }
       ],
-      "title": "Host CPU and memory",
+      "title": "Connections by service",
       "type": "timeseries"
     },
     {
@@ -742,7 +664,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Used share of the root and /mnt/4tb filesystems on g700data1.",
+      "description": "Backends as a percentage of that instance's `max_connections`. Amber at 70% and red at 90% \u2014 past 90% a new client is one burst away from 'sorry, too many clients already'.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -774,7 +696,7 @@
               "mode": "none"
             },
             "thresholdsStyle": {
-              "mode": "off"
+              "mode": "dashed"
             }
           },
           "mappings": [],
@@ -785,11 +707,19 @@
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 90
               }
             ]
           },
-          "max": 100,
-          "min": 0
+          "min": 0,
+          "max": 100
         },
         "overrides": []
       },
@@ -797,7 +727,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 15
+        "y": 17
       },
       "id": 21,
       "options": {
@@ -818,16 +748,16 @@
       },
       "targets": [
         {
-          "expr": "100 - 100 * node_filesystem_avail_bytes{mountpoint=~\"/|/mnt/4tb\"} / node_filesystem_size_bytes{mountpoint=~\"/|/mnt/4tb\"}",
-          "legendFormat": "{{mountpoint}}",
-          "refId": "A",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
-          }
+          },
+          "expr": "100 * sum by (service) (pg_stat_activity_count{service=~\"$service\"}) / max by (service) (pg_settings_max_connections{service=~\"$service\"})",
+          "refId": "A",
+          "legendFormat": "{{service}}"
         }
       ],
-      "title": "Filesystem used",
+      "title": "Connection headroom (used vs max)",
       "type": "timeseries"
     },
     {
@@ -836,225 +766,11 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 23
-      },
-      "id": 106,
-      "panels": [],
-      "title": "GPU",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "RTX 5080 SM utilisation on g700data1, from the nvidia_gpu_exporter. Sustained values above 90% mean the GPU is saturated, not faulty. Detail on the DHG GPU board.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "unit": "percent",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 70
-              },
-              {
-                "color": "red",
-                "value": 90
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 8,
-        "x": 0,
-        "y": 24
-      },
-      "id": 60,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "max(nvidia_smi_utilization_gpu_ratio) * 100",
-          "refId": "A"
-        }
-      ],
-      "title": "GPU utilisation",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "Framebuffer memory in use as a percentage of total. Red above 92%: past that point a new model load or a larger batch OOMs rather than queues.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "unit": "percent",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 80
-              },
-              {
-                "color": "red",
-                "value": 92
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 8,
-        "x": 8,
-        "y": 24
-      },
-      "id": 61,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "100 * sum(nvidia_smi_memory_used_bytes) / sum(nvidia_smi_memory_total_bytes)",
-          "refId": "A"
-        }
-      ],
-      "title": "VRAM used",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "Hottest GPU core temperature. Red at 85 C, where the card begins thermal-slowdown clock throttling \u2014 lost throughput rather than imminent damage.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "unit": "celsius",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 75
-              },
-              {
-                "color": "red",
-                "value": 85
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 8,
-        "x": 16,
-        "y": 24
-      },
-      "id": 62,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "max(nvidia_smi_temperature_gpu)",
-          "refId": "A"
-        }
-      ],
-      "title": "GPU temperature",
-      "type": "stat"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 28
+        "y": 25
       },
       "id": 103,
       "panels": [],
-      "title": "Containers",
+      "title": "Throughput",
       "type": "row"
     },
     {
@@ -1062,7 +778,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Busiest dhg-* containers by CPU, from cAdvisor. 100% is one full core.",
+      "description": "Committed transactions per second per instance. Read-only workloads still commit, so a floor of roughly one per second is the exporter's own scrape traffic.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1071,202 +787,7 @@
           "custom": {
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "% of one core",
-            "axisPlacement": "auto",
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "unit": "percent",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 29
-      },
-      "id": 30,
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean",
-            "max",
-            "lastNotNull"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "expr": "topk(5, sum by (name) (rate(container_cpu_usage_seconds_total{name=~\"dhg-.*\"}[5m])) * 100)",
-          "legendFormat": "{{name}}",
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          }
-        }
-      ],
-      "title": "Top 5 containers by CPU",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "Largest dhg-* containers by working-set memory, from cAdvisor.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "bytes",
-            "axisPlacement": "auto",
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "unit": "bytes",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 29
-      },
-      "id": 31,
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean",
-            "max",
-            "lastNotNull"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "expr": "topk(5, sum by (name) (container_memory_working_set_bytes{name=~\"dhg-.*\"}))",
-          "legendFormat": "{{name}}",
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          }
-        }
-      ],
-      "title": "Top 5 containers by memory",
-      "type": "timeseries"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 37
-      },
-      "id": 104,
-      "panels": [],
-      "title": "Services",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "Combined read + write DB operation rate on the registry API. Full detail on the DHG Registry API board.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "ops/s",
+            "axisLabel": "",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -1302,7 +823,214 @@
                 "value": null
               }
             ]
-          }
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 26
+      },
+      "id": 30,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (service) (rate(pg_stat_database_xact_commit{service=~\"$service\"}[5m]))",
+          "refId": "A",
+          "legendFormat": "{{service}}"
+        }
+      ],
+      "title": "Transactions / sec",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Share of block reads served from shared buffers over a 1h window. Runs red to green: below 0.90 the working set no longer fits in shared_buffers. Gaps mean the instance did no block I/O at all in the window, which is not the same as a bad ratio.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "mappings": [],
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.9
+              },
+              {
+                "color": "green",
+                "value": 0.99
+              }
+            ]
+          },
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 26
+      },
+      "id": 31,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (service) (rate(pg_stat_database_blks_hit{service=~\"$service\"}[1h])) / (sum by (service) (rate(pg_stat_database_blks_hit{service=~\"$service\"}[1h])) + sum by (service) (rate(pg_stat_database_blks_read{service=~\"$service\"}[1h])))",
+          "refId": "A",
+          "legendFormat": "{{service}}"
+        }
+      ],
+      "title": "Cache hit ratio",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 34
+      },
+      "id": 104,
+      "panels": [],
+      "title": "Storage and faults",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "On-disk size per instance, every database summed. A step change with no deploy behind it is worth chasing.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "unit": "bytes",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
         },
         "overrides": []
       },
@@ -1310,7 +1038,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 38
+        "y": 35
       },
       "id": 40,
       "options": {
@@ -1331,16 +1059,16 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(registry_write_operations_total[5m])) + sum(rate(registry_read_operations_total[5m]))",
-          "legendFormat": "ops/s",
-          "refId": "A",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
-          }
+          },
+          "expr": "sum by (service) (pg_database_size_bytes{service=~\"$service\"})",
+          "refId": "A",
+          "legendFormat": "{{service}}"
         }
       ],
-      "title": "Registry operation rate",
+      "title": "Database size by service",
       "type": "timeseries"
     },
     {
@@ -1348,7 +1076,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Portage API HTTP request rate broken down by response status code.",
+      "description": "Transactions rolled back in the trailing hour. A steady non-zero rate on an application database means failing statements, not deliberate aborts.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1357,7 +1085,7 @@
           "custom": {
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "req/s",
+            "axisLabel": "",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -1374,17 +1102,18 @@
               "type": "linear"
             },
             "showPoints": "never",
-            "spanNulls": false,
+            "spanNulls": true,
             "stacking": {
               "group": "A",
               "mode": "none"
             },
             "thresholdsStyle": {
               "mode": "off"
-            }
+            },
+            "axisSoftMax": 2
           },
           "mappings": [],
-          "unit": "reqps",
+          "unit": "short",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1393,7 +1122,8 @@
                 "value": null
               }
             ]
-          }
+          },
+          "min": 0
         },
         "overrides": []
       },
@@ -1401,7 +1131,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 38
+        "y": 35
       },
       "id": 41,
       "options": {
@@ -1422,16 +1152,16 @@
       },
       "targets": [
         {
-          "expr": "sum by (status_code) (rate(portage_http_requests_total[5m]))",
-          "legendFormat": "{{status_code}}",
-          "refId": "A",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
-          }
+          },
+          "expr": "sum by (service) (increase(pg_stat_database_xact_rollback{service=~\"$service\"}[1h]))",
+          "refId": "A",
+          "legendFormat": "{{service}}"
         }
       ],
-      "title": "Portage request rate",
+      "title": "Rollbacks (1h increase)",
       "type": "timeseries"
     },
     {
@@ -1439,7 +1169,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Share of Portage API responses that are 5xx. The numerator is guarded with `or vector(0)` so the panel reads 0 when no 5xx has been served rather than going blank.",
+      "description": "Deadlocks broken by the server in the trailing hour, per instance. Any non-zero value names the database whose lock ordering needs a look.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1448,7 +1178,116 @@
           "custom": {
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "ratio",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "dashed"
+            },
+            "axisSoftMax": 2
+          },
+          "mappings": [],
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 35
+      },
+      "id": 42,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (service) (increase(pg_stat_database_deadlocks{service=~\"$service\"}[1h]))",
+          "refId": "A",
+          "legendFormat": "{{service}}"
+        }
+      ],
+      "title": "Deadlocks (1h increase)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 43
+      },
+      "id": 105,
+      "panels": [],
+      "title": "Replication and vacuum",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Seconds of replay lag per instance. All seven are primaries today, so a flat zero is the correct reading; a rising line means one is now streaming from somewhere else.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -1475,7 +1314,7 @@
             }
           },
           "mappings": [],
-          "unit": "percentunit",
+          "unit": "s",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1484,17 +1323,18 @@
                 "value": null
               }
             ]
-          }
+          },
+          "min": 0
         },
         "overrides": []
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 38
+        "w": 12,
+        "x": 0,
+        "y": 44
       },
-      "id": 42,
+      "id": 50,
       "options": {
         "legend": {
           "calcs": [
@@ -1513,69 +1353,33 @@
       },
       "targets": [
         {
-          "expr": "(sum(rate(portage_http_requests_total{status_code=~\"5..\"}[5m])) or vector(0)) / sum(rate(portage_http_requests_total[5m]))",
-          "legendFormat": "5xx ratio",
-          "refId": "A",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
-          }
+          },
+          "expr": "max by (service) (pg_replication_lag_seconds{service=~\"$service\"})",
+          "refId": "A",
+          "legendFormat": "{{service}}"
         }
       ],
-      "title": "Portage 5xx ratio",
+      "title": "Replication lag",
       "type": "timeseries"
     },
     {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 46
-      },
-      "id": 105,
-      "panels": [],
-      "title": "Logs",
-      "type": "row"
-    },
-    {
       "datasource": {
-        "type": "loki",
-        "uid": "loki"
+        "type": "prometheus",
+        "uid": "prometheus"
       },
-      "description": "Containers emitting the most error/fatal/panic log lines, from Loki. dhg-node-exporter is excluded: its thermal-zone collector floods this panel and is tracked separately.",
+      "description": "Dead row versions awaiting vacuum, worst ten tables across the selection. A table that stays near the top is one autovacuum is not keeping up with, and its index scans are paying for it.",
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
+            "mode": "thresholds"
           },
           "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "lines / 5m",
-            "axisPlacement": "auto",
-            "drawStyle": "bars",
-            "fillOpacity": 60,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "smooth",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "normal"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
             }
           },
           "mappings": [],
@@ -1586,6 +1390,14 @@
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 10000
+              },
+              {
+                "color": "red",
+                "value": 100000
               }
             ]
           }
@@ -1594,40 +1406,60 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 47
+        "w": 12,
+        "x": 12,
+        "y": 44
       },
-      "id": 50,
+      "id": 51,
       "options": {
-        "legend": {
-          "calcs": [
-            "sum",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Dead tuples"
+          }
+        ]
       },
       "targets": [
         {
-          "expr": "topk(5, sum by (container) (count_over_time({job=\"dhg-ai-factory\", level=~\"(?i)err.*|fatal|panic\", container!=\"dhg-node-exporter\"}[5m])))",
-          "legendFormat": "{{container}}",
-          "queryType": "range",
-          "refId": "A",
           "datasource": {
-            "type": "loki",
-            "uid": "loki"
-          }
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "topk(10, sum by (service, relname) (pg_stat_user_tables_n_dead_tup{service=~\"$service\"}))",
+          "refId": "A",
+          "format": "table",
+          "instant": true
         }
       ],
-      "title": "Top 5 containers by error log lines",
-      "type": "timeseries"
+      "title": "Top 10 tables by dead tuples",
+      "type": "table",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "pattern": "^(service|relname|Value)$"
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "service": 0,
+              "relname": 1,
+              "Value": 2
+            },
+            "renameByName": {
+              "service": "Service",
+              "relname": "Table",
+              "Value": "Dead tuples"
+            }
+          }
+        }
+      ]
     }
   ],
   "refresh": "30s",
@@ -1636,10 +1468,44 @@
   "tags": [
     "dhg",
     "platform",
-    "overview"
+    "postgresql",
+    "database",
+    "fleet"
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(pg_up, service)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Service",
+        "multi": true,
+        "name": "service",
+        "options": [],
+        "query": {
+          "query": "label_values(pg_up, service)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
   },
   "time": {
     "from": "now-6h",
@@ -1647,8 +1513,8 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "DHG Platform Overview",
-  "uid": "dhg-platform-overview",
+  "title": "DHG PostgreSQL Fleet",
+  "uid": "dhg-platform-postgres",
   "version": 1,
   "weekStart": ""
 }

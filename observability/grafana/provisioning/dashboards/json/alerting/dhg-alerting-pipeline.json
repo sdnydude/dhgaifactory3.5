@@ -15,7 +15,7 @@
       }
     ]
   },
-  "description": "Platform-wide first-look board for g700data1: what is firing, what is down, how the host, GPU and containers are doing, and the top-line signal from the registry and Portage. Replaces DHG-Core-Golden, which queried ASR and GPU metrics that this stack never exposed. The GPU row is live as of the nvidia_gpu_exporter deployment; the DHG GPU board carries the detail.",
+  "description": "The alerting path end to end: rule evaluation in Prometheus and the Loki ruler, delivery through Alertmanager, and the scrape health the whole thing depends on. Use this board to answer 'did the alert get out?', not 'what is broken?' \u2014 the DHG Alerting & Rules board covers rule content and alert history.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -46,7 +46,7 @@
       },
       "id": 100,
       "panels": [],
-      "title": "Health",
+      "title": "Alert state",
       "type": "row"
     },
     {
@@ -54,7 +54,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Prometheus alerts currently in the firing state. Guarded with `or vector(0)` so an empty ALERTS series reads 0 rather than 'No data'.",
+      "description": "Prometheus alert instances currently in the firing state. Guarded with `or vector(0)` so an empty ALERTS series reads 0 rather than 'No data'.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -105,8 +105,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "count(ALERTS{alertstate=\"firing\"}) or vector(0)",
-          "legendFormat": "firing",
+          "expr": "sum(ALERTS{alertstate=\"firing\"}) or vector(0)",
           "refId": "A"
         }
       ],
@@ -118,7 +117,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Prometheus scrape targets currently failing. Detail is in the 'Targets down' table below.",
+      "description": "Alert instances whose condition is true but whose `for` duration has not elapsed. Pending is normal; pending that never resolves or fires means a flapping condition.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -134,7 +133,7 @@
                 "value": null
               },
               {
-                "color": "red",
+                "color": "yellow",
                 "value": 1
               }
             ]
@@ -169,12 +168,11 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "count(up == 0) or vector(0)",
-          "legendFormat": "down",
+          "expr": "sum(ALERTS{alertstate=\"pending\"}) or vector(0)",
           "refId": "A"
         }
       ],
-      "title": "Targets down",
+      "title": "Pending alerts",
       "type": "stat"
     },
     {
@@ -182,14 +180,14 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "g700data1 CPU utilisation, derived from idle time across all cores.",
+      "description": "Alerts Alertmanager currently holds as active. This should track the firing count; a persistent gap means alerts are not reaching Alertmanager.",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
           },
           "mappings": [],
-          "unit": "percent",
+          "unit": "short",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -199,11 +197,7 @@
               },
               {
                 "color": "yellow",
-                "value": 70
-              },
-              {
-                "color": "red",
-                "value": 90
+                "value": 1
               }
             ]
           }
@@ -237,12 +231,11 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
-          "legendFormat": "cpu",
+          "expr": "sum(alertmanager_alerts{state=\"active\"})",
           "refId": "A"
         }
       ],
-      "title": "Host CPU",
+      "title": "Alertmanager active",
       "type": "stat"
     },
     {
@@ -250,14 +243,14 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "g700data1 memory in use, measured against MemAvailable (excludes reclaimable cache).",
+      "description": "Alerts silenced or inhibited rather than delivered. A non-zero value that nobody remembers creating is how an outage goes unnoticed.",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
           },
           "mappings": [],
-          "unit": "percent",
+          "unit": "short",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -267,11 +260,7 @@
               },
               {
                 "color": "yellow",
-                "value": 80
-              },
-              {
-                "color": "red",
-                "value": 92
+                "value": 1
               }
             ]
           }
@@ -305,12 +294,11 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)",
-          "legendFormat": "memory",
+          "expr": "sum(alertmanager_alerts{state=\"suppressed\"})",
           "refId": "A"
         }
       ],
-      "title": "Host memory",
+      "title": "Alertmanager suppressed",
       "type": "stat"
     },
     {
@@ -318,14 +306,14 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Used share of the / filesystem on g700data1.",
+      "description": "Notification attempts Alertmanager could not deliver in the trailing hour, all receivers summed. Non-zero means alerts fired and nobody was told.",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
           },
           "mappings": [],
-          "unit": "percent",
+          "unit": "short",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -334,12 +322,8 @@
                 "value": null
               },
               {
-                "color": "yellow",
-                "value": 75
-              },
-              {
                 "color": "red",
-                "value": 90
+                "value": 1
               }
             ]
           }
@@ -373,12 +357,11 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "100 - 100 * node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"}",
-          "legendFormat": "/",
+          "expr": "sum(increase(alertmanager_notifications_failed_total[1h])) or vector(0)",
           "refId": "A"
         }
       ],
-      "title": "Root disk used",
+      "title": "Notification failures (1h)",
       "type": "stat"
     },
     {
@@ -386,14 +369,14 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Used share of the /mnt/4tb data volume on g700data1.",
+      "description": "Scrape targets Prometheus cannot reach. A down target is a blind spot: its alert rules cannot fire because it produces no samples.",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
           },
           "mappings": [],
-          "unit": "percent",
+          "unit": "short",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -402,12 +385,8 @@
                 "value": null
               },
               {
-                "color": "yellow",
-                "value": 75
-              },
-              {
                 "color": "red",
-                "value": 90
+                "value": 1
               }
             ]
           }
@@ -441,12 +420,11 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "100 - 100 * node_filesystem_avail_bytes{mountpoint=\"/mnt/4tb\"} / node_filesystem_size_bytes{mountpoint=\"/mnt/4tb\"}",
-          "legendFormat": "/mnt/4tb",
+          "expr": "count(up == 0) or vector(0)",
           "refId": "A"
         }
       ],
-      "title": "/mnt/4tb used",
+      "title": "Targets down",
       "type": "stat"
     },
     {
@@ -459,7 +437,7 @@
       },
       "id": 101,
       "panels": [],
-      "title": "Alerts and targets",
+      "title": "Alert state over time",
       "type": "row"
     },
     {
@@ -467,16 +445,39 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Every scrape target that is currently down, by job and instance. An empty table is the healthy state.",
+      "description": "Firing alert instances grouped by the `severity` label the rule sets. Legitimately empty when nothing is firing, so panel 10 is listed in `observability/verify/allow-empty/dhg-alerting-pipeline.txt`.",
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "thresholds"
+            "mode": "palette-classic"
           },
           "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "drawStyle": "bars",
+            "fillOpacity": 40,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
             }
           },
           "mappings": [],
@@ -485,11 +486,12 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
+                "color": "green",
                 "value": null
               }
             ]
-          }
+          },
+          "min": 0
         },
         "overrides": []
       },
@@ -501,13 +503,20 @@
       },
       "id": 10,
       "options": {
-        "showHeader": true,
-        "sortBy": [
-          {
-            "desc": false,
-            "displayName": "Job"
-          }
-        ]
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
@@ -515,47 +524,52 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "up == 0",
-          "format": "table",
-          "instant": true,
-          "refId": "A"
+          "expr": "sum by (severity) (ALERTS{alertstate=\"firing\"})",
+          "refId": "A",
+          "legendFormat": "{{severity}}"
         }
       ],
-      "title": "Targets down",
-      "type": "table",
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "Value": true
-            },
-            "renameByName": {
-              "job": "Job",
-              "instance": "Instance",
-              "service": "Service"
-            }
-          }
-        }
-      ]
+      "title": "Firing alerts by severity",
+      "type": "timeseries"
     },
     {
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Alerts currently firing, with their severity. An empty table is the healthy state.",
+      "description": "Alert instances waiting out their `for` duration, by rule name. A rule that lives here permanently without firing has a `for` longer than its condition ever holds. Empty is the healthy state, so panel 11 is listed in the allow-empty file.",
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "thresholds"
+            "mode": "palette-classic"
           },
           "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "drawStyle": "bars",
+            "fillOpacity": 40,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
             }
           },
           "mappings": [],
@@ -564,11 +578,12 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
+                "color": "green",
                 "value": null
               }
             ]
-          }
+          },
+          "min": 0
         },
         "overrides": []
       },
@@ -580,13 +595,20 @@
       },
       "id": 11,
       "options": {
-        "showHeader": true,
-        "sortBy": [
-          {
-            "desc": false,
-            "displayName": "Alert"
-          }
-        ]
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
@@ -594,33 +616,13 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "ALERTS{alertstate=\"firing\"}",
-          "format": "table",
-          "instant": true,
-          "refId": "A"
+          "expr": "sum by (alertname) (ALERTS{alertstate=\"pending\"})",
+          "refId": "A",
+          "legendFormat": "{{alertname}}"
         }
       ],
-      "title": "Firing alerts",
-      "type": "table",
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "alertstate": true,
-              "Value": true
-            },
-            "renameByName": {
-              "alertname": "Alert",
-              "severity": "Severity",
-              "job": "Job",
-              "instance": "Instance"
-            }
-          }
-        }
-      ]
+      "title": "Pending alerts by rule",
+      "type": "timeseries"
     },
     {
       "collapsed": false,
@@ -632,7 +634,7 @@
       },
       "id": 102,
       "panels": [],
-      "title": "Host",
+      "title": "Alertmanager delivery",
       "type": "row"
     },
     {
@@ -640,7 +642,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "g700data1 CPU and memory utilisation over time.",
+      "description": "Notification attempts per receiver integration over a trailing hour. Integrations with no configured receiver sit flat at zero; that is configuration, not failure.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -649,7 +651,7 @@
           "custom": {
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "%",
+            "axisLabel": "",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -666,7 +668,7 @@
               "type": "linear"
             },
             "showPoints": "never",
-            "spanNulls": false,
+            "spanNulls": true,
             "stacking": {
               "group": "A",
               "mode": "none"
@@ -676,7 +678,7 @@
             }
           },
           "mappings": [],
-          "unit": "percent",
+          "unit": "short",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -686,14 +688,13 @@
               }
             ]
           },
-          "max": 100,
           "min": 0
         },
         "overrides": []
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 8,
         "x": 0,
         "y": 15
       },
@@ -716,25 +717,16 @@
       },
       "targets": [
         {
-          "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
-          "legendFormat": "CPU",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (integration) (increase(alertmanager_notifications_total[1h]))",
           "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          }
-        },
-        {
-          "expr": "100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)",
-          "legendFormat": "Memory",
-          "refId": "B",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          }
+          "legendFormat": "{{integration}}"
         }
       ],
-      "title": "Host CPU and memory",
+      "title": "Notifications sent (1h increase)",
       "type": "timeseries"
     },
     {
@@ -742,7 +734,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Used share of the root and /mnt/4tb filesystems on g700data1.",
+      "description": "Delivery attempts that errored, per integration. Any line off the floor is an alert that fired into the void \u2014 check the receiver's credentials and the container's egress.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -751,7 +743,7 @@
           "custom": {
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "%",
+            "axisLabel": "",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -768,35 +760,38 @@
               "type": "linear"
             },
             "showPoints": "never",
-            "spanNulls": false,
+            "spanNulls": true,
             "stacking": {
               "group": "A",
               "mode": "none"
             },
             "thresholdsStyle": {
-              "mode": "off"
-            }
+              "mode": "dashed"
+            },
+            "axisSoftMax": 2
           },
           "mappings": [],
-          "unit": "percent",
+          "unit": "short",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
               }
             ]
-          },
-          "max": 100,
-          "min": 0
+          }
         },
         "overrides": []
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 12,
+        "w": 8,
+        "x": 8,
         "y": 15
       },
       "id": 21,
@@ -818,251 +813,24 @@
       },
       "targets": [
         {
-          "expr": "100 - 100 * node_filesystem_avail_bytes{mountpoint=~\"/|/mnt/4tb\"} / node_filesystem_size_bytes{mountpoint=~\"/|/mnt/4tb\"}",
-          "legendFormat": "{{mountpoint}}",
-          "refId": "A",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
-          }
+          },
+          "expr": "sum by (integration) (increase(alertmanager_notifications_failed_total[1h]))",
+          "refId": "A",
+          "legendFormat": "{{integration}}"
         }
       ],
-      "title": "Filesystem used",
+      "title": "Notification failures (1h increase)",
       "type": "timeseries"
     },
     {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 23
-      },
-      "id": 106,
-      "panels": [],
-      "title": "GPU",
-      "type": "row"
-    },
-    {
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "RTX 5080 SM utilisation on g700data1, from the nvidia_gpu_exporter. Sustained values above 90% mean the GPU is saturated, not faulty. Detail on the DHG GPU board.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "unit": "percent",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 70
-              },
-              {
-                "color": "red",
-                "value": 90
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 8,
-        "x": 0,
-        "y": 24
-      },
-      "id": 60,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "max(nvidia_smi_utilization_gpu_ratio) * 100",
-          "refId": "A"
-        }
-      ],
-      "title": "GPU utilisation",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "Framebuffer memory in use as a percentage of total. Red above 92%: past that point a new model load or a larger batch OOMs rather than queues.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "unit": "percent",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 80
-              },
-              {
-                "color": "red",
-                "value": 92
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 8,
-        "x": 8,
-        "y": 24
-      },
-      "id": 61,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "100 * sum(nvidia_smi_memory_used_bytes) / sum(nvidia_smi_memory_total_bytes)",
-          "refId": "A"
-        }
-      ],
-      "title": "VRAM used",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "Hottest GPU core temperature. Red at 85 C, where the card begins thermal-slowdown clock throttling \u2014 lost throughput rather than imminent damage.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "unit": "celsius",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 75
-              },
-              {
-                "color": "red",
-                "value": 85
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 8,
-        "x": 16,
-        "y": 24
-      },
-      "id": 62,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "max(nvidia_smi_temperature_gpu)",
-          "refId": "A"
-        }
-      ],
-      "title": "GPU temperature",
-      "type": "stat"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 28
-      },
-      "id": 103,
-      "panels": [],
-      "title": "Containers",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "Busiest dhg-* containers by CPU, from cAdvisor. 100% is one full core.",
+      "description": "Alerts Alertmanager holds, split into active, suppressed and unprocessed. A growing unprocessed count means the dispatcher is behind.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1071,7 +839,7 @@
           "custom": {
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "% of one core",
+            "axisLabel": "",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -1098,7 +866,7 @@
             }
           },
           "mappings": [],
-          "unit": "percent",
+          "unit": "short",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1107,15 +875,125 @@
                 "value": null
               }
             ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 15
+      },
+      "id": 22,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (state) (alertmanager_alerts)",
+          "refId": "A",
+          "legendFormat": "{{state}}"
+        }
+      ],
+      "title": "Alertmanager alerts by state",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
+      "id": 103,
+      "panels": [],
+      "title": "Rule engine",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Rule evaluations that errored, by rule group. Non-zero means a rule is not being evaluated at all \u2014 its alerts cannot fire regardless of the underlying system's state.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "dashed"
+            },
+            "axisSoftMax": 2
+          },
+          "mappings": [],
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
           }
         },
         "overrides": []
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 8,
         "x": 0,
-        "y": 29
+        "y": 24
       },
       "id": 30,
       "options": {
@@ -1136,16 +1014,16 @@
       },
       "targets": [
         {
-          "expr": "topk(5, sum by (name) (rate(container_cpu_usage_seconds_total{name=~\"dhg-.*\"}[5m])) * 100)",
-          "legendFormat": "{{name}}",
-          "refId": "A",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
-          }
+          },
+          "expr": "label_replace(sum by (rule_group) (increase(prometheus_rule_evaluation_failures_total[1h])), \"group\", \"$1\", \"rule_group\", \".*;(.*)\")",
+          "refId": "A",
+          "legendFormat": "{{group}}"
         }
       ],
-      "title": "Top 5 containers by CPU",
+      "title": "Rule evaluation failures (1h increase)",
       "type": "timeseries"
     },
     {
@@ -1153,7 +1031,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Largest dhg-* containers by working-set memory, from cAdvisor.",
+      "description": "Wall time of the last evaluation of each rule group. Approaching the group's interval (15s here) means evaluations will start being skipped.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1162,7 +1040,7 @@
           "custom": {
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "bytes",
+            "axisLabel": "",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -1189,7 +1067,7 @@
             }
           },
           "mappings": [],
-          "unit": "bytes",
+          "unit": "s",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1198,15 +1076,16 @@
                 "value": null
               }
             ]
-          }
+          },
+          "min": 0
         },
         "overrides": []
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 29
+        "w": 8,
+        "x": 8,
+        "y": 24
       },
       "id": 31,
       "options": {
@@ -1227,37 +1106,24 @@
       },
       "targets": [
         {
-          "expr": "topk(5, sum by (name) (container_memory_working_set_bytes{name=~\"dhg-.*\"}))",
-          "legendFormat": "{{name}}",
-          "refId": "A",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
-          }
+          },
+          "expr": "label_replace(prometheus_rule_group_last_duration_seconds, \"group\", \"$1\", \"rule_group\", \".*;(.*)\")",
+          "refId": "A",
+          "legendFormat": "{{group}}"
         }
       ],
-      "title": "Top 5 containers by memory",
+      "title": "Rule group evaluation duration",
       "type": "timeseries"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 37
-      },
-      "id": 104,
-      "panels": [],
-      "title": "Services",
-      "type": "row"
     },
     {
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Combined read + write DB operation rate on the registry API. Full detail on the DHG Registry API board.",
+      "description": "Alert notifications Prometheus dropped because its Alertmanager send queue was full. Single aggregate series; non-zero means alerts never reached Alertmanager.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1266,7 +1132,7 @@
           "custom": {
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "ops/s",
+            "axisLabel": "",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -1283,23 +1149,28 @@
               "type": "linear"
             },
             "showPoints": "never",
-            "spanNulls": false,
+            "spanNulls": true,
             "stacking": {
               "group": "A",
               "mode": "none"
             },
             "thresholdsStyle": {
-              "mode": "off"
-            }
+              "mode": "dashed"
+            },
+            "axisSoftMax": 2
           },
           "mappings": [],
-          "unit": "ops",
+          "unit": "short",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
               }
             ]
           }
@@ -1309,8 +1180,113 @@
       "gridPos": {
         "h": 8,
         "w": 8,
+        "x": 16,
+        "y": 24
+      },
+      "id": 32,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(prometheus_notifications_dropped_total[1h])) or vector(0)",
+          "refId": "A",
+          "legendFormat": "dropped"
+        }
+      ],
+      "title": "Prometheus notifications dropped (1h increase)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
         "x": 0,
-        "y": 38
+        "y": 32
+      },
+      "id": 104,
+      "panels": [],
+      "title": "Loki ruler",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "The Loki ruler runs the log-based alert rules and posts them to the same Alertmanager. Sent, errored and dropped are each a single aggregate series, so the static legends name exactly one line apiece.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 33
       },
       "id": 40,
       "options": {
@@ -1331,16 +1307,34 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(registry_write_operations_total[5m])) + sum(rate(registry_read_operations_total[5m]))",
-          "legendFormat": "ops/s",
-          "refId": "A",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
-          }
+          },
+          "expr": "sum(increase(loki_prometheus_notifications_sent_total[1h])) or vector(0)",
+          "refId": "A",
+          "legendFormat": "sent"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(loki_prometheus_notifications_errors_total[1h])) or vector(0)",
+          "refId": "B",
+          "legendFormat": "errors"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(loki_prometheus_notifications_dropped_total[1h])) or vector(0)",
+          "refId": "C",
+          "legendFormat": "dropped"
         }
       ],
-      "title": "Registry operation rate",
+      "title": "Loki ruler notifications (1h increase)",
       "type": "timeseries"
     },
     {
@@ -1348,7 +1342,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Portage API HTTP request rate broken down by response status code.",
+      "description": "Log-alert rule evaluations that errored, by rule group. Non-zero means the Loki-side rules in `dhg-log-alerts` are not running.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1357,7 +1351,7 @@
           "custom": {
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "req/s",
+            "axisLabel": "",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -1374,23 +1368,28 @@
               "type": "linear"
             },
             "showPoints": "never",
-            "spanNulls": false,
+            "spanNulls": true,
             "stacking": {
               "group": "A",
               "mode": "none"
             },
             "thresholdsStyle": {
-              "mode": "off"
-            }
+              "mode": "dashed"
+            },
+            "axisSoftMax": 2
           },
           "mappings": [],
-          "unit": "reqps",
+          "unit": "short",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
               }
             ]
           }
@@ -1399,9 +1398,9 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 8,
-        "y": 38
+        "w": 12,
+        "x": 12,
+        "y": 33
       },
       "id": 41,
       "options": {
@@ -1422,24 +1421,125 @@
       },
       "targets": [
         {
-          "expr": "sum by (status_code) (rate(portage_http_requests_total[5m]))",
-          "legendFormat": "{{status_code}}",
-          "refId": "A",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
-          }
+          },
+          "expr": "label_replace(sum by (rule_group) (increase(loki_prometheus_rule_evaluation_failures_total[1h])), \"group\", \"$1\", \"rule_group\", \".*;(.*)\")",
+          "refId": "A",
+          "legendFormat": "{{group}}"
         }
       ],
-      "title": "Portage request rate",
+      "title": "Loki ruler evaluation failures (1h increase)",
       "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 41
+      },
+      "id": 105,
+      "panels": [],
+      "title": "Scrape health",
+      "type": "row"
     },
     {
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Share of Portage API responses that are 5xx. The numerator is guarded with `or vector(0)` so the panel reads 0 when no 5xx has been served rather than going blank.",
+      "description": "Every scrape target currently down, by job and instance. An empty table is the goal state, so panel 50 is listed in the allow-empty file.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "mappings": [],
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 42
+      },
+      "id": 50,
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "Job"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "up == 0",
+          "refId": "A",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "title": "Targets down",
+      "type": "table",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "pattern": "^(job|service|instance)$"
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "job": 0,
+              "service": 1,
+              "instance": 2
+            },
+            "renameByName": {
+              "job": "Job",
+              "instance": "Instance",
+              "service": "Service"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "95th percentile scrape wall time per job over a 5m window. `scrape_duration_seconds` is a gauge, not a histogram, so this is `quantile_over_time` across samples rather than `histogram_quantile`. A job climbing toward its scrape_timeout will start producing gaps.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1448,7 +1548,7 @@
           "custom": {
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "ratio",
+            "axisLabel": "",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -1475,7 +1575,7 @@
             }
           },
           "mappings": [],
-          "unit": "percentunit",
+          "unit": "s",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1484,17 +1584,18 @@
                 "value": null
               }
             ]
-          }
+          },
+          "min": 0
         },
         "overrides": []
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 38
+        "w": 12,
+        "x": 12,
+        "y": 42
       },
-      "id": 42,
+      "id": 51,
       "options": {
         "legend": {
           "calcs": [
@@ -1513,16 +1614,16 @@
       },
       "targets": [
         {
-          "expr": "(sum(rate(portage_http_requests_total{status_code=~\"5..\"}[5m])) or vector(0)) / sum(rate(portage_http_requests_total[5m]))",
-          "legendFormat": "5xx ratio",
-          "refId": "A",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
-          }
+          },
+          "expr": "max by (job) (quantile_over_time(0.95, scrape_duration_seconds[5m]))",
+          "refId": "A",
+          "legendFormat": "{{job}}"
         }
       ],
-      "title": "Portage 5xx ratio",
+      "title": "Scrape duration p95 by job",
       "type": "timeseries"
     },
     {
@@ -1531,103 +1632,38 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 46
+        "y": 50
       },
-      "id": 105,
+      "id": 106,
       "panels": [],
-      "title": "Logs",
+      "title": "Links",
       "type": "row"
     },
     {
       "datasource": {
-        "type": "loki",
-        "uid": "loki"
+        "type": "datasource",
+        "uid": "grafana"
       },
-      "description": "Containers emitting the most error/fatal/panic log lines, from Loki. dhg-node-exporter is excluded: its thermal-zone collector floods this panel and is tracked separately.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "lines / 5m",
-            "axisPlacement": "auto",
-            "drawStyle": "bars",
-            "fillOpacity": 60,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "smooth",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "normal"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
+      "description": "Where to go once an alert is on this board.",
       "gridPos": {
-        "h": 8,
+        "h": 5,
         "w": 24,
         "x": 0,
-        "y": 47
+        "y": 51
       },
-      "id": 50,
+      "id": 60,
       "options": {
-        "legend": {
-          "calcs": [
-            "sum",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
         },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
+        "content": "### Where to act\n\n- <span style=\"color:#663399\">**Alertmanager**</span> \u2014 silence, inhibit, or inspect a live alert: <http://10.0.0.251:9093>\n- <span style=\"color:#663399\">**Alert runbook**</span> \u2014 what each DHG rule means and what to do about it: <http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts>\n- <span style=\"color:#663399\">**Prometheus rules**</span> \u2014 rule source and evaluation state: <http://10.0.0.251:9090/rules>\n",
+        "mode": "markdown"
       },
-      "targets": [
-        {
-          "expr": "topk(5, sum by (container) (count_over_time({job=\"dhg-ai-factory\", level=~\"(?i)err.*|fatal|panic\", container!=\"dhg-node-exporter\"}[5m])))",
-          "legendFormat": "{{container}}",
-          "queryType": "range",
-          "refId": "A",
-          "datasource": {
-            "type": "loki",
-            "uid": "loki"
-          }
-        }
-      ],
-      "title": "Top 5 containers by error log lines",
-      "type": "timeseries"
+      "pluginVersion": "10.2.0",
+      "title": "Runbook and Alertmanager",
+      "type": "text"
     }
   ],
   "refresh": "30s",
@@ -1635,8 +1671,10 @@
   "style": "dark",
   "tags": [
     "dhg",
-    "platform",
-    "overview"
+    "alerting",
+    "alertmanager",
+    "prometheus",
+    "pipeline"
   ],
   "templating": {
     "list": []
@@ -1647,8 +1685,8 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "DHG Platform Overview",
-  "uid": "dhg-platform-overview",
+  "title": "DHG Alerting Pipeline",
+  "uid": "dhg-alerting-pipeline",
   "version": 1,
   "weekStart": ""
 }
