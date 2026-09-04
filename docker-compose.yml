@@ -237,6 +237,10 @@ services:
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      # Default num_ctx=4096 is too small for Portage multi-image vision scans
+      # (3-image qwen3-vl request = ~8k prompt tokens, 2026-08-16). 16k covers
+      # scans + Porter tool loops; KV cache cost fits alongside granite on the 5080.
+      - OLLAMA_CONTEXT_LENGTH=16384
     deploy:
       resources:
         reservations:
