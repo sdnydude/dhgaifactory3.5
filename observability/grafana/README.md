@@ -108,11 +108,33 @@ A panel that is legitimately empty when the system is healthy is listed by panel
 comment giving the reason. Nothing else belongs in those files — an allow-empty entry
 added to silence a broken query is how a dead board survives.
 
-Current entries:
+Current allow-empty entries:
 
+- `dhg-ai-langfuse` 20 — error/warn/fatal log lines from dh40801 containers; the two log-volume panels above it prove logs are still flowing.
+- `dhg-alerting-pipeline` 10, 11, 50 — firing alerts by severity, pending alerts by rule, targets-down table; nothing firing / nothing down is the goal state.
 - `dhg-log-analytics` 41 — registry-db error/fatal log lines; the DB logs nothing but `LOG` when healthy.
 - `dhg-platform-overview` 10, 11 — targets-down and firing-alerts tables; empty is the goal state.
 - `dhg-postgresql` 40 — lock modes filtered to `> 0`; no rows means no locks held.
+
+## Current dashboards
+
+Twelve boards. Filename = uid; the folder is the subdirectory under
+`provisioning/dashboards/json/`.
+
+| Folder | uid | Purpose |
+|---|---|---|
+| `platform` | `dhg-platform-overview` | Platform-wide first look for g700data1: what is firing, what is down, host/container/service health. The reference board for the standard above. |
+| `platform` | `docker-overview` | Per-container CPU, memory, network and restart counts from cAdvisor. |
+| `platform` | `dhg-platform-gpu` | RTX 5080 health from `nvidia_gpu_exporter` — VRAM, utilisation, temperature, power. |
+| `platform` | `dhg-platform-postgres` | All seven PostgreSQL instances on one board (`postgres` + `postgres-multi` jobs), keyed by `service`. |
+| `platform` | `dhg-postgresql` | registry-db detail: connections, transactions, locks, table and index stats. |
+| `platform` | `dhg-log-analytics` | Loki log volume by container, error rates, pattern search. |
+| `platform` | `memreg-daemon` | memreg capture daemon (`job="memreg"`) — sweeps, DLQ depth, capture outcomes. |
+| `services` | `dhg-registry-api` | Registry API RED signals plus its DB-operation counters and latency histograms. |
+| `ai` | `dhg-ai-langfuse` | Langfuse on dh40801 and the host it runs on: health probe, canary round-trip, container and host metrics. |
+| `ai` | `vs-engine-overview` | Verbalized Sampling engine, scoped to what the service actually exposes today. |
+| `alerting` | `dhg-alerting` | Alert state overview — firing/resolved history by rule and severity. |
+| `alerting` | `dhg-alerting-pipeline` | The alerting path end to end: rule evaluation in Prometheus and the Loki ruler, delivery through Alertmanager to Slack and the registry webhook. |
 
 ## Tracing
 

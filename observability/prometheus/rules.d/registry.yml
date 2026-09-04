@@ -21,7 +21,7 @@ groups:
         annotations:
           summary: "Registry API serving over 5% 5xx responses"
           description: "{{ $value | humanizePercentage }} of registry-api requests have returned 5xx for 10 minutes. Capture POSTs, KB search and the frontend all depend on this API — check `docker logs dhg-registry-api` and the per-handler breakdown on the registry dashboard."
-          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#registryhigherrorrate"
+          runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#registryhigherrorrate"
 
       # p95 across all handlers. KB search is the slowest legitimate route and
       # sits well under 2s, so a sustained p95 above that is a real regression.
@@ -38,4 +38,4 @@ groups:
         annotations:
           summary: "Registry API p95 latency above 2s"
           description: "registry-api p95 request duration has been {{ $value | humanizeDuration }} for 10 minutes. Usual causes are a slow pgvector KB query, connection-pool saturation on dhg-registry-db, or an Anthropic call blocking a request path."
-          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#registryhighlatency"
+          runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#registryhighlatency"

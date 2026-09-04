@@ -23,7 +23,7 @@ groups:
         annotations:
           summary: "dh40801 node-exporter unreachable"
           description: "Prometheus cannot scrape 10.0.0.179:9100. Either dh40801 is down or its observability agent stopped, and with it every host and container metric for the Langfuse stack. Check `docker --context dh40801 ps` first; if the context itself fails the host is gone."
-          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#dh40801down"
+          runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#dh40801down"
 
       - alert: Dh40801DiskHigh
         expr: (1 - node_filesystem_avail_bytes{job="node-exporter-dh40801", mountpoint="/"} / node_filesystem_size_bytes{job="node-exporter-dh40801", mountpoint="/"}) > 0.85
@@ -33,7 +33,7 @@ groups:
         annotations:
           summary: "dh40801 root filesystem above 85% ({{ $value | humanizePercentage }})"
           description: "The dh40801 root volume is filling. ClickHouse and MinIO under the Langfuse stack are the growth drivers; when the disk fills, Langfuse stops persisting traces. Check `docker --context dh40801 system df` and the Langfuse named volumes."
-          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#dh40801diskhigh"
+          runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#dh40801diskhigh"
 
   - name: dh40801-langfuse
     rules:
@@ -45,7 +45,7 @@ groups:
         annotations:
           summary: "Langfuse health endpoint failing on dh40801"
           description: "The blackbox probe of http://10.0.0.179:3000/api/public/health has not returned 2xx for 3 minutes. Langfuse is not accepting traces; every agent that traces to it is losing observability. Check `docker --context dh40801 logs --tail 200 dhg-langfuse-web`."
-          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#langfuseunhealthy"
+          runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#langfuseunhealthy"
 
       # THE MinIO silent-drop detector. Langfuse v3 accepts a trace (HTTP 207)
       # and hands it to MinIO for the worker to drain into ClickHouse. If MinIO
@@ -67,7 +67,7 @@ groups:
         annotations:
           summary: "Langfuse write-then-read round-trip has not succeeded in over 15 min"
           description: "The canary last completed a full trace round-trip more than 15 minutes ago, or its metric is missing entirely. Langfuse may be accepting traces and silently dropping them (MinIO down or the `langfuse` bucket gone) — the health endpoint will still look fine. Run `doppler run --project dhg-monitoring --config dev -- observability/scripts/langfuse-canary.sh` by hand for the failing step, then check `docker --context dh40801 logs --tail 200 dhg-langfuse-minio` and `dhg-langfuse-worker`."
-          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#langfusecanarystale"
+          runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#langfusecanarystale"
 
       # Tighter than the shared ContainerCrashLoop (>3 restarts in 15m over all
       # dhg-* containers): the Langfuse stack is a fixed set of long-lived
@@ -80,4 +80,4 @@ groups:
         annotations:
           summary: "Langfuse container {{ $labels.name }} restarted more than once in 15 min"
           description: "{{ $labels.name }} on dh40801 is restarting repeatedly. ClickHouse and MinIO restarts drop in-flight trace batches even while the web tier keeps answering 200. Check `docker --context dh40801 logs --tail 200 {{ $labels.name }}` for the exit reason."
-          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#langfusecontainerrestart"
+          runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#langfusecontainerrestart"

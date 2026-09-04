@@ -16,7 +16,7 @@ groups:
         annotations:
           summary: "Postgres instance {{ $labels.service }} is unreachable"
           description: "The exporter could not connect to {{ $labels.service }} ({{ $labels.instance }}) for 2 minutes. Anything backed by this database is down or about to be."
-          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#postgresdown"
+          runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#postgresdown"
 
       # numbackends is per-database; max_connections is per-server and carries an
       # extra `server` label, so both sides are aggregated down to `service`.
@@ -32,4 +32,4 @@ groups:
         annotations:
           summary: "Postgres {{ $labels.service }} above 80% of max_connections"
           description: "{{ $labels.service }} has held {{ $value | humanizePercentage }} of its connection slots for 10 minutes. New connections will start being refused; look for a client leaking pool connections."
-          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#postgresconnectionshigh"
+          runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#postgresconnectionshigh"

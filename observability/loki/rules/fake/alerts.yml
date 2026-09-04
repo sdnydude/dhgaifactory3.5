@@ -6,7 +6,7 @@
 # No other severity value may be used here.
 #
 # Every rule carries `for:`, `summary`, `description`, and a `runbook_url`
-# anchored at http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts.
+# anchored at http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts.
 
 groups:
   - name: dhg-log-alerts
@@ -29,7 +29,7 @@ groups:
         annotations:
           summary: "High error rate in logs ({{ $value }} errors in 5m)"
           description: "More than 50 error-level log lines across all containers (excluding dhg-node-exporter thermal_zone noise) in the last 5 minutes."
-          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#higherrorrate"
+          runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#higherrorrate"
 
       # Same dhg-node-exporter exclusion as HighErrorRate above — see that
       # comment for the thermal_zone root cause and the pending real fix.
@@ -43,7 +43,7 @@ groups:
         annotations:
           summary: "Container {{ $labels.container }} error spike ({{ $value }} errors in 5m)"
           description: "A single container is producing more than 20 errors in 5 minutes, indicating a potential service issue. dhg-node-exporter is excluded as known thermal_zone noise."
-          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#containererrorspike"
+          runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#containererrorspike"
 
       - alert: PostgresFatalError
         expr: |
@@ -56,7 +56,7 @@ groups:
         annotations:
           summary: "PostgreSQL FATAL/PANIC error detected"
           description: "A FATAL or PANIC level error was logged by the registry database. Immediate investigation required."
-          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#postgresfatalerror"
+          runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#postgresfatalerror"
 
       - alert: NoLogsFromRegistryApi
         expr: |
@@ -69,7 +69,7 @@ groups:
         annotations:
           summary: "No logs received from registry-api for 10+ minutes"
           description: "The registry API container has not emitted any logs. It may be down, or Alloy may have lost connectivity to Loki."
-          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#nologsfromregistryapi"
+          runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#nologsfromregistryapi"
 
       # P5 T8: raw secret shapes surviving redaction = redaction-failure signal.
       # Detects JWT/Doppler token shapes in STORED lines (post-redaction) —
@@ -84,4 +84,4 @@ groups:
         annotations:
           summary: "Raw secret shape stored in logs ({{ $labels.container }})"
           description: "A JWT or Doppler token shape reached the log store unredacted from container {{ $labels.container }}. Rotate the credential FIRST; never paste the matching line anywhere. Then fix the redaction stage and run the seeded-secret proof."
-          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#secretleakdetected"
+          runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#secretleakdetected"
