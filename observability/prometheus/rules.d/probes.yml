@@ -1,0 +1,49 @@
+# Blackbox uptime probes for the surfaces that expose no /metrics of their own.
+# Targets are defined in the blackbox-http / blackbox-public jobs in
+# prometheus.yml and each carries a `service` label.
+groups:
+  - name: probes
+    rules:
+      - alert: FrontendDown
+        expr: probe_success{service="frontend"} == 0
+        for: 3m
+        labels:
+          severity: high
+        annotations:
+          summary: "Frontend is not answering on :3000"
+          description: "http://dhg-frontend:3000/ has failed its probe for 3 minutes. This is the chat/inbox UI — the primary human surface."
+          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#frontenddown"
+
+      - alert: OpenWebUIDown
+        expr: probe_success{service="open-webui"} == 0
+        for: 3m
+        labels:
+          severity: high
+        annotations:
+          summary: "Open WebUI is not answering on :8080"
+          description: "http://dhg-open-webui:8080/ has failed its probe for 3 minutes. The local-model chat UI is unreachable; check dhg-open-webui and dhg-ollama."
+          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#openwebuidown"
+
+      - alert: GrafanaDown
+        expr: probe_success{service="grafana"} == 0
+        for: 3m
+        labels:
+          severity: high
+        annotations:
+          summary: "Grafana /api/health is failing"
+          description: "http://dhg-grafana:3000/api/health has failed its probe for 3 minutes. Every dashboard is dark, and this alert is the only remaining signal that observability itself is broken."
+          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#grafanadown"
+
+      # Warning, not high: this probe is answered at the Cloudflare edge by the
+      # Access policy (302, redirect not followed). A failure means DNS or the
+      # Cloudflare edge is broken for the hostname — it says nothing about the
+      # tunnel or the registry app, which RegistryApiDown covers.
+      - alert: RegistryPublicDown
+        expr: probe_success{service="registry-public"} == 0
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "registry.digitalharmonyai.com is not answering at the Cloudflare edge"
+          description: "https://registry.digitalharmonyai.com/health has failed its probe for 3 minutes. DNS or the Cloudflare Access application for this hostname is broken. Origin health is a separate signal (RegistryApiDown)."
+          runbook_url: "http://10.0.0.251:8017/projects/dhg-ai-factory/runbooks/alerts#registrypublicdown"

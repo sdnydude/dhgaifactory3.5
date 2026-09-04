@@ -44,6 +44,35 @@ scrape_configs:
           service: 'registry-db'
     scrape_interval: 30s
 
+  # The other six Postgres instances, via one multi-target postgres_exporter
+  # (REBUILD-PLAN-2026-09 WP4). v0.15.0 serves /probe?target=<host:port/db>
+  # &auth_module=<name>; credentials never appear here — they live in the
+  # gitignored observability/postgres-exporter/postgres_exporter.yml rendered
+  # from Doppler. __param_auth_module is set per target as a static label.
+  - job_name: 'postgres-multi'
+    metrics_path: /probe
+    static_configs:
+      - targets: ['dhg-medkb-db:5432/medkb']
+        labels: {service: 'medkb-db', __param_auth_module: 'medkb'}
+      - targets: ['portage-db:5432/portage']
+        labels: {service: 'portage-db', __param_auth_module: 'portage'}
+      - targets: ['dhg-eval-db:5432/evalviewer']
+        labels: {service: 'eval-db', __param_auth_module: 'eval'}
+      - targets: ['dhg-transcribe-db:5432/transcribe']
+        labels: {service: 'transcribe-db', __param_auth_module: 'transcribe'}
+      - targets: ['dhg-audio-postgres:5432/audio_agent']
+        labels: {service: 'audio-postgres', __param_auth_module: 'audio'}
+      - targets: ['plane-app-plane-db-1:5432/plane']
+        labels: {service: 'plane-db', __param_auth_module: 'plane'}
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: dhg-postgres-exporter-multi:9187
+    scrape_interval: 30s
+
   # Node Exporter (host metrics) — uses host network, reachable via dhg-network gateway
   - job_name: 'node-exporter'
     static_configs:
@@ -51,6 +80,18 @@ scrape_configs:
         labels:
           service: 'node-exporter'
     scrape_interval: 15s
+
+  # GPU metrics — nvidia_gpu_exporter (REBUILD-PLAN-2026-09 WP4, decision D-G).
+  # Wraps nvidia-smi; exposes nvidia_smi_utilization_gpu_ratio,
+  # nvidia_smi_memory_{used,total}_bytes, nvidia_smi_temperature_gpu, all keyed
+  # by GPU uuid.
+  - job_name: 'gpu'
+    static_configs:
+      - targets: ['dhg-gpu-exporter:9835']
+        labels:
+          service: 'gpu'
+    metrics_path: /metrics
+    scrape_interval: 30s
 
   # cAdvisor (container metrics)
   - job_name: 'cadvisor'
@@ -145,6 +186,21 @@ scrape_configs:
     metrics_path: /metrics
     scrape_interval: 15s
 
+  # audio-agent (REBUILD-PLAN-2026-09 WP4). It belongs to compose project
+  # dhg-audio-agent (config at langgraph_workflows/dhg-agents-cloud/src/
+  # dhg-audio-agent/docker-compose.yml) and is attached only to
+  # dhg-audio-agent_audio-net, so neither a docker-sd label on it (the SD job
+  # keeps only projects dhgaifactory35|dhg-memreg) nor container DNS would work
+  # from Prometheus. Scraped over the published host port instead: container
+  # 8000 -> host 8101, serving prometheus_client /metrics.
+  - job_name: 'audio-agent'
+    static_configs:
+      - targets: ['10.0.0.251:8101']
+        labels:
+          service: 'audio-agent'
+    metrics_path: /metrics
+    scrape_interval: 30s
+
   # Portage API (project `portage`, joined to dhg-network). Serves TLS on 8016
   # with a self-signed cert -> https + skip verify. Not picked up by docker-sd
   # because that job keeps only compose projects dhgaifactory35|dhg-memreg.
@@ -174,6 +230,18 @@ scrape_configs:
       - targets:
           - http://10.0.0.251:11434/api/tags
         labels: {service: 'ollama', path: 'lan'}
+      # Uptime probes for the three UIs with no /metrics of their own
+      # (REBUILD-PLAN-2026-09 WP4). dhg-frontend:3000/ answers 307 -> /projects;
+      # http_2xx follows redirects, so the probe sees the final 200.
+      - targets:
+          - http://dhg-frontend:3000/
+        labels: {service: 'frontend', path: 'container'}
+      - targets:
+          - http://dhg-open-webui:8080/
+        labels: {service: 'open-webui', path: 'container'}
+      - targets:
+          - http://dhg-grafana:3000/api/health
+        labels: {service: 'grafana', path: 'container'}
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target
@@ -191,6 +259,29 @@ scrape_configs:
       - targets:
           - https://portage-api:8016/health
         labels: {service: 'portage-api', path: 'container'}
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: dhg-blackbox:9115
+    scrape_interval: 30s
+
+  # Public hostname behind Cloudflare Access. Separate job because it needs the
+  # http_cf_access module (302 accepted, redirect not followed). Read the module
+  # comment in observability/blackbox/blackbox.yml: a success here proves the
+  # Cloudflare edge answers for the hostname and the Access policy is attached —
+  # it does NOT prove the cloudflared tunnel or the registry app, because Access
+  # rejects the unauthenticated request at the edge and never reaches the origin.
+  - job_name: 'blackbox-public'
+    metrics_path: /probe
+    params:
+      module: [http_cf_access]
+    static_configs:
+      - targets:
+          - https://registry.digitalharmonyai.com/health
+        labels: {service: 'registry-public', path: 'public'}
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target

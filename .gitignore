@@ -133,3 +133,8 @@ backups/
 # Tracked source of truth is observability/alertmanager/alertmanager.yml.tmpl;
 # regenerate with observability/scripts/render-alertmanager.sh
 /observability/alertmanager/alertmanager.yml
+
+# Rendered postgres_exporter multi-target auth_modules — embeds DB passwords.
+# Tracked shape reference is observability/postgres-exporter/postgres_exporter.yml.example;
+# regenerate with observability/postgres-exporter/render-postgres-exporter.sh
+/observability/postgres-exporter/postgres_exporter.yml
