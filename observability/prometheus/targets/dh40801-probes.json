@@ -1,1 +1,1 @@
-[]
+[{"targets":["http://10.0.0.179:3000/api/public/health"],"labels":{"host":"dh40801","service":"langfuse"}}]

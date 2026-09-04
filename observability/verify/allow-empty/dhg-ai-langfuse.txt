@@ -1,0 +1,1 @@
+20  # error/warn/fatal log lines from dh40801 containers; empty is the healthy state. The two log-volume panels above prove logs are still flowing.
