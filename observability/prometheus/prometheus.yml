@@ -13,6 +13,7 @@ alerting:
 # Load alert rules
 rule_files:
   - 'alerts.yml'
+  - 'rules.d/*.yml'   # per-host / per-WP rule files (dh40801, gpu, postgres) without editing this file
 
 # Scrape configurations
 scrape_configs:
@@ -247,3 +248,29 @@ scrape_configs:
   - job_name: 'alloy'
     static_configs:
       - targets: ['alloy:12345']
+
+  # --- file_sd jobs: targets live in targets/*.json and are picked up without a restart.
+  # Added 2026-09-04 (rebuild plan WP5) so the dh40801 observability agent can be wired
+  # from its own files. Empty target files are valid.
+  - job_name: 'node-exporter-dh40801'
+    file_sd_configs:
+      - files: ['/etc/prometheus/targets/dh40801-node.json']
+        refresh_interval: 1m
+  - job_name: 'cadvisor-dh40801'
+    file_sd_configs:
+      - files: ['/etc/prometheus/targets/dh40801-cadvisor.json']
+        refresh_interval: 1m
+  - job_name: 'blackbox-langfuse'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    file_sd_configs:
+      - files: ['/etc/prometheus/targets/dh40801-probes.json']
+        refresh_interval: 1m
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: dhg-blackbox:9115
