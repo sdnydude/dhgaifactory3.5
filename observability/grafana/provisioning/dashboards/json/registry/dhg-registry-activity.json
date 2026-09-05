@@ -92,7 +92,7 @@
           "format": "table",
           "rawQuery": true,
           "editorMode": "code",
-          "rawSql": "SELECT count(*) AS open FROM deferred_items WHERE status = 'open'"
+          "rawSql": "SELECT count(*) AS open FROM deferred_items WHERE status = 'open' AND project_name IN (${project:sqlstring})"
         }
       ],
       "options": {
@@ -403,7 +403,7 @@
           "format": "table",
           "rawQuery": true,
           "editorMode": "code",
-          "rawSql": "SELECT priority, count(*) AS items\n  FROM deferred_items\n WHERE status = 'open'\n GROUP BY 1\n ORDER BY array_position(ARRAY['critical','high','medium','low'], priority)"
+          "rawSql": "SELECT priority, count(*) AS items\n  FROM deferred_items\n WHERE status = 'open' AND project_name IN (${project:sqlstring})\n GROUP BY 1\n ORDER BY array_position(ARRAY['critical','high','medium','low'], priority)"
         }
       ],
       "options": {
@@ -484,7 +484,7 @@
           "format": "table",
           "rawQuery": true,
           "editorMode": "code",
-          "rawSql": "SELECT substr(title, 1, 140)                                        AS title,\n       priority,\n       category,\n       project_name                                                 AS project,\n       floor(extract(epoch FROM now() - created_at) / 86400)::int    AS age_days\n  FROM deferred_items\n WHERE status = 'open'\n ORDER BY created_at DESC\n LIMIT 20"
+          "rawSql": "SELECT substr(title, 1, 140)                                        AS title,\n       priority,\n       category,\n       project_name                                                 AS project,\n       floor(extract(epoch FROM now() - created_at) / 86400)::int    AS age_days\n  FROM deferred_items\n WHERE status = 'open' AND project_name IN (${project:sqlstring})\n ORDER BY created_at DESC\n LIMIT 20"
         }
       ],
       "options": {
@@ -1462,7 +1462,35 @@
     "memreg"
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "name": "project",
+        "label": "Project",
+        "type": "query",
+        "datasource": {
+          "type": "postgres",
+          "uid": "registry-pg"
+        },
+        "query": "SELECT DISTINCT project_name FROM deferred_items ORDER BY 1",
+        "definition": "SELECT DISTINCT project_name FROM deferred_items ORDER BY 1",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "allValue": null,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [],
+        "sort": 1,
+        "hide": 0
+      }
+    ]
   },
   "time": {
     "from": "now-30d",

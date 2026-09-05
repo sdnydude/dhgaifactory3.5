@@ -59,8 +59,34 @@ for v in dash.get("templating", {}).get("list", []):
         cur = ".*"
     subs[v["name"]] = str(cur)
 
+sqlsubs = {}   # ${var:sqlstring} — quoted, comma-joined values of a query variable
+
+def var_values(v):
+    """Resolve a query-type variable's values through its own datasource so
+    'All' expands to the real list (Grafana does this client-side; /api/ds/query
+    does not)."""
+    ds = v.get("datasource") or {}
+    defn = v.get("definition") or v.get("query") or ""
+    if not isinstance(defn, str) or not defn.strip() or not ds.get("uid"):
+        return []
+    st, res = post_query({"refId": "V", "datasource": ds, "rawSql": defn,
+                          "format": "table", "maxDataPoints": 1000, "intervalMs": 60000})
+    vals = []
+    for r in (res.get("results") or {}).values():
+        for f in r.get("frames") or []:
+            cols = (f.get("data") or {}).get("values") or []
+            if cols:
+                vals.extend(str(x) for x in cols[0] if x is not None)
+    return vals
+
 def interpolate(s):
     for name, val in subs.items():
+        if "${%s:sqlstring}" % name in s:
+            if name not in sqlsubs:
+                v = next((x for x in dash.get("templating", {}).get("list", []) if x["name"] == name), {})
+                vals = var_values(v) if val == ".*" else val.split("|")
+                sqlsubs[name] = ",".join("'" + x.replace("'", "''") + "'" for x in vals) or "''"
+            s = s.replace("${%s:sqlstring}" % name, sqlsubs[name])
         for form in ("${%s}" % name, "[[%s]]" % name, "$" + name):
             s = s.replace(form, val)
     return s
