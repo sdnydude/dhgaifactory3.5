@@ -25,10 +25,34 @@ Five provisioning providers, one per folder, each pointed at its own subdirector
 | `DHG / Alerting` | `json/alerting` | rule engine, delivery, alert state |
 | `DHG / Registry` | `json/registry` | boards over the registry Postgres (SQL, not Prometheus) |
 
-Provisioning creates the folders. Grafana 10.2 does **not** provision folder permissions
-from files — after adding a folder, grant the Viewer role read on it via
-`POST /api/access-control/folders/{uid}/users|builtInRoles`, or the `dhg-verify` service
-account cannot render it.
+Provisioning creates the folders — **with no permissions at all**. Grafana 10.2 applies
+the default ACL (creator → Admin, built-in Editor → Edit, built-in Viewer → View) only
+when a folder is created through the UI or the folder API. The dashboard file provisioner
+creates its folder under a background identity with `userID=0`, logs
+`Could not make user admin ... identifier is not initialized`, and leaves
+`GET /api/folders/{uid}/permissions` returning `[]`. Because dashboard access in Grafana
+is entirely folder-scoped — the OSS basic Viewer role carries `datasources:read` but no
+global `dashboards:read` — a freshly provisioned folder is invisible to every non-Admin
+identity, including the `dhg-verify` service account (`/api/search` omits it,
+`GET /api/dashboards/uid/<uid>` returns 403). File-based provisioning of folder
+permissions is Grafana Enterprise only, so the OSS fix is a script:
+
+```
+observability/scripts/grant-folder-viewer.sh          # --dry-run to preview
+```
+
+It walks `/api/folders` and grants built-in Viewer → View and Editor → Edit on any folder
+missing them, preserving existing user and team grants. It is idempotent — folders that
+already have both are reported `unchanged`. **Run it after every
+`docker compose up -d grafana` / `docker compose restart grafana`**, which is the only
+time a new provider folder can appear (provider config is read at startup only). Grafana
+caches RBAC decisions for a few seconds, so a newly granted folder may 403 for one more
+request before it answers 200.
+
+It authenticates as the Grafana admin: user from `docker inspect dhg-grafana`
+(`GF_SECURITY_ADMIN_USER`), password from Doppler `dhg-monitoring/dev`
+`GF_SECURITY_ADMIN_PASSWORD`; both are overridable with `GF_ADMIN_USER` /
+`GF_ADMIN_PASSWORD`.
 
 Provider config (`dashboards/dashboards.yml`) is read at Grafana **startup only**;
 restart `dhg-grafana` after editing it. Dashboard JSON re-provisions live every 10s.

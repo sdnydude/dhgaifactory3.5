@@ -50,7 +50,10 @@ canonical** (AUDIT P1 / decision D-B): `registry-api`, `vs-engine`,
 `session-logger` and `memreg` are drop-relabelled out of `docker-sd` so each is
 scraped once with a stable instance label. `file_sd` jobs read
 `observability/prometheus/targets/*.json` and pick up changes without a restart —
-that is how dh40801 is wired. Blackbox jobs cover surfaces with no `/metrics`.
+that is how dh40801 is wired. Both hosts' node-exporter and cAdvisor targets carry
+a `host` label — `host="g700data1"` on the static jobs, `host="dh40801"` from the
+file_sd target files — so `node_*` and `container_*` series can be split by host
+without relying on the job name. Blackbox jobs cover surfaces with no `/metrics`.
 Logs: Alloy on both hosts ships container logs to the Loki on g700data1;
 dh40801's Alloy tags its streams `host="dh40801"`. Keep-all — nothing is deleted
 automatically.
@@ -111,6 +114,15 @@ Grafana startup only. The authoring standard is
 (gitignored), authenticating with `GRAFANA_SA_TOKEN` from Doppler
 `dhg-monitoring/dev`. Legitimately-empty panels are listed by id in
 `observability/verify/allow-empty/<uid>.txt` with a reason.
+
+**After every Grafana restart, run `observability/scripts/grant-folder-viewer.sh`.**
+A folder created by the dashboard provisioner gets no ACL at all (Grafana applies
+default folder permissions only on the UI/API creation path), so a new provider
+folder is invisible to every non-Admin identity — including the `dhg-verify`
+service account that `verify-dashboard.sh` uses, which then reports a 403 fetch
+failure rather than an empty panel. The script is idempotent; folders that already
+carry the Viewer/Editor grants are reported `unchanged`. Full explanation in
+[`observability/grafana/README.md`](../observability/grafana/README.md).
 
 ## Langfuse
 

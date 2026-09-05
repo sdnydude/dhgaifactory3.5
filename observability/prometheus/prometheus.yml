@@ -79,6 +79,10 @@ scrape_configs:
       - targets: ['172.18.0.1:9100']
         labels:
           service: 'node-exporter'
+          # Host identity, symmetric with targets/dh40801-node.json. Without it
+          # node_* series from g700data1 are indistinguishable from dh40801's
+          # except by job name.
+          host: 'g700data1'
     scrape_interval: 15s
 
   # GPU metrics — nvidia_gpu_exporter (REBUILD-PLAN-2026-09 WP4, decision D-G).
@@ -99,6 +103,8 @@ scrape_configs:
       - targets: ['cadvisor:8080']
         labels:
           service: 'cadvisor'
+          # Host identity, symmetric with targets/dh40801-cadvisor.json.
+          host: 'g700data1'
     scrape_interval: 30s
     # AUDIT-2026-09 P14: container_network_advance_tcp_stats_total was ~22% of
     # TSDB series and is referenced by no dashboard, alert or query. Dropped at
