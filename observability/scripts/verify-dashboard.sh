@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
 # Verify a provisioned Grafana dashboard: replay every panel query through
-# /api/ds/query over a now-1h window, then render the board to PNG.
+# /api/ds/query, then render the board to PNG.
 # Usage: verify-dashboard.sh <uid> [--out DIR]
-# Exit 0 only when every non-row Prometheus/Loki panel answered without error
-# and returned at least one series (or its panel id is listed in
+# Exit 0 only when every non-row Prometheus/Loki/Postgres panel answered without
+# error and returned at least one series (or its panel id is listed in
 # observability/verify/allow-empty/<uid>.txt).
+#
+# Replay window: Prometheus and Loki panels are replayed over now-1h, which is
+# ample for scraped metrics. Postgres panels are replayed over the dashboard's
+# own time.from instead, because their $__timeFilter() is expanded server-side
+# against that window and registry capture rows are sparse — a now-1h replay of
+# a 30-day board would report every SQL panel empty and be wrong about it.
 set -uo pipefail
 GRAFANA_URL="${GRAFANA_URL:-http://10.0.0.251:3001}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -32,7 +38,7 @@ HTTP="$(curl -sS -H "Authorization: Bearer $GRAFANA_SA_TOKEN" \
 [ "$HTTP" = "200" ] || { echo "$UID_ARG: FAIL fetch /api/dashboards/uid/$UID_ARG -> HTTP $HTTP"; exit 1; }
 
 UID_ARG="$UID_ARG" ALLOW_FILE="$ALLOW_FILE" DASH_JSON="$DASH_JSON" python3 - <<'PY'
-import json, os, sys, time, urllib.request, urllib.error
+import json, os, re, sys, time, urllib.request, urllib.error
 
 url, tok = os.environ["GRAFANA_URL"], os.environ["GRAFANA_SA_TOKEN"]
 uid, allow_file = os.environ["UID_ARG"], os.environ["ALLOW_FILE"]
@@ -66,8 +72,22 @@ def flatten(panels):
             yield p
 now = int(time.time() * 1000)
 frm = now - 3600 * 1000
-def post_query(q):
-    body = json.dumps({"from": str(frm), "to": str(now), "queries": [q]}).encode()
+
+_UNIT_MS = {"s": 1000, "m": 60000, "h": 3600000, "d": 86400000,
+            "w": 604800000, "M": 2592000000, "y": 31536000000}
+
+def relative_ms(expr, default_ms):
+    """'now-30d' -> 2592000000. Anything else (absolute epochs, odd syntax)
+    falls back to default_ms so an unparseable range never silently passes."""
+    m = re.match(r"^now-(\d+)([smhdwMy])$", str(expr or ""))
+    return int(m.group(1)) * _UNIT_MS[m.group(2)] if m else default_ms
+
+# Dashboard's own window, used for SQL panels only.
+dash_frm = now - relative_ms((dash.get("time") or {}).get("from"), 3600 * 1000)
+
+def post_query(q, q_frm=None):
+    body = json.dumps({"from": str(q_frm if q_frm is not None else frm),
+                       "to": str(now), "queries": [q]}).encode()
     req = urllib.request.Request(url + "/api/ds/query", data=body, method="POST",
                                  headers={"Authorization": "Bearer " + tok,
                                           "Content-Type": "application/json"})
@@ -89,7 +109,7 @@ for panel in flatten(dash.get("panels") or []):
     queries = []
     for i, t in enumerate(targets):
         ds = t.get("datasource") or pds
-        if not isinstance(ds, dict) or ds.get("type") not in ("prometheus", "loki"):
+        if not isinstance(ds, dict) or ds.get("type") not in ("prometheus", "loki", "postgres"):
             continue
         if str(ds.get("uid", "")).startswith("$"):
             ds = {"type": ds["type"], "uid": subs.get(ds["uid"].strip("${}"), ds["uid"])}
@@ -100,7 +120,13 @@ for panel in flatten(dash.get("panels") or []):
         q["maxDataPoints"] = 200
         if ds["type"] == "loki":
             q.setdefault("queryType", "range")
-        for key in ("expr", "query"):
+        if ds["type"] == "postgres":
+            # The SQL datasource needs the raw statement and an explicit result
+            # format; without rawQuery it falls back to the visual builder and
+            # returns nothing.
+            q["rawQuery"] = True
+            q.setdefault("format", "table")
+        for key in ("expr", "query", "rawSql"):
             if isinstance(q.get(key), str):
                 q[key] = interpolate(q[key])
         queries.append(q)
@@ -110,7 +136,8 @@ for panel in flatten(dash.get("panels") or []):
     pid, title = panel.get("id"), (panel.get("title") or "").strip() or "(untitled)"
     series, errs, codes = 0, [], []
     for q in queries:
-        code, resp = post_query(q)
+        q_frm = dash_frm if q["datasource"]["type"] == "postgres" else frm
+        code, resp = post_query(q, q_frm)
         codes.append(str(code))
         res = (resp.get("results") or {}).get(q["refId"], {})
         err = res.get("error") or resp.get("message")
@@ -132,7 +159,7 @@ for panel in flatten(dash.get("panels") or []):
         print("panel %-4s %-42.42s http=%s series=%d%s" % (pid, title, ",".join(codes), series, note))
 
 if checked == 0:
-    print("no Prometheus/Loki panel to replay — nothing was verified")
+    print("no Prometheus/Loki/Postgres panel to replay — nothing was verified")
 print("PANELS_CHECKED=%d PANELS_FAILED=%d" % (checked, failed))
 sys.exit(1 if failed or checked == 0 else 0)
 PY

@@ -47,3 +47,17 @@ providers:
     options:
       path: /etc/grafana/provisioning/dashboards/json/alerting
       foldersFromFilesStructure: false
+
+  # Boards over the registry Postgres (datasource uid registry-pg, role
+  # grafana_ro). Kept in its own folder so the SQL boards are not mixed in with
+  # the Prometheus/Loki infrastructure folders.
+  - name: 'DHG Registry'
+    orgId: 1
+    folder: 'DHG / Registry'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/json/registry
+      foldersFromFilesStructure: false

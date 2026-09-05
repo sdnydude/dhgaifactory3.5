@@ -15,7 +15,7 @@ next provisioning pass.
 
 ## Folders
 
-Four provisioning providers, one per folder, each pointed at its own subdirectory:
+Five provisioning providers, one per folder, each pointed at its own subdirectory:
 
 | Folder | Path | Holds |
 |---|---|---|
@@ -23,6 +23,7 @@ Four provisioning providers, one per folder, each pointed at its own subdirector
 | `DHG / Services` | `json/services` | one board per application service |
 | `DHG / AI` | `json/ai` | model/agent/inference boards |
 | `DHG / Alerting` | `json/alerting` | rule engine, delivery, alert state |
+| `DHG / Registry` | `json/registry` | boards over the registry Postgres (SQL, not Prometheus) |
 
 Provisioning creates the folders. Grafana 10.2 does **not** provision folder permissions
 from files — after adding a folder, grant the Viewer role read on it via
@@ -77,7 +78,9 @@ those labels — added blindly they produce selectors that match nothing. Both a
 ## Presentation
 
 - `unit` is set on every field: `ops`, `reqps`, `percent`, `percentunit`, `s`, `ms`,
-  `bytes`, `short`. An unset unit is a defect.
+  `bytes`, `short`. An unset unit is a defect. Use `none`, not `short`, on any stat
+  whose exact value is the point — `short` renders 1,113 as "1 K", which is precisely
+  the rounding an honesty tile exists to avoid.
 - Thresholds are semantic — green healthy, amber degraded, red act now — and absolute,
   never decorative. Health direction is encoded in the step order (a cache-hit gauge runs
   red → green).
@@ -88,7 +91,10 @@ those labels — added blindly they produce selectors that match nothing. Both a
   or into their own panel.
 - Every panel has a `description` saying what it measures and what a bad value means.
   Where a metric does not measure what its title suggests, the description says so.
-- `refresh: "30s"`, `time.from: "now-6h"`, `version: 1`, `schemaVersion: 38`.
+- `refresh: "30s"`, `time.from: "now-6h"`, `version: 1`, `schemaVersion: 38`. SQL
+  boards over the registry capture tables are the one exception to `now-6h`: those
+  rows arrive a handful a day, so `dhg-registry-activity` defaults to `now-30d` — a
+  6h window on it is legitimately, and uselessly, empty.
 - `tags`: `["dhg", "<folder>", …subject]`, e.g. `["dhg", "services", "registry", "api"]`.
 
 ## Brand
@@ -102,6 +108,11 @@ health and nothing else.
 `observability/scripts/verify-dashboard.sh <uid>` replays every panel through
 `/api/ds/query` and renders the board to `observability/verify/<uid>.png`. Exit 0
 requires every panel to answer without error and return at least one series.
+
+Prometheus and Loki panels are replayed over `now-1h`. Postgres panels are replayed
+over the **dashboard's own `time.from`**, because their `$__timeFilter()` is expanded
+server-side against the request window and registry capture rows are sparse — a
+`now-1h` replay of a 30-day board would call every SQL panel empty and be wrong.
 
 A panel that is legitimately empty when the system is healthy is listed by panel id in
 `observability/verify/allow-empty/<uid>.txt`, one per line, each with a trailing `#`
@@ -118,7 +129,7 @@ Current allow-empty entries:
 
 ## Current dashboards
 
-Twelve boards. Filename = uid; the folder is the subdirectory under
+Thirteen boards. Filename = uid; the folder is the subdirectory under
 `provisioning/dashboards/json/`.
 
 | Folder | uid | Purpose |
@@ -135,6 +146,59 @@ Twelve boards. Filename = uid; the folder is the subdirectory under
 | `ai` | `vs-engine-overview` | Verbalized Sampling engine, scoped to what the service actually exposes today. |
 | `alerting` | `dhg-alerting` | Alert state overview — firing/resolved history by rule and severity. |
 | `alerting` | `dhg-alerting-pipeline` | The alerting path end to end: rule evaluation in Prometheus and the Loki ruler, delivery through Alertmanager to Slack and the registry webhook. |
+| `registry` | `dhg-registry-activity` | What the registry has captured — deferred items, decisions, insights, corrections, bug fixes, ship and agent sessions, test coverage. SQL over the small indexed capture tables only. |
+
+## Registry DB datasource
+
+`uid: registry-pg`, name **Registry DB**, type `postgres`, pointed at
+`dhg-registry-db:5432/dhg_registry` over the internal docker network
+(`sslmode: disable` — the DB publishes no TLS endpoint). Pool is deliberately small:
+`maxOpenConns: 3`, `maxIdleConns: 1`, `connMaxLifetime: 300`.
+
+**The role, not the pool, is what makes this safe.** Grafana connects as
+`grafana_ro`, created 2026-09-05:
+
+- `LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE`
+- `CONNECT` on `dhg_registry`, `USAGE` on `public`, `SELECT` on all tables in
+  `public`, plus `ALTER DEFAULT PRIVILEGES ... GRANT SELECT ON TABLES` so new
+  tables are readable without a re-grant. No INSERT/UPDATE/DELETE anywhere.
+- `ALTER ROLE grafana_ro SET statement_timeout = '10s'` — the load guard. The
+  registry DB runs on `max_connections = 100` and serves the application; without
+  this, one bad panel pins a connection against a multi-hundred-MB sequential scan
+  (AUDIT-2026-09 advisor review, HIGH finding on `incident_actions`).
+- `ALTER ROLE grafana_ro SET default_transaction_read_only = on` — belt and braces:
+  even a mistaken grant cannot produce a write.
+
+Before it existed, `dhg` — a SUPERUSER — was the only login role on that database.
+Never point a dashboard at `dhg`.
+
+**Provisioning is rendered, not tracked.** Grafana's `secureJsonData.password` takes
+a literal, so:
+
+| File | Tracked? | What it is |
+|---|---|---|
+| `provisioning/datasources/registry-postgres.yml.tmpl` | yes | source of truth |
+| `provisioning/datasources/registry-postgres.yml` | **no** (gitignored) | rendered, contains the password |
+
+```
+observability/scripts/render-grafana-datasources.sh   # reads Doppler dhg-monitoring/dev
+docker compose up -d grafana                          # datasources load at startup only
+```
+
+The password lives in Doppler `dhg-monitoring/dev` as `REGISTRY_GRAFANA_RO_PASSWORD`.
+To rotate: `ALTER ROLE grafana_ro PASSWORD '<new>'`, update the Doppler secret,
+re-render, restart Grafana. Health check:
+`GET /api/datasources/uid/registry-pg/health` → `Database Connection OK`.
+
+**What SQL boards may query.** Only the small indexed capture tables
+(`deferred_items`, `decision_logs`, `insights`, `corrections`, `bug_fixes`,
+`ship_sessions`, `agent_sessions`, `test_coverage`), all of which carry
+`created_at` and an index on it. `incident_actions` and `incident_events` are
+2.6M rows / ~700 MB each with no usable time index — **no panel may query them.**
+`incidents` itself is limited to the single deliberately-labelled raw-count stat on
+`dhg-registry-activity`: the table says ~1,113 active while `/api/incidents/stats`
+says 110, and that gap is tracked as two open deferred items. Until it is fixed, no
+incidents board.
 
 ## Tracing
 
@@ -142,8 +206,9 @@ Tempo was retired 2026-09-04 (AUDIT-2026-09 section 7, decision D-A): it never r
 a span in production. The service definition still lives in `docker-compose.override.yml`
 but is held out of `docker compose up` by a `profiles: ["retired"]` merge stanza in
 `docker-compose.yml`; its data volume `dhgaifactory35_tempo_data` is left in place.
-Grafana therefore has exactly two datasources — Prometheus and Loki — and no
-`derivedFields` / `exemplarTraceIdDestinations` trace links.
+Grafana therefore has no `derivedFields` / `exemplarTraceIdDestinations` trace
+links. Its three datasources are Prometheus, Loki and the read-only Registry DB
+(see below).
 
 All OTLP now goes to Langfuse at `http://10.0.0.179:3000/api/public/otel`
 (traces: `/v1/traces`), authenticated with a project key pair as HTTP Basic.
