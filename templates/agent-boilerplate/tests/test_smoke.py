@@ -59,7 +59,7 @@ def test_agent_module_constructs_untraced(no_langfuse):
 
     assert agent.TRACING_ENABLED is False
     assert agent.AGENT_ID
-    assert agent.MODEL == agent.DEFAULT_MODEL
+    assert agent.MODEL is None  # no default model id; unset constructs against the test model
     # The Pydantic AI agent and its typed output contract exist.
     assert agent.agent is not None
     assert "summary" in agent.AgentOutput.model_fields
@@ -111,3 +111,12 @@ def test_registry_client_defaults_to_the_docker_network_name(no_langfuse):
     assert manifest["service"]["id"] == agent.AGENT_ID
     assert manifest["service"]["type"] == "specialized_agent"
     assert manifest["service"]["tracing"] == "disabled"
+
+
+def test_main_refuses_to_run_without_agent_model(no_langfuse):
+    import agent
+
+    importlib.reload(agent)
+
+    assert agent.MODEL is None
+    assert agent.main(["hello"]) == 2

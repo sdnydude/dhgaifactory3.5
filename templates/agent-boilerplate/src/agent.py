@@ -21,7 +21,7 @@ prometheus_client and a /metrics route in that service, the way
 services/vs-engine and services/session-logger do.
 
 ENVIRONMENT
-  AGENT_MODEL              LLM-agnostic model string (default below)
+  AGENT_MODEL              LLM-agnostic model string, required for real runs (no default)
   ANTHROPIC_API_KEY        provider credential for the default model
   AI_FACTORY_REGISTRY_URL  registry base URL (default: the docker network name)
   LANGFUSE_PUBLIC_KEY      optional: enables tracing (see tracing.py)
@@ -61,8 +61,10 @@ AGENT_VERSION = "1.0.0"
 
 # LLM-agnostic model string: `<provider>:<model>`. Swap providers by setting
 # AGENT_MODEL -- no code change. See README.md for the Ollama example.
-DEFAULT_MODEL = "anthropic:claude-opus-5"
-MODEL = os.getenv("AGENT_MODEL", DEFAULT_MODEL)
+# There is deliberately no default model id (DHG rule: never hardcode model
+# IDs in configs). Without AGENT_MODEL the agent still imports and constructs,
+# against pydantic_ai's built-in "test" model, and main() refuses to run.
+MODEL = os.getenv("AGENT_MODEL")
 
 # Registry reachable by container name on dhgaifactory35_dhg-network. From the
 # host, set AI_FACTORY_REGISTRY_URL=http://10.0.0.251:8011.
@@ -103,7 +105,7 @@ class AgentOutput(BaseModel):
 # defer_model_check keeps import cheap and credential-free: the provider is
 # resolved on the first run, so the module imports in CI with no API key set.
 agent = Agent(
-    MODEL,
+    MODEL or "test",
     output_type=AgentOutput,
     system_prompt=SYSTEM_PROMPT,
     name=AGENT_ID,
@@ -250,6 +252,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--user-id", default="cli", help="Requesting user id.")
     args = parser.parse_args(argv)
 
+    if not MODEL:
+        LOGGER.error("AGENT_MODEL is required, e.g. anthropic:<model-id> or ollama:<model>; nothing was run")
+        return 2
     LOGGER.info("model=%s tracing=%s", MODEL, "on" if TRACING_ENABLED else "off")
     output = asyncio.run(run_agent(args.topic, args.user_id))
     print(json.dumps(output.model_dump(), indent=2))

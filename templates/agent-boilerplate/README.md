@@ -41,8 +41,8 @@ form. No code change is needed to switch providers.
 
 | Target | Env |
 |---|---|
-| Default (Claude) | unset -> `anthropic:claude-opus-5`, needs `ANTHROPIC_API_KEY` |
-| Cheaper Claude | `AGENT_MODEL=anthropic:claude-sonnet-5` |
+| Unset | agent constructs against pydantic_ai's `test` model; `main()` logs an error and exits 2 |
+| Claude | `AGENT_MODEL=anthropic:<model-id>` (pick the current id; none is pinned here) |
 | Local Ollama | `AGENT_MODEL=ollama:qwen3:27b` plus `OLLAMA_BASE_URL=http://10.0.0.251:11434/v1` |
 
 The Ollama path needs no API key; the provider substitutes a placeholder. Verify
@@ -102,8 +102,8 @@ that service, the way `services/vs-engine` and `services/session-logger` do.
 
 | Variable | Required | Purpose |
 |---|---|---|
-| `AGENT_MODEL` | no | model string; default `anthropic:claude-opus-5` |
-| `ANTHROPIC_API_KEY` | for the default model | provider credential |
+| `AGENT_MODEL` | yes, for real runs | `<provider>:<model>`; no default (DHG rule: no hardcoded model ids). Unset = constructs against the `test` model and `main()` exits 2 |
+| `ANTHROPIC_API_KEY` | for `anthropic:` models | provider credential |
 | `AI_FACTORY_REGISTRY_URL` | no | registry base URL |
 | `AGENT_TIMEOUT_SECONDS` | no | per-run timeout, default 300 |
 | `LANGFUSE_PUBLIC_KEY` | no | enables tracing (with the secret key) |
