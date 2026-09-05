@@ -714,7 +714,7 @@ logs.
 ### MemregDLQBacklog
 
 ```promql
-max_over_time(memreg_dlq_depth[15m]) > 0
+max_over_time(memreg_dlq_depth_total[15m]) > 0
 ```
 
 **Means:** the memreg capture dead-letter queue has been non-empty for 15
@@ -745,7 +745,7 @@ code and fix the payload schema.
 ### MemregDLQMetricMissing
 
 ```promql
-absent(memreg_dlq_depth)
+absent(memreg_dlq_depth_total)
 ```
 
 **Means:** the DLQ depth gauge is not being exported at all. This is the
@@ -756,20 +756,21 @@ unnoticed forever.
 **First three checks:**
 
 ```bash
-docker exec dhg-prometheus wget -qO- http://dhg-memreg-agent:8020/metrics | grep memreg_dlq_depth
+docker exec dhg-prometheus wget -qO- http://dhg-memreg-agent:8020/metrics | grep memreg_dlq_depth_total
 curl -sG http://10.0.0.251:9090/api/v1/query --data-urlencode 'query=up{job="memreg"}'
 docker logs --tail 100 dhg-memreg-agent
 ```
 
 **Likely causes:** `dhg-memreg-agent` down (then `PrometheusTargetDown` fires
-too); the gauge is lazily created and has never been touched since the last
-restart — a known property of labelled gauges in the daemon; the metrics port
-changed.
+too); the daemon image predates 2026-09-05 (before that date the per-pipeline
+gauge `memreg_dlq_depth` had no series when the queue was empty, so an empty
+DLQ looked like a dead exporter; the fix added the unlabeled
+`memreg_dlq_depth_total`, always present); the metrics port changed.
 
-**Resolve:** if the container is up and the metric is genuinely absent from
-`/metrics`, the daemon needs to initialise the gauge at startup rather than on
-first use. Do not "fix" this by deleting the alert — absence is the failure
-mode it exists to catch.
+**Resolve:** if the container is up and `memreg_dlq_depth_total` is absent from
+`/metrics`, rebuild and restart the daemon from `~/DHG/dhg-memreg` (`docker
+compose build && docker compose up -d`). Do not "fix" this by deleting the
+alert — absence is the failure mode it exists to catch.
 
 **Dashboard:** [Memreg Daemon](http://10.0.0.251:3001/d/memreg-daemon)
 

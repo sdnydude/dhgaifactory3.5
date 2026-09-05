@@ -33,7 +33,7 @@
       },
       "id": 1,
       "panels": [],
-      "title": "Memreg Daemon — Health",
+      "title": "Memreg Daemon \u2014 Health",
       "type": "row"
     },
     {
@@ -225,19 +225,19 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(memreg_dlq_depth{job=\"memreg\", service=\"memreg\"}) or vector(0)",
+          "expr": "memreg_dlq_depth_total{job=\"memreg\", service=\"memreg\"}",
           "legendFormat": "depth",
           "refId": "A"
         }
       ],
-      "description": "Current dead-letter queue depth. Guarded with `or vector(0)`: when the exporter stops publishing memreg_dlq_depth this reads 0 too, so read it next to \"DLQ metric present\" — a 0 there means this tile is a fallback, not a measurement."
+      "description": "Current dead-letter queue depth. Guarded with `or vector(0)`: when the exporter stops publishing memreg_dlq_depth this reads 0 too, so read it next to \"DLQ metric present\" \u2014 a 0 there means this tile is a fallback, not a measurement."
     },
     {
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Whether the exporter is publishing memreg_dlq_depth at all. MISSING means the DLQ depth panels are showing their `or vector(0)` fallback and the real queue depth is unknown — not that the queue is empty.",
+      "description": "Whether the exporter is publishing memreg_dlq_depth at all. MISSING means the DLQ depth panels are showing their `or vector(0)` fallback and the real queue depth is unknown \u2014 not that the queue is empty.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -304,7 +304,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "count(memreg_dlq_depth) or vector(0)",
+          "expr": "count(memreg_dlq_depth_total) or vector(0)",
           "legendFormat": "present",
           "refId": "A"
         }
@@ -814,7 +814,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(memreg_dlq_depth{job=\"memreg\", service=\"memreg\"}) or vector(0)",
+          "expr": "memreg_dlq_depth_total{job=\"memreg\", service=\"memreg\"}",
           "legendFormat": "depth",
           "refId": "A"
         },
@@ -828,7 +828,7 @@
           "refId": "B"
         }
       ],
-      "description": "DLQ depth and drop rate over time. Same `or vector(0)` fallback caveat as the DLQ Depth tile — check \"DLQ metric present\" before trusting a flat zero."
+      "description": "DLQ depth and drop rate over time. Same `or vector(0)` fallback caveat as the DLQ Depth tile \u2014 check \"DLQ metric present\" before trusting a flat zero."
     }
   ],
   "schemaVersion": 39,
@@ -850,5 +850,5 @@
   "title": "Memreg Daemon",
   "uid": "memreg-daemon",
   "version": 1,
-  "description": "Memreg capture daemon (:8020). Sweeps are sparse by design — a few per hour — so rate/quantile panels use hour-scale windows. Selectors pin `service=\"memreg\"` as well as the job: only the canonical static scrape job sets `service`, so stale series left behind by the retired docker-sd job cannot double every tile."
+  "description": "Memreg capture daemon (:8020). Sweeps are sparse by design \u2014 a few per hour \u2014 so rate/quantile panels use hour-scale windows. Selectors pin `service=\"memreg\"` as well as the job: only the canonical static scrape job sets `service`, so stale series left behind by the retired docker-sd job cannot double every tile."
 }

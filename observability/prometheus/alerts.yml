@@ -306,7 +306,7 @@ groups:
       # Capture dead-letter queue stuck non-empty: registry captures are
       # failing and the daemon retry is not draining them (refactor item 13R).
       - alert: MemregDLQBacklog
-        expr: max_over_time(memreg_dlq_depth[15m]) > 0
+        expr: max_over_time(memreg_dlq_depth_total[15m]) > 0
         for: 15m
         labels:
           severity: high
@@ -319,14 +319,14 @@ groups:
       # A gauge that stops being exported looks exactly like a healthy DLQ.
       # This is the fail-closed companion to MemregDLQBacklog.
       - alert: MemregDLQMetricMissing
-        expr: absent(memreg_dlq_depth)
+        expr: absent(memreg_dlq_depth_total)
         for: 30m
         labels:
           severity: warning
           service: memreg
         annotations:
-          summary: "memreg_dlq_depth is not being exported"
-          description: "The DLQ depth gauge is absent from the memreg scrape, so MemregDLQBacklog cannot fire and a growing dead-letter queue would go unnoticed. Verify dhg-memreg-agent:8020/metrics still exposes memreg_dlq_depth."
+          summary: "memreg_dlq_depth_total is not being exported"
+          description: "The DLQ depth gauge is absent from the memreg scrape, so MemregDLQBacklog cannot fire and a growing dead-letter queue would go unnoticed. Verify dhg-memreg-agent:8020/metrics still exposes memreg_dlq_depth_total (unlabeled, always present; the per-pipeline memreg_dlq_depth has no series when the queue is empty)."
           runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#memregdlqmetricmissing"
 
   # P5 log program (T5): store growth watch + shipper liveness.
