@@ -62,9 +62,11 @@ export interface CmeServiceStats {
   table_counts: Record<string, number>;
 }
 
-export interface LgTopNode {
-  span_name: string;
-  calls: number;
+// Subset of registry /api/incidents/stats we render. The API's active count is
+// known to disagree with the incidents table; see the card subtitle.
+export interface IncidentStats {
+  total: number;
+  by_status: Record<string, number>;
 }
 
 export interface CorrectionCategoryStats {
@@ -114,6 +116,8 @@ export interface DeferredItemStats {
 
 export interface Telemetry {
   targets: PromTarget[] | null;
+  targetsTotal: number | null;
+  targetsDown: number | null;
   alertsFiring: number | null;
 
   regReqRate: number | null;
@@ -128,11 +132,11 @@ export interface Telemetry {
   nodeMemAvailPct: number | null;
   promUptime: number | null;
 
-  lgCalls15m: number | null;
-  lgLatencyP95: number | null;
-  lgActiveNodes: number | null;
-  lgTopNodes: LgTopNode[] | null;
-  lgCallsSpark: { v: number }[];
+  containersRunning: number | null;
+  containerCpuCores: number | null;
+  containerMemBytes: number | null;
+
+  incidentStats: IncidentStats | null;
 
   cmePipeline: CmePipelineStats | null;
   cmeServices: CmeServiceStats | null;

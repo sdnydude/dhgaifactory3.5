@@ -1,0 +1,1 @@
+[{"targets":["10.0.0.179:9100"],"labels":{"host":"dh40801","service":"node-exporter"}}]

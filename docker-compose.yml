@@ -237,6 +237,10 @@ services:
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      # Default num_ctx=4096 is too small for Portage multi-image vision scans
+      # (3-image qwen3-vl request = ~8k prompt tokens, 2026-08-16). 16k covers
+      # scans + Porter tool loops; KV cache cost fits alongside granite on the 5080.
+      - OLLAMA_CONTEXT_LENGTH=16384
     deploy:
       resources:
         reservations:
@@ -327,10 +331,15 @@ services:
       - OLLAMA_URL=http://dhg-ollama:11434
       - EMBEDDING_MODEL=nomic-embed-text
       - DEFAULT_GENERATION_MODEL=claude-sonnet-4-6
-      - LANGSMITH_PROJECT=dhg-medkb
-      - OTEL_ENDPOINT=http://dhg-tempo:4318
-      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    # OTLP export to Langfuse. Rendered from Doppler (dhg-monitoring/dev) by
+    # observability/scripts/render-medkb-otel-env.sh; absent until the
+    # dhg-ai-factory Langfuse project keys exist, in which case medkb starts
+    # with tracing disabled. OTEL_ENDPOINT must NOT be set inline here — an
+    # `environment:` entry would override the env_file value.
+    env_file:
+      - path: services/medkb/.env.otel
+        required: false
     labels:
       - prometheus.scrape=true
       - prometheus.port=8015
@@ -352,10 +361,127 @@ services:
       - MEDKB_REDIS_URL=redis://dhg-medkb-cache:6379/0
     restart: unless-stopped
 
+  # Grafana image renderer — backs /render/d/<uid> PNG snapshots used by
+  # observability/scripts/verify-dashboard.sh. Renderer 3.x (>= 3.6.1) is the
+  # documented match for Grafana 10.2; 3.12.9 is the last 3.x release.
+  grafana-renderer:
+    image: grafana/grafana-image-renderer:3.12.9
+    container_name: dhg-grafana-renderer
+    networks:
+      - dhg-network
+    environment:
+      - ENABLE_METRICS=true
+    restart: unless-stopped
+
+  # Merge stanza only — the grafana service itself is defined in
+  # docker-compose.override.yml. Adds the renderer wiring.
+  grafana:
+    environment:
+      - GF_RENDERING_SERVER_URL=http://dhg-grafana-renderer:8081/render
+      - GF_RENDERING_CALLBACK_URL=http://dhg-grafana:3000/
+    depends_on:
+      - grafana-renderer
+
+  # GPU metrics (REBUILD-PLAN-2026-09 WP4, decision D-G). Wraps nvidia-smi
+  # rather than installing DCGM; `runtime: nvidia` matches the standing policy
+  # of runc as default with the nvidia runtime opted into per container.
+  # utility capability only — no CUDA/compute libs needed to read nvidia-smi.
+  gpu-exporter:
+    image: utkuozdemir/nvidia_gpu_exporter:1.4.0
+    container_name: dhg-gpu-exporter
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=utility
+    networks:
+      - dhg-network
+    restart: unless-stopped
+
+  # Multi-instance Postgres metrics (REBUILD-PLAN-2026-09 WP4). Separate from the
+  # existing `postgres-exporter` (registry-db, single-target DATA_SOURCE_NAME):
+  # postgres_exporter v0.15.0 serves /probe?target=<host:port/db>&auth_module=<name>,
+  # so one container covers the other six instances. Credentials live in the
+  # gitignored postgres_exporter.yml, rendered from Doppler by
+  # observability/postgres-exporter/render-postgres-exporter.sh.
+  #
+  # The six databases sit on five different compose networks (only dhg-medkb-db is
+  # on dhg-network, and portage-db publishes only to host loopback 127.2.0.1), so
+  # this container joins all of them and reaches each DB by container DNS on 5432.
+  postgres-exporter-multi:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: dhg-postgres-exporter-multi
+    # The image runs as nobody(65534); the rendered auth_modules file is mode 600
+    # owned by the repo user, so run as root to read it rather than widening the
+    # file permissions on a host-side file that contains DB passwords.
+    user: "0:0"
+    command:
+      - '--config.file=/etc/postgres_exporter/postgres_exporter.yml'
+    volumes:
+      - ./observability/postgres-exporter/postgres_exporter.yml:/etc/postgres_exporter/postgres_exporter.yml:ro
+    networks:
+      - dhg-network
+      - portage-network
+      - eval-network
+      - transcribe-network
+      - audio-network
+      - plane-network
+    restart: unless-stopped
+
+  # Merge stanza only — the prometheus service itself is defined in
+  # docker-compose.override.yml. Adds a host-gateway alias so the
+  # `cloudflared` scrape job can reach the two host systemd units'
+  # metrics servers on host.docker.internal:20241/20242.
+  prometheus:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # Merge stanza only — the tempo service itself is defined in
+  # docker-compose.override.yml. Tempo is RETIRED (AUDIT-2026-09 section 7,
+  # decision D-A): it never received a span, and OTLP now goes to Langfuse.
+  # The `retired` profile keeps the definition out of a plain `docker compose
+  # up -d` while leaving it recoverable via `--profile retired`.
+  tempo:
+    profiles: ["retired"]
+
+  # ── Merged into the override's definitions (Compose merges same-named
+  # services across files; lists append). Kept here because the override is
+  # the observability owner's file. ──────────────────────────────────────
+  registry-api:
+    volumes:
+      # Runbooks-as-code: registry/seed_runbooks.py loads these YAML files
+      # (POST /api/incidents/runbooks/seed); the table is a cache of them.
+      - ./observability/runbooks:/app/runbooks:ro
+
+  dhg-remediator:
+    # The image runs as uid 10001 (services/remediator/Dockerfile). The
+    # allowlisted `docker logs/inspect/ps/stats` diagnostics need the socket,
+    # so the host docker group (getent group docker -> 125 on g700data1) is
+    # added instead of running as root.
+    group_add:
+      - "125"
+
 networks:
   dhg-network:
     external: true
     name: dhgaifactory35_dhg-network
+  # Foreign compose-project networks, joined read-only by postgres-exporter-multi
+  # so it can reach each Postgres instance by container DNS. Nothing in this
+  # project publishes onto them.
+  portage-network:
+    external: true
+    name: portage_portage-network
+  eval-network:
+    external: true
+    name: dhg-research-eval-viewer_default
+  transcribe-network:
+    external: true
+    name: dhg-transcribe_default
+  audio-network:
+    external: true
+    name: dhg-audio-agent_audio-net
+  plane-network:
+    external: true
+    name: plane-app_default
 
 volumes:
   postgres-data:

@@ -1,0 +1,21 @@
+alert: GrafanaDown
+trigger_rule: T23
+severity: high
+mode: notify
+title: Grafana /api/health is failing
+description: Every dashboard is dark and this alert is the remaining signal that observability itself is broken.
+fixture:
+  container: dhg-grafana
+diagnostics:
+  - order: 1
+    description: Container state, exit code and restart count
+    command: docker inspect dhg-grafana --format '{{.State.Status}} exit={{.State.ExitCode}} restarts={{.RestartCount}} started={{.State.StartedAt}}'
+  - order: 2
+    description: Last 100 log lines (an invalid provisioning file is named on the first error)
+    command: docker logs --tail 100 dhg-grafana
+  - order: 3
+    description: Health endpoint from inside the network
+    command: curl -s -m 5 http://dhg-grafana:3000/api/health
+human_steps:
+  - Fix the provisioning file the log names (observability/grafana/provisioning), then `docker compose up -d grafana`.
+notes: ""

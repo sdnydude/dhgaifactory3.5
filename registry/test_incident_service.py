@@ -146,8 +146,9 @@ class TestCreateIncident:
         )
 
         assert result is existing
-        # Should add a dedup event to the existing incident
-        db.add.assert_called_once()
+        # Dedup updates the existing incident in place — no new rows. Writing a
+        # timeline event per re-fire is what grew incident_events to 678 MB.
+        db.add.assert_not_called()
 
     @patch("incident_service.find_duplicate", return_value=None)
     @patch("incident_service.capture_system_snapshot", return_value={})
@@ -353,3 +354,132 @@ class TestPostmortem:
 
         svc.create_or_update_postmortem(db, inc_id, summary="RCA complete")
         assert incident.status == "postmortem"
+
+
+# ── One definition of "active" (stats vs list agreement) ────────────────
+
+
+def _offline_session():
+    """A real SQLAlchemy Session bound to a never-connected engine.
+
+    Lets us compile a Query to SQL and assert on the predicates that were
+    actually applied, which a MagicMock chain cannot show.
+    """
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    return Session(bind=create_engine("postgresql://u:p@offline/db"))
+
+
+class TestBuildIncidentQuery:
+    """list_incidents and compute_stats must share one filter definition."""
+
+    def test_status_filter_carries_no_time_window(self):
+        sql = str(svc.build_incident_query(_offline_session(), status="active"))
+        assert "incidents.status =" in sql
+        assert "incidents.created_at >=" not in sql
+
+    def test_since_adds_the_time_window(self):
+        sql = str(svc.build_incident_query(
+            _offline_session(),
+            status="active",
+            since=datetime.now(timezone.utc),
+        ))
+        assert "incidents.created_at >=" in sql
+
+    def test_list_incidents_is_unwindowed_by_default(self):
+        db = MagicMock()
+        with patch.object(svc, "build_incident_query") as mock_build:
+            svc.list_incidents(db, status="active")
+        assert mock_build.call_args.kwargs["since"] is None
+
+
+class TestStatsListAgreement:
+    def test_by_status_counts_all_open_not_just_the_window(self):
+        """Regression: stats said 110 active while the table held 1,112.
+
+        `total` is a rate over the window; `by_status` is a point-in-time
+        count of what is open right now and must ignore `since`.
+        """
+        db = MagicMock()
+        windowed = [make_incident(status="active")]
+        every = [make_incident(status="active") for _ in range(3)]
+
+        def fake_build(_db, **kwargs):
+            q = MagicMock()
+            q.all.return_value = windowed if kwargs.get("since") else every
+            return q
+
+        with patch.object(svc, "build_incident_query", side_effect=fake_build):
+            stats = svc.compute_stats(db, since=datetime.now(timezone.utc))
+
+        assert stats["total"] == 1
+        assert stats["by_status"]["active"] == 3
+
+    def test_by_status_matches_a_full_list_walk(self):
+        """stats.by_status['active'] == len(list_incidents(status='active'))."""
+        db = MagicMock()
+        rows = [make_incident(status="active") for _ in range(7)]
+
+        def fake_build(_db, **kwargs):
+            q = MagicMock()
+            q.all.return_value = rows
+            q.order_by.return_value = q
+            q.offset.return_value = q
+            q.limit.return_value = q
+            return q
+
+        with patch.object(svc, "build_incident_query", side_effect=fake_build):
+            stats = svc.compute_stats(db, since=datetime.now(timezone.utc))
+            listed = svc.list_incidents(db, status="active", limit=1000)
+
+        assert stats["by_status"]["active"] == len(listed)
+
+
+# ── Fingerprint deduplication ───────────────────────────────────────────
+
+
+class TestFingerprintDedup:
+    def test_fingerprint_query_has_no_time_window(self):
+        """An alert re-firing against a long-open incident must still dedupe."""
+        q = svc.build_duplicate_query(_offline_session(), fingerprint="A|b|c")
+        sql = str(q)
+        assert "incidents.fingerprint =" in sql
+        assert "incidents.created_at >=" not in sql
+
+    def test_matches_open_incident_with_no_trigger_rule(self):
+        """MemregDLQBacklog has no trigger_rule; it still must not re-create."""
+        db = MagicMock()
+        old = make_incident(
+            trigger_rule=None,
+            created_at=datetime.now(timezone.utc) - timedelta(days=45),
+        )
+        mock_query_chain(db, [old])
+
+        result = svc.find_duplicate(
+            db,
+            trigger_rule=None,
+            affected_services=["memreg"],
+            fingerprint="MemregDLQBacklog|memreg|",
+        )
+        assert result is old
+
+    def test_dedup_bumps_last_seen_and_count_without_inserting(self):
+        db = MagicMock()
+        existing = make_incident()
+        existing.occurrence_count = 4
+        existing.last_seen_at = None
+
+        with patch.object(svc, "find_duplicate", return_value=existing):
+            result = svc.create_incident(
+                db,
+                title="Duplicate trigger",
+                severity="high",
+                category="infrastructure",
+                fingerprint="fp-1",
+            )
+
+        assert result is existing
+        assert existing.occurrence_count == 5
+        assert existing.last_seen_at is not None
+        db.add.assert_not_called()

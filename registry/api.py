@@ -19,6 +19,8 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from prometheus_client import generate_latest
+from prometheus_fastapi_instrumentator import Instrumentator
+from prometheus_fastapi_instrumentator import metrics as http_metrics
 
 from database import engine, SessionLocal, get_db
 from models import Media, Transcript, Segment, Event
@@ -278,6 +280,29 @@ app.add_middleware(
 )
 
 
+# ============================================================================
+# HTTP RED metrics (rate / errors / duration)
+# ============================================================================
+# Buckets span the latency range actually observed for registry requests:
+# 5 ms (cached reads) up to 5 s (pgvector KB search, CME aggregation), with
+# extra resolution across the 50 ms - 2.5 s band where the DB-bound routes sit.
+HTTP_LATENCY_BUCKETS = (
+    0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, float("inf"),
+)
+
+# Added last, so this middleware is outermost and observes every request,
+# including those short-circuited by WriteAuthMiddleware. `handler` is always
+# the route template ("/api/v1/agents/{service_id}"), never the raw path, so
+# ids and slugs cannot inflate label cardinality; unmatched paths collapse to
+# handler="none". /metrics and /healthz are excluded as pure scrape traffic.
+Instrumentator(
+    should_group_status_codes=False,
+    excluded_handlers=["/metrics", "/healthz"],
+).add(
+    http_metrics.requests(),
+    http_metrics.latency(buckets=HTTP_LATENCY_BUCKETS),
+).instrument(app)
+
 
 # ============================================================================
 # Health & Metrics Endpoints
@@ -321,25 +346,62 @@ class AlertmanagerPayload(BaseModel):
     alerts: List[AlertmanagerAlert]
 
 
-# Map Prometheus alertname → incident trigger rule + category
+# Map alertname (Prometheus and Loki ruler rules) → incident trigger rule + category.
+#
+# Contract, enforced by test_alert_trigger_map.py against the rule files:
+#   - every key is a live alertname in observability/prometheus/alerts.yml,
+#     observability/prometheus/rules.d/*.yml or observability/loki/rules/fake/alerts.yml;
+#   - every critical|high alertname is listed, so the decision "automated
+#     diagnostics or human-only" is explicit for every alert that can open an
+#     incident;
+#   - "trigger": "T<n>" means observability/runbooks/<alertname>.yml exists
+#     (seeded into incident_runbooks); the remediator runs its read-only
+#     diagnostics and records them on the incident;
+#   - "trigger": None, "human_only": True means the incident is created with
+#     no runbook, so the remediator never touches it.
+#
+# Severity gate (kept on purpose): alertmanager_webhook creates incidents only
+# for severity critical|high. A warning alert never becomes an incident even
+# when listed here — the warning entries document the runbook that would
+# apply if the severity were raised, nothing more.
 ALERT_TRIGGER_MAP: dict = {
-    "ContainerCrashLoop": {"trigger": "T2", "category": "infrastructure"},
+    # ── automated diagnostics (observability/runbooks/<alertname>.yml) ──
     "HostMemoryHigh": {"trigger": "T3", "category": "infrastructure"},
     "HostSwapHigh": {"trigger": "T4", "category": "infrastructure"},
     "RootDiskHigh": {"trigger": "T5", "category": "infrastructure"},
-    "DataDiskHigh": {"trigger": "T6", "category": "infrastructure"},
-    "RegistryApiDown": {"trigger": "T8", "category": "infrastructure"},
+    "DataDiskHigh": {"trigger": "T6", "category": "infrastructure"},          # warning: never an incident
     "PrometheusTargetDown": {"trigger": "T8", "category": "infrastructure"},
     "PostgresConnectionsHigh": {"trigger": "T9", "category": "data"},
-    "ZombieProcessesHigh": {"trigger": "T12", "category": "infrastructure"},
     "ContainerMemoryLeak": {"trigger": "T13", "category": "infrastructure"},
-    "ContainerHighCPU": {"trigger": "T1", "category": "infrastructure"},
-    "ContainerHighMemory": {"trigger": "T13", "category": "infrastructure"},
-    # P5 log program (2026-08-25)
-    "SecretLeakDetected": {"trigger": "T14", "category": "security"},
     "LokiStoreGrowth": {"trigger": "T15", "category": "infrastructure"},
     "AlloyDown": {"trigger": "T16", "category": "infrastructure"},
     "LokiDown": {"trigger": "T17", "category": "infrastructure"},
+    "OllamaDown": {"trigger": "T18", "category": "infrastructure"},
+    "PortageApiDown": {"trigger": "T19", "category": "infrastructure"},
+    "AlertmanagerDown": {"trigger": "T20", "category": "infrastructure"},
+    "FrontendDown": {"trigger": "T21", "category": "infrastructure"},
+    "OpenWebUIDown": {"trigger": "T22", "category": "infrastructure"},
+    "GrafanaDown": {"trigger": "T23", "category": "infrastructure"},
+    "ContainerHighMemory": {"trigger": "T24", "category": "infrastructure"},  # warning: never an incident
+    # ── human-only (incident created, no runbook, remediator never acts) ──
+    "ContainerCrashLoop": {"trigger": None, "category": "infrastructure", "human_only": True},
+    "RegistryApiDown": {"trigger": None, "category": "infrastructure", "human_only": True},
+    "PrometheusRuleEvalFailures": {"trigger": None, "category": "infrastructure", "human_only": True},
+    "PrometheusNotificationsDropped": {"trigger": None, "category": "infrastructure", "human_only": True},
+    "AlertmanagerNotificationsFailing": {"trigger": None, "category": "infrastructure", "human_only": True},
+    "PortageHighErrorRate": {"trigger": None, "category": "performance", "human_only": True},
+    "RegistryHighErrorRate": {"trigger": None, "category": "performance", "human_only": True},
+    "MemregDLQBacklog": {"trigger": None, "category": "pipeline", "human_only": True},
+    "PostgresDown": {"trigger": None, "category": "data", "human_only": True},
+    "PostgresFatalError": {"trigger": None, "category": "data", "human_only": True},
+    "GpuTempHigh": {"trigger": None, "category": "infrastructure", "human_only": True},
+    "Dh40801Down": {"trigger": None, "category": "infrastructure", "human_only": True},
+    "Dh40801DiskHigh": {"trigger": None, "category": "infrastructure", "human_only": True},
+    "LangfuseUnhealthy": {"trigger": None, "category": "integration", "human_only": True},
+    "LangfuseCanaryStale": {"trigger": None, "category": "integration", "human_only": True},
+    "LangfuseContainerRestart": {"trigger": None, "category": "integration", "human_only": True},
+    # A leaked secret is rotated by a person; no diagnostic may read the line.
+    "SecretLeakDetected": {"trigger": None, "category": "security", "human_only": True},
 }
 
 
@@ -352,6 +414,7 @@ async def alertmanager_webhook(
     logger.info(f"Alertmanager webhook: status={payload.status}, alerts={len(payload.alerts)}")
 
     created = 0
+    deduped = 0
     skipped = 0
 
     for alert in payload.alerts:
@@ -376,22 +439,52 @@ async def alertmanager_webhook(
         trigger_rule = mapping.get("trigger")
         category = mapping.get("category", "infrastructure")
 
+        # Stable identity of the condition, independent of trigger_rule (which
+        # is None for any alertname missing from ALERT_TRIGGER_MAP). While the
+        # matching incident stays open, re-fires bump its counter instead of
+        # inserting a new row.
+        instance = alert.labels.get("instance", "")
+        fingerprint = f"{alertname}|{service}|{instance}"
+
+        # Label values the remediator resolves runbook placeholders from
+        # ({container} {instance} {job} {service}); cAdvisor's `name` is the
+        # container name.
+        tags = [
+            f"{key}:{value}"
+            for key, label in (
+                ("container", "name"), ("instance", "instance"),
+                ("job", "job"), ("service", "service"),
+            )
+            if (value := alert.labels.get(label))
+        ]
+
         try:
             from incident_service import create_incident as create_inc
-            create_inc(
+            incident = create_inc(
                 db,
                 title=f"[{alertname}] {summary}",
                 severity=severity,
                 category=category,
                 trigger_rule=trigger_rule,
                 affected_services=[service],
+                tags=tags,
                 created_by="alertmanager",
+                fingerprint=fingerprint,
             )
-            created += 1
+            if (getattr(incident, "occurrence_count", 1) or 1) > 1:
+                deduped += 1
+            else:
+                created += 1
         except Exception as exc:
             logger.error(f"Failed to create incident for alert {alertname}: {exc}")
 
-    return {"status": "received", "alerts_processed": len(payload.alerts), "incidents_created": created, "skipped": skipped}
+    return {
+        "status": "received",
+        "alerts_processed": len(payload.alerts),
+        "incidents_created": created,
+        "incidents_deduped": deduped,
+        "skipped": skipped,
+    }
 
 
 # ============================================================================

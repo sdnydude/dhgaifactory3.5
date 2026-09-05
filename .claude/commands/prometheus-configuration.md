@@ -14,14 +14,14 @@ Where `$ARGUMENTS` describes the specific task, for example:
 
 ## Capabilities
 
-**What this command does:** Edits, validates, and reloads `prometheus.yml` and `alerts.yml` for the DHG AI Factory Prometheus instance, covering the five established scrape targets, recording rules, and SLO alert thresholds.
+**What this command does:** Edits, validates, and reloads `prometheus.yml`, `alerts.yml` and `rules.d/*.yml` for the DHG AI Factory Prometheus instance, covering the scrape jobs defined in `prometheus.yml`, recording rules, and SLO alert thresholds.
 
 **Use it when you need to:**
 - Add a new scrape target for a service on `dhgaifactory35_dhg-network` and verify it goes UP
 - Write recording rules for HTTP request rate, error rate, or P95 latency to speed up Grafana panels
 - Add or tune an alert rule with correct PromQL, `for` duration, severity, and runbook annotation
 - Diagnose why cAdvisor, node-exporter, or postgres-exporter shows DOWN in the Prometheus targets UI
-- Validate config with `promtool check` and hot-reload via the `/-/reload` HTTP endpoint
+- Validate config with `promtool check`, then `docker compose restart prometheus` (this build has no `--web.enable-lifecycle`, so `/-/reload` returns 403)
 
 **Example invocations:**
 - `/project:prometheus-configuration add scrape target for the new dhg-langgraph-api on port 8080`
@@ -34,19 +34,23 @@ Where `$ARGUMENTS` describes the specific task, for example:
 
 **Config file:** `/home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/observability/prometheus/prometheus.yml`
 **Alert rules file:** `/home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/observability/prometheus/alerts.yml`
-**Prometheus UI:** `http://localhost:9090`
+**Prometheus UI:** `http://10.0.0.251:9090`
 **Docker network:** `dhgaifactory35_dhg-network`
 **Container name prefix:** `dhg-`
 
-### Five Scrape Targets
+### Scrape Targets
 
-| Job | Container / Address | Port | Interval |
-|-----|---------------------|------|----------|
-| `prometheus` | `localhost` | 9090 | 15s (global) |
-| `registry-api` | `registry-api` | 8000 | 10s |
-| `postgres` | `postgres-exporter` | 9187 | 30s |
-| `node-exporter` | `172.18.0.1` (host network gateway) | 9100 | 15s |
-| `cadvisor` | `cadvisor` | 8080 | 15s |
+**See `observability/prometheus/prometheus.yml` for the current list — it is the
+only authority; do not maintain a copy here.** Static jobs are canonical
+(AUDIT-2026-09 P1 / decision D-B): `registry-api`, `vs-engine`, `session-logger`
+and `memreg` are drop-relabelled out of the `docker-sd` job so each is scraped
+exactly once with a stable instance label. `file_sd` jobs read
+`observability/prometheus/targets/*.json` and pick up target changes without a
+restart. Live check:
+
+```bash
+curl -s http://10.0.0.251:9090/api/v1/targets | python3 -m json.tool
+```
 
 Note: `node-exporter` runs on the host network, not inside `dhgaifactory35_dhg-network`. It is reached via the Docker bridge gateway IP `172.18.0.1`. Do not change this to a container hostname.
 
@@ -81,12 +85,14 @@ global:
 
 rule_files:
   - 'alerts.yml'
+  - 'rules.d/*.yml'   # per-host / per-WP rule files, added without editing this file
 
 scrape_configs:
   # Prometheus self-monitoring
   - job_name: 'prometheus'
     static_configs:
-      - targets: ['localhost:9090']
+      # Self-scrape over loopback INSIDE the prometheus container.
+      - targets: ['127.0.0.1:9090']
         labels:
           service: 'prometheus'
 
@@ -291,24 +297,22 @@ Checking /etc/prometheus/prometheus.yml
 
 ## Step 7: Reload Prometheus
 
-Prometheus supports hot-reload via SIGHUP or the reload endpoint. Use the HTTP endpoint — it is safer:
+This build does **not** run with `--web.enable-lifecycle`, so
+`POST /-/reload` returns 403. Restart the container instead:
 
 ```bash
-curl -X POST http://localhost:9090/-/reload
-```
-
-Verify the reload succeeded:
-
-```bash
-curl -s http://localhost:9090/api/v1/status/config | python3 -m json.tool | head -30
-```
-
-If the container needs a full restart:
-
-```bash
-docker restart dhg-prometheus
+docker compose restart prometheus
 docker logs dhg-prometheus --tail 20
 ```
+
+Verify the new config is live:
+
+```bash
+curl -s http://10.0.0.251:9090/api/v1/status/config | python3 -m json.tool | head -30
+```
+
+`file_sd` target files (`observability/prometheus/targets/*.json`) and Loki ruler
+rule files are polled and need no reload at all.
 
 ---
 
@@ -317,7 +321,7 @@ docker logs dhg-prometheus --tail 20
 Check the Prometheus targets API immediately after reload:
 
 ```bash
-curl -s http://localhost:9090/api/v1/targets | python3 -m json.tool
+curl -s http://10.0.0.251:9090/api/v1/targets | python3 -m json.tool
 ```
 
 All five targets should show `"health": "up"`. A target in `"health": "down"` means Prometheus cannot reach it.
@@ -325,7 +329,7 @@ All five targets should show `"health": "up"`. A target in `"health": "down"` me
 Simplified check showing only health status per job:
 
 ```bash
-curl -s 'http://localhost:9090/api/v1/targets' \
+curl -s 'http://10.0.0.251:9090/api/v1/targets' \
   | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
@@ -337,7 +341,7 @@ for t in data['data']['activeTargets']:
 Instant query to confirm all five jobs are up:
 
 ```bash
-curl -s 'http://localhost:9090/api/v1/query?query=up' | python3 -m json.tool
+curl -s 'http://10.0.0.251:9090/api/v1/query?query=up' | python3 -m json.tool
 ```
 
 ---
@@ -392,14 +396,14 @@ YAML errors in `prometheus.yml` or `alerts.yml` will appear here. Prometheus wil
 ### Checking scrape configuration in effect
 
 ```bash
-curl http://localhost:9090/api/v1/status/config
+curl http://10.0.0.251:9090/api/v1/status/config
 ```
 
 ### Testing a PromQL query
 
 ```bash
-curl -G 'http://localhost:9090/api/v1/query' --data-urlencode 'query=up'
-curl -G 'http://localhost:9090/api/v1/query' --data-urlencode 'query=rate(http_requests_total[5m])'
+curl -G 'http://10.0.0.251:9090/api/v1/query' --data-urlencode 'query=up'
+curl -G 'http://10.0.0.251:9090/api/v1/query' --data-urlencode 'query=rate(http_requests_total[5m])'
 ```
 
 ---
@@ -456,7 +460,7 @@ Then add the corresponding scrape job to `prometheus.yml` using the service name
 3. Set per-job `scrape_interval` only when it differs from the 15s global — do not repeat the global default
 4. Use recording rules for any PromQL expression queried in more than one Grafana panel
 5. Alert `for:` duration must be at least 1 minute — do not fire on transient single-scrape failures
-6. Validate with `promtool` and reload via HTTP before declaring the work done
+6. Validate with `promtool` and `docker compose restart prometheus` before declaring the work done
 7. All container names use `dhg-` prefix; Docker service names (used as hostnames) do not
 8. Never use port 8500 for the registry API — use port 8000
 
@@ -467,6 +471,6 @@ Then add the corresponding scrape job to `prometheus.yml` using the service name
 A Prometheus configuration change is complete when:
 - `promtool check config` returns SUCCESS with no warnings
 - `promtool check rules` returns SUCCESS for all rule files
-- `curl http://localhost:9090/-/reload` returns 200
-- `curl http://localhost:9090/api/v1/targets` shows all intended targets with `"health": "up"`
+- `docker compose restart prometheus` completes and `curl -s http://10.0.0.251:9090/api/v1/rules` reports every rule `health: ok`
+- `curl http://10.0.0.251:9090/api/v1/targets` shows all intended targets with `"health": "up"`
 - No error lines appear in `docker logs dhg-prometheus --since 60s`

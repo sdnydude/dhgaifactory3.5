@@ -1,0 +1,2 @@
+# Log panels where "no rows" is the healthy state.
+41  # PostgreSQL Errors — registry-db error/fatal log lines

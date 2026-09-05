@@ -1,0 +1,92 @@
+# dh40801 (10.0.0.179) observability agent — node-exporter, cAdvisor, Alloy.
+#
+# Scraped by the g700data1 Prometheus over the LAN via the file_sd jobs
+# `node-exporter-dh40801` and `cadvisor-dh40801`
+# (observability/prometheus/targets/dh40801-*.json). Alloy ships this host's
+# container logs to the g700data1 Loki with the external label host="dh40801".
+#
+# DEPLOY (from the repo root, per the standing decision to use the remote
+# Docker context and never Ansible):
+#
+#   ALLOY_CONFIG="$(cat dh40801/alloy/config.alloy)" \
+#     docker --context dh40801 compose \
+#       -f dh40801/docker-compose.observability.yml up -d
+#
+# Why the env var: with a remote context a `configs: file:` entry (and any bind
+# mount) resolves on the REMOTE host, so the repo path does not exist there.
+# `configs: content:` is uploaded by Compose, so the config travels with the
+# command and nothing has to be copied to 10.0.0.179 by hand. The content is
+# interpolated from ALLOY_CONFIG so dh40801/alloy/config.alloy stays the single
+# source of truth. Compose interpolates `$` in the content, so that file must
+# contain none; after every deploy verify the delivered config matches (the
+# only expected difference is the trailing newline, which `$(cat ...)` strips):
+#
+#   diff <(docker --context dh40801 exec dhg-alloy cat /etc/alloy/config.alloy) \
+#        dh40801/alloy/config.alloy
+#
+name: dhg-observability
+
+configs:
+  alloy_config:
+    content: "${ALLOY_CONFIG:?export ALLOY_CONFIG from dh40801/alloy/config.alloy first - see header}"
+
+services:
+  # Host metrics. Version pinned to match g700data1 so both hosts expose the
+  # same metric set to the same dashboards and rules.
+  node-exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: dhg-node-exporter
+    command:
+      - '--path.rootfs=/host'
+      - '--collector.textfile.directory=/host/var/lib/node_exporter/textfile'
+      - '--no-collector.thermal_zone'
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    ports:
+      - "10.0.0.179:9100:9100"
+    restart: unless-stopped
+
+  # Per-container metrics for the Langfuse stack (CPU, memory, restarts).
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.51.0
+    container_name: dhg-cadvisor
+    command:
+      - '--docker_only=true'
+      - '--housekeeping_interval=30s'
+      - '--store_container_labels=false'
+      - '--disable_metrics=percpu,perf_event,referenced_memory,tcp,udp,sched,process,hugetlb'
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    ports:
+      - "10.0.0.179:8080:8080"
+    restart: unless-stopped
+
+  # Container logs -> g700data1 Loki. Runs as root for docker.sock access,
+  # matching the g700data1 Alloy.
+  alloy:
+    image: grafana/alloy:v1.19.0
+    container_name: dhg-alloy
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    user: root
+    configs:
+      - source: alloy_config
+        target: /etc/alloy/config.alloy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - alloy_data:/var/lib/alloy
+    restart: unless-stopped
+
+volumes:
+  alloy_data:

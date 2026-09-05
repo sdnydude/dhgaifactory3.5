@@ -1,0 +1,55 @@
+# Shape of the generated postgres_exporter.yml (postgres_exporter v0.15.0
+# multi-target mode). The real file holds plaintext credentials, is gitignored,
+# and is produced by ./render-postgres-exporter.sh from Doppler dhg-monitoring/dev
+# secrets PG_DSN_MEDKB, PG_DSN_PORTAGE, PG_DSN_EVAL, PG_DSN_TRANSCRIBE,
+# PG_DSN_AUDIO, PG_DSN_PLANE.
+#
+# v0.15.0 has no env-var interpolation in this file, so it cannot be committed
+# with ${VAR} references — hence the render script.
+#
+# Each key under auth_modules is the value of the auth_module query parameter in
+# the prometheus.yml `postgres-multi` job; the target host/port/db comes from the
+# job's static targets, which carry no credentials.
+auth_modules:
+  medkb:
+    type: userpass
+    userpass:
+      username: REPLACED_BY_RENDER_SCRIPT
+      password: REPLACED_BY_RENDER_SCRIPT
+    options:
+      sslmode: disable
+  portage:
+    type: userpass
+    userpass:
+      username: REPLACED_BY_RENDER_SCRIPT
+      password: REPLACED_BY_RENDER_SCRIPT
+    options:
+      sslmode: disable
+  eval:
+    type: userpass
+    userpass:
+      username: REPLACED_BY_RENDER_SCRIPT
+      password: REPLACED_BY_RENDER_SCRIPT
+    options:
+      sslmode: disable
+  transcribe:
+    type: userpass
+    userpass:
+      username: REPLACED_BY_RENDER_SCRIPT
+      password: REPLACED_BY_RENDER_SCRIPT
+    options:
+      sslmode: disable
+  audio:
+    type: userpass
+    userpass:
+      username: REPLACED_BY_RENDER_SCRIPT
+      password: REPLACED_BY_RENDER_SCRIPT
+    options:
+      sslmode: disable
+  plane:
+    type: userpass
+    userpass:
+      username: REPLACED_BY_RENDER_SCRIPT
+      password: REPLACED_BY_RENDER_SCRIPT
+    options:
+      sslmode: disable

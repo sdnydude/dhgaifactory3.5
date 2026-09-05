@@ -1,0 +1,22 @@
+alert: ContainerMemoryLeak
+trigger_rule: T13
+severity: high
+mode: notify
+title: Container memory > 16GB with no limit
+description: An unbounded container is holding more than 16 GB on a 64 GB host. Either it leaks or it needs a mem_limit so its failure is contained.
+fixture:
+  container: dhg-ollama
+diagnostics:
+  - order: 1
+    description: Live memory usage of the container
+    command: docker stats --no-stream --format '{{.Name}} {{.MemUsage}} {{.MemPerc}}' {container}
+  - order: 2
+    description: Configured memory limit (0 means none)
+    command: docker inspect {container} --format 'limit={{.HostConfig.Memory}} restarts={{.RestartCount}} started={{.State.StartedAt}}'
+  - order: 3
+    description: Usage over the last 24h (flat = loaded once, rising = leak)
+    command: curl -sG http://dhg-prometheus:9090/api/v1/query --data-urlencode 'query=container_memory_usage_bytes{name="{container}"} - container_memory_usage_bytes{name="{container}"} offset 24h'
+human_steps:
+  - Ollama holding several resident models is usually legitimate; unload idle ones with keep_alive 0 rather than restarting mid-inference.
+  - For a genuine leak add a mem_limit in docker-compose.yml so it is OOM-killed in isolation, then fix the consumer.
+notes: ""

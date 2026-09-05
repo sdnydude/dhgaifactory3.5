@@ -1,0 +1,22 @@
+alert: AlertmanagerDown
+trigger_rule: T20
+severity: critical
+mode: notify
+title: Alertmanager is down
+description: Prometheus still evaluates rules but nothing reaches Telegram or the registry webhook until dhg-alertmanager is back.
+fixture:
+  container: dhg-alertmanager
+diagnostics:
+  - order: 1
+    description: Container state, exit code and restart count
+    command: docker inspect dhg-alertmanager --format '{{.State.Status}} exit={{.State.ExitCode}} restarts={{.RestartCount}} started={{.State.StartedAt}}'
+  - order: 2
+    description: Last 100 log lines (an invalid rendered config is named on the first error line)
+    command: docker logs --tail 100 dhg-alertmanager
+  - order: 3
+    description: Health endpoint from inside the network
+    command: curl -s -m 5 http://dhg-alertmanager:9093/-/healthy
+human_steps:
+  - Validate before restarting - `docker run --rm -v "$PWD/observability/alertmanager:/a" --entrypoint amtool prom/alertmanager:v0.27.0 check-config /a/alertmanager.yml`.
+  - Re-render from the template with observability/scripts/render-alertmanager.sh if the rendered file is bad, then `docker compose up -d alertmanager`.
+notes: While this fires, every other alert is silently undelivered; this incident is only visible because the registry polls the rule state.

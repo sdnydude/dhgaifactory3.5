@@ -1,0 +1,22 @@
+alert: LokiDown
+trigger_rule: T17
+severity: critical
+mode: notify
+title: Loki is down
+description: The log store is unreachable. Ingestion buffers in Alloy and the Docker json-file driver while it is down.
+fixture:
+  container: dhg-loki
+diagnostics:
+  - order: 1
+    description: Container state, exit code and restart count
+    command: docker inspect dhg-loki --format '{{.State.Status}} exit={{.State.ExitCode}} restarts={{.RestartCount}} started={{.State.StartedAt}}'
+  - order: 2
+    description: Last 200 log lines
+    command: docker logs --tail 200 dhg-loki
+  - order: 3
+    description: Readiness endpoint from inside the network
+    command: curl -s -m 5 http://dhg-loki:3100/ready
+human_steps:
+  - A bad loki-config.yml after an edit is the usual cause; the first log error names the field.
+  - Check the store path on /mnt/4tb is mounted and writable before restarting.
+notes: The 3.x image has no shell, so this alert is the liveness probe.

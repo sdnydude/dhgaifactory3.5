@@ -30,6 +30,43 @@ logger = logging.getLogger("incident_service")
 DEDUP_WINDOW_MINUTES = 15
 CASCADE_WINDOW_MINUTES = 5
 
+# An incident in one of these statuses is "open". This is the single
+# definition shared by the list endpoint, the stats endpoint, and dedup.
+OPEN_STATUSES = ("active", "mitigated")
+
+
+# ── Shared query builder ─────────────────────────────────────────────────
+
+def build_incident_query(
+    db: Session,
+    *,
+    status: str | None = None,
+    severity: str | None = None,
+    category: str | None = None,
+    service: str | None = None,
+    since: datetime | None = None,
+):
+    """The one place incident filters are defined.
+
+    `since` is optional and windows on created_at. Status is a point-in-time
+    property, so callers asking "what is open right now" must pass since=None;
+    only rate-style aggregates (how many incidents happened in the last N
+    days) window. Stats and list disagreeing on this is what made the API
+    report 110 active while the table held 1,112.
+    """
+    query = db.query(Incident)
+    if status:
+        query = query.filter(Incident.status == status)
+    if severity:
+        query = query.filter(Incident.severity == severity)
+    if category:
+        query = query.filter(Incident.category == category)
+    if service:
+        query = query.filter(Incident.affected_services.any(service))
+    if since:
+        query = query.filter(Incident.created_at >= since)
+    return query
+
 
 # ── System snapshot ──────────────────────────────────────────────────────
 
@@ -111,12 +148,36 @@ def enrich_snapshot_with_db(snapshot: dict[str, Any], db: Session) -> None:
 
 # ── Deduplication ────────────────────────────────────────────────────────
 
+def build_duplicate_query(db: Session, *, fingerprint: str):
+    """Open incidents carrying this fingerprint, with no time window.
+
+    A condition that has been alerting for three days is still the same
+    incident, so matching must not expire after DEDUP_WINDOW_MINUTES.
+    """
+    return db.query(Incident).filter(
+        Incident.fingerprint == fingerprint,
+        Incident.status.in_(OPEN_STATUSES),
+    )
+
+
 def find_duplicate(
     db: Session,
     trigger_rule: str | None,
     affected_services: list[str],
+    fingerprint: str | None = None,
 ) -> Incident | None:
-    """Check for an open incident with the same trigger+service within the dedup window."""
+    """Find the open incident this signal already belongs to.
+
+    Preferred match is the fingerprint (alertname|service|instance), which is
+    stable for as long as the condition persists. Callers without a
+    fingerprint (manual creates, older clients) fall back to the original
+    trigger+service match inside the dedup window.
+    """
+    if fingerprint:
+        existing = build_duplicate_query(db, fingerprint=fingerprint).first()
+        if existing:
+            return existing
+
     if not trigger_rule:
         return None
 
@@ -126,7 +187,7 @@ def find_duplicate(
         db.query(Incident)
         .filter(
             Incident.trigger_rule == trigger_rule,
-            Incident.status.in_(["active", "mitigated"]),
+            Incident.status.in_(OPEN_STATUSES),
             Incident.created_at >= cutoff,
         )
     )
@@ -185,6 +246,7 @@ def create_incident(
     impact_summary: str | None = None,
     started_at: datetime | None = None,
     created_by: str | None = None,
+    fingerprint: str | None = None,
     auto_snapshot: bool = True,
     auto_cascade: bool = True,
 ) -> Incident:
@@ -193,16 +255,13 @@ def create_incident(
     services = affected_services or []
 
     # Deduplication check
-    dup = find_duplicate(db, trigger_rule, services)
+    dup = find_duplicate(db, trigger_rule, services, fingerprint=fingerprint)
     if dup:
-        # Add an event to the existing incident instead of creating a new one
-        event = IncidentEvent(
-            incident_id=dup.id,
-            event_type="symptom",
-            source="dedup",
-            description=f"Duplicate trigger fired: {title}",
-        )
-        db.add(event)
+        # Update the existing incident in place. Writing a timeline event per
+        # re-fire is what grew incident_events to 678 MB; the occurrence
+        # counter carries the same information in one row.
+        dup.occurrence_count = (dup.occurrence_count or 1) + 1
+        dup.last_seen_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(dup)
         return dup
@@ -226,6 +285,8 @@ def create_incident(
         impact_summary=impact_summary,
         started_at=started_at,
         created_by=created_by,
+        fingerprint=fingerprint,
+        last_seen_at=datetime.now(timezone.utc),
     )
     db.add(incident)
     db.flush()  # get incident.id before cascade check
@@ -266,18 +327,14 @@ def list_incidents(
     severity: str | None = None,
     category: str | None = None,
     service: str | None = None,
+    since: datetime | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> list[Incident]:
-    query = db.query(Incident).order_by(Incident.created_at.desc())
-    if status:
-        query = query.filter(Incident.status == status)
-    if severity:
-        query = query.filter(Incident.severity == severity)
-    if category:
-        query = query.filter(Incident.category == category)
-    if service:
-        query = query.filter(Incident.affected_services.any(service))
+    query = build_incident_query(
+        db, status=status, severity=severity,
+        category=category, service=service, since=since,
+    ).order_by(Incident.created_at.desc())
     return query.offset(offset).limit(limit).all()
 
 
@@ -458,19 +515,18 @@ def compute_stats(
     category: str | None = None,
     service: str | None = None,
 ) -> dict[str, Any]:
-    """Compute aggregate incident stats including SLA metrics."""
+    """Compute aggregate incident stats including SLA metrics.
 
-    query = db.query(Incident)
-    if since:
-        query = query.filter(Incident.created_at >= since)
-    if severity:
-        query = query.filter(Incident.severity == severity)
-    if category:
-        query = query.filter(Incident.category == category)
-    if service:
-        query = query.filter(Incident.affected_services.any(service))
+    `total`, `by_severity`, `by_category`, the SLA averages and `top_triggers`
+    describe incidents *created* in the `since` window. `by_status` is a
+    point-in-time count of what is open right now and is deliberately
+    unwindowed, so it agrees with GET /api/incidents?status=... walked to the
+    end.
+    """
 
-    incidents = query.all()
+    incidents = build_incident_query(
+        db, severity=severity, category=category, service=service, since=since,
+    ).all()
     total = len(incidents)
 
     by_severity: dict[str, int] = {}
@@ -480,9 +536,15 @@ def compute_stats(
     ttm_values: list[float] = []
     ttr_values: list[float] = []
 
+    # Status counts come from the same filters minus the time window, so the
+    # "Active" card and the incident list cannot disagree.
+    for inc in build_incident_query(
+        db, severity=severity, category=category, service=service, since=None,
+    ).all():
+        by_status[inc.status] = by_status.get(inc.status, 0) + 1
+
     for inc in incidents:
         by_severity[inc.severity] = by_severity.get(inc.severity, 0) + 1
-        by_status[inc.status] = by_status.get(inc.status, 0) + 1
         by_category[inc.category] = by_category.get(inc.category, 0) + 1
 
         # TTD: started_at → detected_at

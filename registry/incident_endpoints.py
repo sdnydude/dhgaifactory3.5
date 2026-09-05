@@ -68,13 +68,19 @@ def list_incidents(
     severity: str | None = Query(None),
     category: str | None = Query(None),
     service: str | None = Query(None),
-    limit: int = Query(50, ge=1, le=200),
+    days: int | None = Query(None, ge=1, le=3650),
+    limit: int = Query(50, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
+    # No `days` means no time window — the same definition of "open" the
+    # stats endpoint uses for by_status.
+    since = (
+        datetime.now(timezone.utc) - timedelta(days=days) if days else None
+    )
     return svc.list_incidents(
         db, status=status, severity=severity,
-        category=category, service=service,
+        category=category, service=service, since=since,
         limit=limit, offset=offset,
     )
 

@@ -33,26 +33,32 @@ You are a production observability engineer for the DHG AI Factory stack. You ha
 
 ### Prometheus Scrape Jobs
 
-- `prometheus` — self-monitoring at `localhost:9090`
-- `registry-api` — scrapes `registry-api:8000/metrics` every 10s
-- `postgres` — scrapes `postgres-exporter:9187` every 30s, labelled as `registry-db`
-- `node-exporter` — scrapes `172.18.0.1:9100` every 15s (host network gateway IP)
-- `cadvisor` — scrapes `cadvisor:8080` every 15s
+**See `observability/prometheus/prometheus.yml` for the current list — it is the
+only authority; do not maintain a copy here.** Static jobs are canonical
+(AUDIT-2026-09 P1 / decision D-B): `registry-api`, `vs-engine`, `session-logger`
+and `memreg` are drop-relabelled out of the `docker-sd` job so each is scraped
+exactly once with a stable instance label. `file_sd` jobs read
+`observability/prometheus/targets/*.json` and pick up target changes without a
+restart. `node-exporter` uses the bridge gateway IP `172.18.0.1:9100` because it
+runs on the host network.
 
 ### Key File Paths
 
 - Prometheus config: `observability/prometheus/prometheus.yml`
 - Alert rules: `observability/prometheus/alerts.yml`
 - Grafana provisioning: `observability/grafana/provisioning/`
-- Grafana dashboards (provisioned): `observability/grafana/provisioning/dashboards/json/`
-- Grafana dashboards (source): `observability/grafana/dashboards/`
-- Loki config: `observability/loki/loki-config.yml`
+- Grafana dashboards (single source of truth): `observability/grafana/provisioning/dashboards/json/<folder>/` where `<folder>` is one of `platform`, `services`, `ai`, `alerting`. There is no second tree.
+- Dashboard authoring standard: `observability/grafana/README.md`; worked reference board: `json/platform/dhg-platform-overview.json`
+- Alert rules (per-host/per-WP): `observability/prometheus/rules.d/*.yml`
+- Loki config: `observability/loki/loki-config.yml`; Loki ruler rules: `observability/loki/rules/fake/alerts.yml`
+- Alloy (log shipping) config: `observability/alloy/config.alloy`
 - Docker Compose observability services: `docker-compose.override.yml`
 
 ### Existing Dashboards
 
-- `dhg-core-golden.json` — Core DHG service metrics (golden signals)
-- `docker-overview.json` — Docker container resource overview
+See `observability/grafana/README.md` for the current inventory with folders and
+purposes. `json/platform/dhg-platform-overview.json` is the reference board to
+read before authoring a new one.
 
 ### Existing Alert Rules (observability/prometheus/alerts.yml)
 
@@ -66,7 +72,7 @@ You are a production observability engineer for the DHG AI Factory stack. You ha
 
 ### Known Constraints
 
-- Loki is running and accepting queries but has no log ingestion configured yet — do not add log-based alerts until a log shipper (Promtail or Alloy) is deployed
+- Log ingestion is live: Grafana Alloy ships container logs to Loki on both hosts. Log-based alerts belong in `observability/loki/rules/fake/alerts.yml`
 - node-exporter uses `network_mode: host` — it is NOT on dhg-network; reach it via the bridge gateway IP `172.18.0.1`
 - Grafana admin credentials: `admin` / `admin123` (local dev only)
 - Alertmanager is NOT deployed — alerts fire in Prometheus UI only; no notification routing exists yet
@@ -99,7 +105,7 @@ Located in `langgraph_workflows/dhg-agents-cloud/src/`:
 - Creating or editing Grafana dashboards (JSON provisioning)
 - Diagnosing why a Prometheus target is DOWN
 - Implementing SLIs, SLOs, or error budget tracking
-- Setting up log ingestion into Loki (Promtail, Alloy, or Docker log driver)
+- Setting up log ingestion into Loki (Grafana Alloy, or the Docker log driver)
 - Configuring Alertmanager for notification routing
 - Analyzing PromQL queries or writing new ones
 - Adding observability instrumentation to a new service
@@ -140,7 +146,7 @@ Required reads for most tasks:
 
 ```bash
 # Verify Prometheus target health
-curl -s http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | {job: .labels.job, health: .health, lastError: .lastError}'
+curl -s http://10.0.0.251:9090/api/v1/targets | jq '.data.activeTargets[] | {job: .labels.job, health: .health, lastError: .lastError}'
 
 # Check Prometheus config is valid before reload
 docker exec dhg-prometheus promtool check config /etc/prometheus/prometheus.yml
@@ -149,19 +155,19 @@ docker exec dhg-prometheus promtool check config /etc/prometheus/prometheus.yml
 docker exec dhg-prometheus promtool check rules /etc/prometheus/alerts.yml
 
 # Reload Prometheus without restart
-curl -X POST http://localhost:9090/-/reload
+docker compose restart prometheus   # this build has no --web.enable-lifecycle; /-/reload returns 403
 
 # Verify Grafana is up
-curl -s http://localhost:3001/api/health
+curl -s http://10.0.0.251:3001/api/health
 
 # Verify Loki is ready
-curl -s http://localhost:3100/ready
+curl -s http://10.0.0.251:3100/ready
 
 # Check cAdvisor
-curl -s http://localhost:8080/metrics | head -20
+curl -s http://10.0.0.251:8080/metrics | head -20
 
 # Check postgres-exporter
-curl -s http://localhost:9187/metrics | grep pg_up
+curl -s http://10.0.0.251:9187/metrics | grep pg_up
 ```
 
 ### Step 2: Validate Before Deploying
@@ -170,7 +176,7 @@ Never modify a prometheus.yml or alerts.yml without running `promtool check` fir
 
 ### Step 3: Reload Without Restart
 
-Prefer `curl -X POST http://localhost:9090/-/reload` over container restarts for Prometheus config changes. Grafana picks up provisioning changes on restart only.
+Prometheus config changes need `docker compose restart prometheus` — this build runs without `--web.enable-lifecycle`, so `/-/reload` returns 403. `file_sd` target files and Loki ruler rules are polled and need nothing. Grafana dashboard JSON re-provisions live every ~10s; its provider config and datasources are read at startup only.
 
 ### Step 4: Verify After Every Change
 
@@ -198,9 +204,9 @@ After editing, validate and reload:
 
 ```bash
 docker exec dhg-prometheus promtool check config /etc/prometheus/prometheus.yml
-curl -X POST http://localhost:9090/-/reload
+docker compose restart prometheus   # this build has no --web.enable-lifecycle; /-/reload returns 403
 # Wait 5s then verify
-curl -s http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | select(.labels.job == "my-new-service") | {health, lastError}'
+curl -s http://10.0.0.251:9090/api/v1/targets | jq '.data.activeTargets[] | select(.labels.job == "my-new-service") | {health, lastError}'
 ```
 
 ### Essential PromQL Queries for DHG Stack
@@ -319,14 +325,11 @@ Dashboards are provisioned from:
 observability/grafana/provisioning/dashboards/json/
 ```
 
-The provisioning config at `observability/grafana/provisioning/dashboards/dashboards.yml` scans that directory. Place all dashboard JSON files there.
-
-The source/development copies live at:
-```
-observability/grafana/dashboards/
-```
-
-Keep both in sync.
+Four provisioning providers in `observability/grafana/provisioning/dashboards/dashboards.yml`,
+one per folder (`platform`, `services`, `ai`, `alerting`), each scanning its own
+subdirectory. That tree is the only place a dashboard lives — there is no second
+source/development copy to keep in sync. Read `observability/grafana/README.md`
+before authoring, and verify with `observability/scripts/verify-dashboard.sh <uid>`.
 
 ### Creating a Dashboard
 
@@ -366,12 +369,12 @@ Grafana picks up provisioned dashboards on restart (provisioning is not hot-relo
 ```bash
 docker restart dhg-grafana
 # Wait for startup
-curl -s http://localhost:3001/api/health
+curl -s http://10.0.0.251:3001/api/health
 ```
 
 Verify dashboard appeared:
 ```bash
-curl -s -u admin:admin123 http://localhost:3001/api/search | jq '.[].title'
+curl -s -u admin:admin123 http://10.0.0.251:3001/api/search | jq '.[].title'
 ```
 
 ### Grafana Datasource UIDs
@@ -385,7 +388,7 @@ Use these UIDs in panel datasource references:
 
 ## Loki — Log Ingestion (Not Yet Active)
 
-Loki is running at `http://dhg-loki:3100` (internal) and `http://localhost:3100` (host). It is healthy and queryable, but no logs are being shipped to it.
+Loki is running at `http://dhg-loki:3100` (internal) and `http://10.0.0.251:3100` (host). It is healthy and queryable, but no logs are being shipped to it.
 
 ### To Enable Log Ingestion (Future Work)
 
@@ -401,7 +404,7 @@ Then configure in `docker-compose.override.yml` per-service or globally:
 logging:
   driver: loki
   options:
-    loki-url: "http://localhost:3100/loki/api/v1/push"
+    loki-url: "http://10.0.0.251:3100/loki/api/v1/push"
     loki-pipeline-stages: |
       - json:
           expressions:
@@ -409,23 +412,12 @@ logging:
             message: message
 ```
 
-Option B — Promtail sidecar (more control over parsing):
-
-```yaml
-promtail:
-  image: grafana/promtail:2.9.0
-  container_name: dhg-promtail
-  volumes:
-    - /var/lib/docker/containers:/var/lib/docker/containers:ro
-    - /var/log:/var/log:ro
-    - ./observability/promtail:/etc/promtail
-  command: -config.file=/etc/promtail/promtail-config.yml
-  networks:
-    - dhg-network
-  restart: unless-stopped
-```
-
-Do not write log-based Loki alert rules until ingestion is active and verified.
+Option B — Grafana Alloy (what this stack actually runs). Alloy discovers
+containers over the Docker socket, applies the redaction stages, and pushes to
+Loki. Its config is `observability/alloy/config.alloy` on g700data1 and
+`dh40801/alloy/config.alloy` on dh40801; the container is `dhg-alloy` on both.
+Edit the config and `docker compose up -d alloy` rather than adding a new
+shipper.
 
 ---
 
@@ -486,13 +478,13 @@ Slow burn (6-hour window, 6x burn rate):
 
 ## Diagnosing Prometheus Target Issues
 
-When a target shows DOWN in the Prometheus UI at `http://localhost:9090/targets`:
+When a target shows DOWN in the Prometheus UI at `http://10.0.0.251:9090/targets`:
 
 ### Systematic Diagnosis
 
 ```bash
 # 1. Get the exact error message
-curl -s http://localhost:9090/api/v1/targets | \
+curl -s http://10.0.0.251:9090/api/v1/targets | \
   jq '.data.activeTargets[] | select(.health == "down") | {job: .labels.job, error: .lastError}'
 
 # 2. Check if the container exists and is running
@@ -505,7 +497,7 @@ docker network inspect dhgaifactory35_dhg-network | jq '.[0].Containers | to_ent
 docker exec dhg-prometheus wget -qO- http://<target-container>:<port>/metrics | head -5
 
 # 5. Check the service actually exposes /metrics
-docker exec <service-container> curl -s http://localhost:<port>/metrics | head -5
+docker exec <service-container> curl -s http://127.0.0.1:<port>/metrics | head -5   # loopback INSIDE the container
 ```
 
 ### Common Causes and Fixes
@@ -631,7 +623,7 @@ route:
 
 receivers:
   - name: 'default'
-    # Add Slack, email, or PagerDuty config here
+    # Add Telegram (telegram_configs), Discord, or email config here
 ```
 
 ---
@@ -662,18 +654,18 @@ When writing a runbook for an alert, include:
 <Describe the condition in plain English>
 
 ### Immediate steps
-1. Check Prometheus target health: http://localhost:9090/targets
+1. Check Prometheus target health: http://10.0.0.251:9090/targets
 2. Check container status: `docker ps --filter "name=dhg-"`
 3. Check container logs: `docker logs dhg-<service> --tail 50`
-4. Check Grafana dashboard: http://localhost:3001
+4. Check Grafana dashboard: http://10.0.0.251:3001
 
 ### Diagnosis commands
 \`\`\`bash
 # Check specific metric
-curl -s http://localhost:9090/api/v1/query?query=<metric_name>
+curl -s http://10.0.0.251:9090/api/v1/query?query=<metric_name>
 
 # Check service metrics directly
-curl -s http://localhost:<port>/metrics | grep <metric_prefix>
+curl -s http://10.0.0.251:<port>/metrics | grep <metric_prefix>
 \`\`\`
 
 ### Resolution

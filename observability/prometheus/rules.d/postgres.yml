@@ -1,0 +1,35 @@
+# Postgres alerts across all seven instances.
+#
+# Two scrape jobs feed these rules and both export pg_up and pg_settings_*:
+#   job="postgres"        registry-db, single-target dhg-postgres-exporter
+#   job="postgres-multi"  the other six, via /probe on dhg-postgres-exporter-multi
+# Every target carries a `service` label, so the rules generalize over `service`
+# rather than being written out per instance.
+groups:
+  - name: postgres
+    rules:
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Postgres instance {{ $labels.service }} is unreachable"
+          description: "The exporter could not connect to {{ $labels.service }} ({{ $labels.instance }}) for 2 minutes. Anything backed by this database is down or about to be."
+          runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#postgresdown"
+
+      # numbackends is per-database; max_connections is per-server and carries an
+      # extra `server` label, so both sides are aggregated down to `service`.
+      - alert: PostgresConnectionsHigh
+        expr: >
+          sum by (service) (pg_stat_database_numbackends)
+          /
+          max by (service) (pg_settings_max_connections)
+          > 0.8
+        for: 10m
+        labels:
+          severity: high
+        annotations:
+          summary: "Postgres {{ $labels.service }} above 80% of max_connections"
+          description: "{{ $labels.service }} has held {{ $value | humanizePercentage }} of its connection slots for 10 minutes. New connections will start being refused; look for a client leaking pool connections."
+          runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#postgresconnectionshigh"
