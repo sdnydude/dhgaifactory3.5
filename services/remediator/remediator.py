@@ -1,36 +1,48 @@
 """
 DHG Remediation Sidecar
 =======================
-Polls for active incidents, matches them to runbooks, and executes
-remediation steps — recording every action via the registry API.
+Polls for active incidents, matches them to runbooks, and enriches each
+incident with read-only diagnostics — recording every step via the registry
+API. It never restarts, stops, or changes anything.
 
-Modes:
-  auto     — execute all steps automatically
-  approval — execute diagnostic steps only; destructive steps logged as pending
-  none     — skip (no remediation)
+Modes (runbook.remediation_mode):
+  notify / auto / approval — run the allowlisted diagnostics, record results
+  none                     — skip (no diagnostics)
+  The three non-none modes behave identically: nothing mutating is ever
+  executed regardless of mode. A step whose command is not on the allowlist
+  is recorded once as `proposed` (command text, no exec) so a human can run
+  it.
 
 Safety:
-  - Hard-blocked commands: rm -rf, docker rmi, volume removal
-  - container_allowlist enforcement
+  - Allowlist by command prefix (allowlist.py): docker inspect/ps/logs --tail/
+    stats --no-stream, curl -s and wget -qO- to http://dhg-*. Shell operators
+    are rejected; commands run with shell=False.
   - A runbook re-runs only when the incident's actionable state changes;
     the cooldown window is a second, independent guard
-  - Only steps that were executed or proposed for approval record an action
+  - Only steps that were executed, proposed, or skipped for an unresolved
+    placeholder record an action
   - Dry-run mode via REMEDIATOR_DRY_RUN=true
+
+Notification: Alertmanager owns the Telegram leg (observability/alertmanager/
+alertmanager.yml.tmpl, receiver `webhook-and-telegram`). The remediator does
+not send messages; diagnostics land on the incident and the incident page
+(frontend Actions tab) shows them.
 
 Observability:
   Prometheus metrics on METRICS_PORT (default 9105) at /metrics —
   remediator_cycles_total, remediator_incidents_seen,
-  remediator_actions_total{kind}.
+  remediator_actions_total{kind}, remediator_commands_total{verdict}.
 """
 
 import logging
 import os
 import re
-import subprocess
 import time
 from datetime import datetime, timezone
 import httpx
 from prometheus_client import CollectorRegistry, Counter, Gauge, start_http_server
+
+from allowlist import check_command, run_allowlisted
 
 # ── Configuration ───────────────────────────────────────────────────────
 
@@ -48,17 +60,11 @@ METRICS_PORT = int(os.getenv("METRICS_PORT", "9105"))
 # Incidents older than this are left alone (see is_stale).
 MAX_INCIDENT_AGE_HOURS = int(os.getenv("MAX_INCIDENT_AGE_HOURS", "24"))
 
-BLOCKED_PATTERNS = [
-    re.compile(r"\brm\s+-rf\b"),
-    re.compile(r"\bdocker\s+rmi\b"),
-    re.compile(r"\bdocker\s+volume\s+rm\b"),
-    re.compile(r"\bdocker\s+system\s+prune\b"),
-    re.compile(r"\bdocker\s+compose\s+down\b"),
-    re.compile(r">\s*/dev/sd"),
-    re.compile(r"\bdd\s+if="),
-]
-
-DESTRUCTIVE_MARKERS = ["restart", "stop", "kill", "terminate", "drop", "delete"]
+# Placeholders a runbook command may carry. Values come from the alert labels
+# the registry webhook stores on the incident as tags ("container:dhg-loki",
+# "instance:loki:3100", "job:loki", "service:loki").
+PLACEHOLDERS = ("container", "instance", "service", "job")
+PLACEHOLDER_RE = re.compile(r"\{(" + "|".join(PLACEHOLDERS) + r")\}")
 
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
@@ -87,6 +93,12 @@ actions_total = Counter(
     "remediator_actions_total",
     "Incident actions recorded, by action type",
     ["kind"],
+    registry=METRICS_REGISTRY,
+)
+commands_total = Counter(
+    "remediator_commands_total",
+    "Runbook commands seen, by allowlist verdict (executed|refused|unresolved)",
+    ["verdict"],
     registry=METRICS_REGISTRY,
 )
 
@@ -122,44 +134,53 @@ def api_post(path: str, body: dict) -> dict | None:
         return None
 
 
-def is_blocked(command: str) -> bool:
-    return any(pat.search(command) for pat in BLOCKED_PATTERNS)
+def incident_labels(incident: dict) -> dict[str, str]:
+    """Placeholder values for an incident.
+
+    Primary source: tags of the form "<placeholder>:<value>" written by the
+    registry webhook from the alert labels. Fallback: affected_services[0]
+    serves as {service}, and as {container} only when it looks like a
+    container name (dhg-*); a job label such as "cloudflared" is not one.
+    """
+    values: dict[str, str] = {}
+    for tag in incident.get("tags") or []:
+        key, sep, value = str(tag).partition(":")
+        if sep and key in PLACEHOLDERS and value and key not in values:
+            values[key] = value
+    services = incident.get("affected_services") or []
+    if services:
+        values.setdefault("service", services[0])
+        if services[0].startswith("dhg-"):
+            values.setdefault("container", services[0])
+    return values
 
 
-def is_destructive(step: dict) -> bool:
-    action_lower = step.get("action", "").lower()
-    cmd = step.get("command", "")
-    if not cmd:
-        return False
-    return any(m in action_lower for m in DESTRUCTIVE_MARKERS)
+def resolve_placeholders(command: str, incident: dict) -> tuple[str, list[str]]:
+    """Substitute {container} {instance} {service} {job}.
 
+    Returns (resolved_command, unresolved_placeholder_names). Only the four
+    known placeholders are touched, so Go templates like {{.State.Status}}
+    pass through untouched.
+    """
+    values = incident_labels(incident)
+    missing: list[str] = []
 
-def resolve_placeholders(command: str, incident: dict) -> str:
-    services = incident.get("affected_services", [])
-    container = services[0] if services else "unknown"
-    return command.replace("{container}", container)
+    def sub(match: re.Match) -> str:
+        name = match.group(1)
+        if name in values:
+            return values[name]
+        if name not in missing:
+            missing.append(name)
+        return match.group(0)
+
+    return PLACEHOLDER_RE.sub(sub, command), missing
 
 
 def execute_command(command: str) -> tuple[int, str]:
     if DRY_RUN:
         log.info("[DRY RUN] Would execute: %s", command)
         return 0, "[dry run] command skipped"
-    try:
-        result = subprocess.run(
-            command,
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        output = (result.stdout + result.stderr).strip()
-        if len(output) > 2000:
-            output = output[:2000] + "\n... (truncated)"
-        return result.returncode, output
-    except subprocess.TimeoutExpired:
-        return -1, "Command timed out after 60s"
-    except Exception as e:
-        return -1, f"Execution error: {e}"
+    return run_allowlisted(command)
 
 
 def record_action(
@@ -237,54 +258,55 @@ def process_incident(incident: dict, runbook: dict) -> None:
             log.info("[Step %d] %s — manual step, no command", order, action_desc)
             continue
 
-        # Safety: block dangerous commands
-        if is_blocked(command):
-            # A refusal is neither an action taken nor one proposed. It is a
-            # runbook authoring bug and belongs in the log, where it is
-            # visible without adding a row per poll.
-            log.warning(
-                "BLOCKED dangerous command in runbook step %d (%s): %s",
-                order, action_desc, command,
-            )
-            continue
+        resolved_cmd, missing = resolve_placeholders(command, incident)
 
-        resolved_cmd = resolve_placeholders(command, incident)
-
-        # approval mode: skip destructive steps
-        if mode == "approval" and is_destructive(step):
+        # The allowlist is checked on the resolved command so a label value
+        # cannot smuggle an operator in, and on the template so a refused
+        # step is refused even when its placeholders are unresolved.
+        allowed, verdict = check_command(resolved_cmd)
+        if not allowed:
+            commands_total.labels(verdict="refused").inc()
             log.info(
-                "Approval required for step %d: %s", order, action_desc,
+                "[Step %d] %s — not allowlisted (%s); recording as proposed",
+                order, action_desc, verdict,
             )
             record_action(
                 inc_id,
-                "diagnostic",
-                f"[Step {order}] {action_desc} — PENDING APPROVAL",
+                "proposed",
+                f"[Step {order}] {action_desc} — proposed, not executed",
                 command=resolved_cmd,
-                result="Destructive step requires human approval",
+                result=f"Not executed: {verdict}. Run by hand if still relevant.",
             )
             continue
 
-        # Execute the command
-        log.info("Executing step %d: %s", order, action_desc)
-        returncode, output = execute_command(resolved_cmd)
+        if missing:
+            commands_total.labels(verdict="unresolved").inc()
+            names = ", ".join("{" + m + "}" for m in missing)
+            log.info("[Step %d] %s — skipped, unresolved %s", order, action_desc, names)
+            record_action(
+                inc_id,
+                "diagnostic",
+                f"[Step {order}] {action_desc} — skipped",
+                command=command,
+                result=f"Skipped: placeholder {names} could not be resolved from the incident "
+                       f"(tags={incident.get('tags') or []}, affected_services={services}).",
+            )
+            continue
 
-        action_type = "auto_remediation" if is_destructive(step) else "diagnostic"
+        log.info("Executing step %d (%s): %s", order, verdict, action_desc)
+        returncode, output = execute_command(resolved_cmd)
+        commands_total.labels(verdict="executed").inc()
         status = "success" if returncode == 0 else f"failed (exit {returncode})"
 
         record_action(
             inc_id,
-            action_type,
+            "diagnostic",
             f"[Step {order}] {action_desc} — {status}",
             command=resolved_cmd,
             result=output or "(no output)",
         )
-
-        if returncode != 0:
-            log.warning(
-                "Step %d failed (exit %d), stopping runbook for %s",
-                order, returncode, inc_id[:8],
-            )
-            break
+        # Diagnostics are independent of each other: a failed `docker logs`
+        # must not hide the Prometheus query that follows it.
 
     processed[inc_id] = time.time()
     log.info("Finished processing incident %s", inc_id[:8])

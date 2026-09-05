@@ -1,0 +1,25 @@
+alert: OllamaDown
+trigger_rule: T18
+severity: high
+mode: notify
+title: Ollama unreachable
+description: The blackbox probe of Ollama failed on the LAN or container path. Porter falls back to paid cloud inference while it is down.
+fixture:
+  container: dhg-ollama
+diagnostics:
+  - order: 1
+    description: Container state, exit code and restart count
+    command: docker inspect dhg-ollama --format '{{.State.Status}} exit={{.State.ExitCode}} restarts={{.RestartCount}} started={{.State.StartedAt}}'
+  - order: 2
+    description: Last 100 log lines
+    command: docker logs --tail 100 dhg-ollama
+  - order: 3
+    description: Container-path API answer (model list)
+    command: curl -s -m 10 http://dhg-ollama:11434/api/tags
+  - order: 4
+    description: Both probe paths as Prometheus sees them
+    command: curl -sG http://dhg-prometheus:9090/api/v1/query --data-urlencode 'query=probe_success{service="ollama"}'
+human_steps:
+  - LAN path down while container path up means the host port mapping was lost; `docker compose up -d --force-recreate --no-deps ollama`.
+  - Both paths down means the container itself; read the log for a CUDA or model-load error before restarting.
+notes: Every minute down is paid cloud inference for Portage Porter.

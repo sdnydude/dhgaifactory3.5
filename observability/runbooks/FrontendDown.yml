@@ -1,0 +1,21 @@
+alert: FrontendDown
+trigger_rule: T21
+severity: high
+mode: notify
+title: Frontend is not answering on :3000
+description: http://dhg-frontend:3000/ has failed its probe for 3 minutes. This is the chat/inbox UI, the primary human surface.
+fixture:
+  container: dhg-frontend
+diagnostics:
+  - order: 1
+    description: Container state, exit code and restart count
+    command: docker inspect dhg-frontend --format '{{.State.Status}} exit={{.State.ExitCode}} restarts={{.RestartCount}} started={{.State.StartedAt}}'
+  - order: 2
+    description: Last 100 log lines
+    command: docker logs --tail 100 dhg-frontend
+  - order: 3
+    description: HTTP status from inside the network
+    command: curl -s -m 10 -o /dev/null -w '%{http_code}' http://dhg-frontend:3000/
+human_steps:
+  - A crashed Next.js container or a mid-rebuild image; read the log, then `docker compose up -d frontend`.
+notes: ""

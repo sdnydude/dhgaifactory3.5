@@ -1,0 +1,25 @@
+alert: OpenWebUIDown
+trigger_rule: T22
+severity: high
+mode: notify
+title: Open WebUI is not answering on :8080
+description: http://dhg-open-webui:8080/ has failed its probe for 3 minutes. Check dhg-ollama as well; the UI depends on it.
+fixture:
+  container: dhg-open-webui
+diagnostics:
+  - order: 1
+    description: Container state, exit code and restart count
+    command: docker inspect dhg-open-webui --format '{{.State.Status}} exit={{.State.ExitCode}} restarts={{.RestartCount}} started={{.State.StartedAt}}'
+  - order: 2
+    description: Last 100 log lines
+    command: docker logs --tail 100 dhg-open-webui
+  - order: 3
+    description: HTTP status from inside the network
+    command: curl -s -m 10 -o /dev/null -w '%{http_code}' http://dhg-open-webui:8080/
+  - order: 4
+    description: Ollama dependency answering
+    command: curl -s -m 10 -o /dev/null -w '%{http_code}' http://dhg-ollama:11434/api/tags
+human_steps:
+  - Fix Ollama first if both are firing.
+  - Otherwise read the log (a locked state volume is common) and `docker compose up -d open-webui`.
+notes: ""

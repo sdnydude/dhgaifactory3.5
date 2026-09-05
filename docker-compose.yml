@@ -443,6 +443,23 @@ services:
   tempo:
     profiles: ["retired"]
 
+  # ── Merged into the override's definitions (Compose merges same-named
+  # services across files; lists append). Kept here because the override is
+  # the observability owner's file. ──────────────────────────────────────
+  registry-api:
+    volumes:
+      # Runbooks-as-code: registry/seed_runbooks.py loads these YAML files
+      # (POST /api/incidents/runbooks/seed); the table is a cache of them.
+      - ./observability/runbooks:/app/runbooks:ro
+
+  dhg-remediator:
+    # The image runs as uid 10001 (services/remediator/Dockerfile). The
+    # allowlisted `docker logs/inspect/ps/stats` diagnostics need the socket,
+    # so the host docker group (getent group docker -> 125 on g700data1) is
+    # added instead of running as root.
+    group_add:
+      - "125"
+
 networks:
   dhg-network:
     external: true
