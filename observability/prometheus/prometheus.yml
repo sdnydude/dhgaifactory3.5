@@ -141,6 +141,16 @@ scrape_configs:
     metrics_path: /metrics
     scrape_interval: 15s
 
+  # Remediator (2026-09-05): /metrics added when the re-processing loop was
+  # fixed; service lives in the override, so a static job rather than labels.
+  - job_name: 'remediator'
+    static_configs:
+      - targets: ['dhg-remediator:9105']
+        labels:
+          service: 'remediator'
+    metrics_path: /metrics
+    scrape_interval: 30s
+
   # Alertmanager self-metrics (AUDIT-2026-09: previously scraped nowhere).
   - job_name: 'alertmanager'
     static_configs:
