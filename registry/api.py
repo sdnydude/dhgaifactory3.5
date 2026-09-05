@@ -377,6 +377,7 @@ async def alertmanager_webhook(
     logger.info(f"Alertmanager webhook: status={payload.status}, alerts={len(payload.alerts)}")
 
     created = 0
+    deduped = 0
     skipped = 0
 
     for alert in payload.alerts:
@@ -401,9 +402,16 @@ async def alertmanager_webhook(
         trigger_rule = mapping.get("trigger")
         category = mapping.get("category", "infrastructure")
 
+        # Stable identity of the condition, independent of trigger_rule (which
+        # is None for any alertname missing from ALERT_TRIGGER_MAP). While the
+        # matching incident stays open, re-fires bump its counter instead of
+        # inserting a new row.
+        instance = alert.labels.get("instance", "")
+        fingerprint = f"{alertname}|{service}|{instance}"
+
         try:
             from incident_service import create_incident as create_inc
-            create_inc(
+            incident = create_inc(
                 db,
                 title=f"[{alertname}] {summary}",
                 severity=severity,
@@ -411,12 +419,22 @@ async def alertmanager_webhook(
                 trigger_rule=trigger_rule,
                 affected_services=[service],
                 created_by="alertmanager",
+                fingerprint=fingerprint,
             )
-            created += 1
+            if (getattr(incident, "occurrence_count", 1) or 1) > 1:
+                deduped += 1
+            else:
+                created += 1
         except Exception as exc:
             logger.error(f"Failed to create incident for alert {alertname}: {exc}")
 
-    return {"status": "received", "alerts_processed": len(payload.alerts), "incidents_created": created, "skipped": skipped}
+    return {
+        "status": "received",
+        "alerts_processed": len(payload.alerts),
+        "incidents_created": created,
+        "incidents_deduped": deduped,
+        "skipped": skipped,
+    }
 
 
 # ============================================================================
