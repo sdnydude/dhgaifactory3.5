@@ -1,0 +1,15 @@
+# DHG agent boilerplate - runtime dependencies.
+# Verified installable and importable on Python 3.12 (2026-09-05).
+#
+# pydantic-ai-slim keeps the install to the providers actually used. Add an
+# extra when you switch provider (e.g. [google], [bedrock]); [openai] is what
+# the Ollama provider needs.
+pydantic-ai-slim[anthropic,openai]==2.40.0
+pydantic==2.13.5
+httpx==0.28.1
+
+# Tracing. Only imported when Langfuse credentials are present (see
+# src/tracing.py) - installed unconditionally so the traced path needs no
+# second image build.
+opentelemetry-sdk==1.44.0
+opentelemetry-exporter-otlp-proto-http==1.44.0

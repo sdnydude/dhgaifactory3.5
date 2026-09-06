@@ -1,0 +1,21 @@
+alert: LokiStoreGrowth
+trigger_rule: T15
+severity: high
+mode: notify
+title: Loki store exceeds 20 GB
+description: The keep-all log store crossed the growth watermark. Operator decision point, never an instruction to delete anything.
+fixture: {}
+diagnostics:
+  - order: 1
+    description: Store size and its textfile freshness (a frozen value can masquerade as growth)
+    command: curl -sG http://dhg-prometheus:9090/api/v1/query --data-urlencode 'query=loki_store_bytes or node_textfile_mtime_seconds'
+  - order: 2
+    description: Top talkers over the last hour
+    command: curl -sG http://dhg-loki:3100/loki/api/v1/query --data-urlencode 'query=topk(10, sum by (container) (count_over_time({job="dhg-ai-factory"}[1h])))'
+  - order: 3
+    description: /mnt/4tb headroom
+    command: curl -sG http://dhg-prometheus:9090/api/v1/query --data-urlencode 'query=node_filesystem_avail_bytes{mountpoint="/mnt/4tb"}'
+human_steps:
+  - Find the top talker first; a single noisy container is almost always the cause.
+  - Expansion or the documented operator-only deletion procedure is Stephen's call.
+notes: ""

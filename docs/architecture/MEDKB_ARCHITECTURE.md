@@ -85,7 +85,7 @@ graph LR
 
     API -->|@traced_node| Tempo
     API -->|metrics| Prometheus
-    API -->|logs via Promtail| Loki
+    API -->|logs via Alloy| Loki
     API -->|@traceable + feedback| LangSmith
 ```
 

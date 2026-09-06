@@ -1,0 +1,17 @@
+alert: DataDiskHigh
+trigger_rule: T6
+severity: warning
+mode: notify
+title: Data disk /mnt/4tb > 80%
+description: The 4 TB data volume holds the Docker data root, Loki store, backups and model caches. Trend signal only.
+fixture: {}
+diagnostics:
+  - order: 1
+    description: /mnt/4tb free vs size
+    command: curl -sG http://dhg-prometheus:9090/api/v1/query --data-urlencode 'query=node_filesystem_avail_bytes{mountpoint="/mnt/4tb"} / node_filesystem_size_bytes{mountpoint="/mnt/4tb"}'
+  - order: 2
+    description: Loki store size
+    command: curl -sG http://dhg-prometheus:9090/api/v1/query --data-urlencode 'query=loki_store_bytes'
+human_steps:
+  - Review /mnt/4tb/backups first, then unused Ollama models, then Docker image layers.
+notes: Severity warning - no incident is opened; these diagnostics run only if the severity is raised.

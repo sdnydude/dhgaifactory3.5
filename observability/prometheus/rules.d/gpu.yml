@@ -1,0 +1,26 @@
+# GPU alerts — nvidia_gpu_exporter (job `gpu`, container dhg-gpu-exporter).
+# Metric names confirmed against the running exporter 1.4.0 on 2026-09-04:
+#   nvidia_smi_memory_used_bytes / nvidia_smi_memory_total_bytes / nvidia_smi_temperature_gpu
+# All are keyed by `uuid`; the RTX 5080 is the only GPU on g700data1.
+groups:
+  - name: gpu
+    rules:
+      - alert: GpuVramHigh
+        expr: nvidia_smi_memory_used_bytes / nvidia_smi_memory_total_bytes > 0.92
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "GPU VRAM above 92% on {{ $labels.uuid }}"
+          description: "GPU {{ $labels.uuid }} has used {{ $value | humanizePercentage }} of its 16GB VRAM for 10 minutes. Ollama model loads and LangGraph inference will start failing or spilling to host RAM."
+          runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#gpuvramhigh"
+
+      - alert: GpuTempHigh
+        expr: nvidia_smi_temperature_gpu > 85
+        for: 5m
+        labels:
+          severity: high
+        annotations:
+          summary: "GPU temperature above 85C on {{ $labels.uuid }}"
+          description: "GPU {{ $labels.uuid }} has been at {{ $value }}C for 5 minutes. The card will thermal-throttle and sustained heat shortens its life; check chassis airflow and current inference load."
+          runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#gputemphigh"

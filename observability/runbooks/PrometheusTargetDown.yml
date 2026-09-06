@@ -1,0 +1,24 @@
+alert: PrometheusTargetDown
+trigger_rule: T8
+severity: high
+mode: notify
+title: Prometheus scrape target DOWN
+description: A Prometheus scrape target has been unreachable for 2 minutes. The monitored service may be down, restarting, or off the compose network.
+fixture:
+  job: prometheus
+  instance: localhost:9090
+diagnostics:
+  - order: 1
+    description: Current up value and labels for the failing job
+    command: curl -sG http://dhg-prometheus:9090/api/v1/query --data-urlencode 'query=up{job="{job}"}'
+  - order: 2
+    description: Every unhealthy target with its last scrape error
+    command: curl -s http://dhg-prometheus:9090/api/v1/targets?state=unhealthy
+  - order: 3
+    description: Containers that have exited
+    command: docker ps -a --filter status=exited --format '{{.Names}} {{.Status}}'
+human_steps:
+  - Both cloudflared targets are DOWN by design (metrics bound to 127.0.0.1); silence them rather than chasing them.
+  - If the container is up but /metrics fails, read its log; if it is on another compose project, check it joined dhgaifactory35_dhg-network.
+  - Fix the target, not the rule. Delete the scrape job only if the target is permanently gone.
+notes: This alert inhibits the per-service *Down alerts for the same instance, so it is the one to work when they fire together.

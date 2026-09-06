@@ -19,8 +19,6 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from dataclasses import dataclass
 
-from langsmith import traceable
-
 
 @dataclass
 class NotificationConfig:
@@ -46,7 +44,6 @@ class EmailSender:
         self.password = config.smtp_password
         self.from_email = config.from_email
 
-    @traceable(name="send_email", run_type="tool")
     async def send(
         self,
         to_email: str,
@@ -87,7 +84,6 @@ class EmailSender:
 class GoogleChatSender:
     """Send Google Chat notifications via webhook."""
 
-    @traceable(name="send_google_chat", run_type="tool")
     async def send(
         self,
         webhook_url: str,
@@ -127,7 +123,6 @@ class NotificationService:
         self.email = EmailSender()
         self.chat = GoogleChatSender()
 
-    @traceable(name="notify_review_assigned", run_type="chain")
     async def on_review_assigned(
         self,
         reviewer_email: str,
@@ -169,7 +164,6 @@ class NotificationService:
 
         return {"email": email_sent, "chat": chat_sent}
 
-    @traceable(name="notify_sla_warning", run_type="chain")
     async def on_sla_warning(
         self,
         reviewer_email: str,
@@ -205,7 +199,6 @@ class NotificationService:
 
         return {"email": email_sent, "chat": chat_sent}
 
-    @traceable(name="notify_sla_timeout", run_type="chain")
     async def on_sla_timeout(
         self,
         prev_reviewer_email: str,
@@ -234,7 +227,6 @@ class NotificationService:
             webhook_url
         )
 
-    @traceable(name="notify_final_timeout", run_type="chain")
     async def on_final_timeout(
         self,
         reviewer_email: str,

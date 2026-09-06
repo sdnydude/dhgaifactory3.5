@@ -390,3 +390,116 @@ class TestLinkChild:
             child_id = str(uuid.uuid4())
             response = client.post(f"/api/incidents/{parent_id}/link/{child_id}")
             assert response.status_code == 204
+
+
+# ── Pagination limit ────────────────────────────────────────────────────
+
+
+class TestListLimit:
+    """?limit=500 returned nothing because the route capped limit at 200."""
+
+    def test_limit_500_is_accepted(self, client):
+        with patch("incident_service.list_incidents", return_value=[]) as mock_list:
+            response = client.get("/api/incidents?limit=500")
+        assert response.status_code == 200
+        assert mock_list.call_args.kwargs["limit"] == 500
+
+    def test_limit_1000_is_accepted(self, client):
+        with patch("incident_service.list_incidents", return_value=[]):
+            assert client.get("/api/incidents?limit=1000").status_code == 200
+
+    def test_limit_above_cap_is_rejected(self, client):
+        assert client.get("/api/incidents?limit=1001").status_code == 422
+
+    def test_days_filter_is_passed_through_as_since(self, client):
+        with patch("incident_service.list_incidents", return_value=[]) as mock_list:
+            response = client.get("/api/incidents?status=active&days=30")
+        assert response.status_code == 200
+        assert mock_list.call_args.kwargs["since"] is not None
+
+    def test_list_is_unwindowed_without_days(self, client):
+        with patch("incident_service.list_incidents", return_value=[]) as mock_list:
+            client.get("/api/incidents?status=active")
+        assert mock_list.call_args.kwargs["since"] is None
+
+
+# ── Alertmanager webhook deduplication ──────────────────────────────────
+
+
+def _alert_payload(alertname="MemregDLQBacklog", service="memreg", instance="10.0.0.251:8011"):
+    return {
+        "version": "4",
+        "groupKey": "{}:{alertname=\"%s\"}" % alertname,
+        "status": "firing",
+        "receiver": "registry",
+        "alerts": [{
+            "status": "firing",
+            "labels": {
+                "alertname": alertname,
+                "severity": "critical",
+                "name": service,
+                "instance": instance,
+            },
+            "annotations": {"summary": f"{alertname} is firing"},
+            "startsAt": "2026-09-05T00:00:00Z",
+        }],
+    }
+
+
+class TestAlertmanagerWebhookDedup:
+    def test_fingerprint_is_stable_across_identical_payloads(self, client):
+        with patch("incident_service.create_incident") as mock_create:
+            mock_create.return_value = MagicMock()
+            client.post("/webhooks/alertmanager", json=_alert_payload())
+            client.post("/webhooks/alertmanager", json=_alert_payload())
+
+        fingerprints = [c.kwargs["fingerprint"] for c in mock_create.call_args_list]
+        assert len(fingerprints) == 2
+        assert fingerprints[0] == fingerprints[1]
+        assert fingerprints[0] == "MemregDLQBacklog|memreg|10.0.0.251:8011"
+
+    def test_fingerprint_differs_per_instance(self, client):
+        with patch("incident_service.create_incident") as mock_create:
+            mock_create.return_value = MagicMock()
+            client.post("/webhooks/alertmanager", json=_alert_payload(instance="a:1"))
+            client.post("/webhooks/alertmanager", json=_alert_payload(instance="b:2"))
+
+        fingerprints = [c.kwargs["fingerprint"] for c in mock_create.call_args_list]
+        assert fingerprints[0] != fingerprints[1]
+
+    def test_two_identical_webhooks_create_one_incident(self, client, mock_db):
+        """End-to-end through the real create_incident/find_duplicate path.
+
+        MemregDLQBacklog has no entry in ALERT_TRIGGER_MAP, so trigger_rule is
+        None — the old trigger-keyed dedup bailed out and created a fresh
+        incident on every re-fire (103 of them in production).
+        """
+        from models import Incident
+
+        open_incidents: list = []
+
+        def query_side_effect(*_args, **_kwargs):
+            q = MagicMock()
+            q.filter.return_value = q
+            q.order_by.return_value = q
+            q.all.return_value = list(open_incidents)
+            q.first.return_value = open_incidents[0] if open_incidents else None
+            return q
+
+        def add_side_effect(obj):
+            if isinstance(obj, Incident):
+                obj.status = "active"
+                obj.occurrence_count = 1
+                open_incidents.append(obj)
+
+        mock_db.query.side_effect = query_side_effect
+        mock_db.add.side_effect = add_side_effect
+
+        with patch("incident_service.capture_system_snapshot", return_value={}), \
+             patch("incident_service.enrich_snapshot_with_db"), \
+             patch("incident_service.find_parent_incident", return_value=None):
+            client.post("/webhooks/alertmanager", json=_alert_payload())
+            client.post("/webhooks/alertmanager", json=_alert_payload())
+
+        assert len(open_incidents) == 1
+        assert open_incidents[0].occurrence_count == 2

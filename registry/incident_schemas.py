@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 # ── Shared literals ──────────────────────────────────────────────────────
 
-IncidentSeverity = Literal["critical", "high", "medium", "low"]
+IncidentSeverity = Literal["critical", "high", "warning", "medium", "low"]
 IncidentStatus = Literal["active", "mitigated", "resolved", "postmortem"]
 IncidentCategory = Literal["infrastructure", "pipeline", "data", "integration", "security", "performance"]
 RootCauseCategory = Literal[
@@ -18,8 +18,8 @@ RootCauseCategory = Literal[
     "disk_pressure", "other",
 ]
 EventType = Literal["symptom", "diagnosis", "escalation", "action", "resolution", "notification"]
-ActionType = Literal["diagnostic", "mitigation", "fix", "prevention", "auto_remediation"]
-RemediationMode = Literal["auto", "approval", "none"]
+ActionType = Literal["diagnostic", "mitigation", "fix", "prevention", "auto_remediation", "proposed"]
+RemediationMode = Literal["notify", "auto", "approval", "none"]
 
 
 # ── Incident CRUD ────────────────────────────────────────────────────────
@@ -97,6 +97,7 @@ class IncidentListResponse(BaseModel):
     category: str
     trigger_rule: str | None
     affected_services: list[str]
+    tags: list[str]
     parent_incident_id: UUID | None
     detected_at: datetime
     mitigated_at: datetime | None

@@ -29,7 +29,7 @@ graph TD
     subgraph "Observability Layer"
         Prometheus[Prometheus :9090] -->|scrape| Registry
         Prometheus -->|scrape| VSEngine
-        Promtail[Promtail] -->|ship logs| Loki[Loki :3100]
+        Alloy[Grafana Alloy] -->|ship logs| Loki[Loki :3100]
         Prometheus -->|alert| Alertmanager[Alertmanager :9093]
         Grafana[Grafana :3001] -->|query| Prometheus
         Grafana -->|query| Loki
@@ -68,7 +68,7 @@ Divergent-convergent mechanism for content generation diversity.
 ### 5. Observability Stack
 Full monitoring, logging, and tracing.
 - **Metrics:** Prometheus -> Alertmanager -> Grafana (6 scrape targets)
-- **Logs:** Promtail -> Loki -> Grafana (Docker container logs)
+- **Logs:** Grafana Alloy -> Loki -> Grafana (Docker container logs)
 - **Traces:** OTel SDK -> Tempo -> Grafana (agent execution traces)
 - **APM:** LangSmith (@traceable on every agent node)
 - **Configs:** `observability/` directory
@@ -100,7 +100,7 @@ User (Frontend) -> LangGraph Cloud -> Orchestrator Recipe
 Agent Node Execution
   -> @traceable decorator -> LangSmith (LLM traces)
   -> @traced_node decorator -> OTel SDK -> Tempo (infrastructure traces)
-  -> Container stdout -> Promtail -> Loki (logs)
+  -> Container stdout -> Grafana Alloy -> Loki (logs)
   -> /metrics endpoint -> Prometheus (metrics)
   -> All queryable in Grafana
 ```

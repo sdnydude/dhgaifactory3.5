@@ -99,14 +99,15 @@ export function Sidebar() {
   const badgeCounts = useAppStore((s) => s.badgeCounts);
   const { darkMode, toggleDarkMode } = useTheme();
   const { visibleRoutes } = useSession();
-  const [cloudStatus, setCloudStatus] = useState<"ok" | "down" | "checking">("checking");
+  const [tracingStatus, setTracingStatus] = useState<"ok" | "down" | "checking">("checking");
 
   useEffect(() => {
     let active = true;
     const check = () => {
-      fetch("/api/langgraph/ok")
-        .then((r) => { if (active) setCloudStatus(r.ok ? "ok" : "down"); })
-        .catch(() => { if (active) setCloudStatus("down"); });
+      fetch("/api/langfuse/health")
+        .then((r) => r.json())
+        .then((d) => { if (active) setTracingStatus(d.status === "ok" ? "ok" : "down"); })
+        .catch(() => { if (active) setTracingStatus("down"); });
     };
     check();
     const interval = setInterval(check, 60_000);
@@ -200,26 +201,26 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* LangGraph Status */}
+      {/* Tracing Status */}
       <div className={cn("px-3 py-2 border-t border-border", collapsed && "px-0 flex justify-center")}>
         {collapsed ? (
           <Tooltip>
             <TooltipTrigger className="inline-flex">
               <span className={cn(
                 "inline-block h-2 w-2 rounded-full",
-                cloudStatus === "ok" ? "bg-green-500" : cloudStatus === "down" ? "bg-red-500" : "bg-yellow-500 animate-pulse",
+                tracingStatus === "ok" ? "bg-green-500" : tracingStatus === "down" ? "bg-red-500" : "bg-yellow-500 animate-pulse",
               )} />
             </TooltipTrigger>
-            <TooltipContent side="right">LangGraph Cloud {cloudStatus === "ok" ? "Connected" : cloudStatus === "down" ? "Unreachable" : "Checking..."}</TooltipContent>
+            <TooltipContent side="right">Langfuse {tracingStatus === "ok" ? "Connected" : tracingStatus === "down" ? "Unreachable" : "Checking..."}</TooltipContent>
           </Tooltip>
         ) : (
           <div className="flex items-center gap-2">
             <span className={cn(
               "inline-block h-2 w-2 rounded-full",
-              cloudStatus === "ok" ? "bg-green-500" : cloudStatus === "down" ? "bg-red-500" : "bg-yellow-500 animate-pulse",
+              tracingStatus === "ok" ? "bg-green-500" : tracingStatus === "down" ? "bg-red-500" : "bg-yellow-500 animate-pulse",
             )} />
             <span className="text-xs text-muted-foreground">
-              LangGraph {cloudStatus === "ok" ? "Cloud" : cloudStatus === "down" ? "Down" : "..."}
+              Langfuse {tracingStatus === "ok" ? "Tracing" : tracingStatus === "down" ? "Down" : "..."}
             </span>
           </div>
         )}

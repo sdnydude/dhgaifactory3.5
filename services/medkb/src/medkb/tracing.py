@@ -32,6 +32,10 @@ def init_tracing(endpoint: str) -> None:
     if not _OTEL_AVAILABLE:
         return
 
+    if not endpoint:
+        logger.info("OTEL_ENDPOINT not set — tracing disabled")
+        return
+
     resource = Resource.create(
         {
             "service.name": SERVICE_NAME,

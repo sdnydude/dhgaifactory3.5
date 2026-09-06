@@ -20,9 +20,10 @@ Create and manage production Grafana dashboards for the DHG AI Factory observabi
 
 ## Project Context
 
-- Grafana runs at http://localhost:3001 (container: `dhg-grafana`, internal port 3000)
+- Grafana runs at http://10.0.0.251:3001 (container: `dhg-grafana`, internal port 3000)
 - Credentials: admin / admin123 (set via `GF_SECURITY_ADMIN_USER` / `GF_SECURITY_ADMIN_PASSWORD`)
-- Dashboard JSON files live at: `observability/grafana/provisioning/dashboards/json/`
+- Dashboard JSON files live at: `observability/grafana/provisioning/dashboards/json/<folder>/` — `platform`, `services`, `ai`, `alerting`, one provisioning provider each. This is the single source of truth; there is no second tree.
+- Authoring standard: `observability/grafana/README.md` (a board that breaks a rule there does not ship)
 - Provisioning config: `observability/grafana/provisioning/dashboards/dashboards.yml`
 - Grafana auto-reloads dashboards every 10 seconds (`updateIntervalSeconds: 10`)
 - Data sources already provisioned:
@@ -32,15 +33,15 @@ Create and manage production Grafana dashboards for the DHG AI Factory observabi
 
 ## Prometheus Scrape Targets
 
-Current jobs defined in `observability/prometheus/prometheus.yml`:
+**See `observability/prometheus/prometheus.yml` — it is the only authority; do
+not maintain a copy of the target list here.** Static jobs are canonical
+(AUDIT-2026-09 P1 / decision D-B); `file_sd` jobs read
+`observability/prometheus/targets/*.json`. Confirm a metric exists before
+building a panel on it:
 
-| Job | Target | Scrape Interval |
-|-----|--------|-----------------|
-| `prometheus` | localhost:9090 | 15s |
-| `registry-api` | registry-api:8000 | 10s |
-| `postgres` | postgres-exporter:9187 | 30s |
-| `node-exporter` | 172.18.0.1:9100 | 15s |
-| `cadvisor` | cadvisor:8080 | 15s |
+```bash
+curl -sG http://10.0.0.251:9090/api/v1/query --data-urlencode 'query=<metric>'
+```
 
 ## Task: $ARGUMENTS
 
@@ -56,7 +57,9 @@ Before writing any JSON:
 2. Confirm which Prometheus metrics or Loki log streams are available for the required panels
 3. Check whether an existing dashboard in `observability/grafana/provisioning/dashboards/json/` already covers this need
 
-Read the existing `dhg-core-golden.json` to understand the established panel structure before diverging from it.
+Read `observability/grafana/README.md` for the standard, then
+`json/platform/dhg-platform-overview.json` as the worked reference for panel
+structure, before diverging from either.
 
 ---
 
@@ -416,9 +419,9 @@ Existing alert rules to be aware of (from `alerts.yml`):
 
 ## Step 8 — Deployment
 
-1. Write the dashboard JSON to `observability/grafana/provisioning/dashboards/json/<name>.json`
+1. Write the dashboard JSON to `observability/grafana/provisioning/dashboards/json/<folder>/<uid>.json` (filename matches the uid exactly)
 2. Grafana detects the file within 10 seconds (no restart needed)
-3. Verify at http://localhost:3001 — navigate to Dashboards and find the new entry
+3. Verify with `observability/scripts/verify-dashboard.sh <uid>` — it replays every panel and renders a PNG; exit 0 means every panel answered with data. Then look at it in Grafana at http://10.0.0.251:3001
 4. If the dashboard does not appear, check Grafana logs:
    ```bash
    docker logs dhg-grafana --tail 50
@@ -430,8 +433,8 @@ Existing alert rules to be aware of (from `alerts.yml`):
 | Error | Cause | Fix |
 |-------|-------|-----|
 | Dashboard not appearing | JSON syntax error | Run `python3 -m json.tool <file>.json` to validate |
-| "No data" on Prometheus panels | Metric does not exist yet | Verify metric name with `curl http://localhost:9090/api/v1/label/__name__/values` |
-| "No data" on Loki panels | Container label mismatch | Check available labels: `curl http://localhost:3100/loki/api/v1/labels` |
+| "No data" on Prometheus panels | Metric does not exist yet | Verify metric name with `curl http://10.0.0.251:9090/api/v1/label/__name__/values` |
+| "No data" on Loki panels | Container label mismatch | Check available labels: `curl http://10.0.0.251:3100/loki/api/v1/labels` |
 | Duplicate UID error | uid clash with existing dashboard | Choose a unique uid and verify against existing files |
 | Panel overlaps | gridPos x+w > 24 | Grafana grid is 24 columns wide — all panels in a row must sum to ≤ 24 |
 
@@ -448,11 +451,11 @@ Existing alert rules to be aware of (from `alerts.yml`):
    - Healthy / normal: `#32374A` (Graphite)
    - Warning: `#F77E2D` (Orange)
    - Critical / error: `#663399` (Purple) or Grafana red (`red`)
-7. Group all DHG dashboards under the same folder by setting `folder: 'DHG AI Factory'` in `dashboards.yml` if you add a second provider block
+7. Put the board in the right folder (`DHG / Platform`, `Services`, `AI`, `Alerting`) by writing it under the matching `json/<folder>/` subdirectory; the providers already exist in `dashboards.yml`
 8. Never hardcode instance addresses in queries — use label selectors (`job`, `name`, variables)
 9. After adding a metric to agent code, add its scrape job to `observability/prometheus/prometheus.yml` and reload Prometheus:
    ```bash
-   curl -X POST http://localhost:9090/-/reload
+   docker compose restart prometheus   # no --web.enable-lifecycle on this build
    ```
 10. Test every dashboard with the time range set to "Last 5 minutes" to confirm live data flows correctly
 
@@ -460,8 +463,10 @@ Existing alert rules to be aware of (from `alerts.yml`):
 
 ## Related Files
 
-- `observability/grafana/provisioning/dashboards/json/dhg-core-golden.json` — reference dashboard
-- `observability/grafana/provisioning/dashboards/json/docker-overview.json` — container metrics reference
+- `observability/grafana/README.md` — the dashboard standard, and the current board inventory
+- `observability/grafana/provisioning/dashboards/json/platform/dhg-platform-overview.json` — reference dashboard
+- `observability/grafana/provisioning/dashboards/json/platform/docker-overview.json` — container metrics reference
+- `observability/scripts/verify-dashboard.sh` — panel replay + PNG render check
 - `observability/prometheus/prometheus.yml` — scrape job definitions
 - `observability/prometheus/alerts.yml` — existing SLO alert rules
 - `observability/grafana/provisioning/datasources/prometheus.yml` — Prometheus datasource config
