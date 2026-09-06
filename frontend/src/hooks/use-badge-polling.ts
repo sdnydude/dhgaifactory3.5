@@ -2,7 +2,11 @@
 
 import { useEffect } from "react";
 import { useAppStore } from "@/stores/app-store";
-import { listPendingReviews } from "@/lib/inboxApi";
+import { getMyReviews } from "@/lib/registryApi";
+
+// Inlined by Next at build time. Without a reviewer identity there is no
+// review queue to count, so the badge stays at 0 and no request is made.
+const REVIEWER_EMAIL = process.env.NEXT_PUBLIC_REVIEWER_EMAIL ?? "";
 
 export function useBadgePolling(intervalMs = 30_000) {
   const setBadgeCounts = useAppStore((s) => s.setBadgeCounts);
@@ -12,18 +16,16 @@ export function useBadgePolling(intervalMs = 30_000) {
 
     const poll = async () => {
       try {
-        // Inbox badge reuses the same helper the /inbox page uses, so
-        // the count cannot drift from the list. listPendingReviews
-        // filters out zombie interrupted threads that have no real
-        // review payload.
-        const [inboxReviews, projectsRes] = await Promise.all([
-          listPendingReviews().catch(() => []),
+        // Inbox badge counts the reviewer's own registry review queue.
+        // "active" assignments are the ones awaiting this reviewer now.
+        const [inboxCount, projectsRes] = await Promise.all([
+          REVIEWER_EMAIL
+            ? getMyReviews(REVIEWER_EMAIL).then((r) => r.count).catch(() => 0)
+            : Promise.resolve(0),
           fetch("/api/registry/api/cme/projects?status=processing"),
         ]);
 
         if (!active) return;
-
-        const inboxCount = inboxReviews.length;
 
         let processingCount = 0;
         if (projectsRes.ok) {
