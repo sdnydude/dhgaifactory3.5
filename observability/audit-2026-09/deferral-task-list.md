@@ -18,8 +18,8 @@ Checkboxes are updated as work lands. Registry deferred-item ids in brackets.
   - [x] Resolve the langchain-core / langchain-anthropic pin conflict; rebuild; restart once; container logs "tracing disabled" instead of the Tempo endpoint; medkb tests pass.
 - [x] **D. Agent boilerplate (done cdc2fe4; its langgraph.json deletion was swept into c6f870e by the orchestrator's unscoped commit) (one agent, `templates/**`)** [da96ef8c]
   - [x] Replace LangSmith `@traceable` with the Pydantic AI + Langfuse pattern (`@observe`, `Agent.instrument_all()`, OTLP env); template must import and run its own smoke test without Langfuse keys present.
-- [ ] **E. Frontend badge poller (one agent, `frontend/**`)** [5ef0dd02]
-  - [ ] Researched: `useBadgePolling` calls `listPendingReviews()` (`frontend/src/lib/inboxApi.ts:21`) against the LangGraph Cloud proxy; the registry already has a review queue: `GET /api/cme/my-reviews?reviewer_email=<email>&status_filter=` backed by `cme_review_assignments`. Fix: drive the badge from that endpoint (reviewer email from the existing frontend config or a `NEXT_PUBLIC_REVIEWER_EMAIL` env) and drop the LangGraph SDK call from the app shell; `/inbox` itself keeps working via its own fallback until the CME pipeline is rebuilt on Pydantic AI. Zero console errors on every route; rebuild frontend once. Needs from Stephen: which reviewer email the badge should count for.
+- [x] **E. Frontend badge poller (done 39cb49f: badge reads the registry review queue, hidden until NEXT_PUBLIC_REVIEWER_EMAIL is set; LangGraph Cloud poll and status dot removed from the app shell, Langfuse health dot added; app-shell console errors 7 to 2, both pre-existing /admin prefetch 404s) (one agent, `frontend/**`)** [5ef0dd02]
+  - [x] Researched: `useBadgePolling` calls `listPendingReviews()` (`frontend/src/lib/inboxApi.ts:21`) against the LangGraph Cloud proxy; the registry already has a review queue: `GET /api/cme/my-reviews?reviewer_email=<email>&status_filter=` backed by `cme_review_assignments`. Fix: drive the badge from that endpoint (reviewer email from the existing frontend config or a `NEXT_PUBLIC_REVIEWER_EMAIL` env) and drop the LangGraph SDK call from the app shell; `/inbox` itself keeps working via its own fallback until the CME pipeline is rebuilt on Pydantic AI. Zero console errors on every route; rebuild frontend once. Needs from Stephen: which reviewer email the badge should count for.
 
 ## Wave 2 — /ship sessions (need their own spec, gates, and approval)
 
@@ -29,9 +29,9 @@ Checkboxes are updated as work lands. Registry deferred-item ids in brackets.
 - [ ] **dhg-transcribe pipeline refactor** (older item) — 10 containers, no tests; separate ship.
 - [ ] **Auth on `/api/incidents/*` and the approval surface** — prerequisite for any remediation approval button; the paused auth-wiring ship.
 
-## Decision needed before Wave 1 E starts
+## Resolved without a decision
 
-Which reviewer email should the inbox badge count pending reviews for (`/api/cme/my-reviews?reviewer_email=`)? Everything else in E is researched and decided.
+The reviewer-email question dissolved: both CME review tables are empty, so the badge is hidden until `NEXT_PUBLIC_REVIEWER_EMAIL` is set when reviewers exist. The `/inbox` page itself still uses the LangGraph SDK for its list; that page is part of the Wave 2 agent-migration ship, not a new deferral (registry item 12bf2817 is tagged to that ship).
 
 ## Not on this list
 
