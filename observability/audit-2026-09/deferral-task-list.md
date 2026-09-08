@@ -39,5 +39,5 @@ Telegram bot credentials, Langfuse `dhg-ai-factory` project keys, ufw rules, and
 
 ## Found during Wave 1, decision needed (not deferred)
 
-- `timeout_handler.start_scheduler` is never called anywhere and apscheduler is not in registry requirements. Wiring it starts enforcing CME review SLA timeouts and escalation notifications. Stephen decides: now, or with the Pydantic AI CME rebuild.
+- ~~`timeout_handler.start_scheduler` is never called anywhere and apscheduler is not in registry requirements.~~ Resolved 2026-09-08 (commit 4d3c87c): scheduler wired behind `CME_SLA_SCHEDULER_ENABLED` (default off), APScheduler 3.11.3 pinned, 24 tests, gauge metric, runbook. Flip the flag when CME reviewers exist.
 - The May Dependabot commit cc2cd57 partially bumped langchain in medkb; the same pattern may exist in `registry/` and `services/session-logger/`. Checked registry image: fastapi 0.104.1 / starlette 0.27 / pydantic 2.5, no langchain installed, so registry is unaffected; session-logger checked: fastapi 0.109 / pydantic 2.6, no langchain packages, unaffected.
