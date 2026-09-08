@@ -4,7 +4,7 @@ Every endpoint module imports from here instead of declaring its own.
 This prevents duplicate-timeseries errors when multiple modules are
 imported in the same process (e.g., during pytest collection).
 """
-from prometheus_client import Counter, Histogram
+from prometheus_client import Counter, Gauge, Histogram
 
 registry_write_latency = Histogram(
     "registry_write_latency",
@@ -39,4 +39,9 @@ registry_errors = Counter(
 registry_db_errors = Counter(
     "registry_db_errors",
     "Total number of database connection errors",
+)
+
+registry_cme_sla_scheduler_enabled = Gauge(
+    "registry_cme_sla_scheduler_enabled",
+    "1 when the CME review SLA scheduler is running (CME_SLA_SCHEDULER_ENABLED), else 0",
 )

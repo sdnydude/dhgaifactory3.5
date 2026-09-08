@@ -248,6 +248,10 @@ services:
   # services across files; lists append). Kept here because the override is
   # the observability owner's file. ──────────────────────────────────────
   registry-api:
+    environment:
+      # CME review SLA scheduler (registry/timeout_handler.py). Default off;
+      # set CME_SLA_SCHEDULER_ENABLED=true in the compose environment to run it.
+      - CME_SLA_SCHEDULER_ENABLED=${CME_SLA_SCHEDULER_ENABLED:-false}
     volumes:
       # Runbooks-as-code: registry/seed_runbooks.py loads these YAML files
       # (POST /api/incidents/runbooks/seed); the table is a cache of them.

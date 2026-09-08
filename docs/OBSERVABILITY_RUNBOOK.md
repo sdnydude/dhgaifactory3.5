@@ -209,6 +209,27 @@ host = timeout, frontend `/api/prometheus` still 200.
 
 Check `memory/reference_port_map.md` before assigning any new port.
 
+## CME SLA scheduler
+
+`registry/timeout_handler.py` runs the CME review SLA (R3-R5): every 15 min it
+times out reviewer assignments past their 24 h deadline, escalates to the next
+reviewer or puts the project on HOLD, and at 09:00 UTC it sends daily HOLD
+reminders. It is wired into the registry-api startup behind
+`CME_SLA_SCHEDULER_ENABLED` (true/1/yes/on = on; anything else or unset = off).
+Default is off — the container logs
+`CME SLA scheduler disabled (CME_SLA_SCHEDULER_ENABLED=false)` at startup.
+
+- Metric: `registry_cme_sla_scheduler_enabled` (gauge, 0/1) on registry-api
+  `/metrics`; check it in Prometheus before assuming the scheduler is running.
+- Turn on: set `CME_SLA_SCHEDULER_ENABLED=true` in the environment the
+  registry-api service reads (the compose `.env` or shell that runs
+  `docker compose`), then `docker compose up -d registry-api`. The startup log
+  line then reads `CME SLA scheduler enabled: check_sla_timeouts every 15 min,
+  daily_hold_reminders daily at 09:00 UTC` and the gauge reads 1.
+- The CME review tables (`cme_review_assignments`, `cme_reviewer_config`) are
+  empty today, so enabling the scheduler enforces nothing until reviewers and
+  assignments exist.
+
 ## Troubleshooting
 
 - **Target down** — read `lastError` from `/api/v1/targets`, then

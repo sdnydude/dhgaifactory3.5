@@ -3,6 +3,7 @@ DHG Registry API Service
 FastAPI service with /healthz, /metrics, and CRUD operations
 All data stored in PostgreSQL DHG Registry
 """
+import os
 import time
 import logging
 from contextlib import asynccontextmanager
@@ -11,6 +12,13 @@ from datetime import datetime
 import uuid
 
 logger = logging.getLogger("dhg.registry")
+# uvicorn configures only its own loggers; without a handler this logger's
+# INFO lines are dropped (root default is WARNING via lastResort).
+if not logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("%(levelname)s:     %(message)s"))
+    logger.addHandler(_handler)
+    logger.setLevel(logging.INFO)
 
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,6 +30,7 @@ from prometheus_client import generate_latest
 from prometheus_fastapi_instrumentator import Instrumentator
 from prometheus_fastapi_instrumentator import metrics as http_metrics
 
+import timeout_handler
 from database import engine, SessionLocal, get_db
 from models import Media, Transcript, Segment, Event
 from metrics import (
@@ -31,6 +40,7 @@ from metrics import (
     registry_read_operations,
     registry_errors,
     registry_db_errors,
+    registry_cme_sla_scheduler_enabled,
 )
 
 
@@ -171,9 +181,24 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"✗ Security role seeding failed: {e}")
 
+    # CME review SLA scheduler — off unless CME_SLA_SCHEDULER_ENABLED is on
+    sla_scheduler = None
+    if timeout_handler.scheduler_enabled():
+        sla_scheduler = timeout_handler.start_scheduler()
+        logger.info(f"CME SLA scheduler enabled: {timeout_handler.SCHEDULE_SUMMARY}")
+    else:
+        raw = os.environ.get(timeout_handler.SCHEDULER_ENV)
+        env = timeout_handler.SCHEDULER_ENV
+        detail = f"{env} unset" if raw is None else f"{env}={raw}"
+        logger.info(f"CME SLA scheduler disabled ({detail})")
+    registry_cme_sla_scheduler_enabled.set(1 if sla_scheduler is not None else 0)
+
     yield
 
     # Shutdown
+    if sla_scheduler is not None:
+        sla_scheduler.shutdown(wait=False)
+        print("[TIMEOUT_HANDLER] Scheduler stopped")
     print("Shutting down Registry API...")
 
 
