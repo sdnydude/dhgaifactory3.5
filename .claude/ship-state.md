@@ -138,8 +138,8 @@ Approach confirmed; no second pass. What would have falsified it: a dump that ne
 
 ## Chunk 3 — first run, alerts, runbooks
 - [x] T7 First manual backup run: 13/13 ok, archives decrypt, NAS mirror dry-run clean, 13 series in Prometheus
-- [ ] T8 rules.d/backups.yml (4 alerts) + TextfileStale regex + drill-container exclusions; promtool green; `docker kill -s HUP dhg-prometheus`; rules listed
-- [ ] T9 Runbook model = human-only: ALERT_TRIGGER_MAP gets explicit `human_only: True` entries for the 4 backup + 6 NAS alerts (no YAML, matching the existing human-only alerts), docs sections written, gen-runbooks coverage regenerated, verify-runbooks green; registry-api rebuilt once, pytest green
+- [x] T8 rules.d/backups.yml (4 alerts) + TextfileStale regex + drill-container exclusions; promtool green; `docker kill -s HUP dhg-prometheus`; rules listed
+- [x] T9 Runbook model = human-only: ALERT_TRIGGER_MAP gets explicit `human_only: True` entries for the 4 backup + 6 NAS alerts (no YAML, matching the existing human-only alerts), docs sections written, gen-runbooks coverage regenerated, verify-runbooks green; registry-api rebuilt once, pytest green
 
 ## Chunk 4 — NAS monitoring
 - [ ] T10 DSM SNMPv3 on (dhgmon, SHA/AES), v1/v2c `public` off — `get` first, `set` with the returned keys, re-`get` proves v1/v2c off

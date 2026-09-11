@@ -427,6 +427,21 @@ ALERT_TRIGGER_MAP: dict = {
     "LangfuseContainerRestart": {"trigger": None, "category": "integration", "human_only": True},
     # A leaked secret is rotated by a person; no diagnostic may read the line.
     "SecretLeakDetected": {"trigger": None, "category": "security", "human_only": True},
+    # Backups (rules.d/backups.yml): the remediator's allowlist cannot run gpg,
+    # rsync or ls, and a restore is never automated. One incident per target
+    # via the `name` label.
+    "BackupStale": {"trigger": None, "category": "data", "human_only": True},
+    "BackupFailed": {"trigger": None, "category": "data", "human_only": True},
+    "RestoreDrillStale": {"trigger": None, "category": "data", "human_only": True},
+    "BackupOffsiteStale": {"trigger": None, "category": "data", "human_only": True},
+    # Synology NAS (rules.d/nas.yml, SNMP via dhg-snmp-exporter): drives are
+    # replaced by a person.
+    "NasDown": {"trigger": None, "category": "infrastructure", "human_only": True},
+    "NasRaidCrashed": {"trigger": None, "category": "infrastructure", "human_only": True},
+    "NasRaidDegraded": {"trigger": None, "category": "infrastructure", "human_only": True},
+    "NasDiskUnhealthy": {"trigger": None, "category": "infrastructure", "human_only": True},
+    "NasVolumeHigh": {"trigger": None, "category": "infrastructure", "human_only": True},
+    "NasTempHigh": {"trigger": None, "category": "infrastructure", "human_only": True},
 }
 
 

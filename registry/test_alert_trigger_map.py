@@ -40,7 +40,8 @@ RUNBOOKS = load_runbooks()
 
 
 def test_rule_files_parsed():
-    assert len(RULES) == 45
+    # 45 from the observability rebuild + 4 backups (rules.d/backups.yml) + 6 NAS (rules.d/nas.yml)
+    assert len(RULES) == 55
     assert len(RUNBOOKS) == 17
 
 

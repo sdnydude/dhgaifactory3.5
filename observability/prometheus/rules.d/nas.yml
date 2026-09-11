@@ -1,0 +1,88 @@
+# Synology DS1618+ (10.0.0.250, DSM 7.1.1) via SNMPv3, scraped by
+# dhg-snmp-exporter (prom/snmp-exporter, module `synology`, job `nas`). Series
+# are the MIB object names: raidStatus{raidName}, diskStatus{diskID},
+# diskHealthStatus, diskTemperature, raidFreeSize, raidTotalSize, up{job="nas"}.
+#
+# raidStatus (SYNOLOGY-RAID-MIB): 1 Normal; 2-10 transitions (Repairing,
+# Migrating, Expanding, Deleting, Creating, RaidSyncing, RaidParityChecking,
+# RaidAssembling, Canceling); 11 Degrade; 12 Crashed; 13 DataScrubbing;
+# 14-21 further transitions. Only 11 and 12 alert; a rebuild or a scrub must
+# never page.
+# diskStatus: 1 Normal, 2 Initialized, 3 NotInitialized, 4 SystemPartitionFailed,
+# 5 Crashed. diskHealthStatus (DSM 7): 1 Normal, 2 Warning, 3 Critical, 4 Failing.
+#
+# Degrade is HIGH, not critical, on purpose: a degrade can last weeks while a
+# drive ships, and Alertmanager's inhibit rule 1 (critical suppresses
+# high|warning on equal service) would silence NasTempHigh/NasVolumeHigh for the
+# whole period. Every rule sets service="nas".
+#
+# History: this NAS ran on 4 of 6 disks from 2026-02-25 to 2026-09-10 with no
+# alert anywhere. These rules exist so that never repeats.
+groups:
+  - name: nas
+    rules:
+      - alert: NasDown
+        expr: up{job="nas"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          service: nas
+        annotations:
+          summary: "Synology NAS is not answering SNMP"
+          description: "dhg-snmp-exporter got no SNMPv3 answer from 10.0.0.250 for 5 minutes: the NAS is off, unreachable, or SNMP was disabled in DSM. The nightly backup mirror (BackupOffsiteStale) will follow within 28 h."
+          runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#nasdown"
+
+      - alert: NasRaidCrashed
+        expr: raidStatus == 12
+        for: 5m
+        labels:
+          severity: critical
+          service: nas
+        annotations:
+          summary: "NAS storage pool {{ $labels.raidName }} has CRASHED"
+          description: "The pool lost more disks than its RAID level tolerates. Data on the volume is unavailable and at risk. Do not reboot, do not pull drives; Storage Manager shows which bays. The local copies under /mnt/4tb/backups/nightly are the backups that matter now."
+          runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#nasraidcrashed"
+
+      - alert: NasRaidDegraded
+        expr: raidStatus == 11
+        for: 5m
+        labels:
+          severity: high
+          service: nas
+        annotations:
+          summary: "NAS storage pool {{ $labels.raidName }} is degraded"
+          description: "The pool is missing at least one disk and is serving data with reduced (or no) redundancy. Identify the bay in Storage Manager > HDD/SSD; reseat a deactivated drive or replace a dead one (SATA HDD, at least the smallest member's size), then Storage Manager > Storage > pool > Repair. Resolves when raidStatus returns to 1; the rebuild itself (status 2-10) does not alert."
+          runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#nasraiddegraded"
+
+      - alert: NasDiskUnhealthy
+        expr: diskHealthStatus >= 3 or diskStatus == 4 or diskStatus == 5
+        for: 5m
+        labels:
+          severity: critical
+          service: nas
+        annotations:
+          summary: "NAS drive {{ $labels.diskID }} is unhealthy"
+          description: "SMART health is Critical/Failing, or the disk has a system-partition failure or crash. Order the replacement before the drive fails outright and Repair while the pool still has redundancy."
+          runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#nasdiskunhealthy"
+
+      - alert: NasVolumeHigh
+        expr: raidFreeSize / raidTotalSize < 0.15
+        for: 30m
+        labels:
+          severity: warning
+          service: nas
+        annotations:
+          summary: "NAS pool {{ $labels.raidName }} under 15% free"
+          description: "The volume holding aifactory-backups (and every other share) has under 15% free for 30 minutes. The backup mirror adds roughly 100 MB a day; find the real consumer in DSM Storage Analyzer."
+          runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#nasvolumehigh"
+
+      - alert: NasTempHigh
+        expr: diskTemperature > 50
+        for: 15m
+        labels:
+          severity: warning
+          service: nas
+        annotations:
+          summary: "NAS drive {{ $labels.diskID }} above 50 C for 15 min"
+          description: "Sustained drive heat shortens drive life and precedes SMART failures. A rebuild or scrub runs the drives hot (transient); otherwise check DSM fan mode and physical airflow. One hot drive among cool neighbours is a drive problem, not a cooling one."
+          runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#nastemphigh"
