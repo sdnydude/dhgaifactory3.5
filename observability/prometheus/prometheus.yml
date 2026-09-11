@@ -367,6 +367,29 @@ scrape_configs:
     file_sd_configs:
       - files: ['/etc/prometheus/targets/dh40801-cadvisor.json']
         refresh_interval: 1m
+
+  # Synology DS1618+ over SNMPv3 through dhg-snmp-exporter (backups + DR ship).
+  # module `synology` is the one shipped in snmp_exporter's snmp.yml; auth
+  # `dhg_v3` is rendered from Doppler into observability/snmp-exporter/auths.yml.
+  # Series: raidStatus, diskStatus, diskHealthStatus, diskTemperature,
+  # raidFreeSize, raidTotalSize (+ system/UPS/storageIO). Rules: rules.d/nas.yml.
+  - job_name: 'nas'
+    metrics_path: /snmp
+    params:
+      module: [synology]
+      auth: [dhg_v3]
+    scrape_interval: 60s
+    scrape_timeout: 30s
+    static_configs:
+      - targets: ['10.0.0.250']
+        labels: {service: 'nas', host: 'synology'}
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: dhg-snmp-exporter:9116
   - job_name: 'blackbox-langfuse'
     metrics_path: /probe
     params:

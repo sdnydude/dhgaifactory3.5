@@ -20,6 +20,8 @@ registry/models.py (DB models)
 web-ui/src/ (legacy — broken, do not fix)
 docker-compose.yml (main)
 docker-compose.override.yml (override — hardcoded secrets, see C11)
+observability/scripts/backup-all.sh + restore-drill.sh (nightly encrypted backups → /mnt/4tb/backups/nightly + Synology mirror; drills into ephemeral containers)
+dhg-snmp-exporter (Synology DS1618+ 10.0.0.250 over SNMPv3; Prometheus job `nas`, rules.d/nas.yml)
 
 ARCH: 13 agent graphs + 4 orchestrator graphs (needs_package, curriculum_package, grant_package, full_pipeline). Each: TypedDict state, ChatAnthropic, @traceable, asyncio.wait_for (5min), retry (3 max).
 

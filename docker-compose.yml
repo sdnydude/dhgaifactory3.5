@@ -198,6 +198,25 @@ services:
       - dhg-network
     restart: unless-stopped
 
+  # Synology DS1618+ (10.0.0.250) over SNMPv3 (backups + DR ship, 2026-09).
+  # snmp.yml is the file shipped with the pinned release (module `synology`);
+  # auths.yml is rendered from Doppler by observability/scripts/render-snmp-exporter.sh
+  # (gitignored, mode 600 — hence root, like postgres-exporter-multi). No port is
+  # published; Prometheus reaches it as dhg-snmp-exporter:9116 (job `nas`).
+  snmp-exporter:
+    image: prom/snmp-exporter:v0.30.1
+    container_name: dhg-snmp-exporter
+    user: "0:0"
+    command:
+      - '--config.file=/etc/snmp_exporter/snmp.yml'
+      - '--config.file=/etc/snmp_exporter/auths.yml'
+    volumes:
+      - ./observability/snmp-exporter/snmp.yml:/etc/snmp_exporter/snmp.yml:ro
+      - ./observability/snmp-exporter/auths.yml:/etc/snmp_exporter/auths.yml:ro
+    networks:
+      - dhg-network
+    restart: unless-stopped
+
   # Multi-instance Postgres metrics (REBUILD-PLAN-2026-09 WP4). Separate from the
   # existing `postgres-exporter` (registry-db, single-target DATA_SOURCE_NAME):
   # postgres_exporter v0.15.0 serves /probe?target=<host:port/db>&auth_module=<name>,

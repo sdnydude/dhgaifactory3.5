@@ -12,7 +12,7 @@ kb_findings: deferred f530537e (critical, open) = this feature; no prior backup 
 codegraph_scan: no symbols; relevant files: scripts/backup.sh, scripts/restore.sh (legacy, to delete), observability/scripts/langfuse-canary.sh (textfile + cron pattern), observability/prometheus/alerts.yml:261 TextfileStale, observability/prometheus/rules.d/dh40801.yml LangfuseCanaryStale (or absent() pattern), observability/scripts/gen-runbooks.py + observability/runbooks/*.yml, dh40801/docker-compose.langfuse.yml, docs-site/projects/dhg-ai-factory/runbooks/alerts.md
 advisor: Phase 1 advisor #1 (approach) 14 notes, folded: TextfileStale exclusion, attempt timestamp + BackupFailed, off-host copy, roles dump, docker cp for MinIO, manifests, weekly tier, flock, AC50-52 status. Phase 1 advisor #2 (transport) 11 notes, folded: DSM rsync service SSH mode (not Terminal SSH), encrypt DB dumps too, gpg not age, immutable snapshots need DSM 7.2, dedicated key, disable anonymous rsyncd 873, pull options infeasible
 decisions: 1 approach A go (Stephen 2026-09-08); 2 config/secrets layer included, gpg-encrypted (Stephen yes); 3 exclusions accepted, ClickHouse system-log bloat FIXED in this ship not deferred (Stephen "fix it"); transport = rsync over SSH to Synology after security review (Stephen "go nas" 2026-09-10)
-nas_state: DS1618+, DSM 7.1.1-42962 U9, volume1 Btrfs 21 TB (8.7 TB used), RAID6 was 4/6 since 2026-02-25; Drive 2 repaired 2026-09-10 -> 5/6 [U_UUUU]; Drive 1 (bay 1) absent, replacement drive needed; SSH port 28 (22 also sshd); swebber64 is administrators; DSM API login works; anonymous rsyncd on 873 lists modules; Snapshot Replication 7.4.2 installed 2026-09-10 (schedule = Stephen's UI step); immutable snapshots need DSM 7.2 (deferred 8baeab4c, Stephen's timing)
+nas_state: DS1618+, DSM 7.1.1-42962 U9, volume1 Btrfs 21 TB (8.7 TB used), RAID6 was 4/6 since 2026-02-25; Drive 2 repaired 2026-09-10 -> 5/6 [U_UUUU]; Drive 1 (bay 1) absent, replacement drive needed; SSH port 28 (22 also sshd); swebber64 is administrators; DSM API login works; SNMPv3 on (dhgmon, SHA/AES), v1/v2c public OFF (2026-09-11); rsync SSH mode on port 22; Snapshot Replication 7.4.2 installed 2026-09-10 (schedule = Stephen's UI step); immutable snapshots need DSM 7.2 (deferred 8baeab4c, Stephen's timing)
 
 ---
 
@@ -142,8 +142,8 @@ Approach confirmed; no second pass. What would have falsified it: a dump that ne
 - [x] T9 Runbook model = human-only: ALERT_TRIGGER_MAP gets explicit `human_only: True` entries for the 4 backup + 6 NAS alerts (no YAML, matching the existing human-only alerts), docs sections written, gen-runbooks coverage regenerated, verify-runbooks green; registry-api rebuilt once, pytest green
 
 ## Chunk 4 — NAS monitoring
-- [ ] T10 DSM SNMPv3 on (dhgmon, SHA/AES), v1/v2c `public` off — `get` first, `set` with the returned keys, re-`get` proves v1/v2c off
-- [ ] T11 dhg-snmp-exporter service + Prometheus job `nas` + CLAUDE.md container name; raidStatus/diskStatus/diskHealthStatus/diskTemperature scraped
+- [x] T10 DSM SNMPv3 on (dhgmon, SHA/AES), v1/v2c `public` off — `get` first, `set` with the returned keys, re-`get` proves v1/v2c off
+- [x] T11 dhg-snmp-exporter service + Prometheus job `nas` + CLAUDE.md container name; raidStatus/diskStatus/diskHealthStatus/diskTemperature scraped
 - [ ] T12 rules.d/nas.yml (6 alerts: NasDown, NasRaidCrashed, NasRaidDegraded=high, NasDiskUnhealthy, NasVolumeHigh, NasTempHigh) + docs; NasRaidDegraded FIRING (pool 5/6) as proof
 
 ## Chunk 5 — drills, surface, schedule
