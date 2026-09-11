@@ -97,8 +97,8 @@ dk() { local ctx="$1"; shift; if [ "$ctx" = local ]; then docker "$@"; else dock
 # pg: extra = user:db1,db2:pghost. Per database, one REPEATABLE READ session
 # exports a snapshot, counts every user table under that snapshot, and pg_dump
 # runs with --snapshot so the counts and the archive describe the same instant.
-# The session is a coprocess on `docker exec -i ... psql`; fd 3/4 carry it.
-PG_COUNTS_SQL="SELECT format('%I.%I', schemaname, relname) || '=' || (xpath('/row/c/text()', query_to_xml(format('select count(*) as c from %I.%I', schemaname, relname), false, true, '')))[1]::text FROM pg_stat_user_tables ORDER BY 1;"
+# The session is `docker exec -i ... psql` fed through a named pipe (fd 4).
+PG_COUNTS_SQL="$BL_PG_COUNTS_SQL"
 produce_pg() {
   local out="$1" ctx="$2" container="$3" extra="$4"
   local user dbs pghost db snap line counts hostflag=() json='{}'

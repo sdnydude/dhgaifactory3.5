@@ -32,6 +32,10 @@ config|files|local|-|config-layer
 EOF
 }
 
+# Per-table row counts as "schema.table=N" lines, one query, works under a
+# REPEATABLE READ snapshot (backup) and against a restored database (drill).
+BL_PG_COUNTS_SQL="SELECT format('%I.%I', schemaname, relname) || '=' || (xpath('/row/c/text()', query_to_xml(format('select count(*) as c from %I.%I', schemaname, relname), false, true, '')))[1]::text FROM pg_stat_user_tables ORDER BY 1;"
+
 # bl_target_field <id> <id|kind|ctx|container|extra> — one field of one row; exit 1 if the id is unknown
 bl_target_field() {
   local row; row="$(bl_targets | awk -F'|' -v id="$1" '$1==id')"
