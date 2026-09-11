@@ -11,7 +11,7 @@ bl_run_id() {
 #   kind pg:         extra = user:db1,db2:pghost   (pghost empty = socket default; plane needs /var/run/postgresql)
 #   kind clickhouse: extra = user:database
 #   kind minio:      extra = path inside the container holding the xl-single tree
-#   kind volume:     extra = container:path,container:path,...  (docker cp sources)
+#   kind volume:     extra = container:path[:exclude],...  (tar inside the container; exclude is relative to path)
 #   kind files:      extra = name of the config-file list (resolved by backup-all.sh)
 # ctx is "local" or a docker context name. The offsite mirror is not a row.
 bl_targets() {
@@ -27,7 +27,7 @@ langfuse-postgres|pg|dh40801|dhg-langfuse-postgres|postgres:postgres:
 langfuse-clickhouse|clickhouse|dh40801|dhg-langfuse-clickhouse|clickhouse:default
 langfuse-minio|minio|dh40801|dhg-langfuse-minio|/data
 plane-minio|minio|local|plane-app-plane-minio-1|/export
-volumes|volume|local|-|dhg-grafana:/var/lib/grafana/grafana.db,dhg-registry-api:/exports,dhg-open-webui:/app/backend/data
+volumes|volume|local|-|dhg-grafana:/var/lib/grafana/grafana.db,dhg-registry-api:/exports,dhg-open-webui:/app/backend/data:cache
 config|files|local|-|config-layer
 EOF
 }

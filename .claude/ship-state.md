@@ -133,7 +133,7 @@ Approach confirmed; no second pass. What would have falsified it: a dump that ne
 
 ## Chunk 2 — scripts
 - [x] T4 observability/scripts/backup-lib.sh + observability/tests/backup-lib.bats green (pure functions: prune, textfile, manifest, target parsing, gpg round-trip) + CI `Shell tests` job added in the same commit
-- [ ] T5 observability/scripts/backup-all.sh + backup-all.bats green (dry-run count, lock exit 75, config-file `test -r` fail-loud); producer isolation proven in T7 with `--target` against a stopped container
+- [x] T5 observability/scripts/backup-all.sh + backup-all.bats green (dry-run count, lock exit 75, config-file `test -r` fail-loud); producer isolation proven in T7 with `--target` against a stopped container
 - [ ] T6 observability/scripts/restore-drill.sh + restore-drill.bats green (manifest-less run skipped, count mismatch non-zero, container removed on failure path)
 
 ## Chunk 3 — first run, alerts, runbooks
