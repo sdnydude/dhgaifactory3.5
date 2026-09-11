@@ -69,6 +69,7 @@ case " $* " in
   *" run --rm "*" pg_restore --list "*) exit 0 ;;
   # ---- drill side ----
   *" run -d "*) echo "deadbeefcafe" ;;
+  *" exec dhg-restore-drill-eval-db mkdir -p /restore "*) exit 0 ;;
   *" exec dhg-restore-drill-eval-db pg_isready "*) exit 0 ;;
   *" cp - dhg-restore-drill-eval-db:"*) cat > /dev/null ;;
   *" exec dhg-restore-drill-eval-db pg_restore "*) exit 0 ;;
@@ -91,6 +92,7 @@ SHIM
   [ "$status" -eq 0 ]
   printf '%s\n' "$output" | grep -q 'eval-db .*PASS'
   grep -q '^docker run -d --network none --name dhg-restore-drill-eval-db -e POSTGRES_PASSWORD=drill pgvector/pgvector:pg15$' "$SHIM_LOG"
+  grep -q '^docker exec dhg-restore-drill-eval-db mkdir -p /restore$' "$SHIM_LOG"     # docker cp - needs an existing dir
   grep -q '^docker exec dhg-restore-drill-eval-db pg_restore -U postgres -d evalviewer /restore/evalviewer.dump$' "$SHIM_LOG"
   grep -q '^docker exec dhg-restore-drill-eval-db pg_restore -U postgres -d evalviewer_test /restore/evalviewer_test.dump$' "$SHIM_LOG"
   grep -q '^docker rm -f dhg-restore-drill-eval-db$' "$SHIM_LOG"
@@ -107,6 +109,19 @@ SHIM
   printf '%s\n' "$output" | grep -q 'eval-db .*FAIL'
   grep -q '^docker rm -f dhg-restore-drill-eval-db$' "$SHIM_LOG"
   ! grep -q 'backup_restore_drill_success_timestamp{name="eval-db"}' "$BACKUP_TEXTFILE"
+}
+
+@test "--all removes a failed target's container before moving to the next target (not only at script exit)" {
+  install_pg_shim
+  "$BACKUP" --target eval-db --no-offsite
+  export DRILL_COUNTS='public.foo=2\npublic.bar=0\n'
+  run "$DRILL" --all
+  [ "$status" -eq 1 ]
+  # the rm for eval-db must appear BEFORE the next target's first docker call
+  rm_line="$(grep -n '^docker rm -f dhg-restore-drill-eval-db$' "$SHIM_LOG" | head -1 | cut -d: -f1)"
+  next_line="$(grep -n 'dhg-restore-drill-audio-postgres\|audio-postgres' "$SHIM_LOG" | head -1 | cut -d: -f1)"
+  [ -n "$rm_line" ]
+  [ -z "$next_line" ] || [ "$rm_line" -lt "$next_line" ]
 }
 
 install_ch_shim() {
@@ -126,6 +141,7 @@ case " $* " in
     esac ;;
   # ---- drill side ----
   *" run -d "*) echo "deadbeefcafe" ;;
+  *" exec dhg-restore-drill-langfuse-clickhouse mkdir -p /restore "*) exit 0 ;;
   *" exec dhg-restore-drill-langfuse-clickhouse clickhouse-client --query SELECT 1 "*) exit 0 ;;
   *" exec -i dhg-restore-drill-langfuse-clickhouse clickhouse-client --multiquery "*) cat > /dev/null ;;
   *" exec -i dhg-restore-drill-langfuse-clickhouse clickhouse-client --query INSERT INTO default.traces FORMAT Native "*) cat > /dev/null ;;
@@ -199,6 +215,19 @@ SHIM
   grep -q '^docker exec dhg-restore-drill-langfuse-minio mc ls local/$' "$SHIM_LOG"
   grep -q '^docker rm -f dhg-restore-drill-langfuse-minio$' "$SHIM_LOG"
   [ "$(find "$TEST_ROOT" -name '*.env-file*' | wc -l)" -eq 0 ]      # env-file removed after create
+}
+
+@test "minio drill uses the target's own data path (plane-minio serves and verifies /export, not /data)" {
+  install_minio_shim
+  sed -i 's#dhg-langfuse-minio:/data#plane-app-plane-minio-1:/export#; s#dhg-restore-drill-langfuse-minio#dhg-restore-drill-plane-minio#g; s#cp - dhg-restore-drill-plane-minio:/ #cp - dhg-restore-drill-plane-minio:/ #' "$TEST_ROOT/bin/docker"
+  sed -i 's#--context dh40801 ##' "$TEST_ROOT/bin/docker"
+  mv "$TEST_ROOT/tree/data" "$TEST_ROOT/tree/export"; sed -i 's#-cf - data#-cf - export#g' "$TEST_ROOT/bin/docker"
+  sed -i 's#cp dhg-restore-drill-plane-minio:/data - #cp dhg-restore-drill-plane-minio:/export - #' "$TEST_ROOT/bin/docker"
+  "$BACKUP" --target plane-minio --no-offsite
+  run "$DRILL" plane-minio
+  [ "$status" -eq 0 ]
+  grep -q ' minio/minio:latest server /export$\| cgr.dev/chainguard/minio:latest server /export$' "$SHIM_LOG"
+  grep -q '^docker cp dhg-restore-drill-plane-minio:/export -$' "$SHIM_LOG"
 }
 
 install_volumes_shim() {

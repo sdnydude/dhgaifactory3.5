@@ -45,6 +45,7 @@ drill_pg() {
   docker run -d --network none --name "$DRILL_CONTAINER" -e POSTGRES_PASSWORD=drill "$image" > /dev/null
   wait_for 60 docker exec "$DRILL_CONTAINER" pg_isready -U postgres || { log "$id: server never became ready"; return 1; }
   bl_gpg_decrypt < "$rundir/roles.sql.gpg" | docker exec -i "$DRILL_CONTAINER" psql -X -q -U postgres -d postgres > /dev/null 2>&1 || true  # roles may already exist
+  docker exec "$DRILL_CONTAINER" mkdir -p /restore      # `docker cp -` refuses a destination that does not exist
   for f in "$rundir"/*.dump.gpg; do
     db="$(basename "$f" .dump.gpg)"
     # decrypt into a tar stream so `docker cp -` can place the file without a host temp file
@@ -53,8 +54,10 @@ drill_pg() {
     rm -f "$rundir/.drill.$db.dump"
     docker exec "$DRILL_CONTAINER" psql -X -q -U postgres -d postgres -c "CREATE DATABASE \"$db\"" > /dev/null
     docker exec "$DRILL_CONTAINER" pg_restore -U postgres -d "$db" "/restore/$db.dump" || { log "$id: pg_restore $db failed"; return 1; }
+    # both sides sorted in byte order: jq's sort is codepoint order, and a locale
+    # `sort` collates "user_badges" and "users" differently (false mismatch)
     want="$(jq -r --arg db "$db" '.counts[$db] | to_entries | map("\(.key)=\(.value)") | sort | join("\n")' "$rundir/manifest.json")"
-    got="$(docker exec "$DRILL_CONTAINER" psql -X -q -At -U postgres -d "$db" -c "$BL_PG_COUNTS_SQL" | sort)"
+    got="$(docker exec "$DRILL_CONTAINER" psql -X -q -At -U postgres -d "$db" -c "$BL_PG_COUNTS_SQL" | LC_ALL=C sort)"
     [ "$got" = "$want" ] || { log "$id/$db: row counts differ from manifest"; printf 'want:\n%s\ngot:\n%s\n' "$want" "$got" >&2; return 1; }
     log "$id/$db: $(wc -l <<<"$got") tables, counts match"
   done
@@ -76,6 +79,7 @@ drill_clickhouse() {
   wait_for 90 docker exec "$DRILL_CONTAINER" clickhouse-client --query "SELECT 1" || { log "$id: server never became ready"; return 1; }
   bl_gpg_decrypt < "$rundir/ddl.sql.gpg" | sed 's/$/;/' \
     | docker exec -i "$DRILL_CONTAINER" clickhouse-client --multiquery || { log "$id: DDL replay failed"; return 1; }
+  docker exec "$DRILL_CONTAINER" mkdir -p /restore      # `docker cp -` refuses a destination that does not exist
   for f in "$rundir"/*.native.gz.gpg; do
     t="$(basename "$f" .native.gz.gpg)"
     bl_gpg_decrypt < "$f" | gunzip > "$rundir/.drill.$t.native"
@@ -101,9 +105,10 @@ drill_clickhouse() {
 # container's env and hands them over through a mode-600 env-file that is
 # deleted right after `docker create` (never argv, never the shim log).
 drill_minio() {
-  local rundir="$1" id image ctx container envfile want got
+  local rundir="$1" id image ctx container path envfile want got
   id="$(jq -r '.target' "$rundir/manifest.json")"; image="$(jq -r '.image' "$rundir/manifest.json")"
   ctx="$(bl_target_field "$id" ctx)"; container="$(bl_target_field "$id" container)"
+  path="$(bl_target_field "$id" extra)"          # /data for Langfuse, /export for plane
   want="$(jq -r '.members' "$rundir/manifest.json")"
   DRILL_CONTAINER="dhg-restore-drill-$id"
   docker rm -f "$DRILL_CONTAINER" > /dev/null 2>&1 || true
@@ -112,16 +117,19 @@ drill_minio() {
   else docker --context "$ctx" inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$container"; fi \
     | sed -n '/^MINIO_ROOT_\(USER\|PASSWORD\)=/p' > "$envfile"
   [ "$(wc -l < "$envfile")" -eq 2 ] || { rm -f "$envfile"; log "$id: could not read MINIO_ROOT_* from $container"; return 1; }
-  docker create --network none --name "$DRILL_CONTAINER" --env-file "$envfile" "$image" server /data > /dev/null
+  docker create --network none --name "$DRILL_CONTAINER" --env-file "$envfile" "$image" server "$path" > /dev/null
   rm -f "$envfile"
-  bl_gpg_decrypt < "$rundir/data.tar.gpg" | docker cp - "$DRILL_CONTAINER:/" || { log "$id: docker cp into the drill container failed"; return 1; }
+  # the archive's entries are rooted at the path's basename (docker cp semantics), so untar into its parent
+  bl_gpg_decrypt < "$rundir/data.tar.gpg" | docker cp - "$DRILL_CONTAINER:$(dirname "$path")" || { log "$id: docker cp into the drill container failed"; return 1; }
+  # equality is measured on the restored tree BEFORE the server starts: MinIO
+  # rewrites .minio.sys (tmp, multipart, format) on first boot.
+  got="$(docker cp "$DRILL_CONTAINER:$path" - | tar -t | wc -l)"
+  [ "$got" = "$want" ] || { log "$id: restored tree has $got entries, manifest says $want"; return 1; }
   docker start "$DRILL_CONTAINER" > /dev/null
   # credentials expand INSIDE the container (sh -c), so they never reach argv here
   wait_for 60 docker exec "$DRILL_CONTAINER" sh -c 'exec mc alias set local http://127.0.0.1:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"' \
     || { log "$id: server never accepted the restored credentials"; return 1; }
   docker exec "$DRILL_CONTAINER" mc ls local/ | sed 's/^/  /' >&2
-  got="$(docker cp "$DRILL_CONTAINER:/data" - | tar -t | wc -l)"
-  [ "$got" = "$want" ] || { log "$id: restored tree has $got entries, manifest says $want"; return 1; }
   log "$id: $got entries verified, server up on the restored tree"
   cleanup
 }
@@ -160,6 +168,7 @@ drill_target() {
     bl_state_set "$id" drill_success "$(date +%s)"; bl_write_textfile
     echo "$id $(basename "$rundir") PASS"
   else
+    cleanup          # a failed target must not leave its container for the EXIT trap of a --all run
     echo "$id $(basename "$rundir") FAIL"; return 1
   fi
 }

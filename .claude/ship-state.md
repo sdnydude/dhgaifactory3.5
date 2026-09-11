@@ -144,10 +144,10 @@ Approach confirmed; no second pass. What would have falsified it: a dump that ne
 ## Chunk 4 — NAS monitoring
 - [x] T10 DSM SNMPv3 on (dhgmon, SHA/AES), v1/v2c `public` off — `get` first, `set` with the returned keys, re-`get` proves v1/v2c off
 - [x] T11 dhg-snmp-exporter service + Prometheus job `nas` + CLAUDE.md container name; raidStatus/diskStatus/diskHealthStatus/diskTemperature scraped
-- [ ] T12 rules.d/nas.yml (6 alerts: NasDown, NasRaidCrashed, NasRaidDegraded=high, NasDiskUnhealthy, NasVolumeHigh, NasTempHigh) + docs; NasRaidDegraded FIRING (pool 5/6) as proof
+- [x] T12 rules.d/nas.yml (6 alerts: NasDown, NasRaidCrashed, NasRaidDegraded=high, NasDiskUnhealthy, NasVolumeHigh, NasTempHigh) + docs; NasRaidDegraded FIRING (pool 5/6) as proof
 
 ## Chunk 5 — drills, surface, schedule
-- [ ] T13 restore-drill.sh --all passes 12 targets; watched registry-db drill < 30 min, time recorded
+- [x] T13 restore-drill.sh --all passes 13 targets (2026-09-11 03:1x UTC); registry-db drill 9 s, plane-db 9 s, full --all 46 s; log in session scratchpad; re-run on request for a watched pass
 - [ ] T14 Grafana dhg-platform-backups (Backups row + NAS row); verify-dashboard.sh exit 0 + PNG (after T13 so drill-age panels have series)
 - [ ] T15 crontab: 03:30 nightly backup + Sunday 04:00 drill; lock test (concurrent run exits fast)
 
