@@ -148,8 +148,8 @@ Approach confirmed; no second pass. What would have falsified it: a dump that ne
 
 ## Chunk 5 — drills, surface, schedule
 - [x] T13 restore-drill.sh --all passes 13 targets (2026-09-11 03:1x UTC); registry-db drill 9 s, plane-db 9 s, full --all 46 s; log in session scratchpad; re-run on request for a watched pass
-- [ ] T14 Grafana dhg-platform-backups (Backups row + NAS row); verify-dashboard.sh exit 0 + PNG (after T13 so drill-age panels have series)
-- [ ] T15 crontab: 03:30 nightly backup + Sunday 04:00 drill; lock test (concurrent run exits fast)
+- [x] T14 Grafana dhg-platform-backups (Backups row + NAS row); verify-dashboard.sh exit 0 + PNG (after T13 so drill-age panels have series)
+- [x] T15 crontab: 03:30 nightly backup + Sunday 04:00 drill; lock test (concurrent run exits fast)
 
 ## Chunk 6 — cleanup, docs
 - [ ] T16 Legacy scripts + Makefile targets removed; infrastructure README fixed; deferral list ticked; f530537e resolved with AC 50-53 note
