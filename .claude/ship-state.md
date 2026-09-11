@@ -1,5 +1,5 @@
 status: in_progress
-phase: 4
+phase: 6
 approved: "go" 2026-09-11T01:12:08Z
 tdd: yes (bats on pure functions; orchestration proven in T7)
 phase2_complete: true — 3 Explore agents (3/3 usable) + Phase 2 advisor (approach holds, no second pass; 21 notes folded); explore passes: 1
@@ -163,6 +163,21 @@ Approach confirmed; no second pass. What would have falsified it: a dump that ne
 - [ ] Telegram: TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID in Doppler → render-alertmanager.sh → reload :9093
 - [ ] Drive 1 replacement (≥ 5.5 TB SATA) → RAID 6/6
 - [ ] DSM 7.2 upgrade (your timing; Video Station is the only consideration) → immutable snapshots (deferred 8baeab4c)
+
+# Phase 4 — Build result (2026-09-11)
+Built: 17/18 tasks (T17 = CI Shell tests job ticks on the PR; ci.yml runs only on pull_request/push to master). 12 commits on feat/backups-dr-2026-09: d43db56 ClickHouse diet, ca89d13 backup-lib + reporter + CI job, 99f39e5 backup-all, 7b90e62 restore-drill, f15b679 manifest types + .state exclusion, 57db845 rules/docs/map, 78773e8 NAS SNMPv3, 283d4af drill fixes, cfd1656 dashboard + crontab, af14b8e docs + cleanup, c4eb381 ship-state. Deferred (build-time, needs approval): ContainerCrashLoop's description text in alerts.yml is a copy of ContainerMemoryLeak's (pre-existing copy-paste); ClickHouse still exposes hex diskID for bays not in the relabel list (Disk 1 will decode once present); RestoreDrillStale absent() alert carries no name label (one incident, expected).
+
+# Phase 5 — Verification (2026-09-11, all fresh)
+- Tests: bats 31/31 (observability/tests, log scratchpad/p5-bats.log); registry pytest 708 passed / 0 failed (scratchpad/p5-pytest.log); bash -n + py_compile clean.
+- Rules: promtool SUCCESS on alerts.yml (25) + backups.yml (4) + nas.yml (6); Prometheus 13 groups / 50 rules live; targets 36/36 up incl. job nas.
+- Series: 13 backup_last_success, 13 drill_success, offsite stamp present, raidStatus pool=11, 7 drive series (decoded names).
+- Alerts: only NasRaidDegraded firing (intended proof; registry incident created); TextfileStale silent; no Backup* alert.
+- Live runs: backup-all 13/13 twice (30 s, 99 MB), NAS mirror dry-run empty; restore-drill --all 13/13 (46 s; registry-db 9 s vs 30-min SLO); isolation check with transcribe-db stopped: only that target failed, container restarted.
+- Health: dhg-registry-api healthy after rebuild; dhg-snmp-exporter up; dhg-langfuse-clickhouse healthy after recreate; canary round-trip 7 s.
+- Regression: /api/v1/projects 200 3 ms, /api/incidents/runbooks 200 3 ms, /api/deferred-items/stats 200 5 ms; postgres/langfuse counts unchanged.
+- AgentShield v1.4.0 vs refreshed baseline: 1103 unchanged, 0 new, Gate PASSED (grade F is the pre-existing .claude posture, unchanged by this ship).
+- Performance baselines: nightly backup wall 30 s; full drill 46 s; NAS scrape 60 s interval, exporter walk ~1 s.
+- Dashboard: verify-dashboard.sh dhg-platform-backups 17/17 panels, PNG rendered and visually checked.
 
 # Phase 3 — Plan detail (authoritative; 18 tasks, 6 chunks; supersedes every earlier draft)
 
