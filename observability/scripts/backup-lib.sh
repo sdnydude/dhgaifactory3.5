@@ -74,7 +74,7 @@ bl_write_manifest() {
   local args=() kv k v
   for kv in "$@"; do
     k="${kv%%=*}"; v="${kv#*=}"
-    if [[ "$v" =~ ^-?[0-9]+$ ]] || jq -e . >/dev/null 2>&1 <<<"$v" && [[ "$v" == \{* || "$v" == \[* ]]; then
+    if [[ "$v" =~ ^-?[0-9]+$ ]] || { [[ "$v" == \{* || "$v" == \[* ]] && jq -e . >/dev/null 2>&1 <<<"$v"; }; then
       args+=(--argjson "$k" "$v")
     else
       args+=(--arg "$k" "$v")

@@ -63,6 +63,10 @@ teardown() {
   [ "${lines[5]}" = "2" ]
   [ "${lines[6]}" = "3" ]
   [ "${lines[7]}" = "$(printf 'defg' | sha256sum | cut -d' ' -f1)" ]
+  # integers and JSON objects keep their JSON types; plain strings stay strings
+  [ "$(jq -r '.duration_seconds|type' "$d/manifest.json")" = "number" ]
+  [ "$(jq -r '.counts|type' "$d/manifest.json")" = "object" ]
+  [ "$(jq -r '.image|type' "$d/manifest.json")" = "string" ]
 }
 
 @test "bl_state_set + bl_write_textfile emit HELP/TYPE and one labelled series per recorded state, atomically, mode 0644" {

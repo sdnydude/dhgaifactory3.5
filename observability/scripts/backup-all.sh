@@ -266,7 +266,9 @@ done < <(selected_targets)
 # retention lives locally; Snapshot Replication on the NAS is the undo). ----
 BACKUP_NAS_KEY="${BACKUP_NAS_KEY:-$HOME/.ssh/nas-backup_ed25519}"
 if [ "$OFFSITE" = 1 ]; then
-  if rsync -a --delete --delete-delay --delay-updates --exclude='tmp-*' \
+  # .state is local operational state (stamps), not backup data; it also changes
+  # right after the mirror, so mirroring it would make every dry-run look dirty.
+  if rsync -a --delete --delete-delay --delay-updates --exclude='tmp-*' --exclude='.state' \
        -e "ssh -p 22 -i $BACKUP_NAS_KEY -o IdentitiesOnly=yes -o BatchMode=yes -o LogLevel=ERROR" \
        "$BACKUP_ROOT/" "$NAS_DEST"; then
     bl_state_set offsite success "$(date +%s)"; bl_write_textfile; log "offsite mirror ok -> $NAS_DEST"

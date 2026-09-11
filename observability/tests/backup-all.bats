@@ -274,7 +274,7 @@ SHIM
   mkdir -p "$BACKUP_ROOT/config/$old"; printf '{}' > "$BACKUP_ROOT/config/$old/manifest.json"
   run "$SCRIPT" --target config
   [ "$status" -eq 0 ]
-  grep -q "^rsync -a --delete --delete-delay --delay-updates --exclude=tmp-\* -e ssh -p 22 -i $TEST_ROOT/nas_key -o IdentitiesOnly=yes -o BatchMode=yes -o LogLevel=ERROR $BACKUP_ROOT/ aifactory-backup@10.0.0.250::aifactory-backups/$" "$SHIM_LOG"
+  grep -q "^rsync -a --delete --delete-delay --delay-updates --exclude=tmp-\* --exclude=.state -e ssh -p 22 -i $TEST_ROOT/nas_key -o IdentitiesOnly=yes -o BatchMode=yes -o LogLevel=ERROR $BACKUP_ROOT/ aifactory-backup@10.0.0.250::aifactory-backups/$" "$SHIM_LOG"
   grep -q '^backup_offsite_last_success_timestamp ' "$BACKUP_TEXTFILE"
   [ ! -d "$BACKUP_ROOT/config/$old" ]
   [ "$(ls -d "$BACKUP_ROOT"/config/*/ | wc -l)" -eq 1 ]
