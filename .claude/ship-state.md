@@ -132,7 +132,7 @@ Approach confirmed; no second pass. What would have falsified it: a dump that ne
 - [x] T3 ClickHouse system-log fix on dh40801 (config.d drop-in; recreate UNDER `doppler run --project langfuse --config dev --` or the container comes up with a blank password; system db < 500 MiB; leftover *_log_0 tables dropped; Langfuse counts unchanged; canary green)
 
 ## Chunk 2 — scripts
-- [ ] T4 observability/scripts/backup-lib.sh + observability/tests/backup-lib.bats green (pure functions: prune, textfile, manifest, target parsing, gpg round-trip) + CI `Shell tests` job added in the same commit
+- [x] T4 observability/scripts/backup-lib.sh + observability/tests/backup-lib.bats green (pure functions: prune, textfile, manifest, target parsing, gpg round-trip) + CI `Shell tests` job added in the same commit
 - [ ] T5 observability/scripts/backup-all.sh + backup-all.bats green (dry-run count, lock exit 75, config-file `test -r` fail-loud); producer isolation proven in T7 with `--target` against a stopped container
 - [ ] T6 observability/scripts/restore-drill.sh + restore-drill.bats green (manifest-less run skipped, count mismatch non-zero, container removed on failure path)
 
