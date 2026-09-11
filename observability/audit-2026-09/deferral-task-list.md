@@ -23,7 +23,7 @@ Checkboxes are updated as work lands. Registry deferred-item ids in brackets.
 
 ## Wave 2 — /ship sessions (need their own spec, gates, and approval)
 
-- [ ] **Backups and disaster recovery** [f530537e] — critical. Scheduled dumps for all seven Postgres instances on g700data1 plus Langfuse Postgres, ClickHouse and MinIO on dh40801, retention on `/mnt/4tb/backups`, a tested restore, and a `backup_last_success_timestamp` textfile metric with a staleness alert. This is the undelivered AC#53 of the Langfuse ship. Ship it as its own session; it touches both hosts and needs a restore drill you watch.
+- [x] **Backups and disaster recovery** [f530537e] — SHIPPED 2026-09-11 (branch feat/backups-dr-2026-09: backup-all.sh, restore-drill.sh, NAS mirror, rules.d/backups.yml + nas.yml, dhg-platform-backups dashboard, dhg-snmp-exporter). — critical. Scheduled dumps for all seven Postgres instances on g700data1 plus Langfuse Postgres, ClickHouse and MinIO on dh40801, retention on `/mnt/4tb/backups`, a tested restore, and a `backup_last_success_timestamp` textfile metric with a staleness alert. This is the undelivered AC#53 of the Langfuse ship. Ship it as its own session; it touches both hosts and needs a restore drill you watch.
 - [ ] **medkb relocation to dh40801 + GPU ingestion** (older item) — already a standing decision; needs a plan, not a patch.
 - [ ] **Migrate the 15 LangGraph agent modules to Pydantic AI + Langfuse** (older item) — this is the agent rewrite; a program, not a fix.
 - [ ] **dhg-transcribe pipeline refactor** (older item) — 10 containers, no tests; separate ship.

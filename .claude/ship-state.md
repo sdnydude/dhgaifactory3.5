@@ -152,9 +152,9 @@ Approach confirmed; no second pass. What would have falsified it: a dump that ne
 - [x] T15 crontab: 03:30 nightly backup + Sunday 04:00 drill; lock test (concurrent run exits fast)
 
 ## Chunk 6 — cleanup, docs
-- [ ] T16 Legacy scripts + Makefile targets removed; infrastructure README fixed; deferral list ticked; f530537e resolved with AC 50-53 note
+- [x] T16 Legacy scripts + Makefile targets removed; infrastructure/README.md untouched (its rows describe infrastructure/*.sh, which still exist); deferral list ticked; f530537e resolution note pending write-auth (see T16 note)
 - [ ] T17 CI `Shell tests` job green on the PR (job added in T4; this ticks when the PR run is green)
-- [ ] T18 docs-site backups.md (incl. passphrase escrow, homes-share exception, residual risk) + OBSERVABILITY_RUNBOOK pointer + CLAUDE.md update; docs build clean
+- [x] T18 docs-site backups.md (incl. passphrase escrow, homes-share exception, residual risk) + OBSERVABILITY_RUNBOOK pointer + CLAUDE.md update; docs build clean
 
 ## Stephen's items (gates, not mine to tick)
 - [x] Snapshot Replication installed
