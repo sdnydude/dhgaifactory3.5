@@ -1,300 +1,204 @@
-status: complete
-phase: 7
-completed_at: 2026-07-29T08:36Z
-feature: Self-hosted Langfuse v3 on dh40801 — replace LangSmith/Langfuse Cloud, repoint Portage before beta
-approach: Approach D — remote Docker context from g700data1; own compose file in-repo; reuse existing cloudflared tunnel; LAN transport
+status: in_progress
+phase: 4
+approved: "go" 2026-09-11T01:12:08Z
+tdd: yes (bats on pure functions; orchestration proven in T7)
+phase2_complete: true — 3 Explore agents (3/3 usable) + Phase 2 advisor (approach holds, no second pass; 21 notes folded); explore passes: 1
+feature: Backups and disaster recovery — nightly encrypted dumps of 7 Postgres (g700data1) + Langfuse Postgres/ClickHouse/MinIO (dh40801) + config layer, pushed rsync-over-SSH to Synology DS1618+ (10.0.0.250), tested restore drills, backup_last_success_timestamp textfile metric + alerts (Langfuse AC#53, deferred f530537e)
+approach: A revised — single orchestrator observability/scripts/backup-all.sh on g700data1; every dump streamed via docker exec/cp from inside the source container (no creds leave containers); gpg --symmetric with Doppler passphrase on every archive; full local retention under /mnt/4tb/backups/nightly (30 d nightly, 84 d Sundays); off-host destination = Synology shared folder aifactory-backups via DSM rsync service in SSH-encrypted mode (dedicated key, dedicated non-admin user); restore-drill.sh into ephemeral containers; ClickHouse system-log TTL fix in scope
 complexity: complex
-explore_scope: full (3-agent divergent explore — targeted was proposed and rejected)
-branch: feat/langfuse-selfhost
-phase2_complete: true — 3 divergent agents + advisor + 3 Fable-5 specialist reviews (infra/tracing/security) + Langfuse official docs (WebFetch + Context7)
-scope_locked: Part A (install Langfuse) + Part B (repoint Portage); PARKED — medkb (c60008ba), agent tracing (d571a7d6), feedback_loop project_name (146c8096)
-approved: "approved" 2026-07-26T20:07:47Z
-kb_findings: Prior decisions — "Custom shouldExportSpan filter + MaskingSpanProcessor wrapper" (Portage Langfuse export gotcha); "Trace context propagates via OpenTelemetry, not threaded through lib signatures"; "Hosted Doppler SaaS over Infisical/Vault self-hosted; CEO can't ops infrastructure" (tension, disavowed in handoff for non-secrets-manager cases); "Standardize project_name to dhg-ai-factory across all capture rules and registry records"; "cloudflare-ops full-capability scope C". Related open deferred items — "[high] Resolve docs.digitalharmonyai.com Cloudflare Access gate (perceived as down)"; "[med] rehearsal:3004 ingress delete + :8018 landing awaiting go". Active correction patterns — workflow-violation INCREASING and repeated scope-cutting (three instances this session): do NOT cut scope.
-codegraph_scan: `from tracing import traced_node` in exactly 14 modules under langgraph_workflows/dhg-agents-cloud/src/ — the LangSmith->Langfuse agent migration is wide-but-shallow. IN SCOPE as Workstream D.
-advisor: 7 reviews — systems-architect, config-safety-reviewer, security-auditor (stack), security-auditor (service account), performance-tuner, plus 2 Fable-5 (60-claim fact verification; efficiency/critical-path). All returned "not ready as-is"; objections were mechanism, not direction. Findings folded in below.
+explore_scope: full
+branch: feat/backups-dr-2026-09 (off feat/observability-rebuild-2026-09 at 4d3c87c+; PR base decided at Phase 8 depending on #29 merge)
+kb_findings: deferred f530537e (critical, open) = this feature; no prior backup decisions; decision "Deploy to dh40801 via remote Docker context, not Ansible"; active correction patterns repeated-instruction + workflow-violation (no deferrals without approval, hard gate); CodeGraph has no backup symbols; docs-site has no backup prior art
+codegraph_scan: no symbols; relevant files: scripts/backup.sh, scripts/restore.sh (legacy, to delete), observability/scripts/langfuse-canary.sh (textfile + cron pattern), observability/prometheus/alerts.yml:261 TextfileStale, observability/prometheus/rules.d/dh40801.yml LangfuseCanaryStale (or absent() pattern), observability/scripts/gen-runbooks.py + observability/runbooks/*.yml, dh40801/docker-compose.langfuse.yml, docs-site/projects/dhg-ai-factory/runbooks/alerts.md
+advisor: Phase 1 advisor #1 (approach) 14 notes, folded: TextfileStale exclusion, attempt timestamp + BackupFailed, off-host copy, roles dump, docker cp for MinIO, manifests, weekly tier, flock, AC50-52 status. Phase 1 advisor #2 (transport) 11 notes, folded: DSM rsync service SSH mode (not Terminal SSH), encrypt DB dumps too, gpg not age, immutable snapshots need DSM 7.2, dedicated key, disable anonymous rsyncd 873, pull options infeasible
+decisions: 1 approach A go (Stephen 2026-09-08); 2 config/secrets layer included, gpg-encrypted (Stephen yes); 3 exclusions accepted, ClickHouse system-log bloat FIXED in this ship not deferred (Stephen "fix it"); transport = rsync over SSH to Synology after security review (Stephen "go nas" 2026-09-10)
+nas_state: DS1618+, DSM 7.1.1-42962 U9, volume1 Btrfs 21 TB (8.7 TB used), RAID6 was 4/6 since 2026-02-25; Drive 2 repaired 2026-09-10 -> 5/6 [U_UUUU]; Drive 1 (bay 1) absent, replacement drive needed; SSH port 28 (22 also sshd); swebber64 is administrators; DSM API login works; anonymous rsyncd on 873 lists modules; Snapshot Replication 7.4.2 installed 2026-09-10 (schedule = Stephen's UI step); immutable snapshots need DSM 7.2 (deferred 8baeab4c, Stephen's timing)
 
 ---
 
-# Spec — Self-hosted Langfuse on dh40801
+# Spec — Backups and disaster recovery
 
 ## What it does
+- Nightly 03:30 ET job on g700data1 (swebber64 crontab, flock, log ~/.claude/run/backup-all.log) dumps every target to /mnt/4tb/backups/nightly/<target>/<UTC-run>/ streamed from inside each source container via docker exec / docker cp (local or --context dh40801). The orchestrator owns ONLY /mnt/4tb/backups/nightly/ (the root also holds root-owned Loki tarballs and an unencrypted ad-hoc registry dump that must never be mirrored). No credentials leave containers; no Doppler needed for dumps. gpg --symmetric (AES256) with passphrase BACKUP_GPG_PASSPHRASE from Doppler dhg-monitoring/dev on every archive; Stephen keeps an out-of-band copy of that passphrase in his password manager (Doppler lockout must not mean unreadable backups).
+- Targets (12 data targets + 1 offsite mirror = 13 rows in the target table):
+  1-7 Postgres: registry-db (dhg_registry + snap2list, user dhg), medkb-db (medkb), eval-db (evalviewer + evalviewer_test), audio-postgres (audio_agent), transcribe-db (transcribe), portage-db (portage), plane-db (plane; psql -h /var/run/postgresql inside container). pg_dump -Fc per database + pg_dumpall --roles-only per instance.
+  8 langfuse-postgres (postgres:17, db postgres) — same.
+  9 langfuse-clickhouse — SHOW CREATE TABLE DDL for every default.* object + per-table SELECT * FORMAT Native for the 9 non-View tables.
+  10 langfuse-minio — docker cp dhg-langfuse-minio:/data - (raw xl-single tree incl. .minio.sys).
+  11 volumes — grafana.db (dhg-grafana, live sqlite via docker cp + PRAGMA integrity_check in the drill), dhg_exports, plane-app_uploads (MinIO xl-single tree at /export in plane-app-plane-minio-1, tar + member count), open-webui-data with cache/ EXCLUDED (regenerable model cache, 1.1 GB; webui.db + vector_db + uploads kept, ~7 MB).
+  12 config layer — docker-compose.override.yml, .env files (repo root, portage, plane.env, dhg-transcribe, dhg-research-eval-viewer) plus the four gitignored secret renders (observability/alertmanager/alertmanager.yml, observability/postgres-exporter/postgres_exporter.yml, observability/grafana/provisioning/datasources/registry-postgres.yml, services/medkb/.env.otel), mode 600, gpg-encrypted. Langfuse env is Doppler project `langfuse` (no dh40801/.env exists) — excluded, documented.
+  13 offsite — `rsync -a --delete --delete-delay --delay-updates` mirror of /mnt/4tb/backups/nightly/ to Synology aifactory-backups via DSM rsync service SSH mode, user aifactory-backup, dedicated key ~/.ssh/nas-backup_ed25519.
+- manifest.json per target per run (written LAST, via jq -n --arg, and treated as the commit marker: drills and prune ignore run dirs without one): source image tag (Langfuse :3 resolved to 3.224.1), per-table row counts captured from the same stream, sha256, bytes, duration.
+- backups.prom is rewritten atomically after EVERY target (not once at the end) so a run killed mid-way still bumps backup_last_attempt_timestamp and BackupFailed fires. dh40801 targets: `timeout` wraps only the connection probe (docker --context dh40801 version), never the dump itself.
+- Retention: LOCAL holds the full policy per target — nightly runs kept 30 days, Sunday runs kept 84 days, only run dirs with manifest.json count. NAS is a pure mirror of /mnt/4tb/backups/nightly/ (`rsync -a --delete --delay-updates`, SSH port 22, dedicated key) as target `offsite-nas`; no NAS-side logic. Snapshot Replication on the folder (daily 04:30, keep 14) is the deletion backstop.
+- Textfile /mnt/4tb/observability/textfile/backups.prom per target: backup_last_success_timestamp, backup_last_attempt_timestamp, backup_last_size_bytes, backup_last_duration_seconds, backup_restore_drill_success_timestamp; backup_offsite_last_success_timestamp.
+- Alerts rules.d/backups.yml: BackupStale (>28 h or absent, critical), BackupFailed (attempt > success, high), RestoreDrillStale (>8 d or absent, high), BackupOffsiteStale (>28 h or absent, high). Every series/rule carries name="<target>" (per-target registry incidents) and service="backups". Stated choice: Alertmanager inhibit rule 1 means one critical BackupStale silences the three high alerts for all targets while service is shared — acceptable, the critical is the one that matters. alerts.yml TextfileStale gets file!~".*/backups\\.prom" (label is the full host path). Docs runbook sections; human-only ALERT_TRIGGER_MAP entries; no runbook YAMLs.
+- Restore drill restore-drill.sh <target> [file]: ephemeral dhg-restore-drill-<target> container, same image tag as manifest, no published ports; gpg decrypt; restore; exact equality vs manifest: pg row counts from the same pg_export_snapshot, ClickHouse rows vs `clickhouse local` count of the Native file itself, MinIO/volumes tar member count + bytes, grafana.db PRAGMA integrity_check; trap removes container on every path; writes drill timestamp. Weekly cron over all targets; one watched registry-db drill in Phase 5.
+- ClickHouse system-log fix on dh40801: config.d drop-in disabling trace_log/text_log/asynchronous_metric_log/metric_log/processors_profile_log, 7-day TTL on the rest; one clickhouse restart; drop existing parts. Langfuse data untouched, canary green after.
+- NAS side (Stephen "go nas", done 2026-09-10; Snapshot Replication INSTALLED 2026-09-10, schedule is Stephen's UI step): shared folder aifactory-backups; user aifactory-backup (non-admin, rsync-only, R/W on that folder only, NA on every other share except homes); rsync service SSH-encrypted mode on port 22 (scripts pin -p 22; port 28 rejects this key); unencrypted rsync accounts off. NOT DONE, Phase 4 gate for AC6: Snapshot Replication install (Stephen: Package Center → Snapshot Replication → Install) + nightly snapshots 14 d on the folder; immutable snapshots after DSM 7.2. Port 873 keeps listing module names while the service is on (SSH mode requires it); anonymous data access returns "account system disabled" (verified) — accepted and documented, DSM firewall not enabled in this ship.
+- Deletes scripts/backup.sh, scripts/restore.sh; updates docs referencing them.
+- Docs: docs-site/projects/dhg-ai-factory/backups.md (top-level page; incl. explicit exclusions, residual-risk statement, NAS degraded-state caveat), runbook sections, OBSERVABILITY_RUNBOOK pointer, Grafana row on dhg-platform-overview (last success age per target), Makefile/infrastructure README references cleaned.
+- Tests: bats 1.13.0 (~/.local/bin/bats) for both scripts, plus a `Shell tests` job in .github/workflows/ci.yml so they run in CI (bats has no precedent in the repo; without the job AC9 is local-only).
+- Residual risk stated in docs: DockerRootDir is /mnt/4tb/docker — the local copy (full retention) lives on the same physical device as every volume it protects (logical-error protection only); until Snapshot Replication is on, both copies are deletable from a compromised g700data1 (NAS user must be R/W for prune); NAS RAID at 5/6 tolerates one more failure. External dependency: Drive 1 replacement.
 
-Stands up a self-hosted Langfuse v3 stack on dh40801 (10.0.0.179), relocates medkb to the same host, integrates both with the AI Factory on g700data1 (10.0.0.251), fixes a live public-exposure defect in Cloudflare Access, and repoints the Portage app off Langfuse Cloud US before beta opens.
+## Observability additions (Stephen "I need observability" / "you add it", 2026-09-10)
+- Grafana dashboard `dhg-platform-backups` (folder DHG / Platform; the thing Stephen opens): per-target table (last success age, size, duration, integrity, drill age), NAS mirror age, run history, red/green header; plus a NAS row (RAID state, per-bay disk health, temps, volume free). Verified with verify-dashboard.sh after the first real run.
+- Synology monitoring: DSM SNMPv3 (authPriv, user from Doppler SNMP_V3_*), v1/v2c community `public` DISABLED; `dhg-snmp-exporter` (prom/snmp-exporter v0.30.1, shipped snmp.yml `synology` module — verified by `grep -n '^  synology:'` after download — plus a Doppler-rendered gitignored auths file, multiple --config.file confirmed by README); Prometheus job `nas` target 10.0.0.250. Series names are MIB object names: raidStatus{raidName}, diskStatus{diskID}, diskHealthStatus, diskTemperature, raidFreeSize, raidTotalSize. rules.d/nas.yml: NasDown (critical), NasRaidCrashed (raidStatus==12, critical), NasRaidDegraded (raidStatus==11, HIGH — not critical, so a weeks-long degrade does not inhibit NasTempHigh/NasVolumeHigh via the service-equal inhibit rule; 2-10 and 13-20 are transitions/scrubs and never alert), NasDiskUnhealthy (diskHealthStatus>=3 or diskStatus in 4,5, critical), NasVolumeHigh (raidFreeSize/raidTotalSize<0.15, warning), NasTempHigh (diskTemperature>50 for 15m, warning); runbooks + docs. NasRaidDegraded is expected to FIRE immediately (pool is 5/6) and is the proof. Prometheus reload is `docker kill -s HUP dhg-prometheus` (no --web.enable-lifecycle; override is unmergeable for `command`).
+- Storage layer (advisor-reviewed, decision ca13da42): full retention lives locally; NAS is a pure `rsync -a --delete --delay-updates` mirror; no NAS-side prune; Snapshot Replication (daily 04:30, keep 14, Stephen sets in UI) is the deletion backstop.
 
-## Full scope — nothing deferred
-
-Per `feedback_no_deferrals.md`: within scope, nothing is deferred.
-
-**A — Langfuse stack.** Six containers, disks, secrets, monitoring, backups.
-**B — Cloudflare Access remediation.** Fix the `*.digitalharmonyai.com` `bypass/everyone` policy and gate the 8 ungated hostnames. Prerequisite for exposing Langfuse and for Workstream H.
-**C — Portage: DEPLOY the tracing branch, then point it at self-hosted.** NOT a repoint — nothing is deployed.
-
-**CRITICAL CORRECTION (2026-07-21).** `LANGFUSE_SELFHOST_HANDOFF.md:29` claims prod is running Langfuse tracing against Cloud US with "traces verified flowing." **That is false.** Verified against the running container:
-1. `portage-api`'s image has no `dist/instrumentation.js` (only app, index, lib, routes, middleware, db, marketplace)
-2. `@langfuse` packages are absent from its `node_modules` entirely
-3. No `"Langfuse tracing enabled"` log line exists — the code isn't there to emit it
-
-Mechanism: the Portage repo is on `main` (b2a6db1); `feat/langfuse-tracing` is NOT merged; `docker-compose.yml` builds `portage-api` from `context: .` (the working tree). Building while on `main` yields an image with no tracing code. The `LANGFUSE_*` env vars are present only because Doppler injects them; nothing reads them.
-
-Consequences that change this ship:
-- The export-filter fix (`shouldExportSpan`) and the image-masking wrapper were validated in DEV ONLY. They have never run against production traffic.
-- `df272d0` (conditionNotes save bug) is stranded on the same unmerged branch — that is why the bug is still live in prod.
-- AC-25 (masking regression check) is now MANDATORY, not precautionary: the first production traces will be the first time that code path meets real user photos.
-- Sequence is: merge/deploy the branch -> verify tracing works AT ALL -> then point at self-hosted. Two verification points, not one.
-**D — LangSmith -> Langfuse agent migration.** Swap `@traceable` for Langfuse `CallbackHandler` across the **14** modules importing `tracing`; set `LANGFUSE_*`, drop `LANGSMITH_*`/`LANGCHAIN_TRACING_V2`. Decide the fate of the parallel OTel->Tempo export.
-**E — User-level attribution.** Langfuse user id = `req.user.email`, plus `tier` + internal UUID as metadata, across all 5 Portage AI features. TDD per tdd-guard. Also set OTel `service.name = portage-api` (currently `unknown_service`).
-**F — Dashboards.** Langfuse user + cost dashboards; Grafana panels for the dh40801 host and the Langfuse stack.
-**G — KB (reframed).** medkb built the read side (retrieval, CRAG, corpora, auth, metrics — 51 commits, 46 tests) and never built ingestion; the dh40801 SOP is an ingestion pipeline needing a GPU. They are two halves of one system:
-- **Move medkb to dh40801** — `dhg-medkb-api`, `dhg-medkb-db`, `dhg-medkb-cache`. Verified safe: ZERO consumers in the codebase, 8 MB of data (sample seed `dhg_cme_sample` only).
-- **Build ingestion on dh40801**, writing through **medkb's own models/migrations** — never Haystack's `PgvectorDocumentStore`, which creates its own tables and would produce write-side/read-side schema drift.
-- **CANCELLED: `dhg-kb-db`.** No sixth vector store. Port 5433 is RELEASED, not reserved.
-- **CANCELLED: Haystack.** medkb already defines retrieval; a second RAG framework serves no consumer.
-- **CANCELLED: a third transcription path.** `dhg-transcribe` already runs faster-whisper (WhisperX's own backend) in 10 containers. Reuse it, containerized onto dh40801's GPU. Add WhisperX only if diarization/alignment is a stated requirement.
-- **Ollama as a container, not a host install** — `curl | sh` needs sudo and duplicates `dhg-ollama`, which already serves nomic-embed-text.
-**H — memreg integration.**
-- **H1 attribution:** `langfuse` and `medkb` **tags** on captures. NOT new `project_name` values — the standardization decision stands.
-- **H2 ingestion:** memreg pulls FROM Langfuse and medkb into the registry KB. **Blocked on B** — the registry API is public today; ingesting trace-derived data before that is fixed would publish user prompts and (after E) customer emails.
-  - Langfuse -> registry: **curated signals only** (error patterns, cost rollups, latency outliers, eval scores). Never prompt bodies, completions, media, or user identifiers.
-  - medkb -> registry: **federate, do not copy.** Registry KB search queries medkb `/v1/query` and merges results.
-
-**Also in scope:** cherry-pick Portage `df272d0` (conditionNotes cap 500->2000) to Portage `main`, independently of the tracing branch.
-
-## Decisions locked
-
-| Decision | Choice | Why |
-|---|---|---|
-| Host | dh40801 | .251 takes beta load; dh40801 idle, 24C/62.5GiB, GPU unused by Langfuse |
-| Deploy mechanism | Remote Docker context (`docker --context dh40801`) | Verified: client 29.5.2 -> server 29.3.0, no sudo, no secrets at rest on dh40801, no repo clone |
-| Ansible | NOT used to deploy | Fleet layer has never executed on any host (ufw `ENABLED=no`, untouched `sshd_config` on .251); `become` undefined fleet-wide; `docker-compose-deploy.yml` has no `-f`/`-p` and would deploy the entire AI Factory onto dh40801 |
-| Transport | LAN (10.0.0.179), not tailnet | `tailscale ping` -> "peer's node key has expired"; LAN 0.2-0.3ms, 0% loss |
-| Public hostname | `labs.digitalharmonyai.com` via the EXISTING tunnel (one ingress line, `service: http://10.0.0.179:3000`) | No new tunnel, no cloudflared container, no tunnel token to leak. **CONSTRAINT: `/etc/cloudflared/config.yml` on .251 is ROOT-OWNED and sudo needs a password — this edit + `systemctl reload cloudflared` is a STEPHEN-run step, not a Claude step. Sequence AFTER the `labs.` Access app (AC-18) exists, so labs never resolves under the still-open wildcard bypass.** |
-| UI path vs data path | Split: UI via tunnel+Access; ingestion LAN-direct | Keeps the highest-PII-density flow off the internet and off Cloudflare's edge; removes the Access-exemption problem; decouples C from B |
-| Postgres/Redis/MinIO | Dedicated, not shared | Prisma migrations run on every upgrade; Redis is a BullMQ queue needing `noeviction`; MinIO holds raw prompts + media |
-| Langfuse projects | TWO — Portage, factory agents | Independent key rotation; separate retention; customer PII isolated |
-| Data disk | `/data` on sda4 (3.4TB xfs, mounted) | DB volumes off the OS disk |
-| Access policy, 8 ungated hostnames | Strict email allowlist on all 8 | All 8 are operator surfaces. Portage beta runs on `portage.`/`portage-api.`, already gated with an allowlist containing the testers. No tester locked out. |
-| medkb location | Moves to dh40801 | Zero consumers; 8 MB; colocates store with the GPU generating its embeddings; frees .251 for beta |
-| 990 PRO reformat | NO | `/data` is 2% used of 3.4TB. Serves nothing this ship needs. RESOLVED, not parked. |
-| Service account | Skipped | docker-group membership is already root-equivalent, so it buys attribution + revocation only |
+## What it does not do
+- Excluded with reason: Prometheus TSDB 3.7 GB, Loki 2.3 GB (regenerable telemetry); alertmanager silences (ephemeral); transcribe uploads 4 GB / qdrant 1.3 GB / whisper models / shared_audio (transcribe refactor ship); Langfuse Redis (ephemeral queue); ClickHouse system db.
+- No PITR/WAL archiving. No in-place restore of production, ever. No NAS mount on g700data1.
 
 ## Acceptance criteria
+1. backup-all.sh exits 0 with all 12 data targets + offsite ok in one manual run; every archive decrypts and passes integrity (pg_restore --list, gzip -t, tar -t).
+2. backups.prom shows all metric families for every target; Prometheus scrapes them; TextfileStale silent after the exclusion.
+3. All 4 backup + 6 NAS alerts pass promtool, have runbook_url and `### <Alert>` docs sections, and appear in the gen-runbooks coverage table as human-only (explicit ALERT_TRIGGER_MAP entries; no runbook YAMLs, matching the existing human-only alerts).
+4. Restore drill passes for all 12 data targets with exact manifest equality; watched registry-db drill under 30 min.
+5. Two flock-guarded crontab entries (nightly backup, weekly drill); forced second run is skipped by the lock.
+6. NAS receives the push; a second rsync --dry-run is clean; NAS user cannot SSH interactively or read other shares (docker, homes modules denied); anonymous data access on 873 denied (verified "account system disabled"); Snapshot Replication installed with a daily snapshot schedule on aifactory-backups; aifactory-backup has no DSM privilege to delete snapshots (immutability itself needs DSM 7.2, deferred 8baeab4c).
+7. ClickHouse system db under 500 MiB after the fix; Langfuse row counts unchanged before/after restart; canary green.
+8. Legacy scripts removed; no remaining references.
+9. Deferred item f530537e closed with AC 50/51 status noted; shell tests for both scripts (bats if present, else a shell harness) per Phase 2 findings.
 
-### A — Langfuse stack
-1. Six containers on dh40801, compose project `dhg-langfuse`, all `dhg-` prefixed, all `restart: unless-stopped`
-2. All image tags pinned exactly (no `:latest`, no major-only floats); web and worker on the SAME patch version
-3. Every container sets `TZ=UTC`; ClickHouse also sets server-side `timezone: UTC`
-4. `DATABASE_URL` sets an explicit `connection_limit`. Prisma v6 confirmed (`prisma: ^6.19.3`): default is 24x2+1 = 49/process x2 processes = 98 against 97 usable — a real startup failure without this
-5. Postgres healthcheck uses `$${POSTGRES_USER}` — HYGIENE ONLY. (An earlier draft claimed a non-default user breaks the stack; that is FALSE — `pg_isready` exits 0 regardless of user validity.)
-6. Redis runs `--maxmemory <N> --maxmemory-policy noeviction --appendonly yes`; `mem_limit` exceeds maxmemory by >=30%
-7. ClickHouse has BOTH a cgroup `mem_limit` AND explicit `max_server_memory_usage`, `mark_cache_size`, `uncompressed_cache_size`
-8. Healthchecks on `langfuse-web` and `langfuse-worker` (upstream has none); ClickHouse `start_period` >= 30s
-9. ONLY the web port published; ClickHouse, Postgres, Redis, MinIO unpublished
-10. Secrets generated via `openssl rand`, stored in a NEW Doppler project `langfuse`; nothing secret in the repo; nothing under `/home` (Samba-exported, writable)
-11. ClickHouse + MinIO data volumes on `/data`
-12. **`scripts/lint-langfuse-compose.sh` committed and passing** — asserts AC 1,2,3,4,6,7,8,9 mechanically. Re-runnable on every future edit.
-13. Langfuse org + 2 projects created; keys minted per project
-14. MinIO lifecycle expiry + ClickHouse retention configured (retention management is enterprise-gated, so manual)
-15. Sampling at 1.0 for beta, with a documented trip-wire (drop to 0.25 if >50k traces/day or MinIO events bucket >100GB)
-
-### B — Cloudflare Access
-16. `*.digitalharmonyai.com` wildcard no longer `bypass`/`everyone`
-17. Dedicated Access app for each of the **8** ungated hostnames (registry, knowledge, app, chat, grafana, docs, dhgdocs, rehearsal): `decision: allow`, explicit email allowlist, 24h session, existing OAuth IdP
-18. `labs.digitalharmonyai.com` Access app created BEFORE its DNS record exists
-19. **`scripts/check-public-exposure.sh` committed** — curls every tunnel hostname and asserts each redirects to Access or returns 401/403. This is the pass/fail gate (supersedes verifying config by inspection)
-20. `otel.` keeps its working `non_identity` service-token policy — DO NOT touch
-21. `portage-api/billing/webhook`, `portage-images.`, `c2l.` bypass apps confirmed intentional before any change
-
-### C — Portage deploy + repoint
-22a. `feat/langfuse-tracing` merged to Portage `main` (or deployed from the branch by explicit decision) — WITHOUT this, no tracing exists at all
-22b. Rebuilt `portage-api` image VERIFIED to contain `dist/instrumentation.js` and `node_modules/@langfuse` — the check that would have caught this
-22. Doppler `dev` pointed at self-hosted, rebuilt, trace verified via the Langfuse API/CLI
-23. Doppler `prd` in a quiet window BEFORE beta users; `"Langfuse tracing enabled"` in logs AND a real trace present
-23b. `LANGFUSE_SELFHOST_HANDOFF.md:29` corrected — it currently asserts prod is tracing successfully, which is false and misled this ship's planning
-24. **Rollback documented and rehearsed:** revert 3 Doppler values (`LANGFUSE_BASE_URL` + 2 keys), rebuild `portage-api`. Rollback success is verified by TRACE ARRIVAL, not container health — a partial Doppler state silently disables tracing
-25. **Masking regression check:** a scanned-item trace in self-hosted Langfuse contains no base64 image data (API-checked, not eyeballed)
-26. **SIGTERM flush bounded** by an explicit timeout in `shutdownTracing()`, OR a recorded decision to accept slower deploys
-
-### D — agent migration
-27. All **14** modules importing `tracing` migrated to Langfuse `CallbackHandler`; `LANGSMITH_*` and `LANGCHAIN_TRACING_V2` removed
-28. Explicit decision recorded on the parallel OTel->Tempo export (keep, or consolidate)
-29. A real agent run produces a trace in the factory Langfuse project
-
-### E — user-level attribution
-30. Langfuse user id = `req.user.email` across all 5 Portage AI features; `tier` + internal UUID as metadata; TDD, one test at a time
-31. OTel `service.name = portage-api`
-32. A trace is attributable to a real user and the Langfuse Users view populates
-
-### F — dashboards
-33. Langfuse cost + user dashboards created
-34. Grafana dashboard covering dh40801 host metrics and the Langfuse container set
-
-### G — medkb relocation + ingestion
-35. **GATE, do first:** medkb's configured embedding model/dimension verified to match nomic-embed-text (768). Mismatch means re-embedding everything.
-36. `dhg-medkb-api`, `dhg-medkb-db`, `dhg-medkb-cache` running on dh40801; 8 MB volume migrated; `/v1/healthz` green from .251; `dhg_cme_sample` corpus still queryable
-36b. **medkb is NOT zero-consumer — the monitoring plane references it.** `registry/patchbay_service.py:34` hardcodes `"medkb": 8015` probed at `PROBE_HOST=10.0.0.251` (line 16), keyed to match frontend `services.ts`. Moving medkb to 10.0.0.179 turns the patchbay tile red unless the probe target is updated. Update `patchbay_service.py` (and the matching `services.ts` entry) to point the medkb probe at 10.0.0.179; verify the tile is green after the move. (An earlier draft claimed "ZERO consumers" — false; corrected 2026-07-21 by the session audit.)
-37. medkb removed from the .251 compose stack, no orphaned volumes
-38. Ingestion pipeline on dh40801: Docling parse -> transcribe (reusing `dhg-transcribe`'s faster-whisper) -> embed (Ollama container) -> write **through medkb's models/migrations**
-39. End-to-end smoke test: a real document lands in a new corpus and is retrievable via `/v1/query`
-40. `dhg-kb-db` NOT created; port 5433 released; Haystack NOT installed — verified by absence
-41. Resource caps set BOTH directions so neither Langfuse nor the KB workload can starve the other
-42. `dh40801` added to `ansible/inventory.yml` for asset truth ONLY — NOT joined to `docker_hosts` until `docker-compose-deploy.yml` is parameterized with `compose_file`/`compose_project`/`repo_path`
-43. SOP Phase 1 leftovers applied on dh40801: `vm.swappiness=10`, unattended-upgrades kernel/nvidia blacklist
-
-### H — memreg integration
-44. `langfuse` and `medkb` tags added to the `auto-*-capture.md` rules; `project_name` stays `dhg-ai-factory`
-45. A capture from Langfuse or medkb work lands in the registry with the correct tag — verified by querying for it
-46. Langfuse -> registry ingestion carries ONLY curated signals. Verified: no prompt body, no completion body, no media reference, no user identifier in any ingested record
-47. Registry KB search federates to medkb `/v1/query`; one query returns merged results
-48. Both ingestion paths idempotent — running twice creates no duplicates (verified by row count)
-49. Workstream B COMPLETE before any Langfuse ingestion runs
-
-### Monitoring, backup, docs
-50. node-exporter + cadvisor + promtail on dh40801; Prometheus static job on .251; disk alerts at 75%/85%
-51. Blackbox probe from .251 to the Langfuse health endpoint — the only detector of a dead collector, since the client fails silently by design
-52. Nightly `pg_dump` of the Langfuse Postgres to .251 (holds orgs, projects, and the API keys prod authenticates with)
-53. **FIX EXISTING GAP: `scripts/backup.sh` is not in any crontab — registry backups are not running today.** Schedule it alongside the Langfuse backup
-54. `reference_port_map.md` extended with a dh40801 section (5433 released, not reserved)
-55. `LANGFUSE_SELFHOST_HANDOFF.md` corrected — it currently names g700data1 as the target
-56. Portage `df272d0` cherry-picked to Portage `main`
-
-## Edge cases / failure modes
-
-- **Collector unreachable:** verified from code — `BatchSpanProcessor`, no `forceFlush` at any request call site, drops on queue overflow. User requests never blocked. Failures are therefore SILENT — hence AC-51.
-- **Half-finished Doppler repoint:** `tracingEnabled` requires BOTH keys; a partial rollout silently disables tracing. Verify by trace arrival (AC-24).
-- **Portage SIGTERM flush:** `shutdownTracing()` has no timeout; an unreachable collector delays shutdown to Docker's grace period (AC-26).
-- **Masking regression:** client-side masking is the only masking (server-side is enterprise-only). A library writing images as non-string attributes bypasses `scrubSpanAttributes` — this is how photos leaked before. AC-25 checks it; the MinIO quota is the second line of defence.
-- **Co-tenancy:** memory breaks first, then disk. GPU is not contended by Langfuse.
-
-## Workstream B detail — exposure PARTIALLY REMEDIATED 2026-07-21
-
-**Original finding:** `*.digitalharmonyai.com` was `bypass/everyone`, 168h session; 8 of 12 tunnel hostnames had no Access gate (app, grafana, registry, chat, knowledge, dhgdocs, rehearsal inherited the wildcard; docs had its own bypass/everyone app). `registry.` served live API data + a public Swagger UI.
-
-**DONE (Stephen ratified):** created dedicated `allow`+allowlist Access apps for registry, knowledge, app, chat, grafana, dhgdocs, rehearsal (all 24h session, 4-email allowlist); converted docs. from bypass to allow. Verified from the public edge: all 12 hostnames now 302->Access or 401. `otel.` non_identity service-token app untouched. **AC-17 is COMPLETE.**
-
-**STILL OPEN:**
-- **AC-16** — the `*.digitalharmonyai.com` wildcard is STILL `bypass/everyone`. It no longer matters for the 12 known hostnames (each has a more-specific app that wins), but any NEW hostname is public-by-default until this is flipped to allow+allowlist. This is the standing landmine — highest-priority remaining B item. Reversible in one API call; the three intentional bypasses (portage-api/billing/webhook, portage-images., c2l.) have dedicated apps and survive the flip.
-- **AC-18** — `labs.` Access app, before its DNS record.
-- **AC-19** — commit `scripts/check-public-exposure.sh`.
-- **AC-21** — confirm the intentional bypasses (note c2l. is vestigial — no live ingress).
-
-## Open items carried into Phase 3
-
-- Exact port block for dh40801 (advisors disagreed; one proposal used 3100, which collides with Loki's fleet convention)
-- ClickHouse `mem_limit` (10g vs 16g) and Redis `maxmemory` (768mb vs 3gb) — reconcile against measured beta volume
-- Whether Langfuse media upload is enabled (decides whether MinIO can stay unpublished)
-
-## === SESSION HANDOFF #2 (2026-07-21 late) — READ FIRST, urgent git-recovery pending ===
-
-**IMMEDIATE STATE — Portage tracing is LIVE but git main does NOT reflect it. Recover before any rebuild.**
-
-Where things are (all verified minutes ago, in `~/DHG/portage`):
-- **Running `portage-api` container IS tracing** — `instrumentation.js` PRESENT, log shows `Langfuse tracing enabled` env=production sampleRate=1. Built from merge `2fa0be8`. Health 200.
-- **Langfuse Cloud still shows 11 traces** (newest 7-20). No NEW trace yet — nobody has triggered a scan/Porter action since the deploy. To confirm end-to-end: do ONE scan or Porter message in the app, then `curl -u pk:sk https://us.cloud.langfuse.com/api/public/traces?limit=1` → expect totalItems=12, today's date. (keys: `doppler secrets get LANGFUSE_PUBLIC_KEY -p portage -c prd --plain`, same for SECRET.)
-- **THE PROBLEM:** a `git reset --hard origin/main` ran in this session (reflog `HEAD@{0}: reset: moving to origin/main`) and threw away the merge. HEAD is now `93087e7` (origin/main, GitHub PR history); **the Langfuse merge `2fa0be8` is dangling off main.** So the DEPLOYED image has tracing, but git main (93087e7) does NOT — a rebuild from main re-loses tracing (the exact regression we just fixed). The recovery below re-establishes it AND pushes so it is durable.
-
-**RECOVERY PLAN (do this first in the new session):**
-1. `cd ~/DHG/portage` — confirm HEAD still `93087e7`, `git cat-file -t 2fa0be8` = commit (recoverable).
-2. Re-merge onto current origin/main: `git merge --no-ff feat/langfuse-tracing`. ONE conflict recurs in `apps/api/src/routes/prepare-listing.ts` — resolution: keep the `traceRequest(...)` wrapper AND the `reverbCategories,` field inside `generateListingFields({...})`. (The exact resolved region: `reverbCategories,` then `        }),` then `      );`.)
-3. **After merge, REVERT the compose binding:** the branch changes `portage-db` to `"10.0.0.251:5436:5432"` (LAN-exposes Postgres with default `portage:portage` creds). Set it back to `"127.0.0.1:5436:5432"`. The app uses the internal network (`portage-db:5432`) and needs no host binding; only host-run migration/seed tooling uses 5436, works on loopback.
-4. `npm --prefix apps/api run typecheck` (was clean before), commit the merge.
-5. **PUSH it so the reset can't kill it again:** `git push origin main` (or open a PR per the repo's PR convention #251/#252 — repo uses GitHub PR merges). `feat/langfuse-tracing` exists ONLY on local disk — also `git push -u origin feat/langfuse-tracing`.
-6. No rebuild needed — running image already has identical tracing code. If you do rebuild: `docker compose build portage-api && docker compose up -d --no-deps portage-api` (`--no-deps` avoids DB recreate).
-7. Rollback if needed: image `portage-api-rollback:2026-07-21` retagged to `portage-portage-api:latest` + `docker compose up -d --no-deps portage-api`.
-
-**Bonus already achieved:** `df272d0` (conditionNotes cap 500→2000, a live prod save-bug fix) is in the same merge — lands with it.
+## Edge cases
+Stopped target container marks that target failed, others continue. dh40801 unreachable marks its three targets (langfuse-postgres, langfuse-clickhouse, langfuse-minio) failed. NAS unreachable marks offsite failed, local copy still written. Disk under 10 GB free aborts before writing. Drill leaves no container on any failure path. Missing Doppler passphrase aborts before any dump.
 
 ---
 
-## === SESSION HANDOFF (2026-07-21) — Langfuse self-host /ship, still Phase 1 ===
+# Phase 2 — Explore synthesis (3/3 agents returned usable output; 1 pass)
 
-**Next action Stephen chose: the CLOUD-FIRST TEST, before building any self-hosted infra.**
+## A. File map
+Create:
+- observability/scripts/backup-lib.sh — target table (12 data targets + offsite), gpg helpers (--passphrase-fd 3), manifest writer, textfile writer (copy langfuse-canary.sh:106-119 atomic pattern)
+- observability/scripts/backup-all.sh — nightly orchestrator (flock, per-target isolation, one 30 s connection probe for dh40801 (timeout wraps the probe, never a dump), local prune 30 d nightly / 84 d Sundays scoped to /mnt/4tb/backups/nightly/<target>/, rsync push to NAS)
+- observability/scripts/restore-drill.sh — ephemeral dhg-restore-drill-<target> containers, exact manifest equality
+- observability/tests/backup-all.bats, restore-drill.bats — bats 1.13.0 at ~/.local/bin/bats (first shell tests in repo)
+- observability/prometheus/rules.d/backups.yml — BackupStale, BackupFailed, RestoreDrillStale, BackupOffsiteStale (copy rules.d/dh40801.yml:50-63 absent() shape); every series carries name="<target>" and service="backups"
+- observability/runbooks/BackupStale.yml, BackupFailed.yml, RestoreDrillStale.yml, BackupOffsiteStale.yml — mode notify, diagnostics as curl -s -G http://dhg-prometheus:9090/api/v1/query only (remediator allowlist services/remediator/allowlist.py:67 refuses ls/gpg/rsync)
+- docs-site/projects/dhg-ai-factory/backups.md — top-level page (architecture.md is a FILE; an architecture/ dir would duplicate the sidebar entry)
+- dh40801/docker-compose.langfuse.yml — clickhouse `configs: content:` drop-in (system-log TTL/disable), delivered over the ssh context per KB insight
+Modify:
+- observability/prometheus/alerts.yml:258-267 TextfileStale → file!~".*/backups\\.prom" (label is the FULL host path, e.g. /host/mnt/4tb/observability/textfile/loki_store.prom) + rewrite comment
+- observability/prometheus/alerts.yml:61 ContainerCrashLoop, :183 ContainerHighCPU → exclude name=~"dhg-restore-drill-.*"
+- registry/api.py ALERT_TRIGGER_MAP → 4 alertnames human_only: True (explicit, provable)
+- observability/grafana/provisioning/dashboards/json/platform/dhg-platform-overview.json → Backups row id 107 after y:55, panels sum to 24 cols; verify only AFTER the first real run (verify-dashboard.sh:180 fails zero-series panels)
+- docs-site/projects/dhg-ai-factory/runbooks/alerts.md → 4 `### <Alert>` sections (Means/First three checks/Likely causes/Resolve/Dashboard), then gen-runbooks.py regenerates automation + coverage blocks
+- Makefile:48-59 remove backup/restore targets; infrastructure/README.md:38-39; docs/OBSERVABILITY_RUNBOOK.md pointer; observability/audit-2026-09/deferral-task-list.md
+- crontab (swebber64): nightly 03:30 + weekly Sunday drill, both flock, absolute doppler path, >> ~/.claude/run/*.log (crontab line-7 shape)
+Delete: scripts/backup.sh, scripts/restore.sh (never scheduled; 8d0c6b8 fixed a lying pipeline; restore drops the live DB)
+Reuse: langfuse-canary.sh (textfile + die + doppler guard), render-grafana-datasources.sh:28-35 (secret handling, umask 077, never echo), verify-runbooks.sh:13-23 (harness shape), gen-runbooks.py, verify-dashboard.sh, seed_runbooks.py validator (alert == filename stem, unique trigger_rule)
 
-Verified live via the Langfuse Cloud API (portage/prd keys, read-only): keys authenticate; project "My Project" / org "Stephen's Organization" exists at https://us.cloud.langfuse.com; **11 traces exist, the 4 newest are `env: production` from 2026-07-20 (scan-refine / scan-item / porter-chat-turn), real user id.** Monitor URL: https://us.cloud.langfuse.com/project/cmrs907u20h8zad0jzu2xm2b4/traces
+## B. Assumption audit (BROKEN items; VERIFIED: socket-trust pg_dump 8/8, pgvector -Fc, MinIO docker cp 35 MB/7,660 members, gpg 2.4.4 batch under no-TTY, docker context fails fast, 03:30 window clear, ClickHouse Native reads MVCC-safe)
+1. Assumption: `file!="backups.prom"` excludes the new textfile. Reality: label is the full path. This means we should: use `file!~".*/backups\\.prom"`.
+2. Assumption: per-target alerts route per target. Reality: registry webhook fingerprint = alertname|service|instance with service from labels name/job (registry/api.py alertmanager_webhook); all targets share job/instance → ONE incident; Alertmanager inhibits by `service` and groups by alertname+service. This means we should: put `name="<target>"` and `service="backups"` on every backup series/rule.
+3. Assumption: `--passphrase-fd 0`. Reality: stdin carries the dump. This means we should: `--passphrase-fd 3`; BACKUP_GPG_PASSPHRASE does not exist yet in Doppler → create in Phase 4 task 1.
+4. Assumption: Grafana sqlite copy is consistent. Reality: no sqlite3 in the grafana image, host, or any local image; volume dir permission-denied. This means we should: docker cp the live file, run `PRAGMA integrity_check` in an alpine+sqlite drill container, document the torn-copy window.
+5. Assumption: plane uploads = plain files. Reality: MinIO xl-single tree mounted at /export in plane-app-plane-minio-1 (260 KB). This means we should: treat like langfuse-minio (tar + member count).
+6. Assumption: non-empty archive = healthy. Reality: 4 of 9 ClickHouse tables are empty → 0-byte Native; ReplacingMergeTree dedup is eventual → Native may hold duplicate ids. This means we should: accept 0-byte Native; manifest row count captured from the same stream; drill compares to that.
+7. Assumption: config layer = override + .env files. Reality: 4 more gitignored secret renders exist (observability/alertmanager/alertmanager.yml, observability/postgres-exporter/postgres_exporter.yml, observability/grafana/provisioning/datasources/registry-postgres.yml, services/medkb/.env.otel); dh40801 has no .env on g700data1 (Langfuse env comes from Doppler project `langfuse`). This means we should: add the 4 files; document the Langfuse env as Doppler-sourced (excluded).
+8. Assumption: retention prune can walk /mnt/4tb/backups. Reality: 3.9 GB root-owned loki tarballs there. This means we should: prune only backup-all's own <target>/ subdirs.
+9. Assumption: nightly payload ~350 MB. Reality: 1.25 GB, open-webui-data 1.1 GB = 88%, of which cache/ is 1.1 GB regenerable model cache (webui.db 736 KB, vector_db 6.2 MB, uploads 48 KB). This means we should: exclude cache/, back up the rest nightly; no tier logic. RESOLVED (advisor).
+10. Assumption: drills run on g700data1. Reality: postgres:17, clickhouse 25.12, chainguard minio images absent locally; drill containers match ContainerHighCPU/CrashLoop selectors. This means we should: pre-pull the 3 images once (Phase 4 task), exclude dhg-restore-drill-.* from the 2 rules.
+11. Assumption: rsync SSH mode is independent of the 873 daemon. Reality: with the rsync service off, SSH-mode auth is refused (tested); anonymous module listing on 873 stays while the service is on; DSM firewall is disabled. This means we should: DECISION — accept 873 listing (module names only, DSM auth required for data) and document, or enable the DSM firewall with a deny-873 rule (posture change).
+12. Assumption: NAS user needs NA on every other share. Reality: NA on `homes` blocks sshd from reading authorized_keys (auth regression, fixed). This means we should: keep NA on all shares except homes; AC#6 verifies docker/homes modules denied.
 
-**Reconciled truth (two of Claude's claims this session were wrong, opposite directions):**
-- The handoff doc's "traces verified flowing" was TRUE when written (7-20).
-- Claude's "tracing never ran in prod" was FALSE — it checked the running container (empty image) but never the Cloud API.
-- Actual: tracing WAS live & emitting production traces on 7-20, then a later `docker compose build` while the Portage repo sat on `main` (branch `feat/langfuse-tracing` unmerged) replaced the running image with one that has no `dist/instrumentation.js` and no `@langfuse`. That is why the live container looks un-instrumented.
+## C. Unexpected connections
+- `make backup`/`make restore` (Makefile:48-59) still wire the legacy scripts → delete with them.
+- CI "Check Documentation Drift" = scripts/generate-docs.py:262-268 asserting container names appear in CLAUDE.md (22 missing) → unaffected by this feature unless a compose service is added. Validate Docker Compose red = POSTGRES_PASSWORD default missing.
+- gen-runbooks.py auto-globs rules.d → docs coverage table changes from 45 rules; page regenerated in the same commit.
+- Do the ClickHouse system-log fix BEFORE the first full backup so manifests baseline post-fix.
+- A pre-existing NAS user `claude` has rsync + DSM + AFP + SMB + Drive allow rules (unknown origin) → Stephen to confirm it is intended.
+- The KB insight "remediator re-processes never-closed incidents every 30 s" appears fixed in source (remediator.py:334-401 is_stale/handled_state); deployed image unverified.
 
-**The test:** in `~/DHG/portage` (currently on `main` b2a6db1) merge/deploy `feat/langfuse-tracing` (commits 6f0c78f tracing + df272d0 conditionNotes save-bug fix — the latter is a LIVE prod bug, land it on main regardless), rebuild `portage-api` (build context is `.`), trigger one AI action, confirm a NEW production trace via `curl -u pk:sk https://us.cloud.langfuse.com/api/public/traces?limit=1` (totalItems > 11). If it works → instrumentation proven, self-host is a pure backend swap. If not → fix instrumentation before touching infra.
+## D. Approach pressure test
+Approach confirmed; no second pass. What would have falsified it: a dump that needs credentials outside its container (none of 13 do), a target too large to stream nightly (1.25 GB before cache exclusion, ~150 MB after), an archive format that cannot be restored into an ephemeral container (all verified or resolved: pgvector -Fc, MinIO xl tree, ClickHouse Native + DDL, live sqlite + integrity_check), or an NAS transport that cannot be scoped to one folder and one key (verified live). Bash stays the tool: every step is a docker exec/cp → gpg → rsync pipeline; jq 1.x and bats 1.13.0 are present for manifests and tests; the one cost is a new CI job for bats. Residual risk the approach does NOT remove: the local copy shares the physical device (/mnt/4tb) with the data; the NAS copy is deletable until Snapshot Replication is on; the NAS RAID is at 5/6. Those are stated in docs and gated in Phase 4, not hidden. Modifications B1-B12 are label/path/scope corrections, not a change of shape.
 
-**State changes made this session, Stephen-ratified:** (1) Cloudflare Access — created allow+allowlist apps for registry/knowledge/app/chat/grafana/dhgdocs/rehearsal + converted docs. bypass→allow; all 12 tunnel hostnames now gated; `otel.` untouched; **wildcard `*.digitalharmonyai.com` STILL bypass/everyone = AC-16, the #1 open Cloudflare item.** (2) `/data` mounted on dh40801. (3) killed 18 orphaned Claude session trees on .251 (~28GB freed); reaper at `~/.claude/scripts/reap-orphan-sessions.sh` — MANUAL ONLY, never cron.
+## Active external dependencies (not parked)
+- Snapshot Replication install on the NAS (Stephen, Package Center) — Phase 4 gate for AC6.
+- Drive 1 replacement (≥5.5 TB SATA) and RAID rebuild to 6/6 — Stephen, hardware.
 
-**Open:** AC-16 wildcard flip; correct handoff doc line 29 (untracked at repo root); AC-36b patchbay medkb probe repoint; `scripts/backup.sh` not in cron. Dormant unused keypair `~/.ssh/dhg-agent_ed25519`.
+## E. Park list (interesting, not this ship — each needs Stephen's approval to record as deferred)
+- DSM 7.2 upgrade + immutable snapshots on aifactory-backups — after the RAID is back to 6/6.
+- CI red baseline (POSTGRES_PASSWORD default in Validate Docker Compose; CLAUDE.md container-name drift; ruff 62; uuid-ossp in CI Postgres) — separate small ship.
+- Remediator deployed-image parity with source (is_stale fix) — verify in an ops pass.
+- NAS `claude` user audit.
 
-**Behavioral standing correction:** before claiming verified/working/done/flowing — run the read or command in the SAME turn. Three document-trusted claims this session (Access pattern, traces flowing, medkb zero-consumers) were all wrong and caught only by looking.
+# Phase 3 — Build checklist (ticked as each task verifies; the detailed plan follows)
 
-**Phase status:** Phase 1 complete, audit-cleared. After the Cloud-first test, resume at Phase 2 (full 3-agent divergent explore). Prior versions: `_v9` (deferred Debug Ops), `_v10` (spec v1).
+## Chunk 1 — prerequisites
+- [x] T1 Doppler secrets: BACKUP_GPG_PASSPHRASE, SNMP_V3_USER, SNMP_V3_AUTH_PASSWORD, SNMP_V3_PRIV_PASSWORD (dhg-monitoring/dev)
+- [x] T2 Pre-pull drill images on g700data1 (postgres:17, clickhouse-server:25.12, chainguard minio, alpine:3.20)
+- [x] T3 ClickHouse system-log fix on dh40801 (config.d drop-in; recreate UNDER `doppler run --project langfuse --config dev --` or the container comes up with a blank password; system db < 500 MiB; leftover *_log_0 tables dropped; Langfuse counts unchanged; canary green)
 
-## Version history
+## Chunk 2 — scripts
+- [ ] T4 observability/scripts/backup-lib.sh + observability/tests/backup-lib.bats green (pure functions: prune, textfile, manifest, target parsing, gpg round-trip) + CI `Shell tests` job added in the same commit
+- [ ] T5 observability/scripts/backup-all.sh + backup-all.bats green (dry-run count, lock exit 75, config-file `test -r` fail-loud); producer isolation proven in T7 with `--target` against a stopped container
+- [ ] T6 observability/scripts/restore-drill.sh + restore-drill.bats green (manifest-less run skipped, count mismatch non-zero, container removed on failure path)
 
-- v1 (2026-07-21) — initial spec after 5 specialist advisor reviews. Snapshot: `ship-state_v10.md`
-- v2 (2026-07-21) — 12 defects fixed: cancelled `dhg-kb-db`/Haystack/WhisperX ACs that contradicted Workstream G; added the 9 missing G ACs for the medkb move and ingestion; added rollback (AC-24), masking check (AC-25), SIGTERM bound (AC-26), lint script (AC-12), exposure sweep script (AC-19), backup cron gap (AC-53); corrected 12->14 modules, 9->8 ungated hostnames, 5->7 advisors; removed the stale "agent migration out of scope" line; renumbered all ACs 1-56 contiguously by workstream
+## Chunk 3 — first run, alerts, runbooks
+- [ ] T7 First manual backup run: 13/13 ok, archives decrypt, NAS mirror dry-run clean, 13 series in Prometheus
+- [ ] T8 rules.d/backups.yml (4 alerts) + TextfileStale regex + drill-container exclusions; promtool green; `docker kill -s HUP dhg-prometheus`; rules listed
+- [ ] T9 Runbook model = human-only: ALERT_TRIGGER_MAP gets explicit `human_only: True` entries for the 4 backup + 6 NAS alerts (no YAML, matching the existing human-only alerts), docs sections written, gen-runbooks coverage regenerated, verify-runbooks green; registry-api rebuilt once, pytest green
 
----
+## Chunk 4 — NAS monitoring
+- [ ] T10 DSM SNMPv3 on (dhgmon, SHA/AES), v1/v2c `public` off — `get` first, `set` with the returned keys, re-`get` proves v1/v2c off
+- [ ] T11 dhg-snmp-exporter service + Prometheus job `nas` + CLAUDE.md container name; raidStatus/diskStatus/diskHealthStatus/diskTemperature scraped
+- [ ] T12 rules.d/nas.yml (6 alerts: NasDown, NasRaidCrashed, NasRaidDegraded=high, NasDiskUnhealthy, NasVolumeHigh, NasTempHigh) + docs; NasRaidDegraded FIRING (pool 5/6) as proof
 
-# PHASE 2 SYNTHESIS + CORRECTIONS (2026-07-26)
+## Chunk 5 — drills, surface, schedule
+- [ ] T13 restore-drill.sh --all passes 12 targets; watched registry-db drill < 30 min, time recorded
+- [ ] T14 Grafana dhg-platform-backups (Backups row + NAS row); verify-dashboard.sh exit 0 + PNG (after T13 so drill-age panels have series)
+- [ ] T15 crontab: 03:30 nightly backup + Sunday 04:00 drill; lock test (concurrent run exits fast)
 
-**The original spec's core premises were refuted by verification. Corrections (each cited):**
+## Chunk 6 — cleanup, docs
+- [ ] T16 Legacy scripts + Makefile targets removed; infrastructure README fixed; deferral list ticked; f530537e resolved with AC 50-53 note
+- [ ] T17 CI `Shell tests` job green on the PR (job added in T4; this ticks when the PR run is green)
+- [ ] T18 docs-site backups.md (incl. passphrase escrow, homes-share exception, residual risk) + OBSERVABILITY_RUNBOOK pointer + CLAUDE.md update; docs build clean
 
-1. **Workstream C REFUTED — Portage tracing is already LIVE, pointed at Langfuse Cloud US.** The spec's "CRITICAL CORRECTION" (prod has no tracing, feat/langfuse-tracing unmerged) is stale. Verified: `portage-api` container has `@langfuse` 5.9.1 (`docker exec ls node_modules/@langfuse`), `LANGFUSE_BASE_URL=https://us.cloud.langfuse.com` (`docker exec env`), feat/langfuse-tracing MERGED to main. Real action = repoint env + **`docker compose up -d portage-api` (RECREATE, not `docker restart`)** (vars baked from env_file at create — F-INFRA). No rebuild, no branch deploy.
+## Stephen's items (gates, not mine to tick)
+- [x] Snapshot Replication installed
+- [ ] Snapshot Replication schedule on aifactory-backups: daily 04:30, keep 14 (UI)
+- [ ] Copy BACKUP_GPG_PASSPHRASE from Doppler into your password manager (escrow; T1 tells you when it exists)
+- [ ] Telegram: TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID in Doppler → render-alertmanager.sh → reload :9093
+- [ ] Drive 1 replacement (≥ 5.5 TB SATA) → RAID 6/6
+- [ ] DSM 7.2 upgrade (your timing; Video Station is the only consideration) → immutable snapshots (deferred 8baeab4c)
 
-2. **Langfuse v3 topology corrected to 6 containers** (LF-COMPOSE authoritative, github.com/langfuse/langfuse): langfuse-web (langfuse:3), langfuse-worker (langfuse-worker:3), postgres:17, clickhouse-server:25.12, redis:7, minio (chainguard). NOT medkb's 4-container clone. Secrets (# CHANGEME): POSTGRES_PASSWORD, DATABASE_URL, SALT, ENCRYPTION_KEY, NEXTAUTH_SECRET, CLICKHOUSE_PASSWORD, REDIS_AUTH, MINIO_ROOT_PASSWORD, 3x S3 keys + NEXTAUTH_URL + LANGFUSE_INIT_*.
+# Phase 3 — Plan detail (authoritative; 18 tasks, 6 chunks; supersedes every earlier draft)
 
-3. **Registry-public premise REFUTED for THIS ship's purpose.** All 12 tunnel hostnames challenge anon requests (302→cloudflareaccess), incl registry. (F-SEC curl). Whether each Access POLICY restricts identity vs bypass/everyone = UNVERIFIED (dashboard-only). Cloudflare Access remediation is de-scoped from this ship unless policy audit shows a bypass.
+Conventions for every task: view files before editing; commit after verify; no `set -x` anywhere near secrets; Prometheus reload = `docker kill -s HUP dhg-prometheus`; Langfuse compose commands run under `doppler run --project langfuse --config prd --` (prd holds CLICKHOUSE_PASSWORD / MINIO_ROOT_PASSWORD; dev has only DOPPLER_* meta); backup root = /mnt/4tb/backups/nightly/ (mkdir -p as swebber64, dir is 755 swebber64); NAS mirror source is that root only.
 
-4. **Infra corrections (F-INFRA):** external `dhgaifactory35_dhg-network` does NOT exist on dh40801 → use stack-local network. Named volumes land in `/var/lib/docker` not `/data` → bind-mount to `/data/langfuse/*`. Stock compose exposes minio `9090:9000` + web `3000:3000` on ALL interfaces → bind non-web ports to 127.0.0.1.
+## Chunk 1 — prerequisites
+T1 Doppler secrets (dhg-monitoring/dev): BACKUP_GPG_PASSPHRASE (`openssl rand -base64 48` piped into `doppler secrets set`), SNMP_V3_USER=dhgmon, SNMP_V3_AUTH_PASSWORD, SNMP_V3_PRIV_PASSWORD (`openssl rand -base64 30 | tr -d '/+='`, 32 chars). Verify: `--only-names` lists all four; tell Stephen to copy BACKUP_GPG_PASSPHRASE into his password manager (escrow). Risk low. Rollback: `doppler secrets delete`.
+T2 Drill images on g700data1: `docker pull postgres:17 clickhouse/clickhouse-server:25.12 cgr.dev/chainguard/minio` and build `dhg-drill-sqlite:3.20` locally (`FROM alpine:3.20; RUN apk add --no-cache sqlite`) because drills run `--network none` and cannot apk at run time. Verify: `docker images` lists all four. Risk low. Rollback: `docker rmi`.
+T3 ClickHouse system-log fix on dh40801. Files: dh40801/docker-compose.langfuse.yml. Do: add `configs: clickhouse_system_logs: content: |` with `<clickhouse>` containing `<trace_log remove="1"/> <text_log remove="1"/> <asynchronous_metric_log remove="1"/> <metric_log remove="1"/> <processors_profile_log remove="1"/> <opentelemetry_span_log remove="1"/>` and `<query_log><ttl>event_date + INTERVAL 7 DAY DELETE</ttl></query_log>`, same for `part_log` and `query_thread_log`; mount at /etc/clickhouse-server/config.d/system-logs.xml on the clickhouse service. Sequence: record `SELECT count() FROM default.traces / observations / scores` and the canary timestamp; `doppler run --project langfuse --config prd -- docker --context dh40801 compose -f dh40801/docker-compose.langfuse.yml up -d clickhouse` (~30-60 s recreate; worker retries); wait healthy; `DROP TABLE IF EXISTS` the six removed logs plus `system.query_log_0`, `system.part_log_0`, `system.query_thread_log_0` (ClickHouse renames tables whose create statement changed); verify system db < 500 MiB (`system.parts` active bytes), the three counts unchanged, `dhg-langfuse-web` healthy, canary success timestamp advances past the restart. Risk HIGH (prod Langfuse component restart, cross-service). Rollback: `git revert` + the same `up -d clickhouse` under prd; only system logs are lost.
 
-5. **Agent tracing (15 registered modules / 18 files real @traceable, langgraph.json) PARKED** (d571a7d6) — not beta-blocking; strategy unresolved (OTLP-exporter+LANGSMITH_OTEL_ENABLED=true vs handoff:94 CallbackHandler swap).
+## Chunk 2 — scripts (TDD: bats on pure functions; orchestration proven in T7)
+T4 observability/scripts/backup-lib.sh (+ observability/tests/backup-lib.bats, + `.github/workflows/ci.yml` job `Shell tests` in the SAME commit: git clone bats-core v1.13.0, ./install.sh $HOME, run `bats observability/tests`). Contents: `#!/usr/bin/env bash`; BACKUP_ROOT=/mnt/4tb/backups/nightly; TEXTFILE=/mnt/4tb/observability/textfile/backups.prom; TARGETS array, one row per line `id|kind|ctx|container|extra` (13 rows: registry-db, medkb-db, eval-db, audio-postgres, transcribe-db, portage-db, plane-db, langfuse-postgres, langfuse-clickhouse, langfuse-minio, plane-minio, volumes, config; plus the offsite mirror handled by backup-all.sh, not a table row); functions: `gpg_stream` (`gpg --batch --yes --symmetric --cipher-algo AES256 --passphrase-fd 3 3<<<"$BACKUP_GPG_PASSPHRASE"`), `write_textfile` (reads a state dir of per-target key=value files, emits HELP/TYPE + `backup_last_attempt_timestamp{name}`, `backup_last_success_timestamp{name}`, `backup_last_size_bytes{name}`, `backup_last_duration_seconds{name}`, `backup_restore_drill_success_timestamp{name}`, `backup_offsite_last_success_timestamp`; mktemp + chmod 0644 + mv -f), `write_manifest` (`jq -n --arg …` → manifest.json, written last), `prune_local` (per target under BACKUP_ROOT only: delete run dirs older than 30 d unless the run date is a Sunday and younger than 84 d; skip dirs without manifest.json; never touch anything outside BACKUP_ROOT), `run_id` (UTC `%Y%m%dT%H%M%SZ`), `is_sunday`. Tests: textfile format and label set; prune keeps Sundays, drops old weekdays, skips manifest-less dirs, ignores files outside root; manifest shape; gpg round-trip with a fixed passphrase; TARGETS parses to 13 rows. Verify: `bats observability/tests` green. Risk low.
+T5 observability/scripts/backup-all.sh. Args: `--all` (default) | `--target <id>` | `--dry-run` | `--no-offsite`. Guards: `: "${BACKUP_GPG_PASSPHRASE:?}"`; `flock -n /run/user/$UID/backup-all.lock` else exit 75 "already running"; free space on /mnt/4tb ≥ 10 GB; one `timeout 30 docker --context dh40801 version` probe, on failure mark the three dh40801 targets failed and continue. Per target: state=attempt (rewrite textfile), producers into `$BACKUP_ROOT/<id>/tmp-<run>/`, integrity check, manifest last, `mv tmp-<run> <run>`, state=success (rewrite textfile). Producers: pg — per instance open one `docker exec -i <c> psql -At -U <user> -d <db>` coprocess: `BEGIN ISOLATION LEVEL REPEATABLE READ; SELECT pg_export_snapshot();` then `SELECT relname, n FROM (SELECT relname, (xpath('/row/c/text()', query_to_xml('select count(*) as c from '||quote_ident(schemaname)||'.'||quote_ident(relname), false, true, '')))[1]::text::bigint AS n FROM pg_stat_user_tables) t` for the manifest counts, then `docker exec <c> pg_dump -Fc --snapshot=<id> -d <db>` | gpg → `<db>.dump.gpg` (plane: `-h /var/run/postgresql`), then COMMIT; plus `pg_dumpall --roles-only` | gpg → roles.sql.gpg. clickhouse — DDL: `SELECT create_table_query FROM system.tables WHERE database='default' ORDER BY engine='View', name` → ddl.sql.gpg; per non-View table `SELECT * FROM default.<t> FORMAT Native` | gzip | gpg → `<t>.native.gz.gpg` (0 bytes allowed; the drill counts rows from the stream itself, no manifest count). minio (langfuse-minio, plane-minio) — `docker [--context dh40801] cp <c>:/data -` (plane: `:/export -`) | tee >(tar -t | wc -l → manifest.members) | gpg → data.tar.gpg. volumes — `docker cp dhg-grafana:/var/lib/grafana/grafana.db -`, `docker cp dhg-registry-api:/exports -`, `docker cp dhg-open-webui:/app/backend/data -` piped through `tar --delete cache` (re-pack excluding cache/) each | tee member/byte count | gpg. config — `test -r` every listed file (repo .env, docker-compose.override.yml, ~/DHG/portage/.env, ~/plane-selfhost/plane-app/plane.env, dhg-transcribe/.env, dhg-research-eval-viewer/.env, the four observability/services secret renders) and fail the target loudly if any is unreadable; `tar -C / -cf - <list>` | gpg → config.tar.gpg. Integrity: decrypt each archive to `pg_restore --list`, `tar -t`, `gzip -t` respectively; sha256 of the .gpg recorded. Offsite (unless --no-offsite): `rsync -a --delete --delete-delay --delay-updates --exclude 'tmp-*' -e "ssh -p 22 -i ~/.ssh/nas-backup_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes -o LogLevel=ERROR" $BACKUP_ROOT/ aifactory-backup@10.0.0.250::aifactory-backups/` → offsite timestamp. Then prune_local. Exit 1 if any target failed; textfile always written. Tests (bats): --dry-run prints 13 target ids + offsite; lock held → exit 75 within 1 s; config target fails loudly when a listed file is unreadable (temp list); producers are functions so a failing shim marks only its target. Verify: bats green; `--target registry-db` real run writes a run dir with manifest and updates the textfile. Risk medium.
+T6 observability/scripts/restore-drill.sh `<id>|--all [run]` (+ restore-drill.bats). Picks the newest run dir with manifest.json (skips others). `docker run -d --network none --name dhg-restore-drill-<id>` with the image recorded in the manifest (source container's `.Config.Image` resolved to the exact tag/digest at dump time). pg: `-e POSTGRES_PASSWORD=drill`, wait `pg_isready`, `psql -f` roles (ignore "already exists"), `pg_restore -d <db>` per db, then the same count query → exact equality with manifest counts. clickhouse: clickhouse-server image, wait /ping, apply ddl.sql, per table `INSERT INTO default.<t> FORMAT Native` from gunzip, then compare `SELECT count() FROM default.<t>` with `clickhouse local --query "SELECT count() FROM file('<t>.native', Native)"` (Native is self-describing) → exact equality. minio: untar into a fresh volume, run the source image with MINIO_ROOT_USER/PASSWORD read at drill time from the SOURCE container's env via `docker [--context] inspect` (never written, never logged; `.minio.sys/config` is encrypted with the root credential), wait /minio/health/live, `mc ls --recursive local/` → compare object count with the tar member count recorded in the manifest MINUS metadata entries (drill records both numbers; equality contract = tar member count of the restored volume vs manifest.members). volumes/config: `tar -t` member count + bytes vs manifest; grafana.db extracted into `dhg-drill-sqlite:3.20` → `PRAGMA integrity_check` == ok. Trap EXIT/INT/TERM → `docker rm -f` + volume rm. On pass writes `backup_restore_drill_success_timestamp{name}` via write_textfile. `--all` runs every data target, exit non-zero on any failure, prints a checklist. Tests (bats with docker shim): manifest-less runs skipped; count mismatch → non-zero; container removed on failure path; unknown id → usage. Risk medium (ephemeral containers on the prod daemon, no ports, no network).
 
-**Divergent yield (park list):** eval-driven capture, PostHog×Langfuse email join, `_extract_langfuse_trace` KB source, GPU colocation — all post-beta.
+## Chunk 3 — first run, alerts, runbooks
+T7 First full run: `doppler run --project dhg-monitoring --config dev -- observability/scripts/backup-all.sh` (after T3). Verify: exit 0; log shows 12 data targets + offsite ok; each archive decrypts and passes integrity; `rsync --dry-run` of the mirror is clean; `curl -sG http://10.0.0.251:9090/api/v1/query --data-urlencode 'query=backup_last_success_timestamp'` returns 12 series with `name` labels plus the offsite series; isolation check: `--target transcribe-db` with the container stopped for 10 s marks only that target failed. Risk medium.
+T8 observability/prometheus/rules.d/backups.yml: BackupStale `(time() - backup_last_success_timestamp > 100800) or absent(backup_last_success_timestamp)` for 5m critical; BackupFailed `backup_last_attempt_timestamp > backup_last_success_timestamp` for 10m high; RestoreDrillStale `(time() - backup_restore_drill_success_timestamp > 691200) or absent(...)` for 5m high; BackupOffsiteStale `(time() - backup_offsite_last_success_timestamp > 100800) or absent(...)` for 5m high; every rule `labels: service: backups` (name comes from the series); runbook_url anchors. observability/prometheus/alerts.yml: TextfileStale expr → `time() - node_textfile_mtime_seconds{file!~".*/backups\\.prom"} > 900` and comment rewritten; ContainerCrashLoop (:61) and ContainerHighCPU (:183) selectors gain `name!~"dhg-restore-drill-.*"`. Verify: `docker exec dhg-prometheus promtool check rules /etc/prometheus/rules.d/backups.yml /etc/prometheus/alerts.yml` green; `docker kill -s HUP dhg-prometheus`; `/api/v1/rules` lists the 4; after 20 min TextfileStale is not pending for backups.prom. Risk low. Rollback: git revert + HUP.
+T9 Runbook model = human-only. registry/api.py ALERT_TRIGGER_MAP: entries for BackupStale, BackupFailed, RestoreDrillStale, BackupOffsiteStale, NasDown, NasRaidCrashed, NasRaidDegraded, NasDiskUnhealthy, NasVolumeHigh, NasTempHigh with `human_only: True` (same shape as existing human-only alerts at api.py:411-429). No runbook YAMLs. docs-site/projects/dhg-ai-factory/runbooks/alerts.md: ten `### <Alert>` sections (Means / First three checks / Likely causes / Resolve / Dashboard) under new `## Backups` and `## NAS` headings. `python3 observability/scripts/gen-runbooks.py` (coverage table regenerated: 45 → 55 rules), `observability/scripts/verify-runbooks.sh --static`. Registry: `docker compose build registry-api && docker compose up -d registry-api` once; `pytest registry -q` green (708 collected baseline). Verify: verify-runbooks exit 0; coverage table shows the ten as human-only. Risk medium (registry restart). Rollback: git revert + rebuild.
 
-**Full plan artifact:** scratchpad/langfuse-ship-plan.md (3 architecture diagrams + source-tagged facts + 5 verification gates G1-G5).
+## Chunk 4 — NAS monitoring
+T10 DSM SNMPv3. Do: `SYNO.Core.SNMP get` (fields today: enable_snmp, enable_snmp_v1v2, enable_snmp_v3, rouser, rocommunity, name, location, contact); attempt `set` with `enable_snmp=true enable_snmp_v1v2=false enable_snmp_v3=true rouser=dhgmon` plus candidate v3 keys (`v3_auth_protocol=SHA v3_auth_pwd=… v3_priv_protocol=AES v3_priv_pwd=…`, values from Doppler under `doppler run`, never printed); re-`get` must show v3 on and v1/v2c off; confirm with a `docker run --rm --network host prom/snmp-exporter:v0.30.1` one-shot probe or T11. If the API rejects the v3 keys (error 120), fallback = Stephen sets SNMPv3 in DSM > Control Panel > Terminal & SNMP > SNMP (user dhgmon, SHA, AES, the two Doppler passwords shown to him via `doppler secrets get --plain` in HIS terminal). Risk low. Rollback: `set enable_snmp_v1v2=true`.
+T11 dhg-snmp-exporter. Files: docker-compose.yml (service `snmp-exporter`, image prom/snmp-exporter:v0.30.1, container_name dhg-snmp-exporter, `user: "0:0"` like postgres-exporter-multi, command `--config.file=/etc/snmp_exporter/snmp.yml --config.file=/etc/snmp_exporter/auths.yml`, volumes observability/snmp-exporter/snmp.yml:ro (copied from the v0.30.1 release tarball, committed, `grep -n '^  synology:'` proves the module) and observability/snmp-exporter/auths.yml:ro (gitignored, rendered by observability/scripts/render-snmp-exporter.sh from Doppler: `auths: dhg_v3: {version: 3, username, security_level: authPriv, password, auth_protocol: SHA, priv_protocol: AES, priv_password}`, mode 600), dhg-network, restart unless-stopped, no ports); observability/prometheus/prometheus.yml job `nas`: metrics_path /snmp, params module [synology] auth [dhg_v3], static target 10.0.0.250 with labels service=nas host=synology, relabel __param_target ← __address__, instance ← __param_target, __address__ → dhg-snmp-exporter:9116; CLAUDE.md gains `dhg-snmp-exporter` (docs-drift check); .gitignore adds observability/snmp-exporter/auths.yml. Verify: `docker compose up -d snmp-exporter`; HUP prometheus; `raidStatus`, `diskStatus`, `diskHealthStatus`, `diskTemperature`, `raidFreeSize` present in Prometheus with instance 10.0.0.250. Risk medium (main compose change; CI "Validate Docker Compose" stays red for the pre-existing POSTGRES_PASSWORD reason). Rollback: remove service + job, HUP.
+T12 observability/prometheus/rules.d/nas.yml: NasDown `up{job="nas"} == 0` 5m critical; NasRaidCrashed `raidStatus == 12` 5m critical; NasRaidDegraded `raidStatus == 11` 5m HIGH; NasDiskUnhealthy `diskHealthStatus >= 3 or diskStatus == 4 or diskStatus == 5` 5m critical; NasVolumeHigh `raidFreeSize / raidTotalSize < 0.15` 30m warning; NasTempHigh `diskTemperature > 50` 15m warning; all `service: nas`, runbook_url anchors (docs sections written in T9). Verify: promtool green; HUP; within 5 min NasRaidDegraded is FIRING (pool is 5/6) and a registry incident row exists (Telegram only once Stephen wires it). Risk low. Rollback: delete file + HUP.
 
----
+## Chunk 5 — drills, surface, schedule
+T13 Drills: `observability/scripts/restore-drill.sh --all` after T7 → 12 data targets pass; then the watched registry-db drill with Stephen present, wall time recorded in ship-state (< 30 min). Verify: 12 `backup_restore_drill_success_timestamp` series. Risk medium.
+T14 Grafana observability/grafana/provisioning/dashboards/json/platform/dhg-platform-backups.json (uid dhg-platform-backups, title "Backups & NAS"): row Backups — stat "targets stale > 28 h" (count of `time()-backup_last_success_timestamp > 100800`), table by name (age since success, size, duration, drill age), offsite age, run history; row NAS — raidStatus state map, per-disk diskHealthStatus, diskTemperature, volume used %, `up{job="nas"}`. 24-col rows, dhg tokens. Verify: `observability/scripts/verify-dashboard.sh dhg-platform-backups` exit 0 + PNG. Risk low.
+T15 crontab (swebber64): `30 3 * * * /home/swebber64/.local/bin/doppler run --project dhg-monitoring --config dev -- /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/observability/scripts/backup-all.sh >> /home/swebber64/.claude/run/backup-all.log 2>&1` and `0 4 * * 0 … restore-drill.sh --all >> …/restore-drill.log 2>&1` (TZ America/New_York = ET). Verify: `crontab -l` shows both; a concurrent manual run exits 75 within 1 s while a run holds the lock. Risk low. Rollback: remove the two lines.
 
-# PHASE 3 PLAN — TASK LIST (scope: Part A install + Part B repoint)
+## Chunk 6 — cleanup, docs
+T16 `git rm scripts/backup.sh scripts/restore.sh`; Makefile:48-59 backup/restore targets removed (no CI consumer); infrastructure/README.md:38-39 updated; observability/audit-2026-09/deferral-task-list.md Wave 2 item ticked; `PATCH /api/deferred-items/f530537e` → resolved with note (AC50 delivered by the observability rebuild — node-exporter/cadvisor/alloy on dh40801; AC51 — blackbox-langfuse job; AC52/53 — this ship). Verify: `git grep -n 'scripts/backup.sh\|scripts/restore.sh'` returns only archive docs; deferred item reads resolved. Risk low.
+T17 CI `Shell tests` job green on the PR (job added in T4; this task is the check that the PR run is green; the four pre-existing red jobs are unchanged). Risk low.
+T18 Docs: docs-site/projects/dhg-ai-factory/backups.md (purpose; target table; what is excluded and why incl. Langfuse env in Doppler; residual risk — same-device local copy, deletable NAS copy until DSM 7.2, RAID 5/6; passphrase escrow; NAS setup incl. the `homes` share exception and the 873 module-name listing; restore procedures — single target, full disaster from the NAS mirror; drill contract; metrics, alerts, dashboard; crontab); docs/OBSERVABILITY_RUNBOOK.md pointer; CLAUDE.md KEY PATHS + container name; `docs-site/build-docs.sh`. Verify: docs build clean; `python3 scripts/generate-docs.py --check` drift count not worse than today's 22. Risk low.
 
-**Legend:** [CLAUDE] I execute · [STEPHEN] genuinely gated (root sudo password / Cloudflare Access dashboard — not offloadable) · verify/rollback per task.
+Order: T1→T2→T3 → T4→T5→T6 → T7 → T8 ∥ T9 → T10→T11→T12 → T13→T14→T15 → T16 ∥ T17 ∥ T18.
 
-## Part A — Install Langfuse on dh40801
-
-- **A1 [CLAUDE] Pre-flight verify.** `docker --context dh40801 ps -a` (empty), `network ls`, `ssh dh40801 'df -h /data && ls -ld /data'`. Verify: state matches F-INFRA. Risk: low (read-only).
-- **A2 [CLAUDE] Provision /data dirs + Doppler.** `ssh dh40801 mkdir -p /data/langfuse/{postgres,clickhouse,clickhouse_logs,minio,redis}` + chown store UIDs (pg 999, ch 101). `doppler projects create langfuse`; generate every CHANGEME secret via openssl into config prd. Verify: dirs exist w/ correct owner; `doppler secrets --project langfuse` lists all; none in repo. Risk: low. Rollback: `rm -rf /data/langfuse`, delete Doppler project.
-- **A3 [CLAUDE] Author `dh40801/docker-compose.langfuse.yml`.** Base LF-COMPOSE; deltas: dhg- prefix, stack-local network, bind-mounts /data/langfuse/*, NEXTAUTH_URL=https://labs.digitalharmonyai.com, minio+all non-web ports→127.0.0.1, exact image pins. Verify: `docker --context dh40801 compose -f ... config` parses; grep no `:latest`, no `external:`. Risk: low (file only). Rollback: rm file.
-- **A4 [CLAUDE] Deploy stack.** `doppler run -p langfuse -c prd -- docker --context dh40801 compose -f dh40801/docker-compose.langfuse.yml -p dhg-langfuse up -d`. [VERIFY] Doppler interpolation into remote-context run; fallback `doppler secrets download --format env` → `--env-file`. Verify: 6 containers Up(healthy). Risk: MEDIUM (service, new host). Rollback: `docker --context dh40801 compose -p dhg-langfuse down` (keep volumes).
-- **A5 [CLAUDE] First-boot + keys.** ClickHouse migrations in web logs; `curl 10.0.0.179:3000/api/public/health` from .251 → 200; org/project/user bootstrapped; capture project public/secret keys → Doppler. Verify: health 200, keys captured. Risk: low.
-- **A6 [CLAUDE] Exposure gate G1.** From .251 `nc -zv 10.0.0.179` for 9090/8123/9000/6379/5432 → all REFUSE; 3000 → accept. Verify: only 3000 open. Risk: low (read). If a store port is open → fix A3 bind, redeploy.
-
-## Part B — Repoint Portage
-
-- **B1 [STEPHEN] Access app `labs.` before DNS.** Cloudflare Access dashboard/API — Claude is classifier-blocked from Access API (not offloadable). Email allowlist, created before DNS record. Verify: app exists.
-- **B2 [STEPHEN] Tunnel ingress.** `/etc/cloudflared/config.yml` is root-owned + sudo needs password (F-INFRA) — genuinely a Stephen step. Add `labs.digitalharmonyai.com → http://10.0.0.179:3000` above 404 catch-all; `cloudflared tunnel route dns`; `systemctl reload cloudflared`. Verify G2: `curl -I https://labs.` → 302 cloudflareaccess.
-- **B3 [CLAUDE] Repoint Portage.** Portage Doppler: `LANGFUSE_BASE_URL=http://10.0.0.179:3000` (LAN ingest), keys = A5 project keys. `docker compose up -d portage-api` from /home/swebber64/DHG/portage (RECREATE). Verify: `docker exec portage-api env | grep LANGFUSE_BASE_URL` = new URL. Risk: MEDIUM (prod Portage). Rollback G5: revert Doppler to us.cloud + recreate; confirm by trace arrival.
-- **B4 [CLAUDE] E2E trace + masking gate G3.** Drive one real Portage AI action; confirm trace in self-hosted UI; **API-verify trace has ZERO base64 image data** (F-SEC: masker is base64-only). Risk: low (read).
-- **B5 [CLAUDE] Reporting gate G4.** Confirm cost + usage populate in Langfuse project dashboard. Risk: low.
-
-## Deploy order
-A1→A6 (Langfuse healthy + hardened) BEFORE B. Within B: B1→B2 (edge gated) BEFORE B3 (repoint), so labs never resolves ungated. B3→B5 after.
-
-## HARD GATE
-Awaiting Stephen: **go / approved / build it / ship it** to enter Phase 4.
-
----
-# PHASE 4 PROGRESS (2026-07-26)
-
-## PART A — COMPLETE + VERIFIED
-- A1 pre-flight: dh40801 clean, ports free, /data writable no-sudo but sudo needs pw -> switched to NAMED VOLUMES (789G OS disk).
-- A2: Doppler project `langfuse` prd, 16 secrets set via openssl (ENCRYPTION_KEY 64 hex verified), none in repo.
-- A3: dh40801/docker-compose.langfuse.yml authored (commit 1383ebf) — 6 services, stack-local net, named volumes, all non-web ports 127.0.0.1. config parses, Doppler interpolation verified.
-- A4/A5: deployed (doppler run + remote context); web crash-looped on ClickHouse ON CLUSTER/Zookeeper -> FIXED CLICKHOUSE_CLUSTER_ENABLED=false (commit ae6049c, bug 41690df7, cited Langfuse docs). Health 200 v3.224.1, all 6 up.
-- A6 GATE G1: PASSED — only :3000 LAN-open; postgres/clickhouse/redis/minio/worker all refused.
-
-Langfuse UI live at http://10.0.0.179:3000 (LAN). INIT project keys in Doppler langfuse/prd (LANGFUSE_INIT_PROJECT_PUBLIC_KEY / _SECRET_KEY).
-
-## PART B — COMPLETE (2026-07-29). SHIP DONE.
-- B1 DONE [STEPHEN 2026-07-28]: Cloudflare Access app labs. created.
-- B2 DONE [STEPHEN 2026-07-28] + GATE G2 PASSED (verified 2026-07-29): `curl -I https://labs.digitalharmonyai.com` -> 302 digitalharmonyai.cloudflareaccess.com login. Edge gated, never resolved ungated.
-- B3 DONE: prod portage-api recreated, LANGFUSE_BASE_URL=http://10.0.0.179:3000 verified in container env + "Langfuse tracing enabled" log (sampleRate 1). Also fixed: prod was on Doppler dev config (prior session).
-- B4 GATE G3 PASSED (2026-07-29): 4 real scan-refine traces (real user traffic 07-27, user-attributed) in self-hosted instance. Newest trace (0be9b9e8eb77a7b2c5175e4b2060121c, 5 obs) API-verified: ZERO raw base64 — both image_url fields read "[image redacted: 293228 base64 chars]", no base64 runs >500 chars anywhere in 71KB trace JSON. Masker confirmed against PROD traffic (was dev-only validated).
-- B5 GATE G4 PASSED (2026-07-29): /api/public/metrics/daily — 2026-07-27: 4 traces, 17 obs, $0.0273 total; per-model usage populated (gemini-2.5-flash 41806 in / 5896 out @ $0.0273; qwen3:4b local 259/2048 @ $0 — expected zero for local model).
+## NAS side (done 2026-09-10, verified)
+Share aifactory-backups (/volume1, hidden, RW = aifactory-backup, NA for that user on all other shares except homes). User aifactory-backup uid 1034, /sbin/nologin, app privileges: rsync ALLOW; DSM/AFP/FTP/SFTP/SMB/Drive DENY. Key ~/.ssh/nas-backup_ed25519 installed. rsync service on (SSH mode, port 22), rsync accounts off. Verified: push/list/delete round-trip clean; docker + homes modules "permission denied"; interactive ssh denied. Not done: Snapshot Replication install (classifier blocked synopkg; Stephen: Package Center → Snapshot Replication → Install); 873 anonymous listing (decision B11).
