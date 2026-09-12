@@ -17,7 +17,8 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 OUT="observability/snmp-exporter/auths.yml"
 
-get() { doppler secrets get "$1" --project dhg-monitoring --config dev --plain --no-check-version 2>/dev/null || true; }
+# A doppler failure (not logged in, offline) must surface as itself, not as "not set".
+get() { doppler secrets get "$1" --project dhg-monitoring --config dev --plain --no-check-version; }
 USER_="$(get SNMP_V3_USER)"; AUTH_="$(get SNMP_V3_AUTH_PASSWORD)"; PRIV_="$(get SNMP_V3_PRIV_PASSWORD)"
 for pair in "SNMP_V3_USER:$USER_" "SNMP_V3_AUTH_PASSWORD:$AUTH_" "SNMP_V3_PRIV_PASSWORD:$PRIV_"; do
   [ -n "${pair#*:}" ] || { echo "render-snmp-exporter: ${pair%%:*} is not set in Doppler dhg-monitoring/dev" >&2; exit 1; }

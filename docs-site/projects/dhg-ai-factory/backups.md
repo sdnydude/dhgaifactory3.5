@@ -9,8 +9,8 @@ Every DHG AI Factory data store is dumped nightly, encrypted, verified, kept
 locally with a 30-day / 12-week retention, mirrored to the Synology NAS, and
 restored into a throwaway container every Sunday to prove the copies are real.
 The whole system is two shell scripts, one Prometheus textfile, ten alert rules
-and one dashboard. Shipped 2026-09-11 (Langfuse ship AC#52/53, registry
-deferred item `f530537e`).
+and one dashboard. Shipped 2026-09-11 (Langfuse ship AC#53, registry deferred
+item `f530537e`).
 
 **What you open:** Grafana → [Backups & NAS](http://10.0.0.251:3001/d/dhg-platform-backups).
 Green header means every target has a verified run under 28 h old, the NAS
@@ -40,7 +40,7 @@ four of six disks since February with nobody knowing.
 | `langfuse-minio` | minio | `dhg-langfuse-minio` on dh40801 | raw xl-single tree `/data` incl. `.minio.sys` |
 | `plane-minio` | minio | `plane-app-plane-minio-1` | raw tree `/export` |
 | `volumes` | volume | `dhg-grafana`, `dhg-registry-api`, `dhg-open-webui` | `grafana.db`, `/exports`, open-webui data minus `cache/` |
-| `config` | files | host filesystem | `observability/scripts/config-layer.list`: `.env` files, `docker-compose.override.yml`, the four Doppler-rendered secret files |
+| `config` | files | host filesystem | `observability/scripts/config-layer.list`: `.env` files, `docker-compose.override.yml`, the five Doppler-rendered secret files |
 
 Every Postgres target is dumped with `pg_dump -Fc` under a `pg_export_snapshot()`
 taken by one `REPEATABLE READ` session that also counts every user table, so the
@@ -83,7 +83,7 @@ none.
   mirror of that tree (`rsync -a --delete --delete-delay --delay-updates`); there
   is no NAS-side logic to break. Snapshot Replication on the NAS folder (daily,
   keep 14) is the undo for a bad mirror.
-- Nightly payload ≈ 100 MB; a full retention set ≈ 8 GB.
+- Nightly payload ≈ 100 MB; a full retention set ≈ 4 GB.
 
 ## Schedule and where it runs
 
@@ -92,8 +92,9 @@ none.
 0  4 * * 0   doppler run --project dhg-monitoring --config dev -- observability/scripts/restore-drill.sh --all >> ~/.claude/run/restore-drill.log
 ```
 
-crontab of `swebber64` on g700data1 (`America/New_York`). Both scripts hold
-`flock` on `/run/user/1000/backup-all.lock`; a second instance exits 75 at once.
+crontab of `swebber64` on g700data1 (`America/New_York`). Both scripts take
+the same `flock` on `/run/user/1000/backup-all.lock`, so a backup and a drill
+never overlap; the second instance exits 75 at once.
 Guards: the passphrase must be present and `/mnt/4tb` must have 10 GB free or
 the run aborts before touching anything. dh40801 gets one 30 s reachability
 probe per run; if it fails, its three targets are marked failed and the rest
@@ -162,7 +163,7 @@ still lists module names anonymously; data access on 873 is denied
    (the key is in the config-layer archive too; if both are gone, the NAS admin
    account can read the share directly).
 2. Restore the config layer first: `gpg -d config/<run>/config.tar.gpg | tar -C / -x`
-   (`.env` files, the override, the rendered secret files). Re-run the four
+   (`.env` files, the override, the rendered secret files). Re-run the
    `render-*.sh` scripts if Doppler is reachable; the archive is the fallback.
 3. `docker compose up -d` the databases only, then per database:
    `gpg -d roles.sql.gpg | psql`, `gpg -d <db>.dump.gpg > x && pg_restore -d <db> x`
@@ -183,13 +184,14 @@ still lists module names anonymously; data access on 873 is denied
 `restore-drill.sh` takes the newest manifest-bearing run of a target, starts an
 ephemeral `dhg-restore-drill-<target>` container (`--network none`, no ports,
 removed by a trap on every exit path, even a failed target inside `--all`) and
-checks **exactly**:
+checks **exactly** (scratch files live under `/mnt/4tb/backups/.drill`, mode 700,
+outside the mirrored tree, and are removed on every exit path):
 
 | kind | restore | equality check |
 |---|---|---|
 | pg | roles, `CREATE DATABASE`, `pg_restore` from a file copied in | per-table counts == manifest counts (byte-order sorted on both sides) |
 | clickhouse | DDL replay, `INSERT … FORMAT Native` | restored count == `clickhouse local` count of the Native file |
-| minio | tree untarred into a *created* container, then started with the source's root credentials (env-file, deleted after create) | member count before start == manifest; server lists buckets |
+| minio | tree untarred into a *created* container (anonymous volume, dropped with the container), then started with the source's root credentials (env-file in scratch, deleted after create) | archive members == manifest; restored tree == archive ∪ the image's pre-restore skeleton, measured before start; server lists buckets |
 | volume | — | member count per archive == manifest; `grafana.db` passes `PRAGMA integrity_check` in `dhg-drill-sqlite:3.20` |
 | files | — | member count == manifest |
 

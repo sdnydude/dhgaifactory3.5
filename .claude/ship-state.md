@@ -1,5 +1,5 @@
 status: in_progress
-phase: 6
+phase: 7
 approved: "go" 2026-09-11T01:12:08Z
 tdd: yes (bats on pure functions; orchestration proven in T7)
 phase2_complete: true — 3 Explore agents (3/3 usable) + Phase 2 advisor (approach holds, no second pass; 21 notes folded); explore passes: 1
@@ -20,7 +20,7 @@ nas_state: DS1618+, DSM 7.1.1-42962 U9, volume1 Btrfs 21 TB (8.7 TB used), RAID6
 
 ## What it does
 - Nightly 03:30 ET job on g700data1 (swebber64 crontab, flock, log ~/.claude/run/backup-all.log) dumps every target to /mnt/4tb/backups/nightly/<target>/<UTC-run>/ streamed from inside each source container via docker exec / docker cp (local or --context dh40801). The orchestrator owns ONLY /mnt/4tb/backups/nightly/ (the root also holds root-owned Loki tarballs and an unencrypted ad-hoc registry dump that must never be mirrored). No credentials leave containers; no Doppler needed for dumps. gpg --symmetric (AES256) with passphrase BACKUP_GPG_PASSPHRASE from Doppler dhg-monitoring/dev on every archive; Stephen keeps an out-of-band copy of that passphrase in his password manager (Doppler lockout must not mean unreadable backups).
-- Targets (12 data targets + 1 offsite mirror = 13 rows in the target table):
+- Targets (13 data targets; the offsite mirror is a step, not a table row):
   1-7 Postgres: registry-db (dhg_registry + snap2list, user dhg), medkb-db (medkb), eval-db (evalviewer + evalviewer_test), audio-postgres (audio_agent), transcribe-db (transcribe), portage-db (portage), plane-db (plane; psql -h /var/run/postgresql inside container). pg_dump -Fc per database + pg_dumpall --roles-only per instance.
   8 langfuse-postgres (postgres:17, db postgres) — same.
   9 langfuse-clickhouse — SHOW CREATE TABLE DDL for every default.* object + per-table SELECT * FORMAT Native for the 9 non-View tables.
@@ -43,7 +43,7 @@ nas_state: DS1618+, DSM 7.1.1-42962 U9, volume1 Btrfs 21 TB (8.7 TB used), RAID6
 
 ## Observability additions (Stephen "I need observability" / "you add it", 2026-09-10)
 - Grafana dashboard `dhg-platform-backups` (folder DHG / Platform; the thing Stephen opens): per-target table (last success age, size, duration, integrity, drill age), NAS mirror age, run history, red/green header; plus a NAS row (RAID state, per-bay disk health, temps, volume free). Verified with verify-dashboard.sh after the first real run.
-- Synology monitoring: DSM SNMPv3 (authPriv, user from Doppler SNMP_V3_*), v1/v2c community `public` DISABLED; `dhg-snmp-exporter` (prom/snmp-exporter v0.30.1, shipped snmp.yml `synology` module — verified by `grep -n '^  synology:'` after download — plus a Doppler-rendered gitignored auths file, multiple --config.file confirmed by README); Prometheus job `nas` target 10.0.0.250. Series names are MIB object names: raidStatus{raidName}, diskStatus{diskID}, diskHealthStatus, diskTemperature, raidFreeSize, raidTotalSize. rules.d/nas.yml: NasDown (critical), NasRaidCrashed (raidStatus==12, critical), NasRaidDegraded (raidStatus==11, HIGH — not critical, so a weeks-long degrade does not inhibit NasTempHigh/NasVolumeHigh via the service-equal inhibit rule; 2-10 and 13-20 are transitions/scrubs and never alert), NasDiskUnhealthy (diskHealthStatus>=3 or diskStatus in 4,5, critical), NasVolumeHigh (raidFreeSize/raidTotalSize<0.15, warning), NasTempHigh (diskTemperature>50 for 15m, warning); runbooks + docs. NasRaidDegraded is expected to FIRE immediately (pool is 5/6) and is the proof. Prometheus reload is `docker kill -s HUP dhg-prometheus` (no --web.enable-lifecycle; override is unmergeable for `command`).
+- Synology monitoring: DSM SNMPv3 (authPriv, user from Doppler SNMP_V3_*), v1/v2c community `public` DISABLED; `dhg-snmp-exporter` (prom/snmp-exporter v0.30.1, shipped snmp.yml `synology` module — verified by `grep -n '^  synology:'` after download — plus a Doppler-rendered gitignored auths file, multiple --config.file confirmed by README); Prometheus job `nas` target 10.0.0.250. Series names are MIB object names: raidStatus{raidName}, diskStatus{diskID}, diskHealthStatus, diskTemperature, raidFreeSize, raidTotalSize. rules.d/nas.yml: NasDown (critical), NasRaidCrashed (raidStatus==12, critical), NasRaidDegraded (raidStatus==11, HIGH — not critical, so a weeks-long degrade does not inhibit NasTempHigh/NasVolumeHigh via the service-equal inhibit rule; 2-10, 13 and 14-20 are transitions/scrubs and never alert), NasDiskUnhealthy (diskHealthStatus>=3 or diskStatus in 4,5, critical), NasVolumeHigh (raidFreeSize/raidTotalSize<0.15, warning), NasTempHigh (diskTemperature>50 for 15m, warning); runbooks + docs. NasRaidDegraded is expected to FIRE immediately (pool is 5/6) and is the proof. Prometheus reload is `docker kill -s HUP dhg-prometheus` (no --web.enable-lifecycle; override is unmergeable for `command`).
 - Storage layer (advisor-reviewed, decision ca13da42): full retention lives locally; NAS is a pure `rsync -a --delete --delay-updates` mirror; no NAS-side prune; Snapshot Replication (daily 04:30, keep 14, Stephen sets in UI) is the deletion backstop.
 
 ## What it does not do
@@ -178,6 +178,31 @@ Built: 17/18 tasks (T17 = CI Shell tests job ticks on the PR; ci.yml runs only o
 - AgentShield v1.4.0 vs refreshed baseline: 1103 unchanged, 0 new, Gate PASSED (grade F is the pre-existing .claude posture, unchanged by this ship).
 - Performance baselines: nightly backup wall 30 s; full drill 46 s; NAS scrape 60 s interval, exporter walk ~1 s.
 - Dashboard: verify-dashboard.sh dhg-platform-backups 17/17 panels, PNG rendered and visually checked.
+
+# Phase 6 — Review findings (6-agent panel, all full-coverage; unified 2026-09-11)
+
+## Critical (blocks shipping)
+- [x] R1 backup-all.sh:42-49 — unknown `--target` exits 0 and logs "all targets ok" (exit 2 dies in the process substitution); mirror + prune still run. 4 reviewers, reproduced. Fix: validate before the lock; test.
+- [x] R2 backup-all.sh run_target — `bl_write_manifest`/`mv` failure still stamps success (errexit off inside `||`/`if`); metrics lie, drill restores the previous run. Fix: chain with `&&`, fail loudly; test via a failing jq shim.
+- [x] R3 rules.d/backups.yml BackupFailed / RestoreDrillStale — a target that never succeeded has no success series, so `attempt > success` matches nothing and `absent()` is false once any target succeeded: first-night failures never alert. Fix: `or (attempt unless on(name) success)`; promtool unit test.
+- [x] R4 restore-drill.sh clickhouse — a decrypt/gunzip failure yields a 0-byte file that the empty-table branch turns into PASS. Fix: fail on decrypt error; test with a corrupted archive.
+
+## Important (fix before merge)
+- [x] R5 restore-drill.sh — plaintext scratch (`.drill.*.dump/.native`, MinIO env-file) is written inside a FINAL run dir under the mirrored tree, and the drill takes no flock (docs claim it does). Fix: scratch under /mnt/4tb/backups/.drill (mode 700, outside nightly/), same lock as backup-all (exit 75); tests.
+- [x] R6 restore-drill.sh:47 — roles restore `> /dev/null 2>&1 || true` swallows every error. Fix: allow only "already exists"; test.
+- [x] R7 render-snmp-exporter.sh:20 — `2>/dev/null || true` turns doppler outages into "not set". Fix: drop both.
+- [x] R8 bats-tdd-reporter.py:37,86-100 — bare except falls back to cwd silently; zero parsed tests returns bats' rc. Fix: specific exceptions + stderr warning; return 1.
+- [x] R9 backup-all.sh:88-91 produce_files — pipeline status discarded, tar stderr muted. Fix: `|| return 1`, unmute.
+- [x] R10 tests (mutation check): clickhouse mkdir, --all cleanup vacuous, MinIO count-before-start, locale sort, empty-table branch, grafana integrity fail, verify_archives failure, unknown target — add regression tests that fail on revert.
+- [x] R11 docs: backups.md flock claim; fifth rendered secret (observability/snmp-exporter/auths.yml) missing from config-layer.list; NAS runbook queries unscoped (Volume/Storage Pool); "≈ 8 GB" → ≈ 4 GB; "AC#52/53" → AC#53; nas.yml transitions comment vs ship-state; ship-state "12+1 rows" stale (13 data rows, offsite not a row); docs/UserManual.md:67 `make backup`.
+- [x] R12 simplifier: `docker cp <file> c:/restore/<name>` instead of the tar --transform detour (comment is false); `dk()` shared via backup-lib; `--target` without value → usage not unbound-variable; unused BACKUP_KEEP_* overrides removed; INT/TERM trap exits; context-probe stderr into the log; NasVolumeHigh summary says "pool".
+- [x] R13 contracts: `bl_state_set` rejects non-numeric values (one bad value blanks the whole textfile); drills check required manifest keys before comparing (`null` mismatch reads wrong).
+
+## Fix pass result (2026-09-11)
+All of R1–R13 fixed test-first (suite 31 → 40 bats + 4 promtool unit tests wired into CI); classification audit: R5 raised to Critical (security), R3 → Important, R8 → Minor (fixed anyway). Live re-verification: config target real run (no tar noise, 700/600 modes), restore-drill --all 13/13 after a fourth defect surfaced live (the chainguard MinIO image seeds /data/.minio.sys, so the contract is archive ∪ baseline), no scratch/plaintext under nightly/, no leftover containers or volumes (34 drill-era anonymous volumes from earlier `run -d` drills removed; 15 older ones pre-date this ship). Alert rules reloaded; BackupFailed/RestoreDrillStale now cover never-succeeded targets.
+
+## Minor (noted, not fixed unless trivial)
+- produce_pg fifo plumbing could be a coproc (works, live-tested, out of scope: no refactor of the unbroken); bats setup dedup into a helper; reporter re-home buffering; test count 55 assertion shape; bare TAP `Bail out!`.
 
 # Phase 3 — Plan detail (authoritative; 18 tasks, 6 chunks; supersedes every earlier draft)
 

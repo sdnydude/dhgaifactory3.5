@@ -1696,7 +1696,7 @@ follow within 28 h.
 ### NasRaidCrashed
 
 ```promql
-raidStatus == 12
+raidStatus{raidName=~"Storage Pool.*"} == 12
 ```
 
 **Means:** the storage pool has lost more disks than its RAID level tolerates.
@@ -1726,7 +1726,7 @@ running with `--no-offsite` until the pool is back.
 ### NasRaidDegraded
 
 ```promql
-raidStatus == 11
+raidStatus{raidName=~"Storage Pool.*"} == 11
 ```
 
 **Means:** the pool is missing at least one disk but still serving data. RAID 6
@@ -1790,17 +1790,18 @@ pool is exactly when the off-host copy matters.
 ### NasVolumeHigh
 
 ```promql
-raidFreeSize / raidTotalSize < 0.15
+raidFreeSize{raidName=~"Volume.*"} / raidTotalSize{raidName=~"Volume.*"} < 0.15
 ```
 
 **Means:** the volume holding `aifactory-backups` (and everything else on the
-NAS) has under 15 % free for 30 minutes. Nightly backups add roughly 100 MB a
+NAS) has under 15 % free for 30 minutes (the pool row always reports ~0 free
+because the volume claims all of it, hence the `Volume.*` scope). Nightly backups add roughly 100 MB a
 day; something else is filling it.
 
 **First three checks:**
 
 ```bash
-curl -sG http://10.0.0.251:9090/api/v1/query --data-urlencode 'query=raidFreeSize / raidTotalSize'
+curl -sG http://10.0.0.251:9090/api/v1/query --data-urlencode 'query=raidFreeSize{raidName=~"Volume.*"} / raidTotalSize{raidName=~"Volume.*"}'
 rsync --list-only -e 'ssh -p 22 -i ~/.ssh/nas-backup_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes' aifactory-backup@10.0.0.250::aifactory-backups/
 du -sh /mnt/4tb/backups/nightly     # the mirror is this size
 ```

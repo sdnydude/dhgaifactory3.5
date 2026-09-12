@@ -34,7 +34,9 @@ def project_root() -> Path:
             ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True
         ).stdout.strip()
         return Path(out)
-    except Exception:
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        # Outside a git checkout the guard would never see this test.json; say so.
+        print(f"bats-tdd-reporter: not in a git repo ({exc}); writing under {Path.cwd()}", file=sys.stderr)
         return Path.cwd()
 
 
@@ -84,12 +86,14 @@ def main() -> int:
     rc, tap = run_bats(args)
     result = parse_tap(tap, default_module)
     if not result["testModules"]:
-        # bats itself failed (syntax error, missing file): surface it as a failed module
+        # bats itself failed (syntax error, missing file) or found no tests:
+        # surface it as a failed module AND a non-zero exit, never a green shell.
         result["testModules"] = [{
             "moduleId": default_module,
             "tests": [{"name": "bats", "fullName": f"{default_module}::bats", "state": "failed",
-                       "errors": [{"message": tap.strip()[-2000:]}]}],
+                       "errors": [{"message": tap.strip()[-2000:] or "no tests parsed"}]}],
         }]
+        rc = rc or 1
     out_dir = root / ".claude" / "tdd-guard" / "data"
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "test.json").write_text(json.dumps(result, indent=2))

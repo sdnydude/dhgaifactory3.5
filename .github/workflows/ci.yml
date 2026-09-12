@@ -87,3 +87,5 @@ jobs:
       - run: git clone --depth 1 --branch v1.13.0 https://github.com/bats-core/bats-core.git /tmp/bats-core && sudo /tmp/bats-core/install.sh /usr/local
       - run: bats --version
       - run: bats observability/tests
+      - name: promtool unit tests (alert rules)
+        run: docker run --rm -v "$PWD/observability/prometheus:/p:ro" --entrypoint promtool prom/prometheus:v2.48.0 test rules /p/tests/backups_test.yml

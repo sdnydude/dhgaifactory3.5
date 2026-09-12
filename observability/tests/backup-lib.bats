@@ -97,6 +97,14 @@ teardown() {
   [ "$(grep -c 'backup_last_attempt_timestamp{name="registry-db"}' "$BACKUP_TEXTFILE")" = "1" ]
 }
 
+@test "bl_state_set rejects a non-numeric value (one bad line would make node-exporter drop the whole textfile)" {
+  run bl_state_set registry-db success "not-a-number"
+  [ "$status" -ne 0 ]
+  [ ! -f "$BACKUP_STATE_DIR/registry-db/success" ]
+  bl_state_set registry-db success 1700000010
+  [ "$(cat "$BACKUP_STATE_DIR/registry-db/success")" = "1700000010" ]
+}
+
 # helper: make a run dir dated N days before NOW (epoch), optionally with a manifest
 mkrun() { # id days_ago with_manifest(1|0)
   local ts run; ts=$(( NOW - $2*86400 )); run="$(date -u -d "@$ts" +%Y%m%dT%H%M%SZ)"

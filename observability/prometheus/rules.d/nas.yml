@@ -6,7 +6,7 @@
 # raidStatus (SYNOLOGY-RAID-MIB): 1 Normal; 2-10 transitions (Repairing,
 # Migrating, Expanding, Deleting, Creating, RaidSyncing, RaidParityChecking,
 # RaidAssembling, Canceling); 11 Degrade; 12 Crashed; 13 DataScrubbing;
-# 14-21 further transitions. Only 11 and 12 alert; a rebuild or a scrub must
+# 14-20 further transitions (SYNOLOGY-RAID-MIB, Synology SNMP MIB Guide). Only 11 and 12 alert; a rebuild or a scrub must
 # never page.
 # diskStatus: 1 Normal, 2 Initialized, 3 NotInitialized, 4 SystemPartitionFailed,
 # 5 Crashed. diskHealthStatus (DSM 7): 1 Normal, 2 Warning, 3 Critical, 4 Failing.
@@ -76,7 +76,7 @@ groups:
           severity: warning
           service: nas
         annotations:
-          summary: "NAS pool {{ $labels.raidName }} under 15% free"
+          summary: "NAS volume {{ $labels.raidName }} under 15% free"
           description: "The volume holding aifactory-backups (and every other share) has under 15% free for 30 minutes. The backup mirror adds roughly 100 MB a day; find the real consumer in DSM Storage Analyzer."
           runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#nasvolumehigh"
 

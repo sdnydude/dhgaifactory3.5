@@ -62,19 +62,24 @@ Open Grafana at [http://localhost:3000](http://localhost:3000).
 ## Maintenance & Backups
 
 ### Database Backups
-The system includes a script to backup the PostgreSQL registry.
+Every data store (7 Postgres instances, Langfuse Postgres/ClickHouse/MinIO,
+Grafana, exports, the config layer) is backed up nightly at 03:30 ET by
+`observability/scripts/backup-all.sh`, encrypted with gpg, mirrored to the
+Synology NAS and restore-drilled every Sunday. Manual run:
 ```bash
-make backup
+doppler run --project dhg-monitoring --config dev -- observability/scripts/backup-all.sh
 ```
-Backups are stored in the `backups/` directory with a timestamp.
+Runs land under `/mnt/4tb/backups/nightly/<target>/<UTC-run>/`. Full design and
+restore procedures: `docs-site/projects/dhg-ai-factory/backups.md`.
 
 ### Restoring Data
-To restore from a backup:
-1. List available backups: `ls -l backups/`
-2. Run restore command:
-   ```bash
-   make restore BACKUP=backup_2025_11_28_120000.sql.gz
-   ```
+Never restore in place. Prove the copy first with the drill, then copy what you
+need out of the ephemeral container:
+```bash
+doppler run --project dhg-monitoring --config dev -- observability/scripts/restore-drill.sh registry-db
+```
+Step-by-step single-target and full-disaster procedures are in
+`docs-site/projects/dhg-ai-factory/backups.md`.
 
 ### Logs
 Logs are aggregated in Loki but can be viewed directly via Docker:

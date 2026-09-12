@@ -32,9 +32,13 @@ groups:
           runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#backupstale"
 
       # Fires the same morning a target fails: the script stamps attempt before
-      # producing and success only after the manifest lands.
+      # producing and success only after the manifest lands. The `unless` half
+      # covers a target that has NEVER succeeded (first night failed, new target,
+      # dh40801 unreachable from day one): it has no success series, so the plain
+      # comparison would match nothing and absent() on the whole metric is false
+      # once any other target has succeeded. Unit-tested in tests/backups_test.yml.
       - alert: BackupFailed
-        expr: backup_last_attempt_timestamp > backup_last_success_timestamp
+        expr: (backup_last_attempt_timestamp > backup_last_success_timestamp) or (backup_last_attempt_timestamp unless on (name) backup_last_success_timestamp)
         for: 10m
         labels:
           severity: high
@@ -47,8 +51,9 @@ groups:
       # Weekly drill (Sundays 04:00 ET) restores every target into an ephemeral
       # container and checks counts against the manifest. 8 days = one missed
       # Sunday plus slack.
+      # Same shape: a backed-up target with no drill stamp at all must alert too.
       - alert: RestoreDrillStale
-        expr: (time() - backup_restore_drill_success_timestamp > 691200) or absent(backup_restore_drill_success_timestamp)
+        expr: (time() - backup_restore_drill_success_timestamp > 691200) or (backup_last_success_timestamp unless on (name) backup_restore_drill_success_timestamp) or absent(backup_restore_drill_success_timestamp)
         for: 5m
         labels:
           severity: high

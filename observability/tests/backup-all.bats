@@ -31,6 +31,13 @@ teardown() {
   [ "$(printf '%s\n' "$output" | grep -c '^plan ')" -eq 14 ]
 }
 
+@test "an unknown --target id exits 2 before doing anything (no plan, no run, no mirror)" {
+  run "$SCRIPT" --target bogus --dry-run
+  [ "$status" -eq 2 ]
+  printf '%s\n' "$output" | grep -q 'unknown target: bogus'
+  ! printf '%s\n' "$output" | grep -q '^plan '
+}
+
 @test "a second run exits 75 within 2 s while another run holds the lock" {
   exec 9>"$BACKUP_LOCK"; flock -x 9
   start=$(date +%s)
@@ -61,6 +68,42 @@ teardown() {
   grep -q '^backup_last_attempt_timestamp{name="config"} ' "$BACKUP_TEXTFILE"
   grep -q '^backup_last_success_timestamp{name="config"} ' "$BACKUP_TEXTFILE"
   [ "$(ls "$BACKUP_ROOT"/config | grep -c '^tmp-')" -eq 0 ]
+}
+
+@test "a manifest write failure (jq broken) fails the target: no success stamp, no run dir, exit 1" {
+  mkdir -p "$TEST_ROOT/etc"; printf 'A=1\n' > "$TEST_ROOT/etc/one.env"
+  printf '%s\n' "$TEST_ROOT/etc/one.env" > "$TEST_ROOT/config.list"; export BACKUP_CONFIG_LIST="$TEST_ROOT/config.list"
+  printf '#!/usr/bin/env bash\necho "jq: fake failure" >&2; exit 5\n' > "$TEST_ROOT/bin/jq"; chmod +x "$TEST_ROOT/bin/jq"
+  run "$SCRIPT" --target config --no-offsite
+  rm -f "$TEST_ROOT/bin/jq"
+  [ "$status" -eq 1 ]
+  printf '%s\n' "$output" | grep -q 'target config FAILED'
+  ! grep -q 'backup_last_success_timestamp{name="config"}' "$BACKUP_TEXTFILE"
+  [ "$(ls -A "$BACKUP_ROOT/config" 2>/dev/null | wc -l)" -eq 0 ]
+}
+
+@test "a tar failure inside the config producer fails the target (pipeline status is not discarded)" {
+  mkdir -p "$TEST_ROOT/etc"; printf 'A=1\n' > "$TEST_ROOT/etc/one.env"
+  printf '%s\n' "$TEST_ROOT/etc/one.env" > "$TEST_ROOT/config.list"; export BACKUP_CONFIG_LIST="$TEST_ROOT/config.list"
+  printf '#!/usr/bin/env bash\necho "tar: fake failure" >&2; exit 2\n' > "$TEST_ROOT/bin/tar"; chmod +x "$TEST_ROOT/bin/tar"
+  run "$SCRIPT" --target config --no-offsite
+  rm -f "$TEST_ROOT/bin/tar"
+  [ "$status" -eq 1 ]
+  printf '%s\n' "$output" | grep -q 'tar: fake failure'
+  printf '%s\n' "$output" | grep -q 'target config FAILED'
+  [ "$(ls -A "$BACKUP_ROOT/config" 2>/dev/null | wc -l)" -eq 0 ]
+}
+
+@test "an archive that fails its integrity check (pg_restore --list) fails the target: no run dir, attempt but no success" {
+  install_pg_docker_shim
+  export PG_RESTORE_LIST_RC=1
+  run "$SCRIPT" --target eval-db --no-offsite
+  [ "$status" -eq 1 ]
+  printf '%s\n' "$output" | grep -q 'integrity check failed'
+  printf '%s\n' "$output" | grep -q 'target eval-db FAILED'
+  grep -q '^backup_last_attempt_timestamp{name="eval-db"} ' "$BACKUP_TEXTFILE"
+  ! grep -q 'backup_last_success_timestamp{name="eval-db"}' "$BACKUP_TEXTFILE"
+  [ "$(ls -A "$BACKUP_ROOT/eval-db" 2>/dev/null | wc -l)" -eq 0 ]
 }
 
 @test "an unreadable file in the config list fails the target loudly: exit 1, attempt bumped, no success, no run dir left" {
@@ -95,7 +138,7 @@ case " $* " in
                    printf 'PGDMP-fake-%s' "$*" ;;
   *" pg_dumpall "*) printf -- '-- roles\nCREATE ROLE fake;\n' ;;
   *" inspect "*)   echo "pgvector/pgvector:pg15" ;;
-  *" run "*" pg_restore --list "*) exit 0 ;;   # archive integrity check runs in the source image
+  *" run "*" pg_restore --list "*) [ "${PG_RESTORE_LIST_RC:-0}" = 0 ] || echo "pg_restore: error: did not find magic string" >&2; exit "${PG_RESTORE_LIST_RC:-0}" ;;   # archive integrity check runs in the source image
   *) echo "unexpected docker call: $*" >&2; exit 9 ;;
 esac
 SHIM

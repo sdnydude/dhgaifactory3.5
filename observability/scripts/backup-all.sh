@@ -10,12 +10,13 @@
 # BACKUP_GPG_PASSPHRASE (Doppler). Prometheus textfile is rewritten after every
 # target. See docs-site/projects/dhg-ai-factory/backups.md.
 set -euo pipefail
+umask 077   # run dirs and archives are owner-only; the NAS mirror inherits it
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=backup-lib.sh
 source "$SCRIPT_DIR/backup-lib.sh"
 
-NAS_DEST="${BACKUP_NAS_DEST:-aifactory-backup@10.0.0.250::aifactory-backups/}"
+NAS_DEST="aifactory-backup@10.0.0.250::aifactory-backups/"
 
 # ---- single instance (cron + a manual run must never overlap) ----
 BACKUP_LOCK="${BACKUP_LOCK:-/run/user/$(id -u)/backup-all.lock}"
@@ -29,7 +30,7 @@ MODE=all; ONLY=""; DRY_RUN=0; OFFSITE=1
 while [ $# -gt 0 ]; do
   case "$1" in
     --all) MODE=all ;;
-    --target) MODE=one; ONLY="$2"; shift ;;
+    --target) MODE=one; ONLY="${2:-}"; [ -n "$ONLY" ] || { echo "backup-all: --target needs an id" >&2; exit 2; }; shift ;;
     --dry-run) DRY_RUN=1 ;;
     --no-offsite) OFFSITE=0 ;;
     -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
@@ -37,15 +38,15 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+# Validate here, in the main shell: an `exit` inside a process substitution
+# only kills the subshell, and an empty loop would end as "all targets ok".
+if [ "$MODE" = one ] && ! bl_target_field "$ONLY" kind > /dev/null; then
+  echo "backup-all: unknown target: $ONLY" >&2; exit 2
+fi
 
 # ---- plan ----
 selected_targets() {
-  if [ "$MODE" = one ]; then
-    bl_targets | awk -F'|' -v id="$ONLY" '$1==id'
-    [ -n "$(bl_targets | awk -F'|' -v id="$ONLY" '$1==id')" ] || { echo "backup-all: unknown target: $ONLY" >&2; exit 2; }
-  else
-    bl_targets
-  fi
+  if [ "$MODE" = one ]; then bl_targets | awk -F'|' -v id="$ONLY" '$1==id'; else bl_targets; fi
 }
 
 if [ "$DRY_RUN" = 1 ]; then
@@ -85,20 +86,18 @@ produce_files() {
     [ -r "$f" ] || { log "config file not readable: $f"; return 1; }
     n=$((n+1))
   done < "$BACKUP_CONFIG_LIST"
-  sed -e '/^\s*$/d' -e '/^\s*#/d' "$BACKUP_CONFIG_LIST" \
-    | tar -C / -cf - --files-from=- --transform='s|^/||' 2>/dev/null \
-    | bl_gpg_encrypt > "$out/config.tar.gpg"
+  # pipefail is on: a tar or gpg failure fails the target here, not a week later at the drill
+  # paths are made relative to / here (not via --transform) so tar has nothing to warn about
+  sed -e '/^\s*$/d' -e '/^\s*#/d' -e 's|^/||' "$BACKUP_CONFIG_LIST" \
+    | tar -C / -cf - --files-from=- \
+    | bl_gpg_encrypt > "$out/config.tar.gpg" || { log "config tar/encrypt failed"; return 1; }
   echo "members=$n"
 }
-
-# dk <ctx> args...  — docker for a local or remote (docker context) target
-dk() { local ctx="$1"; shift; if [ "$ctx" = local ]; then docker "$@"; else docker --context "$ctx" "$@"; fi; }
 
 # pg: extra = user:db1,db2:pghost. Per database, one REPEATABLE READ session
 # exports a snapshot, counts every user table under that snapshot, and pg_dump
 # runs with --snapshot so the counts and the archive describe the same instant.
 # The session is `docker exec -i ... psql` fed through a named pipe (fd 4).
-PG_COUNTS_SQL="$BL_PG_COUNTS_SQL"
 produce_pg() {
   local out="$1" ctx="$2" container="$3" extra="$4"
   local user dbs pghost db snap line counts hostflag=() json='{}'
@@ -111,7 +110,7 @@ produce_pg() {
       < "$out/.psql-$db.in" > "$out/.psql-$db.out" &
     local psql_pid=$!
     exec 4> "$out/.psql-$db.in"
-    printf 'BEGIN ISOLATION LEVEL REPEATABLE READ;\nSELECT pg_export_snapshot();\n%s\nSELECT %s;\n' "$PG_COUNTS_SQL" "'__END__'" >&4
+    printf 'BEGIN ISOLATION LEVEL REPEATABLE READ;\nSELECT pg_export_snapshot();\n%s\nSELECT %s;\n' "$BL_PG_COUNTS_SQL" "'__END__'" >&4
     # wait for the session to publish snapshot + counts
     local waited=0
     until [ -s "$out/.psql-$db.out" ] && tail -1 "$out/.psql-$db.out" | grep -qx '__END__'; do
@@ -226,13 +225,17 @@ run_target() {
     mapfile -t kv < "$tmp/.fields"; rm -f "$tmp/.fields"
     t1=$(date +%s)
     bytes=$(du -sb "$tmp" | cut -f1)
-    bl_write_manifest "$tmp" target="$id" kind="$kind" run="$run" ctx="$ctx" container="$container" \
-      duration_seconds=$((t1 - t0)) "${kv[@]}"
-    mv "$tmp" "$final"
-    bl_state_set "$id" success "$t1"; bl_state_set "$id" size_bytes "$bytes"; bl_state_set "$id" duration_seconds $((t1 - t0))
-    bl_write_textfile
-    log "target $id ok (${bytes} B, $((t1 - t0)) s)"
-    return 0
+    # errexit is off inside this if-body: every step that makes the run "real"
+    # must be chained explicitly, or a jq/mv failure would still stamp success.
+    if bl_write_manifest "$tmp" target="$id" kind="$kind" run="$run" ctx="$ctx" container="$container" \
+         duration_seconds=$((t1 - t0)) "${kv[@]}" \
+       && [ -s "$tmp/manifest.json" ] && mv "$tmp" "$final"; then
+      bl_state_set "$id" success "$t1"; bl_state_set "$id" size_bytes "$bytes"; bl_state_set "$id" duration_seconds $((t1 - t0))
+      bl_write_textfile
+      log "target $id ok (${bytes} B, $((t1 - t0)) s)"
+      return 0
+    fi
+    log "target $id: manifest or rename failed"
   fi
   rm -rf -- "$tmp"
   bl_write_textfile
@@ -248,7 +251,9 @@ probe_ctx() {
   local ctx="$1"
   [ "$ctx" = local ] && return 0
   if [ -z "${ctx_ok[$ctx]+x}" ]; then
-    if timeout 30 docker --context "$ctx" version > /dev/null 2>&1; then ctx_ok[$ctx]=1; else ctx_ok[$ctx]=0; log "context $ctx unreachable - its targets are marked failed"; fi
+    local err
+    if err="$(timeout 30 docker --context "$ctx" version 2>&1 >/dev/null)"; then ctx_ok[$ctx]=1
+    else ctx_ok[$ctx]=0; log "context $ctx unreachable - its targets are marked failed: $(head -1 <<<"$err")"; fi
   fi
   [ "${ctx_ok[$ctx]}" = 1 ]
 }

@@ -36,6 +36,9 @@ EOF
 # REPEATABLE READ snapshot (backup) and against a restored database (drill).
 BL_PG_COUNTS_SQL="SELECT format('%I.%I', schemaname, relname) || '=' || (xpath('/row/c/text()', query_to_xml(format('select count(*) as c from %I.%I', schemaname, relname), false, true, '')))[1]::text FROM pg_stat_user_tables ORDER BY 1;"
 
+# dk <ctx> args...  — docker for a local or remote (docker context) target
+dk() { local ctx="$1"; shift; if [ "$ctx" = local ]; then docker "$@"; else docker --context "$ctx" "$@"; fi; }
+
 # bl_target_field <id> <id|kind|ctx|container|extra> — one field of one row; exit 1 if the id is unknown
 bl_target_field() {
   local row; row="$(bl_targets | awk -F'|' -v id="$1" '$1==id')"
@@ -99,8 +102,11 @@ bl_write_manifest() {
 BACKUP_STATE_DIR="${BACKUP_STATE_DIR:-/mnt/4tb/backups/nightly/.state}"
 BACKUP_TEXTFILE="${BACKUP_TEXTFILE:-/mnt/4tb/observability/textfile/backups.prom}"
 
-# bl_state_set <name> <key> <value>
+# bl_state_set <name> <key> <value>  — value must be a non-negative integer:
+# one non-numeric sample makes node-exporter reject the whole textfile, every
+# backup series vanishes at once and every absent() alert fires.
 bl_state_set() {
+  [[ "$3" =~ ^[0-9]+$ ]] || { echo "bl_state_set: refusing non-numeric value for $1/$2" >&2; return 1; }
   mkdir -p "$BACKUP_STATE_DIR/$1"
   printf '%s\n' "$3" > "$BACKUP_STATE_DIR/$1/$2"
 }
@@ -149,8 +155,8 @@ bl_write_textfile() {
 
 # ---- retention ----
 BACKUP_ROOT="${BACKUP_ROOT:-/mnt/4tb/backups/nightly}"
-BACKUP_KEEP_DAILY_DAYS="${BACKUP_KEEP_DAILY_DAYS:-30}"
-BACKUP_KEEP_SUNDAY_DAYS="${BACKUP_KEEP_SUNDAY_DAYS:-84}"
+BACKUP_KEEP_DAILY_DAYS=30
+BACKUP_KEEP_SUNDAY_DAYS=84
 
 # bl_prune_local [now_epoch] — deletes completed run dirs under $BACKUP_ROOT/<target>/
 # older than the daily window, keeping Sunday runs for the weekly window.

@@ -17,6 +17,7 @@
 /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/observability/postgres-exporter/postgres_exporter.yml
 /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/observability/grafana/provisioning/datasources/registry-postgres.yml
 /home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/services/medkb/.env.otel
+/home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/observability/snmp-exporter/auths.yml
 
 # Sibling stacks whose databases are backed up here too
 /home/swebber64/DHG/portage/.env
