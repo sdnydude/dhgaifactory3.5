@@ -1,6 +1,10 @@
-status: in_progress
-phase: 7
+status: complete
+phase: 8
 approved: "go" 2026-09-11T01:12:08Z
+pr: https://github.com/sdnydude/dhgaifactory3.5/pull/30 (base feat/observability-rebuild-2026-09, stacked on #29)
+completed_at: 2026-09-12T21:45:00Z
+ship_log: docs-site/projects/dhg-ai-factory/ship-log/003-backups-and-disaster-recovery-nightly-encrypted-dumps-nas-mirror-restore-drills.md
+ship_session: ed7f145b-6609-471e-bc80-2e9b5362b0bc
 tdd: yes (bats on pure functions; orchestration proven in T7)
 phase2_complete: true — 3 Explore agents (3/3 usable) + Phase 2 advisor (approach holds, no second pass; 21 notes folded); explore passes: 1
 feature: Backups and disaster recovery — nightly encrypted dumps of 7 Postgres (g700data1) + Langfuse Postgres/ClickHouse/MinIO (dh40801) + config layer, pushed rsync-over-SSH to Synology DS1618+ (10.0.0.250), tested restore drills, backup_last_success_timestamp textfile metric + alerts (Langfuse AC#53, deferred f530537e)
@@ -149,7 +153,7 @@ Approach confirmed; no second pass. What would have falsified it: a dump that ne
 ## Chunk 5 — drills, surface, schedule
 - [x] T13 restore-drill.sh --all passes 13 targets (2026-09-11 03:1x UTC); registry-db drill 9 s, plane-db 9 s, full --all 46 s; log in session scratchpad; re-run on request for a watched pass
 - [x] T14 Grafana dhg-platform-backups (Backups row + NAS row); verify-dashboard.sh exit 0 + PNG (after T13 so drill-age panels have series)
-- [x] T15 crontab: 03:30 nightly backup + Sunday 04:00 drill; lock test (concurrent run exits fast)
+- [ ] T17 CI `Shell tests` job green on the PR — BLOCKED: ci.yml triggers only on `pull_request: branches: [master]`; PR #30 is based on feat/observability-rebuild-2026-09, so GitHub Actions did not run (only CodeRabbit, Socket, CircleCI ran, all green). Ticks after #29 merges and #30 is retargeted to master. Local equivalent run 2026-09-12: bats 40/40 + promtool SUCCESS.
 
 ## Chunk 6 — cleanup, docs
 - [x] T16 Legacy scripts + Makefile targets removed; infrastructure/README.md untouched (its rows describe infrastructure/*.sh, which still exist); deferral list ticked; f530537e resolved with the AC 50-53 note (registry write token)
