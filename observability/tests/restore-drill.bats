@@ -6,30 +6,23 @@
 #
 # Run: python3 observability/tests/bats-tdd-reporter.py observability/tests/restore-drill.bats
 
+load test_helper
 DRILL="$BATS_TEST_DIRNAME/../scripts/restore-drill.sh"
 BACKUP="$BATS_TEST_DIRNAME/../scripts/backup-all.sh"
 
 setup() {
-  TEST_ROOT="$(mktemp -d)"
-  export BACKUP_ROOT="$TEST_ROOT/nightly"
-  export BACKUP_STATE_DIR="$TEST_ROOT/state"
-  export BACKUP_TEXTFILE="$TEST_ROOT/backups.prom"
-  export BACKUP_LOCK="$TEST_ROOT/lock"
-  export BACKUP_GPG_PASSPHRASE="bats-fixed-passphrase"
-  export GNUPGHOME="$TEST_ROOT/gnupg"
-  export BACKUP_MIN_FREE_GB=0
+  common_setup
   export BACKUP_DRILL_TMP="$TEST_ROOT/drill-scratch"
-  mkdir -p "$BACKUP_ROOT" "$BACKUP_STATE_DIR" "$GNUPGHOME" "$TEST_ROOT/bin" "$TEST_ROOT/etc"
-  chmod 700 "$GNUPGHOME"
-  export PATH="$TEST_ROOT/bin:$PATH"
-  printf 'A=1\n' > "$TEST_ROOT/etc/one.env"; printf 'B=2\n' > "$TEST_ROOT/etc/two.env"
-  printf '%s\n%s\n' "$TEST_ROOT/etc/one.env" "$TEST_ROOT/etc/two.env" > "$TEST_ROOT/config.list"
+  mkdir -p "$TEST_ROOT/etc"
+  printf 'A=1
+' > "$TEST_ROOT/etc/one.env"; printf 'B=2
+' > "$TEST_ROOT/etc/two.env"
+  printf '%s
+%s
+' "$TEST_ROOT/etc/one.env" "$TEST_ROOT/etc/two.env" > "$TEST_ROOT/config.list"
   export BACKUP_CONFIG_LIST="$TEST_ROOT/config.list"
 }
-
-teardown() {
-  rm -rf "$TEST_ROOT"
-}
+teardown() { common_teardown; }
 
 @test "a manifest missing a required key fails the drill with a 'manifest missing' message, not a null comparison" {
   "$BACKUP" --target config --no-offsite
@@ -72,7 +65,7 @@ teardown() {
 # One docker shim for both the backup (pg producer) and the drill. DRILL_COUNTS
 # controls what the restored database "contains".
 install_pg_shim() {
-  cat > "$TEST_ROOT/bin/docker" <<'SHIM'
+  install_shim docker <<'SHIM'
 #!/usr/bin/env bash
 echo "docker $*" >> "$SHIM_LOG"
 case " $* " in
@@ -100,8 +93,6 @@ case " $* " in
   *) echo "unexpected docker call: $*" >&2; exit 9 ;;
 esac
 SHIM
-  chmod +x "$TEST_ROOT/bin/docker"
-  export SHIM_LOG="$TEST_ROOT/shim.log"; : > "$SHIM_LOG"
   export DRILL_COUNTS='public.users=0\npublic.user_x=3\n'   # emitted in locale order on purpose; the drill must sort in byte order
 }
 
@@ -156,7 +147,7 @@ SHIM
 }
 
 install_ch_shim() {
-  cat > "$TEST_ROOT/bin/docker" <<'SHIM'
+  install_shim docker <<'SHIM'
 #!/usr/bin/env bash
 echo "docker $*" >> "$SHIM_LOG"
 q="${@: -1}"
@@ -185,8 +176,6 @@ case " $* " in
   *) echo "unexpected docker call: $*" >&2; exit 9 ;;
 esac
 SHIM
-  chmod +x "$TEST_ROOT/bin/docker"
-  export SHIM_LOG="$TEST_ROOT/shim.log"; : > "$SHIM_LOG"
 }
 
 @test "clickhouse drill: DDL replayed, each Native stream inserted, restored count equals the count clickhouse-local reads from the file itself" {
@@ -228,7 +217,7 @@ SHIM
 install_minio_shim() {
   mkdir -p "$TEST_ROOT/tree/data/langfuse/obj1" "$TEST_ROOT/tree/data/.minio.sys/config"
   printf 'x' > "$TEST_ROOT/tree/data/langfuse/obj1/xl.meta"; printf 'c' > "$TEST_ROOT/tree/data/.minio.sys/config/config.json"
-  cat > "$TEST_ROOT/bin/docker" <<'SHIM'
+  install_shim docker <<'SHIM'
 #!/usr/bin/env bash
 echo "docker $*" >> "$SHIM_LOG"
 case " $* " in
@@ -247,8 +236,7 @@ case " $* " in
   *) echo "unexpected docker call: $*" >&2; exit 9 ;;
 esac
 SHIM
-  chmod +x "$TEST_ROOT/bin/docker"
-  export SHIM_LOG="$TEST_ROOT/shim.log" SHIM_TREE="$TEST_ROOT/tree"; : > "$SHIM_LOG"
+  export SHIM_TREE="$TEST_ROOT/tree"
 }
 
 @test "minio drill: server started from the archived tree with the source's root credentials (env-file, never argv), buckets listed, member count equals the manifest" {
@@ -285,7 +273,7 @@ install_volumes_shim() {
   mkdir -p "$TEST_ROOT/tree/data/vector_db" "$TEST_ROOT/tree/exports"
   printf 'db' > "$TEST_ROOT/tree/data/webui.db"; printf 'v' > "$TEST_ROOT/tree/data/vector_db/index"
   printf 'g' > "$TEST_ROOT/tree/grafana.db"; printf 'e' > "$TEST_ROOT/tree/exports/report.pdf"
-  cat > "$TEST_ROOT/bin/docker" <<'SHIM'
+  install_shim docker <<'SHIM'
 #!/usr/bin/env bash
 echo "docker $*" >> "$SHIM_LOG"
 case " $* " in
@@ -303,8 +291,7 @@ case " $* " in
   *) echo "unexpected docker call: $*" >&2; exit 9 ;;
 esac
 SHIM
-  chmod +x "$TEST_ROOT/bin/docker"
-  export SHIM_LOG="$TEST_ROOT/shim.log" SHIM_TREE="$TEST_ROOT/tree"; : > "$SHIM_LOG"
+  export SHIM_TREE="$TEST_ROOT/tree"
 }
 
 @test "volumes drill: every archive lists exactly its manifest member count and grafana.db passes PRAGMA integrity_check in the sqlite drill image" {

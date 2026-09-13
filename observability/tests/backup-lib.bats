@@ -5,22 +5,13 @@
 #
 # Run: python3 observability/tests/bats-tdd-reporter.py observability/tests/backup-lib.bats
 
+load test_helper
 setup() {
-  TEST_ROOT="$(mktemp -d)"
-  export BACKUP_ROOT="$TEST_ROOT/nightly"
-  export BACKUP_STATE_DIR="$TEST_ROOT/state"
-  export BACKUP_TEXTFILE="$TEST_ROOT/backups.prom"
-  export BACKUP_GPG_PASSPHRASE="bats-fixed-passphrase"
-  export GNUPGHOME="$TEST_ROOT/gnupg"
-  mkdir -p "$BACKUP_ROOT" "$BACKUP_STATE_DIR" "$GNUPGHOME"
-  chmod 700 "$GNUPGHOME"
+  common_setup
   # shellcheck source=../scripts/backup-lib.sh
   source "$BATS_TEST_DIRNAME/../scripts/backup-lib.sh"
 }
-
-teardown() {
-  rm -rf "$TEST_ROOT"
-}
+teardown() { common_teardown; }
 
 @test "bl_run_id is a UTC stamp of the form YYYYMMDDTHHMMSSZ" {
   run bl_run_id

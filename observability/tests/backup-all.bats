@@ -5,25 +5,11 @@
 #
 # Run: python3 observability/tests/bats-tdd-reporter.py observability/tests/backup-all.bats
 
+load test_helper
 SCRIPT="$BATS_TEST_DIRNAME/../scripts/backup-all.sh"
 
-setup() {
-  TEST_ROOT="$(mktemp -d)"
-  export BACKUP_ROOT="$TEST_ROOT/nightly"
-  export BACKUP_STATE_DIR="$TEST_ROOT/state"
-  export BACKUP_TEXTFILE="$TEST_ROOT/backups.prom"
-  export BACKUP_LOCK="$TEST_ROOT/lock"
-  export BACKUP_GPG_PASSPHRASE="bats-fixed-passphrase"
-  export GNUPGHOME="$TEST_ROOT/gnupg"
-  export BACKUP_MIN_FREE_GB=0
-  mkdir -p "$BACKUP_ROOT" "$BACKUP_STATE_DIR" "$GNUPGHOME" "$TEST_ROOT/bin"
-  chmod 700 "$GNUPGHOME"
-  export PATH="$TEST_ROOT/bin:$PATH"
-}
-
-teardown() {
-  rm -rf "$TEST_ROOT"
-}
+setup() { common_setup; }
+teardown() { common_teardown; }
 
 @test "--dry-run exits 0 and prints one plan line per data target plus the offsite mirror (14)" {
   run "$SCRIPT" --dry-run
@@ -121,7 +107,7 @@ teardown() {
 
 # docker shim: answers the exact calls the pg producer makes and records them
 install_pg_docker_shim() {
-  cat > "$TEST_ROOT/bin/docker" <<'SHIM'
+  install_shim docker <<'SHIM'
 #!/usr/bin/env bash
 echo "docker $*" >> "$SHIM_LOG"
 case " $* " in
@@ -142,9 +128,7 @@ case " $* " in
   *) echo "unexpected docker call: $*" >&2; exit 9 ;;
 esac
 SHIM
-  chmod +x "$TEST_ROOT/bin/docker"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$TEST_ROOT/bin/pg_restore"; chmod +x "$TEST_ROOT/bin/pg_restore"
-  export SHIM_LOG="$TEST_ROOT/shim.log"; : > "$SHIM_LOG"
 }
 
 @test "pg producer dumps each database with pg_dump --snapshot from one REPEATABLE READ session, dumps roles, and records row counts in the manifest" {
@@ -169,7 +153,7 @@ SHIM
 }
 
 install_clickhouse_docker_shim() {
-  cat > "$TEST_ROOT/bin/docker" <<'SHIM'
+  install_shim docker <<'SHIM'
 #!/usr/bin/env bash
 echo "docker $*" >> "$SHIM_LOG"
 # producer calls: docker --context dh40801 exec <c> sh -c '<script>' sh <user> <query>
@@ -187,8 +171,6 @@ case " $* " in
   *) echo "unexpected docker call: $*" >&2; exit 9 ;;
 esac
 SHIM
-  chmod +x "$TEST_ROOT/bin/docker"
-  export SHIM_LOG="$TEST_ROOT/shim.log"; : > "$SHIM_LOG"
 }
 
 @test "clickhouse producer saves the DDL of every default.* object and one gzipped Native stream per non-View table via the dh40801 context" {
@@ -212,7 +194,7 @@ SHIM
 install_cp_docker_shim() {
   mkdir -p "$TEST_ROOT/tree/langfuse/obj1" "$TEST_ROOT/tree/.minio.sys/buckets"
   printf 'x' > "$TEST_ROOT/tree/langfuse/obj1/xl.meta"; printf 'y' > "$TEST_ROOT/tree/.minio.sys/buckets/meta"
-  cat > "$TEST_ROOT/bin/docker" <<'SHIM'
+  install_shim docker <<'SHIM'
 #!/usr/bin/env bash
 echo "docker $*" >> "$SHIM_LOG"
 case " $* " in
@@ -222,8 +204,7 @@ case " $* " in
   *) echo "unexpected docker call: $*" >&2; exit 9 ;;
 esac
 SHIM
-  chmod +x "$TEST_ROOT/bin/docker"
-  export SHIM_LOG="$TEST_ROOT/shim.log" SHIM_TREE="$TEST_ROOT/tree"; : > "$SHIM_LOG"
+  export SHIM_TREE="$TEST_ROOT/tree"
 }
 
 @test "minio producer streams the whole data tree with docker cp and records the tar member count" {
@@ -245,7 +226,7 @@ install_tar_docker_shim() {
   mkdir -p "$TEST_ROOT/tree/data/cache/models" "$TEST_ROOT/tree/data/vector_db" "$TEST_ROOT/tree/exports"
   printf 'db' > "$TEST_ROOT/tree/data/webui.db"; printf 'big' > "$TEST_ROOT/tree/data/cache/models/blob"; printf 'v' > "$TEST_ROOT/tree/data/vector_db/index"
   printf 'g' > "$TEST_ROOT/tree/grafana.db"; printf 'e' > "$TEST_ROOT/tree/exports/report.pdf"
-  cat > "$TEST_ROOT/bin/docker" <<'SHIM'
+  install_shim docker <<'SHIM'
 #!/usr/bin/env bash
 echo "docker $*" >> "$SHIM_LOG"
 case " $* " in
@@ -261,8 +242,7 @@ case " $* " in
   *) echo "unexpected docker call: $*" >&2; exit 9 ;;
 esac
 SHIM
-  chmod +x "$TEST_ROOT/bin/docker"
-  export SHIM_LOG="$TEST_ROOT/shim.log" SHIM_TREE="$TEST_ROOT/tree"; : > "$SHIM_LOG"
+  export SHIM_TREE="$TEST_ROOT/tree"
 }
 
 @test "volume producer tars each source inside its container, honours the cache exclusion for open-webui, and records members per archive" {
@@ -284,7 +264,7 @@ SHIM
 }
 
 @test "an unreachable docker context fails its targets after one probe, with no dump attempted and attempt stamps bumped" {
-  cat > "$TEST_ROOT/bin/docker" <<'SHIM'
+  install_shim docker <<'SHIM'
 #!/usr/bin/env bash
 echo "docker $*" >> "$SHIM_LOG"
 case " $* " in
@@ -292,7 +272,6 @@ case " $* " in
   *) echo "unexpected docker call: $*" >&2; exit 9 ;;
 esac
 SHIM
-  chmod +x "$TEST_ROOT/bin/docker"; export SHIM_LOG="$TEST_ROOT/shim.log"; : > "$SHIM_LOG"
   run "$SCRIPT" --target langfuse-postgres --no-offsite
   [ "$status" -eq 1 ]
   printf '%s\n' "$output" | grep -q 'context dh40801 unreachable'
@@ -306,11 +285,10 @@ SHIM
 @test "after the targets, the tree is mirrored to the NAS with rsync over the dedicated key, the offsite stamp is written, and local retention is pruned" {
   mkdir -p "$TEST_ROOT/etc"; printf 'A=1\n' > "$TEST_ROOT/etc/one.env"
   printf '%s\n' "$TEST_ROOT/etc/one.env" > "$TEST_ROOT/config.list"; export BACKUP_CONFIG_LIST="$TEST_ROOT/config.list"
-  cat > "$TEST_ROOT/bin/rsync" <<'SHIM'
+  install_shim rsync <<'SHIM'
 #!/usr/bin/env bash
 echo "rsync $*" >> "$SHIM_LOG"; exit 0
 SHIM
-  chmod +x "$TEST_ROOT/bin/rsync"; export SHIM_LOG="$TEST_ROOT/shim.log"; : > "$SHIM_LOG"
   export BACKUP_NAS_KEY="$TEST_ROOT/nas_key"
   # a 40-day-old completed weekday run that retention must remove
   old="$(date -u -d '2026-08-04T03:30:00Z' +%Y%m%dT%H%M%SZ)"   # Tuesday
