@@ -28,7 +28,7 @@ sed -i -E '/^[[:space:]]*-?[[:space:]]*(LANGGRAPH_API_URL|LANGCHAIN_API_KEY)[=:]
 # 5.2 — duplicate the textfile flag line (keeps indentation and "- " prefix) and
 #       turn the copy into the new flag; idempotent
 if ! grep -q -- '--no-collector.thermal_zone' "$F"; then
-  sed -i -E '/--collector\.textfile\.directory=/{p;s#--collector\.textfile\.directory=.*#--no-collector.thermal_zone#}' "$F"
+  sed -i -E '/--collector\.textfile\.directory=/{p;s#(['"'"'"]?)--collector\.textfile\.directory=[^'"'"'"]*(['"'"'"]?)#\1--no-collector.thermal_zone\2#}' "$F"
 fi
 
 if ! docker compose config --quiet; then
