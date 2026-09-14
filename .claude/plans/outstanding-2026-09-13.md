@@ -60,6 +60,11 @@ Four pre-existing red jobs on every PR to master:
 - [ ] 6.3 Migrate 15 LangGraph agent modules to Pydantic AI + Langfuse (includes `/inbox` list off the LangGraph SDK, registry 12bf2817). Found 2026-09-13: `REGISTRY_WEBHOOK_SECRET` is blank everywhere (override interpolates an unset shell var; not in .env or Doppler), so `/api/cme/webhook` (LangGraph drive-sync hook) always 401s. Remove endpoint + override line + `NEXT_PUBLIC_LANGGRAPH_API_URL` (frontend) in this ship.
 - [ ] 6.4 dhg-transcribe pipeline refactor (10 containers, no tests).
 
+## Track 7 — Deferred-backlog triage (scheduled 2026-09-14 21:00 ET, Stephen)
+
+- [ ] 7.1 Pull all open registry deferred items for dhg-ai-factory (113 open, 109 > 30 d as of 2026-09-13). Present as a checkbox list grouped by category with one recommendation each: do now / close done / close wont_fix / keep. No item changes before Stephen decides.
+- [ ] 7.2 Apply decisions via the registry API (bearer token, `resolution_reason`), re-run `/api/deferred-items/stats`. Verify: open count matches the list of kept items.
+
 ## Watch (no action unless red)
 
 - [x] First Sunday restore drill 2026-09-13 04:00 ET: 13/13 PASS.
