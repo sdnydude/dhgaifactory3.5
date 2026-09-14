@@ -1,0 +1,139 @@
+// Grafana Alloy — dh40801 (10.0.0.179) log collection.
+// Adapted from observability/alloy/config.alloy (g700data1): identical redaction
+// stages, identical level extraction, identical healthcheck drops. Deltas:
+//   - loki.write endpoint is the g700data1 Loki over the LAN (10.0.0.251:3100)
+//   - external label host="dh40801" so every stream from this host is selectable
+//     as {host="dh40801"} (the g700data1 Alloy sets no host label)
+// Source of truth is this repo file; it is delivered to the container via the
+// `configs:` block in dh40801/docker-compose.observability.yml (inline content,
+// so nothing has to be copied to the remote host by hand).
+
+discovery.docker "dh40801" {
+	host             = "unix:///var/run/docker.sock"
+	refresh_interval = "5s"
+}
+
+discovery.relabel "dh40801" {
+	targets = []
+
+	rule {
+		source_labels = ["__meta_docker_container_name"]
+		regex         = "/(.+)"
+		target_label  = "container"
+	}
+
+	rule {
+		target_label = "job"
+		replacement  = "dhg-ai-factory"
+	}
+
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+		target_label  = "compose_service"
+	}
+
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+		target_label  = "compose_project"
+	}
+}
+
+loki.source.docker "dh40801" {
+	host             = "unix:///var/run/docker.sock"
+	targets          = discovery.docker.dh40801.targets
+	forward_to       = [loki.process.dh40801.receiver]
+	relabel_rules    = discovery.relabel.dh40801.rules
+	refresh_interval = "5s"
+}
+
+loki.process "dh40801" {
+	forward_to = [loki.write.default.receiver]
+
+	// ---- Redaction (P5 spec §3.2, 6 stages — masks NEW lines, deletes nothing) ----
+	// ALLOY SEMANTICS: stage.replace substitutes the CAPTURE GROUP content with the
+	// literal `replace` string; there is no capture-group back-reference expansion;
+	// a groupless pattern is a no-op.
+	// NOTE: this file must contain no `$` character — it is shipped to the remote
+	// host through Compose variable interpolation (see the compose file header),
+	// which would rewrite anything that looks like a variable reference.
+	// The secret is always the capture group.
+	// 1. Authorization header/field values
+	stage.replace {
+		expression = "(?i)authorization\"?\\s*[:=]\\s*\"?((?:bearer\\s+)?[A-Za-z0-9._~+/-]+=*)"
+		replace    = "[REDACTED]"
+	}
+
+	// 2. JWT shape anywhere
+	stage.replace {
+		expression = "(eyJ[A-Za-z0-9_-]{8,}\\.eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,})"
+		replace    = "[REDACTED_JWT]"
+	}
+
+	// 3. Cookie / Set-Cookie whole value
+	stage.replace {
+		expression = "(?i)(?:set-)?cookie\"?\\s*[:=]\\s*\"?([^\"]+)"
+		replace    = "[REDACTED]"
+	}
+
+	// 4. api_key / token / secret / password key-value tails
+	stage.replace {
+		expression = "(?i)(?:api[_-]?key|token|secret|password)\"?\\s*[:=]\\s*\"?([^\"\\s,}]+)"
+		replace    = "[REDACTED]"
+	}
+
+	// 5. OAuth codes/tokens in URLs
+	stage.replace {
+		expression = "(?i)[?&](?:code|state|access_token|id_token)=([^&\\s\"]+)"
+		replace    = "[REDACTED]"
+	}
+
+	// 6. Doppler token shapes
+	stage.replace {
+		expression = "(dp\\.(?:st|ct|pt)\\.[A-Za-z0-9_-]{10,})"
+		replace    = "[REDACTED_DOPPLER]"
+	}
+
+	// ---- Level extraction ----
+	stage.regex {
+		expression = "(?i)(?:\"level\"\\s*[:=]\\s*\"(?P<json_level>[^\"]+)\"|(?:^|\\s)level[=:]\\s*(?P<kv_level>DEBUG|INFO|WARN(?:ING)?|ERROR|FATAL|CRITICAL)|(?:^|\\s)(?P<pg_level>LOG|ERROR|FATAL|PANIC|WARNING|NOTICE|DEBUG)\\s*:)"
+	}
+
+	stage.template {
+		source   = "level"
+		template = "{{ if .json_level }}{{ .json_level }}{{ else if .kv_level }}{{ .kv_level }}{{ else if .pg_level }}{{ .pg_level }}{{ else }}unknown{{ end }}"
+	}
+
+	stage.labels {
+		values = {
+			level = null,
+		}
+	}
+
+	stage.label_drop {
+		values = ["json_level", "kv_level", "pg_level", "filename"]
+	}
+
+	// ---- Healthcheck noise drop (combined-log form + JSON/pino form) ----
+	stage.match {
+		selector = "{job=\"dhg-ai-factory\"}"
+
+		stage.drop {
+			drop_counter_reason = "healthcheck"
+			expression          = "\"(?:GET|HEAD) /(?:health[z]?|ready|metrics|api/health|api/tags|-/healthy|ok)\\s"
+		}
+
+		stage.drop {
+			drop_counter_reason = "healthcheck_json"
+			expression          = "\"url\"\\s*:\\s*\"/(?:health[z]?|ready|metrics)\""
+		}
+	}
+}
+
+loki.write "default" {
+	endpoint {
+		url = "http://10.0.0.251:3100/loki/api/v1/push"
+	}
+	external_labels = {
+		host = "dh40801",
+	}
+}

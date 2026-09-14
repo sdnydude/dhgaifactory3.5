@@ -1,0 +1,21 @@
+alert: HostMemoryHigh
+trigger_rule: T3
+severity: critical
+mode: notify
+title: Host memory > 90%
+description: g700data1 has under 10% of 64 GB available. The OOM killer is close and does not choose politely.
+fixture: {}
+diagnostics:
+  - order: 1
+    description: Top container memory consumers right now
+    command: docker stats --no-stream --format 'table {{.Name}}\t{{.MemUsage}}\t{{.MemPerc}}'
+  - order: 2
+    description: Host available vs total memory
+    command: curl -sG http://dhg-prometheus:9090/api/v1/query --data-urlencode 'query=node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes'
+  - order: 3
+    description: Top 10 containers by memory as cAdvisor sees them
+    command: curl -sG http://dhg-prometheus:9090/api/v1/query --data-urlencode 'query=topk(10, container_memory_usage_bytes{name=~"dhg-.*"})'
+human_steps:
+  - Identify the top consumer first; for Ollama unload idle models with keep_alive 0 rather than restarting mid-inference.
+  - vm.swappiness is 10 - swap will not absorb the spike; treat HostSwapHigh as the same incident.
+notes: ""

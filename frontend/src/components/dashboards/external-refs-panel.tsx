@@ -27,11 +27,6 @@ export function ExternalRefsPanel() {
             note: "alert routing · LAN only",
           },
           {
-            name: "Tempo",
-            url: "http://10.0.0.251:3200",
-            note: "trace search · LAN only",
-          },
-          {
             name: "LangSmith Cloud",
             url: "https://smith.langchain.com",
             note: "per-run LLM traces · external",

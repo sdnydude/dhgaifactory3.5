@@ -10,8 +10,5 @@ datasources:
     editable: false
     jsonData:
       maxLines: 1000
-      derivedFields:
-        - datasourceUid: tempo
-          matcherRegex: '"?trace_id"?\s*[:=]\s*"?(\w{16,32})"?'
-          name: TraceID
-          url: "$${__value.raw}"
+      # derivedFields (TraceID -> Tempo) removed 2026-09-04: Tempo retired
+      # (AUDIT-2026-09 section 7, decision D-A).

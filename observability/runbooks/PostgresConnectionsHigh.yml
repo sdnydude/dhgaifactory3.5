@@ -1,0 +1,22 @@
+alert: PostgresConnectionsHigh
+trigger_rule: T9
+severity: high
+mode: notify
+title: Postgres above 80% of max_connections
+description: The named instance has held over 80% of its connection slots for 10 minutes; new connections will start being refused.
+fixture:
+  service: registry-db
+diagnostics:
+  - order: 1
+    description: Backends vs max_connections for the instance
+    command: curl -sG http://dhg-prometheus:9090/api/v1/query --data-urlencode 'query=sum by (service) (pg_stat_database_numbackends{service="{service}"}) / max by (service) (pg_settings_max_connections{service="{service}"})'
+  - order: 2
+    description: Backends per database on the instance
+    command: curl -sG http://dhg-prometheus:9090/api/v1/query --data-urlencode 'query=pg_stat_database_numbackends{service="{service}"}'
+  - order: 3
+    description: Backend growth over the last hour
+    command: curl -sG http://dhg-prometheus:9090/api/v1/query --data-urlencode 'query=sum by (service) (pg_stat_database_numbackends{service="{service}"}) - sum by (service) (pg_stat_database_numbackends{service="{service}"} offset 1h)'
+human_steps:
+  - Run `docker exec <db> psql -U postgres -c "SELECT state, count(*), max(now()-state_change) FROM pg_stat_activity GROUP BY state"` - a pile of idle in transaction with a long oldest age is an un-closed session, a code bug.
+  - Find the leaking client before raising max_connections.
+notes: psql runs against the production database and is therefore never executed by the remediator.

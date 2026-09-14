@@ -13,7 +13,6 @@ import {
 import { SystemHeartbeatPanel } from "@/components/dashboards/system-heartbeat-panel";
 import { GoldenSignalsPanel } from "@/components/dashboards/golden-signals-panel";
 import { InfraPanel } from "@/components/dashboards/infra-panel";
-import { LangGraphPanel } from "@/components/dashboards/langgraph-panel";
 import { CmePipelinePanel } from "@/components/dashboards/cme-pipeline-panel";
 import { ServiceLayerPanel } from "@/components/dashboards/service-layer-panel";
 import { ExternalRefsPanel } from "@/components/dashboards/external-refs-panel";
@@ -22,7 +21,9 @@ import { DeferredIntelligencePanel } from "@/components/dashboards/deferred-inte
 
 export default function DashboardsPage() {
   const [t, setT] = useState<Telemetry>(EMPTY);
-  const [nowMs, setNowMs] = useState(() => Date.now());
+  // null until mounted: the clock must not render on the server, or its value
+  // differs from the client's and hydration fails (React #418).
+  const [nowMs, setNowMs] = useState<number | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | undefined>(
     undefined,
   );
@@ -35,6 +36,7 @@ export default function DashboardsPage() {
     };
     run();
     intervalRef.current = setInterval(run, POLL_MS);
+    // First tick lands within 1s; until then the clock reads "--:--:--Z".
     const tickInt = setInterval(() => setNowMs(Date.now()), 1000);
     return () => {
       cancelled = true;
@@ -44,7 +46,7 @@ export default function DashboardsPage() {
   }, []);
 
   const elapsedSec =
-    t.lastUpdated != null
+    t.lastUpdated != null && nowMs != null
       ? Math.floor((nowMs - t.lastUpdated.getTime()) / 1000)
       : null;
 
@@ -57,11 +59,14 @@ export default function DashboardsPage() {
       : "DEGRADED";
   const systemTone = !t.reachable ? "bad" : allUp ? "ok" : "warn";
 
-  const now = new Date();
-  const hh = String(now.getUTCHours()).padStart(2, "0");
-  const mm = String(now.getUTCMinutes()).padStart(2, "0");
-  const ss = String(now.getUTCSeconds()).padStart(2, "0");
-  const utcStamp = `${hh}:${mm}:${ss}Z`;
+  let utcStamp = "--:--:--Z";
+  if (nowMs != null) {
+    const now = new Date(nowMs);
+    const hh = String(now.getUTCHours()).padStart(2, "0");
+    const mm = String(now.getUTCMinutes()).padStart(2, "0");
+    const ss = String(now.getUTCSeconds()).padStart(2, "0");
+    utcStamp = `${hh}:${mm}:${ss}Z`;
+  }
 
   return (
     <div className="mc-root h-full overflow-y-auto">
@@ -123,7 +128,6 @@ export default function DashboardsPage() {
         <SystemHeartbeatPanel t={t} />
         <GoldenSignalsPanel t={t} />
         <InfraPanel t={t} />
-        <LangGraphPanel t={t} />
         <CmePipelinePanel t={t} />
         <ServiceLayerPanel t={t} />
         <FeedbackLoopPanel t={t} />

@@ -1018,6 +1018,12 @@ class Incident(Base):
     impact_summary = Column(Text, nullable=True)
     prevention = Column(Text, nullable=True)
     trigger_rule = Column(String(50), nullable=True)
+    # Stable identity of the underlying condition: "alertname|service|instance".
+    # An alert re-firing against a still-open incident bumps occurrence_count
+    # instead of inserting a new row.
+    fingerprint = Column(String(255), nullable=True)
+    occurrence_count = Column(Integer, nullable=False, server_default="1")
+    last_seen_at = Column(DateTime(timezone=True), nullable=True)
     affected_services = Column(ARRAY(Text), nullable=False, server_default="{}")
     affected_project_ids = Column(ARRAY(UUID(as_uuid=True)), nullable=True)
     tags = Column(ARRAY(Text), nullable=False, server_default="{}")
@@ -1051,6 +1057,8 @@ class Incident(Base):
         Index("ix_incidents_status", "status"),
         Index("ix_incidents_severity", "severity"),
         Index("ix_incidents_created_at", "created_at"),
+        Index("ix_incidents_status_created_at", "status", "created_at"),
+        Index("ix_incidents_fingerprint", "fingerprint"),
         Index("ix_incidents_trigger_rule", "trigger_rule"),
         Index("ix_incidents_parent", "parent_incident_id"),
         Index("ix_incidents_affected_services", "affected_services", postgresql_using="gin"),
@@ -1111,6 +1119,7 @@ class IncidentAction(Base):
 
     __table_args__ = (
         Index("ix_incident_actions_incident_id", "incident_id"),
+        Index("ix_incident_actions_created_at", "created_at"),
     )
 
     def __repr__(self) -> str:

@@ -1,0 +1,21 @@
+alert: RootDiskHigh
+trigger_rule: T5
+severity: high
+mode: notify
+title: Root disk > 85%
+description: The root filesystem is filling. Docker image/layer churn, json-file container logs and journald are the usual growth.
+fixture: {}
+diagnostics:
+  - order: 1
+    description: Root filesystem free vs size
+    command: curl -sG http://dhg-prometheus:9090/api/v1/query --data-urlencode 'query=node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}'
+  - order: 2
+    description: Growth over the last 24h
+    command: curl -sG http://dhg-prometheus:9090/api/v1/query --data-urlencode 'query=node_filesystem_avail_bytes{mountpoint="/"} offset 24h - node_filesystem_avail_bytes{mountpoint="/"}'
+  - order: 3
+    description: Exited containers still holding writable layers
+    command: docker ps -a --filter status=exited --format '{{.Names}} {{.Status}} {{.Size}}'
+human_steps:
+  - Run `journalctl --vacuum-size=500M` first (safe and usually enough), then `docker system df` and prune dangling images only.
+  - Nothing is deleted automatically; every step here is read-only.
+notes: ""

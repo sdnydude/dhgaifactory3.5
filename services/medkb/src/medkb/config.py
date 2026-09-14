@@ -26,7 +26,9 @@ class Settings(BaseSettings):
     query_cache_ttl_seconds: int = 300
     embedding_cache_ttl_days: int = 7
 
-    otel_endpoint: str = "http://dhg-tempo:4318"
+    # Empty = tracing disabled. Set by services/medkb/.env.otel, rendered from
+    # Doppler by observability/scripts/render-medkb-otel-env.sh (Langfuse OTLP).
+    otel_endpoint: str = ""
     langsmith_project: str = "dhg-medkb"
 
     default_k: int = 8

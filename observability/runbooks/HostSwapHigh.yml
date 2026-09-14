@@ -1,0 +1,21 @@
+alert: HostSwapHigh
+trigger_rule: T4
+severity: high
+mode: notify
+title: Host swap > 80%
+description: Swap is over 80% used. With vm.swappiness=10 this is genuine pressure, a precursor to HostMemoryHigh.
+fixture: {}
+diagnostics:
+  - order: 1
+    description: Swap free vs total
+    command: curl -sG http://dhg-prometheus:9090/api/v1/query --data-urlencode 'query=node_memory_SwapFree_bytes / node_memory_SwapTotal_bytes'
+  - order: 2
+    description: Host available memory
+    command: curl -sG http://dhg-prometheus:9090/api/v1/query --data-urlencode 'query=node_memory_MemAvailable_bytes'
+  - order: 3
+    description: Top container memory consumers right now
+    command: docker stats --no-stream --format 'table {{.Name}}\t{{.MemUsage}}\t{{.MemPerc}}'
+human_steps:
+  - Free real memory (see HostMemoryHigh). Do not add swap; it buys latency, not headroom.
+  - Per-process swap needs the host - `for p in /proc/[0-9]*; do awk -v p=$p "/VmSwap/{print \$2, p}" $p/status; done | sort -rn | head`.
+notes: ""

@@ -121,19 +121,22 @@ This phase is fully automated. Tell the user:
 Then execute these steps, reporting brief status after each:
 
 ### Step 1: Create the agent file
-Generate `langgraph_workflows/dhg-agents-cloud/src/{name}_agent.py` using the standard DHG pattern. The generated file MUST include all of the following — no placeholders, no TODOs:
+
+**Substrate:** copy `templates/agent-boilerplate/` — it is the current DHG pattern (Pydantic AI + self-hosted Langfuse, per ADR-001). LangSmith `@traceable` and LangGraph `StateGraph` are retired; do not generate them. The 15 existing agents under `langgraph_workflows/dhg-agents-cloud/src/` have not been migrated yet (that is its own program), so Step 2 and Phase 6 below still describe the LangGraph Cloud path for those — a new agent generated from the template is a standalone module until that migration lands.
+
+Generate `langgraph_workflows/dhg-agents-cloud/src/{name}_agent.py` from the boilerplate. The generated file MUST include all of the following — no placeholders, no TODOs:
 
 1. **Module docstring** — agent name, purpose, upstream/downstream
-2. **Imports** — langgraph, langsmith, langchain_anthropic, tracing
-3. **State TypedDict** — with INPUT, PROCESSING, OUTPUT, METADATA sections. METADATA always includes: `errors: List[str]`, `retry_count: int`, `model_used: str`, `total_tokens: int`, `total_cost: float`
-4. **LLMClient class** — with `@traceable` on generate method, cost tracking
-5. **System prompt** — generated from the user's purpose description and special instructions. Write a thorough, production-quality system prompt (10-30 lines) that captures the agent's domain expertise. Do NOT ask the user to write this — generate it from their interview answers.
-6. **Graph nodes** — each with BOTH `@traceable(name="{name}.{node}")` AND `@traced_node("{name}", "{node}")` decorators. Every node is `async def`. Error handling appends to errors list (never overwrites). Each node uses `asyncio.wait_for` with 300s timeout.
-7. **Routing function** (if quality gate enabled) — checks `quality_score` and `retry_count` against MAX_RETRIES (3)
-8. **Graph assembly** — StateGraph, add_node, add_edge/add_conditional_edges, set_entry_point
-9. **Export** — `graph = builder.compile()` at module level
+2. **Imports** — `pydantic_ai.Agent`, `pydantic.BaseModel`, the agent's prompt constants, and `configure_tracing` from the template's `tracing` module
+3. **Typed output model** — a `BaseModel` with the agent's real output fields (Pydantic AI validates the response against it and retries on a mismatch)
+4. **Tracing** — `TRACING_ENABLED = configure_tracing(AGENT_ID)` once at module level; it is a no-op when `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` are absent
+5. **System prompt** — generated from the user's purpose description and special instructions, written into `src/prompts/{name}.py` as an UPPERCASE constant and imported (never inlined — `.claude/rules/llm-prompts.md`). Write a thorough, production-quality prompt (10-30 lines). Do NOT ask the user to write this — generate it from their interview answers.
+6. **Agent construction** — `Agent(MODEL, output_type=..., system_prompt=..., name=AGENT_ID, retries=2, defer_model_check=True)`; tools via `@agent.tool_plain` / `@agent.tool`
+7. **Quality gate** (if enabled) — an output-validator or a bounded retry loop capped at MAX_RETRIES (3)
+8. **Run function** — `async def run_agent(...)` wrapping `agent.run(...)` in `asyncio.wait_for` with a 300s timeout, bracketed by the registry `log_request` / `update_request` calls
+9. **CLI entry point** — `main()` at module level, as in the boilerplate
 
-Use Claude Sonnet as the default model unless the user indicated otherwise in their answers.
+Model selection is LLM-agnostic: read `AGENT_MODEL` with the template's default (`anthropic:claude-opus-5`) as the fallback, unless the user indicated a different model in their answers.
 
 Report: "Created agent file."
 
@@ -167,10 +170,12 @@ Running safety checks...
 - `pyproject.toml` exists and contains all imported packages
 - No stdlib module name conflicts (agent filename doesn't shadow a Python built-in)
 - No Infisical SDK imports
+- No `langsmith`, `langgraph`, or `langchain_*` imports — those are retired (ADR-001)
+- No prompt literals inlined in the agent module; prompts live in `src/prompts/{name}.py`
 - No hardcoded file paths or localhost references (except Ollama if using local model)
-- `graph` variable exported at module level
-- `.compile()` called on StateGraph
-- Entry added to `langgraph.json` and JSON is valid
+- Typed output `BaseModel` and `run_agent` exported at module level
+- `configure_tracing` called once at module level
+- Entry added to `langgraph.json` and JSON is valid (until the LangGraph Cloud path is retired)
 
 If any check fails:
 - Show the user a plain-English explanation: "One of the software packages the agent needs isn't installed yet. Fixing that now..."
@@ -189,8 +194,10 @@ Run three tests automatically. Explain what's happening in plain language.
 
 ```bash
 cd langgraph_workflows/dhg-agents-cloud
-python -c "from src.{name}_agent import graph; print('OK')"
+python -c "from src.{name}_agent import run_agent; print('OK')"
 ```
+
+The import must succeed with no Langfuse keys and no provider key set — that is what `defer_model_check=True` and the tracing no-op are for.
 
 Report: "Agent loads correctly." or diagnose and fix.
 
@@ -199,19 +206,13 @@ Report: "Agent loads correctly." or diagnose and fix.
 
 ```bash
 python -c "
-from src.{name}_agent import {Name}State
-import typing
-hints = typing.get_type_hints({Name}State)
-required = ['topic', 'errors', 'retry_count', 'model_used', 'total_tokens', 'total_cost']
-missing = [f for f in required if f not in hints]
-if missing:
-    print(f'MISSING: {missing}')
-else:
-    print(f'OK: {len(hints)} fields')
+from src.{name}_agent import {Name}Output, TRACING_ENABLED, run_agent
+fields = list({Name}Output.model_fields)
+print(f'OK: {len(fields)} output fields, tracing={TRACING_ENABLED}')
 "
 ```
 
-Report: "Structure verified — {N} data fields configured." or diagnose and fix.
+Report: "Structure verified — {N} output fields configured." or diagnose and fix.
 
 ### Test 3: Does it actually work?
 > Running a test with a sample topic. This calls the AI model, so it may take 30-60 seconds...
@@ -221,24 +222,17 @@ Report: "Structure verified — {N} data fields configured." or diagnose and fix
 ```bash
 python -c "
 import asyncio
-from src.{name}_agent import graph
+from src.{name}_agent import run_agent
 
 async def test():
-    result = await asyncio.wait_for(
-        graph.ainvoke({'topic': 'test topic for smoke check', 'messages': []}),
+    output = await asyncio.wait_for(
+        run_agent('test topic for smoke check'),
         timeout=60
     )
-    errors = result.get('errors', [])
-    if errors:
-        print(f'WARNINGS: {errors}')
-    else:
-        output_keys = [k for k in result.keys() if k not in ('messages', 'errors', 'retry_count', 'model_used', 'total_tokens', 'total_cost', 'topic')]
-        print(f'OK')
-        for k in output_keys:
-            val = result.get(k)
-            if val:
-                preview = str(val)[:300]
-                print(f'{k}: {preview}')
+    print('OK')
+    for field, value in output.model_dump().items():
+        if value:
+            print(f'{field}: {str(value)[:300]}')
 
 asyncio.run(test())
 "
@@ -327,7 +321,8 @@ Report: "Pushed to master. LangGraph Cloud will pick this up automatically."
 
 **Behind the scenes:**
 ```bash
-# Check deployment status via LangSmith API
+# Check deployment status via the LangGraph Cloud API (legacy path — retired
+# once the agent migration to Pydantic AI + Langfuse lands)
 curl -s -H "x-api-key: ${LANGCHAIN_API_KEY}" \
   https://dhg-agents-526554f2bb905517adab9bd53427c745.us.langgraph.app/ok
 ```

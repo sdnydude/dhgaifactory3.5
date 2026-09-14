@@ -1,0 +1,3 @@
+10  # firing alerts by severity — nothing firing is the goal state
+11  # pending alerts by rule — nothing pending is the goal state
+50  # targets-down table — every scrape target up is the goal state

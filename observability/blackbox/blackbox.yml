@@ -1,0 +1,32 @@
+modules:
+  http_2xx:
+    prober: http
+    timeout: 5s
+    http:
+      preferred_ip_protocol: ip4
+      valid_status_codes: [200]
+  http_2xx_insecure_tls:
+    prober: http
+    timeout: 5s
+    http:
+      preferred_ip_protocol: ip4
+      valid_status_codes: [200]
+      tls_config:
+        insecure_skip_verify: true
+  # Public hostnames behind Cloudflare Access. An unauthenticated request is
+  # answered at the Cloudflare edge with a 302 to the Access login page, so the
+  # redirect must NOT be followed (following it lands on a 200 login page and
+  # makes the probe meaningless). Verified 2026-09-04:
+  #   curl -s -o /dev/null -w '%{http_code}' https://registry.digitalharmonyai.com/health -> 302
+  # WHAT THIS PROVES: DNS resolves, the Cloudflare edge answers for the hostname
+  # and the Access policy is attached. It does NOT prove the cloudflared tunnel is
+  # up or that the origin app is healthy — Access short-circuits at the edge and
+  # the request never reaches the origin. Origin health is covered by the
+  # registry-api scrape job and RegistryApiDown.
+  http_cf_access:
+    prober: http
+    timeout: 5s
+    http:
+      preferred_ip_protocol: ip4
+      no_follow_redirects: true
+      valid_status_codes: [200, 302]

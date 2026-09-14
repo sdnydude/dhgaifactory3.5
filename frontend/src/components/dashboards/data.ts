@@ -7,7 +7,7 @@ import type {
   CorrectionStats,
   FeedbackLoopHealth,
   DeferredItemStats,
-  LgTopNode,
+  IncidentStats,
   Telemetry,
 } from "./types";
 
@@ -16,13 +16,18 @@ import type {
 export const POLL_MS = 10_000;
 export const RANGE_WINDOW_SECONDS = 15 * 60;
 export const RANGE_STEP_SECONDS = 30;
-export const LG_SERVICE_SELECTOR = '{service="dhg-langgraph-agents"}';
+
+// The registry's own Postgres, as labelled by the postgres_exporter multi-target
+// scrape. Other services (portage, medkb, …) share the same metric names.
+export const PG_REGISTRY_SELECTOR = '{service="registry-db"}';
 
 export const BORDERED_ROW =
   "flex items-baseline justify-between py-1 border-b border-[color:var(--mc-frame)]/40";
 
 export const EMPTY: Telemetry = {
   targets: null,
+  targetsTotal: null,
+  targetsDown: null,
   alertsFiring: null,
   regReqRate: null,
   regErrRate: null,
@@ -33,11 +38,10 @@ export const EMPTY: Telemetry = {
   nodeLoad1: null,
   nodeMemAvailPct: null,
   promUptime: null,
-  lgCalls15m: null,
-  lgLatencyP95: null,
-  lgActiveNodes: null,
-  lgTopNodes: null,
-  lgCallsSpark: [],
+  containersRunning: null,
+  containerCpuCores: null,
+  containerMemBytes: null,
+  incidentStats: null,
   cmePipeline: null,
   cmeServices: null,
   regReqRateSpark: [],
@@ -182,6 +186,18 @@ export function formatPercent(n: number | null, decimals = 1): string {
   return `${(n * 100).toFixed(decimals)}%`;
 }
 
+export function formatBytes(bytes: number | null): string {
+  if (bytes === null || !Number.isFinite(bytes)) return "——";
+  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
+  let v = bytes;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i += 1;
+  }
+  return `${v.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
 export function formatUptime(seconds: number | null): string {
   if (seconds === null || !Number.isFinite(seconds)) return "——";
   const d = Math.floor(seconds / 86400);
@@ -213,6 +229,8 @@ export function qualityTone(score: number | null): string {
 export async function fetchTelemetry(): Promise<Telemetry> {
   const [
     targets,
+    targetsTotal,
+    targetsDown,
     alertsFiring,
     regReq,
     regErr,
@@ -223,21 +241,22 @@ export async function fetchTelemetry(): Promise<Telemetry> {
     nodeLoad,
     nodeMem,
     promUp,
-    lgCalls,
-    lgLat,
-    lgNodes,
-    lgTop,
+    cAdvisorCount,
+    cAdvisorCpu,
+    cAdvisorMem,
     regReqMatrix,
     regLatMatrix,
     loadMatrix,
-    lgCallsMatrix,
     cmePipelineRaw,
     cmeServicesRaw,
     correctionStatsRaw,
     feedbackHealthRaw,
     deferredStatsRaw,
+    incidentStatsRaw,
   ] = await Promise.all([
     fetchTargets(),
+    promQuery("count(up)"),
+    promQuery("count(up == 0) or vector(0)"),
     fetchAlerts(),
     promQuery('sum(rate(http_requests_total{job="registry-api"}[1m]))'),
     promQuery(
@@ -246,60 +265,46 @@ export async function fetchTelemetry(): Promise<Telemetry> {
     promQuery(
       'histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{job="registry-api"}[5m])))',
     ),
-    promQuery("pg_stat_activity_count"),
+    promQuery(`sum(pg_stat_activity_count${PG_REGISTRY_SELECTOR})`),
     promQuery(
-      "sum(pg_stat_database_blks_hit) / clamp_min(sum(pg_stat_database_blks_hit + pg_stat_database_blks_read), 1)",
+      `sum(pg_stat_database_blks_hit${PG_REGISTRY_SELECTOR}) / clamp_min(sum(pg_stat_database_blks_hit${PG_REGISTRY_SELECTOR} + pg_stat_database_blks_read${PG_REGISTRY_SELECTOR}), 1)`,
     ),
-    promQuery('up{job="postgres"}'),
-    promQuery("node_load1"),
+    promQuery('max(up{job="postgres",service="registry-db"})'),
+    promQuery('node_load1{job="node-exporter"}'),
     promQuery(
-      "avg(node_memory_MemAvailable_bytes) / avg(node_memory_MemTotal_bytes)",
+      'avg(node_memory_MemAvailable_bytes{job="node-exporter"}) / avg(node_memory_MemTotal_bytes{job="node-exporter"})',
     ),
     promQuery(
       'time() - process_start_time_seconds{job="prometheus"}',
     ),
     promQuery(
-      `sum(increase(traces_spanmetrics_calls_total${LG_SERVICE_SELECTOR}[15m]))`,
+      'count(count by (name) (container_last_seen{job="cadvisor",name!=""}))',
     ),
     promQuery(
-      `histogram_quantile(0.95, sum by (le) (rate(traces_spanmetrics_latency_bucket${LG_SERVICE_SELECTOR}[5m])))`,
+      'sum(rate(container_cpu_usage_seconds_total{job="cadvisor",name!=""}[5m]))',
     ),
     promQuery(
-      `count(count by (span_name) (traces_spanmetrics_calls_total${LG_SERVICE_SELECTOR}))`,
-    ),
-    promQuery(
-      `topk(8, sum by (span_name) (increase(traces_spanmetrics_calls_total${LG_SERVICE_SELECTOR}[15m])))`,
+      'sum(container_memory_working_set_bytes{job="cadvisor",name!=""})',
     ),
     promRange('sum(rate(http_requests_total{job="registry-api"}[1m]))'),
     promRange(
       'histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{job="registry-api"}[5m])))',
     ),
-    promRange("node_load1"),
-    promRange(
-      `sum(rate(traces_spanmetrics_calls_total${LG_SERVICE_SELECTOR}[1m]))`,
-    ),
+    promRange('node_load1{job="node-exporter"}'),
     fetchRegistryJson<CmePipelineStats>("/api/cme/stats/pipeline"),
     fetchRegistryJson<CmeServiceStats>("/api/cme/stats/services"),
     fetchRegistryJson<CorrectionStats>("/api/corrections/stats"),
     fetchRegistryJson<FeedbackLoopHealth>("/api/feedback-loop/health"),
     fetchRegistryJson<DeferredItemStats>("/api/deferred-items/stats"),
+    fetchRegistryJson<IncidentStats>("/api/incidents/stats"),
   ]);
 
   const reachable = targets !== null;
 
-  const lgTopNodes: LgTopNode[] | null =
-    lgTop === null
-      ? null
-      : lgTop
-          .map((r) => ({
-            span_name: r.metric.span_name ?? "unknown",
-            calls: parseFloat(r.value[1]),
-          }))
-          .filter((n) => Number.isFinite(n.calls) && n.calls > 0)
-          .sort((a, b) => b.calls - a.calls);
-
   return {
     targets,
+    targetsTotal: firstSample(targetsTotal),
+    targetsDown: firstSample(targetsDown),
     alertsFiring,
     regReqRate: firstSample(regReq),
     regErrRate: firstSample(regErr),
@@ -310,11 +315,10 @@ export async function fetchTelemetry(): Promise<Telemetry> {
     nodeLoad1: firstSample(nodeLoad),
     nodeMemAvailPct: firstSample(nodeMem),
     promUptime: firstSample(promUp),
-    lgCalls15m: firstSample(lgCalls),
-    lgLatencyP95: firstSample(lgLat),
-    lgActiveNodes: firstSample(lgNodes),
-    lgTopNodes,
-    lgCallsSpark: toSpark(lgCallsMatrix),
+    containersRunning: firstSample(cAdvisorCount),
+    containerCpuCores: firstSample(cAdvisorCpu),
+    containerMemBytes: firstSample(cAdvisorMem),
+    incidentStats: incidentStatsRaw,
     cmePipeline: cmePipelineRaw,
     cmeServices: cmeServicesRaw,
     regReqRateSpark: toSpark(regReqMatrix),

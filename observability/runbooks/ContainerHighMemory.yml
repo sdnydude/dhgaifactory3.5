@@ -1,0 +1,21 @@
+alert: ContainerHighMemory
+trigger_rule: T24
+severity: warning
+mode: notify
+title: Container memory > 90% of limit
+description: A container with a configured mem_limit is within 10% of it and will be OOM-killed if it crosses.
+fixture:
+  container: dhg-registry-api
+diagnostics:
+  - order: 1
+    description: Live memory usage against the limit
+    command: docker stats --no-stream --format '{{.Name}} {{.MemUsage}} {{.MemPerc}}' {container}
+  - order: 2
+    description: Configured limit and restart count (OOM kills show up as restarts)
+    command: docker inspect {container} --format 'limit={{.HostConfig.Memory}} oomkilled={{.State.OOMKilled}} restarts={{.RestartCount}}'
+  - order: 3
+    description: Usage-to-limit ratio as Prometheus sees it
+    command: curl -sG http://dhg-prometheus:9090/api/v1/query --data-urlencode 'query=container_memory_usage_bytes{name="{container}"} / container_spec_memory_limit_bytes{name="{container}"}'
+human_steps:
+  - Decide whether the limit is wrong or the consumer is; raising the limit only moves the OOM kill.
+notes: Severity warning - the registry webhook does not open an incident for it, so these diagnostics run only if the severity is raised.

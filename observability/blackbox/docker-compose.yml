@@ -1,0 +1,25 @@
+# Blackbox exporter — synthetic HTTP probes for services that expose no /metrics
+# (Ollama) and for the LAN-path checks Prometheus can't otherwise see.
+# Separate compose project on the shared dhg-network (same pattern as dhg-memreg).
+# Added 2026-08-15 after the ollama.service boot-race incident (registry bug-fix ef492f28).
+#   docker compose -f observability/blackbox/docker-compose.yml up -d
+name: dhg-blackbox
+services:
+  blackbox:
+    image: prom/blackbox-exporter:v0.25.0
+    container_name: dhg-blackbox
+    restart: unless-stopped
+    command: ["--config.file=/etc/blackbox/blackbox.yml"]
+    volumes:
+      - ./blackbox.yml:/etc/blackbox/blackbox.yml:ro
+    ports:
+      - "127.0.0.1:9115:9115"
+    networks: [dhg-network]
+    labels:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "9115"
+      prometheus.io/path: "/metrics"
+networks:
+  dhg-network:
+    external: true
+    name: dhgaifactory35_dhg-network

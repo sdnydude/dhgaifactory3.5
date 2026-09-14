@@ -1,0 +1,22 @@
+alert: PortageApiDown
+trigger_rule: T19
+severity: high
+mode: notify
+title: Portage API unreachable
+description: The direct scrape of portage-api:8016 or the public HTTPS probe is failing.
+fixture:
+  container: portage-api
+diagnostics:
+  - order: 1
+    description: Container state, exit code and restart count
+    command: docker inspect portage-api --format '{{.State.Status}} exit={{.State.ExitCode}} restarts={{.RestartCount}} started={{.State.StartedAt}}'
+  - order: 2
+    description: Last 200 log lines
+    command: docker logs --tail 200 portage-api
+  - order: 3
+    description: Direct scrape vs public probe (which leg is failing)
+    command: curl -sG http://dhg-prometheus:9090/api/v1/query --data-urlencode 'query=up{job="portage-api"} or probe_success{service="portage-api"}'
+human_steps:
+  - Only the public HTTPS probe failing with the container healthy means the Cloudflare tunnel, not the app; check the portage tunnel.
+  - Container down means read the log, then `docker compose -f <portage compose> up -d portage-api`.
+notes: The container runs on the portage compose project and is joined to the shared network; it carries no dhg- prefix.

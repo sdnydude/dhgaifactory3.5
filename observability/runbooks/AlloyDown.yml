@@ -1,0 +1,25 @@
+alert: AlloyDown
+trigger_rule: T16
+severity: high
+mode: notify
+title: Alloy log shipper is down
+description: Grafana Alloy is not being scraped. Container logs buffer in json-file (10m x 3 per container) and are lost if this persists.
+fixture:
+  container: dhg-alloy
+diagnostics:
+  - order: 1
+    description: Container state, exit code and restart count
+    command: docker inspect dhg-alloy --format '{{.State.Status}} exit={{.State.ExitCode}} restarts={{.RestartCount}} started={{.State.StartedAt}}'
+  - order: 2
+    description: Last 100 log lines (a bad config.alloy is named here)
+    command: docker logs --tail 100 dhg-alloy
+  - order: 3
+    description: Is Loki accepting writes (Alloy's downstream)
+    command: curl -s -m 5 http://dhg-loki:3100/ready
+  - order: 4
+    description: Alloy readiness endpoint
+    command: curl -s -m 5 http://dhg-alloy:12345/-/ready
+human_steps:
+  - Fix Loki first if both are down.
+  - Validate observability/alloy/config.alloy, then `docker compose up -d alloy`.
+notes: ""

@@ -1,0 +1,3 @@
+# Panels where "no rows" is the healthy state.
+10  # Targets down — table of up==0; empty means every scrape target is UP
+11  # Firing alerts — table of ALERTS{alertstate="firing"}; empty means nothing is firing

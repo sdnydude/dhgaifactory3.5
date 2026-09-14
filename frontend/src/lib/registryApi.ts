@@ -219,8 +219,28 @@ export async function submitReview(
   );
 }
 
-export async function getMyReviews(): Promise<Record<string, unknown>[]> {
-  return apiFetch<Record<string, unknown>[]>("/api/cme/my-reviews");
+export interface MyReviewsResponse {
+  reviews: Record<string, unknown>[];
+  count: number;
+}
+
+/**
+ * Review assignments for one reviewer.
+ *
+ * `reviewer_email` is required by the registry endpoint. `statusFilter`
+ * matches the assignment status column — pending, active, approved,
+ * revision_requested, timeout, skipped (registry/models.py). "active" is
+ * the registry's own default and means "this reviewer's turn, SLA running".
+ */
+export async function getMyReviews(
+  reviewerEmail: string,
+  statusFilter = "active",
+): Promise<MyReviewsResponse> {
+  const params = new URLSearchParams({
+    reviewer_email: reviewerEmail,
+    status_filter: statusFilter,
+  });
+  return apiFetch<MyReviewsResponse>(`/api/cme/my-reviews?${params}`);
 }
 
 // =============================================================================

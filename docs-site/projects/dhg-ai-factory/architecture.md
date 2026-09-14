@@ -41,7 +41,7 @@ All agents have dual tracing: LangSmith (`@traceable`) + OpenTelemetry (`@traced
 
 ### Legacy Agent System (Decommissioned)
 
-9 Docker-based FastAPI agents (ports 2024, 8002-8008, 3005) — all stopped with `restart: "no"`. Source in `agents/` for reference. Do not build new features on these.
+9 Docker-based FastAPI agents (ports 2024, 8002-8008, 3005). Their service definitions were removed from `docker-compose.yml` on 2026-09-06 (none had run; see `observability/audit-2026-09/advisor-langgraph-removal.md`). Source remains in `agents/` for reference only. Do not build new features on these.
 
 ## Infrastructure Services
 

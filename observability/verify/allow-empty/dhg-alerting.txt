@@ -1,0 +1,2 @@
+10  # Alert History: empty when no alert has fired or been pending in the window = healthy
+40  # Current Alert Detail table: empty when nothing is firing = healthy

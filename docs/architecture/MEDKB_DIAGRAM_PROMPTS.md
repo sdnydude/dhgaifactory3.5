@@ -99,7 +99,7 @@ ARROWS:
   "embeddings", "generation", "external retrievers".
 - medkb → observability: dashed Orange 1.5px arrows (signaling telemetry
   export, not request flow), labeled "@traced_node", "metrics",
-  "logs via Promtail", "@traceable + feedback".
+  "logs via Alloy", "@traceable + feedback".
 
 Bottom caption strip: "All DHG services share dhgaifactory35_dhg-network"
 in small Graphite 11pt italic.

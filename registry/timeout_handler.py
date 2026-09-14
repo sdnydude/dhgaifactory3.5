@@ -12,10 +12,9 @@ Uses APScheduler for in-process scheduling.
 """
 
 import asyncio
+import os
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
-
-from langsmith import traceable
 
 # Database imports
 from database import SessionLocal
@@ -24,8 +23,23 @@ from models import CMEProject, CMEReviewAssignment, CMEReviewerConfig
 # Notification service
 from notification_service import notification_service
 
+# Feature toggle: the scheduler only runs when this env var is explicitly on.
+SCHEDULER_ENV = "CME_SLA_SCHEDULER_ENABLED"
+_TRUTHY = frozenset({"true", "1", "yes", "on"})
 
-@traceable(name="check_sla_timeouts", run_type="chain")
+
+def parse_scheduler_flag(value):
+    """Strict on/off parse: true/1/yes/on (any case) -> True; anything else -> False."""
+    if value is None:
+        return False
+    return value.strip().lower() in _TRUTHY
+
+
+def scheduler_enabled():
+    """Read the CME_SLA_SCHEDULER_ENABLED toggle from the environment."""
+    return parse_scheduler_flag(os.environ.get(SCHEDULER_ENV))
+
+
 async def check_sla_timeouts():
     """
     Check for SLA timeouts and handle accordingly.
@@ -63,7 +77,6 @@ async def check_sla_timeouts():
         db.close()
 
 
-@traceable(name="handle_timeout", run_type="chain")
 async def handle_timeout(db: Session, assignment: CMEReviewAssignment):
     """Handle a timed-out assignment (R4, R5)."""
     now = datetime.utcnow()
@@ -121,7 +134,6 @@ async def handle_timeout(db: Session, assignment: CMEReviewAssignment):
         print(f"[TIMEOUT_HANDLER] Final reviewer timeout - {project.name} set to HOLD")
 
 
-@traceable(name="send_warning", run_type="chain")
 async def send_warning(db: Session, assignment: CMEReviewAssignment):
     """Send SLA warning 4 hours before deadline."""
     now = datetime.utcnow()
@@ -146,7 +158,6 @@ async def send_warning(db: Session, assignment: CMEReviewAssignment):
     print(f"[TIMEOUT_HANDLER] Sent warning to {reviewer.email} for {project.name}")
 
 
-@traceable(name="send_daily_hold_reminders", run_type="chain")
 async def send_daily_hold_reminders():
     """
     Send daily reminders for projects on HOLD (R5).
@@ -184,6 +195,10 @@ async def send_daily_hold_reminders():
 
     finally:
         db.close()
+
+
+# Human-readable summary of the two jobs registered below; logged at startup.
+SCHEDULE_SUMMARY = "check_sla_timeouts every 15 min, daily_hold_reminders daily at 09:00 UTC"
 
 
 def start_scheduler():

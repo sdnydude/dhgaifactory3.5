@@ -1,0 +1,41 @@
+# Registry API HTTP alerts (RED — rate / errors / duration).
+#
+# Source: prometheus-fastapi-instrumentator, mounted on the FastAPI app in
+# registry/api.py. `handler` is always the route template, so the ratios below
+# aggregate cleanly across every endpoint. /metrics and /healthz are excluded
+# from instrumentation, so scrape and healthcheck traffic never dilutes them.
+groups:
+  - name: registry-api
+    rules:
+      # Ratio, not an absolute count: the registry serves bursty capture traffic,
+      # so a fixed 5xx/s threshold would fire on any quiet period.
+      - alert: RegistryHighErrorRate
+        expr: >
+          sum(rate(http_requests_total{job="registry-api",status=~"5.."}[10m]))
+          /
+          sum(rate(http_requests_total{job="registry-api"}[10m]))
+          > 0.05
+        for: 10m
+        labels:
+          severity: high
+        annotations:
+          summary: "Registry API serving over 5% 5xx responses"
+          description: "{{ $value | humanizePercentage }} of registry-api requests have returned 5xx for 10 minutes. Capture POSTs, KB search and the frontend all depend on this API — check `docker logs dhg-registry-api` and the per-handler breakdown on the registry dashboard."
+          runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#registryhigherrorrate"
+
+      # p95 across all handlers. KB search is the slowest legitimate route and
+      # sits well under 2s, so a sustained p95 above that is a real regression.
+      - alert: RegistryHighLatency
+        expr: >
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(http_request_duration_seconds_bucket{job="registry-api"}[10m]))
+          )
+          > 2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Registry API p95 latency above 2s"
+          description: "registry-api p95 request duration has been {{ $value | humanizeDuration }} for 10 minutes. Usual causes are a slow pgvector KB query, connection-pool saturation on dhg-registry-db, or an Anthropic call blocking a request path."
+          runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#registryhighlatency"

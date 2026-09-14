@@ -2,7 +2,6 @@
 Shared test fixtures for registry API tests.
 
 Handles:
-- Prometheus CollectorRegistry cleanup between test sessions
 - FastAPI dependency override for get_db (mock database)
 - sys.path setup so registry modules import correctly
 """
@@ -13,28 +12,11 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 import pytest
 from unittest.mock import MagicMock
-from prometheus_client import REGISTRY
-from prometheus_client.metrics import MetricWrapperBase
 
 
 collect_ignore = [
     "test_coverage_schemas.py",
 ]
-
-
-@pytest.fixture(autouse=True, scope="session")
-def clean_prometheus_registry():
-    """Clear any previously registered Prometheus metrics before tests run."""
-    collectors_to_remove = []
-    for collector in REGISTRY._names_to_collectors.values():
-        if isinstance(collector, MetricWrapperBase):
-            collectors_to_remove.append(collector)
-    for collector in collectors_to_remove:
-        try:
-            REGISTRY.unregister(collector)
-        except Exception:
-            pass
-    yield
 
 
 @pytest.fixture

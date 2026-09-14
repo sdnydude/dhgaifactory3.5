@@ -14,7 +14,7 @@ After any work that **adds, removes, or modifies test files**, immediately post 
 **Self-check:** Before committing, scan staged files for test patterns. If any match, fire this rule.
 
 **Baseline counts (update after each capture):**
-- Registry: 514 tests (as of 2026-05-22)
+- Registry: 613 passed / 7 pre-existing DB-migration failures / 30 skipped = 650 collected (as of 2026-09-04, `pytest registry -q` with DATABASE_URL set)
 - Frontend: check via `npm --prefix frontend run test -- --reporter=verbose 2>&1 | tail -5`
 
 ## When NOT to trigger

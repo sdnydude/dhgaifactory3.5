@@ -20,6 +20,11 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Environment
+
+- `NEXT_PUBLIC_REVIEWER_EMAIL` — reviewer identity for the sidebar inbox badge, which counts that reviewer's `active` assignments from the registry (`GET /api/cme/my-reviews`). Unset (the default) means no request is made and the badge stays hidden.
+- `LANGFUSE_URL` — Langfuse base URL for the sidebar tracing-health dot, called server-side via `/api/langfuse/health` (default `http://10.0.0.179:3000`).
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

@@ -9,15 +9,15 @@ Run a DHG AI Factory health status report. Your job is to execute a battery of h
 Execute all of these in a single Bash call where possible (chained with `;` not `&&` so one failure does not abort the rest). Use short timeouts — a dead service must not hang the whole report. Every HTTP check should use `curl -s -m 3` (3 second max).
 
 1. **Main Docker stack** — `docker compose ps --format json 2>/dev/null | jq -s 'length as $total | map(select(.State == "running")) | length as $running | "\($running)/\($total)"'` (running vs total containers in the main `dhgaifactory3.5` compose project).
-2. **LangGraph dev server** — `curl -s -m 3 -o /dev/null -w "%{http_code}" http://localhost:2026/ok`. Expect `200`.
-3. **Registry API** — `curl -s -m 3 http://localhost:8011/healthz`. Expect JSON with `"status":"ok"` or similar.
-4. **Frontend (Next.js)** — `curl -s -m 3 -o /dev/null -w "%{http_code}" http://localhost:3000`. Expect `200`.
-5. **Prometheus** — `curl -s -m 3 http://localhost:9090/-/healthy` (expect `Prometheus Server is Healthy`) AND `curl -s -m 3 http://localhost:9090/api/v1/targets | jq '.data.activeTargets | [.[] | {job: .labels.job, health}] | group_by(.health) | map({(.[0].health): length}) | add'` (target health counts).
-6. **Grafana** — `curl -s -m 3 http://localhost:3001/api/health | jq -r '.database'`. Expect `ok`.
-7. **Loki** — `curl -s -m 3 -o /dev/null -w "%{http_code}" http://localhost:3100/ready`.
-8. **Tempo** — `curl -s -m 3 -o /dev/null -w "%{http_code}" http://localhost:3200/ready`.
-9. **Alertmanager health** — `curl -s -m 3 -o /dev/null -w "%{http_code}" http://localhost:9093/-/healthy`.
-10. **Active alerts** — `curl -s -m 3 http://localhost:9093/api/v2/alerts | jq 'length'`. Report the count; promote to WARN if >0.
+2. **LangGraph dev server** — `curl -s -m 3 -o /dev/null -w "%{http_code}" http://10.0.0.251:2026/ok`. Expect `200`.
+3. **Registry API** — `curl -s -m 3 http://10.0.0.251:8011/healthz`. Expect JSON with `"status":"ok"` or similar.
+4. **Frontend (Next.js)** — `curl -s -m 3 -o /dev/null -w "%{http_code}" http://10.0.0.251:3000`. Expect `200`.
+5. **Prometheus** — `curl -s -m 3 http://10.0.0.251:9090/-/healthy` (expect `Prometheus Server is Healthy`) AND `curl -s -m 3 http://10.0.0.251:9090/api/v1/targets | jq '.data.activeTargets | [.[] | {job: .labels.job, health}] | group_by(.health) | map({(.[0].health): length}) | add'` (target health counts).
+6. **Grafana** — `curl -s -m 3 http://10.0.0.251:3001/api/health | jq -r '.database'`. Expect `ok`.
+7. **Loki** — `curl -s -m 3 -o /dev/null -w "%{http_code}" http://10.0.0.251:3100/ready`.
+8. **Alloy (log shipper)** — `curl -s -m 3 -o /dev/null -w "%{http_code}" http://10.0.0.251:3100/loki/api/v1/labels`. Tempo was retired 2026-09-04 — do not probe :3200.
+9. **Alertmanager health** — `curl -s -m 3 -o /dev/null -w "%{http_code}" http://10.0.0.251:9093/-/healthy`.
+10. **Active alerts** — `curl -s -m 3 http://10.0.0.251:9093/api/v2/alerts | jq 'length'`. Report the count; promote to WARN if >0.
 11. **Git state** — `git status --short | wc -l` (modified file count), `git rev-parse --abbrev-ref HEAD` (current branch), `git log --oneline -1` (last commit).
 12. **CodeGraph index** — `codegraph status 2>/dev/null | grep -E "files|nodes|edges"` (report file/node/edge counts if available; mark WARN if command errors).
 
