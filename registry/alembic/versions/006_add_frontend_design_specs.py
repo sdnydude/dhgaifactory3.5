@@ -33,7 +33,10 @@ def upgrade():
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
     )
 
-    op.execute("""
+    # Raw string with `\:` escapes: alembic wraps this in sqlalchemy.text(), which
+    # reads `:40` / `:true` inside the JSON as bind parameters. The escape is
+    # stripped at compile time, so the stored JSON is unchanged. Do not "clean up".
+    op.execute(r"""
         INSERT INTO frontend_design_specs (
             feature_name, slug, status, spec_path, comp_path, description,
             components, design_tokens, visual_polish
@@ -45,8 +48,8 @@ def upgrade():
             'frontend/src/components/agents/',
             'Interactive agent catalog with grid/list/table views, category filtering, search, live stats, and detail slide-over panel for all 17 LangGraph graphs.',
             '["agents-library.tsx","agents-library-toolbar.tsx","agents-library-grid.tsx","agents-library-list.tsx","agents-library-table.tsx","agent-slide-over.tsx"]'::jsonb,
-            '{"category_colors":{"content":"#663399","recipe":"#F77E2D","qa":"#22c55e","infra":"#71717a"},"animation_stagger_ms":40,"animation_duration_ms":350}'::jsonb,
-            '{"card_entry_animation":true,"category_hover_shadows":true,"radial_gradient_bg":true,"health_indicator_border":true,"micro_success_bar":true,"table_sticky_header":true}'::jsonb
+            '{"category_colors":{"content":"#663399","recipe":"#F77E2D","qa":"#22c55e","infra":"#71717a"},"animation_stagger_ms"\:40,"animation_duration_ms"\:350}'::jsonb,
+            '{"card_entry_animation"\:true,"category_hover_shadows"\:true,"radial_gradient_bg"\:true,"health_indicator_border"\:true,"micro_success_bar"\:true,"table_sticky_header"\:true}'::jsonb
         );
     """)
 

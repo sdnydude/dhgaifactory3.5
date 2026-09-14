@@ -29,7 +29,6 @@ from burndown_schemas import (
     BurndownListWithItems,
     BurndownListSummary,
     BurndownListUpdate,
-    BurndownItemCreate,
     BurndownItemBulkCreate,
     BurndownItemResponse,
     BurndownItemUpdate,

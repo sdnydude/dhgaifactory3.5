@@ -11,7 +11,7 @@ extra='forbid' at the schema layer, rejecting agent-owned keys before the handle
 """
 import time
 import logging
-from datetime import date, datetime, timezone
+from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -65,7 +65,7 @@ async def list_dev_changelog(
             entries=[DevChangelogEntry.model_validate(r) for r in rows],
             total=total,
         )
-    except Exception as e:
+    except Exception:
         registry_errors.labels(error_type="list_dev_changelog").inc()
         logger.exception("list_dev_changelog failed")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -85,7 +85,7 @@ async def get_dev_changelog(slug: str, db: Session = Depends(get_db)) -> DevChan
         return DevChangelogEntry.model_validate(row)
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         registry_errors.labels(error_type="get_dev_changelog").inc()
         logger.exception("get_dev_changelog failed")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -113,7 +113,7 @@ async def patch_dev_changelog(
         return DevChangelogEntry.model_validate(row)
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         db.rollback()
         registry_errors.labels(error_type="patch_dev_changelog").inc()
         logger.exception("patch_dev_changelog failed")

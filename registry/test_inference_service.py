@@ -56,6 +56,7 @@ class TestRegisterOrUpdateNode:
 
         assert db.add.called
         assert db.commit.called
+        assert result is db.add.call_args[0][0]
 
     def test_updates_existing_node(self):
         db = MagicMock()
@@ -148,6 +149,7 @@ class TestHeartbeat:
         db.query.return_value = q
 
         result = svc.heartbeat(db, "gpu-1")
+        assert result is node
         assert db.commit.called
 
     def test_brings_offline_node_online(self):
@@ -234,6 +236,7 @@ class TestListModels:
                     _mock_row(InferenceNode))]
         db = self._setup_db(route=route, query_results=models)
         result = svc.list_models(db, task_type="chat")
+        assert result == models
         assert db.query.called
 
     def test_task_type_array_filter(self):
