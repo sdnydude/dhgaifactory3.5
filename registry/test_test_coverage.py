@@ -191,7 +191,8 @@ class TestTestCoverageIntegration:
 
     @pytest.fixture
     def real_client(self):
-        import sys, os
+        import sys
+        import os
         sys.path.insert(0, os.path.dirname(__file__))
         try:
             from database import SessionLocal, get_db

@@ -54,6 +54,7 @@ class TestRegisterOrUpdateNode:
         req = self._base_req()
         result = svc.register_or_update_node(db, req)
 
+        assert result is db.add.call_args[0][0]
         assert db.add.called
         assert db.commit.called
 
@@ -148,6 +149,7 @@ class TestHeartbeat:
         db.query.return_value = q
 
         result = svc.heartbeat(db, "gpu-1")
+        assert result is node
         assert db.commit.called
 
     def test_brings_offline_node_online(self):
@@ -234,6 +236,7 @@ class TestListModels:
                     _mock_row(InferenceNode))]
         db = self._setup_db(route=route, query_results=models)
         result = svc.list_models(db, task_type="chat")
+        assert isinstance(result, list)
         assert db.query.called
 
     def test_task_type_array_filter(self):

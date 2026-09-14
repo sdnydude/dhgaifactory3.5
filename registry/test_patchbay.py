@@ -9,7 +9,7 @@ Run with: pytest registry/test_patchbay.py -v
 import asyncio
 import os
 import sys
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 

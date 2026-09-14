@@ -5,7 +5,6 @@ import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session, joinedload
 
 from models import BurndownList, BurndownItem

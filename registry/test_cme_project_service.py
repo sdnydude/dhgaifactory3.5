@@ -110,6 +110,7 @@ class TestCreateProject:
         mock_db.refresh.assert_called_once()
 
         added_project = mock_db.add.call_args[0][0]
+        assert result is added_project
         assert isinstance(added_project, CMEProject)
         assert added_project.name == "Oncology Grant 2026"
         assert added_project.status == "intake"
@@ -209,6 +210,7 @@ class TestUpdateProjectIntake:
             intake_dict={"new": True},
         )
 
+        assert result is project
         assert project.name == "New Name"
         assert project.intake == {"new": True}
         mock_db.commit.assert_called_once()
@@ -244,7 +246,7 @@ class TestUpdateProjectIntake:
     def test_calls_extract_intake_fields_fn_when_provided(self, mock_db):
         project = _mock_project()
         extract_fn = MagicMock()
-        q = _mock_query_chain(mock_db, [])
+        _mock_query_chain(mock_db, [])
 
         svc.update_project_intake(
             mock_db,
@@ -297,6 +299,7 @@ class TestArchiveProject:
 
         result = svc.archive_project(mock_db, project)
 
+        assert result is project
         assert project.status == "archived"
         mock_db.commit.assert_called_once()
         mock_db.refresh.assert_called_once()
@@ -318,6 +321,7 @@ class TestSetProjectStatus:
 
         result = svc.set_project_status(mock_db, project, "processing")
 
+        assert result is project
         assert project.status == "processing"
         mock_db.commit.assert_called_once()
         mock_db.refresh.assert_called_once()

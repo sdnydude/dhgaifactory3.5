@@ -239,12 +239,11 @@ class TestKbSearch:
 
     def test_failed_source_tracked(self):
         db = MagicMock()
-        with MagicMock() as mock_search:
-            import unittest.mock as um
-            with um.patch.object(svc, "search_source", side_effect=Exception("boom")):
-                results, searched, failed = svc.kb_search(
-                    db, "query", None, sources=["docs"], limit=5,
-                )
+        import unittest.mock as um
+        with um.patch.object(svc, "search_source", side_effect=Exception("boom")):
+            results, searched, failed = svc.kb_search(
+                db, "query", None, sources=["docs"], limit=5,
+            )
         assert "docs" in failed
         assert searched == []
 
