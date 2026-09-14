@@ -339,7 +339,7 @@ async def health():
         with engine.connect() as conn:
             conn.execute(select(1))
         return "OK"
-    except Exception as e:
+    except Exception:
         registry_db_errors.inc()
         logger.exception("healthz database check failed")
         raise HTTPException(status_code=503, detail="Database unavailable")
@@ -554,7 +554,7 @@ async def create_media(media: MediaCreate, db: Session = Depends(get_db)):
         registry_write_latency.observe((time.time() - start_time) * 1000)
 
         return db_media
-    except Exception as e:
+    except Exception:
         db.rollback()
         registry_errors.labels(error_type='create_media_failed').inc()
         logger.exception("create_media failed")
@@ -570,7 +570,7 @@ async def list_media(skip: int = 0, limit: int = 100, db: Session = Depends(get_
         registry_read_operations.labels(operation='list_media').inc()
         registry_read_latency.observe((time.time() - start_time) * 1000)
         return media
-    except Exception as e:
+    except Exception:
         registry_errors.labels(error_type='list_media_failed').inc()
         logger.exception("list_media failed")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -589,7 +589,7 @@ async def get_media(media_id: uuid.UUID, db: Session = Depends(get_db)):
         return media
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         registry_errors.labels(error_type='get_media_failed').inc()
         logger.exception("get_media failed")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -633,7 +633,7 @@ async def create_transcript(transcript: TranscriptCreate, db: Session = Depends(
         return db_transcript
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         db.rollback()
         registry_errors.labels(error_type='create_transcript_failed').inc()
         logger.exception("create_transcript failed")
@@ -649,7 +649,7 @@ async def list_transcripts(skip: int = 0, limit: int = 100, db: Session = Depend
         registry_read_operations.labels(operation='list_transcripts').inc()
         registry_read_latency.observe((time.time() - start_time) * 1000)
         return transcripts
-    except Exception as e:
+    except Exception:
         registry_errors.labels(error_type='list_transcripts_failed').inc()
         logger.exception("list_transcripts failed")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -664,7 +664,7 @@ async def get_transcripts_by_media(media_id: uuid.UUID, db: Session = Depends(ge
         registry_read_operations.labels(operation='get_transcripts_by_media').inc()
         registry_read_latency.observe((time.time() - start_time) * 1000)
         return transcripts
-    except Exception as e:
+    except Exception:
         registry_errors.labels(error_type='get_transcripts_by_media_failed').inc()
         logger.exception("get_transcripts_by_media failed")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -687,7 +687,7 @@ async def create_segment(segment: SegmentCreate, db: Session = Depends(get_db)):
         registry_write_latency.observe((time.time() - start_time) * 1000)
 
         return db_segment
-    except Exception as e:
+    except Exception:
         db.rollback()
         registry_errors.labels(error_type='create_segment_failed').inc()
         logger.exception("create_segment failed")
@@ -703,7 +703,7 @@ async def get_segments_by_transcript(transcript_id: uuid.UUID, db: Session = Dep
         registry_read_operations.labels(operation='get_segments_by_transcript').inc()
         registry_read_latency.observe((time.time() - start_time) * 1000)
         return segments
-    except Exception as e:
+    except Exception:
         registry_errors.labels(error_type='get_segments_by_transcript_failed').inc()
         logger.exception("get_segments_by_transcript failed")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -726,7 +726,7 @@ async def create_event(event: EventCreate, db: Session = Depends(get_db)):
         registry_write_latency.observe((time.time() - start_time) * 1000)
 
         return db_event
-    except Exception as e:
+    except Exception:
         db.rollback()
         registry_errors.labels(error_type='create_event_failed').inc()
         logger.exception("create_event failed")
@@ -742,7 +742,7 @@ async def list_events(skip: int = 0, limit: int = 100, db: Session = Depends(get
         registry_read_operations.labels(operation='list_events').inc()
         registry_read_latency.observe((time.time() - start_time) * 1000)
         return events
-    except Exception as e:
+    except Exception:
         registry_errors.labels(error_type='list_events_failed').inc()
         logger.exception("list_events failed")
         raise HTTPException(status_code=500, detail="Internal server error")

@@ -21,14 +21,14 @@ restarted 16:09Z, zero 5xx in the last 6 h, `POST /listings` → 201 at 21:46Z a
 - [x] 1.3 Shell tests: pass (2026-09-14T00:06Z run). Lint Python, Check Documentation Drift, Validate Docker Compose, Test Registry API: fail, pre-existing (Track 2).
 - [x] 1.4 PR #30 merged into master 2026-09-13 20:12 ET (4720e18, --no-ff); main checkout now on master.
 
-## Track 2 — CI red baseline (blocks a fully green #30 run; small ship, own branch)
+## Track 2 — CI red baseline — SHIPPED 2026-09-13 (PR #31, all 10 checks green; ship log 004)
 
 Four pre-existing red jobs on every PR to master:
-- [ ] 2.1 Validate Docker Compose: `POSTGRES_PASSWORD` has no default → `docker compose config` fails in CI. Fix: `${POSTGRES_PASSWORD:?}` style guard that CI satisfies via a dummy env, or a CI-only `.env.ci`. Verify: job green.
-- [ ] 2.2 Check Documentation Drift: CLAUDE.md container names out of date vs compose. Fix: regenerate. Verify: `python3 scripts/generate-docs.py --check` exit 0.
-- [ ] 2.3 Lint Python: 62 ruff findings. Fix: the real ones; `--ignore` only what is deliberate, with a comment. Verify: `ruff check` clean.
-- [ ] 2.4 Test Registry API: `uuid-ossp` missing in CI Postgres. Fix: `CREATE EXTENSION` in the alembic base migration or a CI init step. Verify: `alembic upgrade head` in CI green.
-- [ ] 2.5 Run Track 2 as one `/ship` (simple) on its own branch off master after 1.1. Then 1.3 gets a fully green run.
+- [x] 2.1 Validate Docker Compose: `POSTGRES_PASSWORD` has no default → `docker compose config` fails in CI. Fix: `${POSTGRES_PASSWORD:?}` style guard that CI satisfies via a dummy env, or a CI-only `.env.ci`. Verify: job green.
+- [x] 2.2 Check Documentation Drift: CLAUDE.md container names out of date vs compose. Fix: regenerate. Verify: `python3 scripts/generate-docs.py --check` exit 0.
+- [x] 2.3 Lint Python: 62 ruff findings. Fix: the real ones; `--ignore` only what is deliberate, with a comment. Verify: `ruff check` clean.
+- [x] 2.4 Test Registry API: `uuid-ossp` missing in CI Postgres. Fix: `CREATE EXTENSION` in the alembic base migration or a CI init step. Verify: `alembic upgrade head` in CI green.
+- [x] 2.5 Run Track 2 as one `/ship` (simple) on its own branch off master after 1.1. Then 1.3 gets a fully green run.
 
 ## Track 3 — Items I flagged during the backups ship
 

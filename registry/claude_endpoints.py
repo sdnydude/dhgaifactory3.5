@@ -116,7 +116,7 @@ async def list_projects(skip: int = 0, limit: int = 100, db: Session = Depends(g
         registry_read_latency.observe((time.time() - start) * 1000)
         registry_read_operations.labels(operation="list_projects").inc()
         return result
-    except Exception as e:
+    except Exception:
         registry_errors.labels(error_type="list_projects").inc()
         logger.exception("list_projects failed")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -142,7 +142,7 @@ async def get_project(project_id: UUID4, db: Session = Depends(get_db)):
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         registry_errors.labels(error_type="get_project").inc()
         logger.exception("get_project failed")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -172,7 +172,7 @@ async def list_conversations(
         registry_read_latency.observe((time.time() - start) * 1000)
         registry_read_operations.labels(operation="list_conversations").inc()
         return result
-    except Exception as e:
+    except Exception:
         registry_errors.labels(error_type="list_conversations").inc()
         logger.exception("list_conversations failed")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -193,7 +193,7 @@ async def get_conversation(conversation_id: UUID4, db: Session = Depends(get_db)
         return _conv_response(conv, msg_count, art_count)
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         registry_errors.labels(error_type="get_conversation").inc()
         logger.exception("get_conversation failed")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -215,7 +215,7 @@ async def search_conversations(
         registry_read_latency.observe((time.time() - start) * 1000)
         registry_read_operations.labels(operation="search_conversations").inc()
         return result
-    except Exception as e:
+    except Exception:
         registry_errors.labels(error_type="search_conversations").inc()
         logger.exception("search_conversations failed")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -234,7 +234,7 @@ async def list_messages(conversation_id: UUID4, db: Session = Depends(get_db)):
         registry_read_latency.observe((time.time() - start) * 1000)
         registry_read_operations.labels(operation="list_messages").inc()
         return messages
-    except Exception as e:
+    except Exception:
         registry_errors.labels(error_type="list_messages").inc()
         logger.exception("list_messages failed")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -258,7 +258,7 @@ async def list_artifacts(
         registry_read_latency.observe((time.time() - start) * 1000)
         registry_read_operations.labels(operation="list_artifacts").inc()
         return artifacts
-    except Exception as e:
+    except Exception:
         registry_errors.labels(error_type="list_artifacts").inc()
         logger.exception("list_artifacts failed")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -273,7 +273,7 @@ async def list_artifacts_by_conversation(conversation_id: UUID4, db: Session = D
         registry_read_latency.observe((time.time() - start) * 1000)
         registry_read_operations.labels(operation="list_artifacts_by_conversation").inc()
         return artifacts
-    except Exception as e:
+    except Exception:
         registry_errors.labels(error_type="list_artifacts_by_conversation").inc()
         logger.exception("list_artifacts_by_conversation failed")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -292,7 +292,7 @@ async def get_artifact(artifact_id: UUID4, db: Session = Depends(get_db)):
         return artifact
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         registry_errors.labels(error_type="get_artifact").inc()
         logger.exception("get_artifact failed")
         raise HTTPException(status_code=500, detail="Internal server error")

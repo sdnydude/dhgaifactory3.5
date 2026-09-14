@@ -47,7 +47,7 @@ async def create_memory_metrics(
         return row
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         db.rollback()
         registry_errors.labels(error_type="create_memory_metrics_failed").inc()
         logger.exception("create_memory_metrics failed")
@@ -70,7 +70,7 @@ async def list_memory_metrics(
         registry_read_operations.labels(operation="list_memory_metrics").inc()
         registry_read_latency.observe((time.time() - start) * 1000)
         return MemoryMetricsList(metrics=rows, total=total)
-    except Exception as e:
+    except Exception:
         registry_errors.labels(error_type="list_memory_metrics_failed").inc()
         logger.exception("list_memory_metrics failed")
         raise HTTPException(status_code=500, detail="Internal server error")

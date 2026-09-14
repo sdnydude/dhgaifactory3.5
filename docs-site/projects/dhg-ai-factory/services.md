@@ -5,6 +5,10 @@ title: Services
 
 # Services Reference
 
+:::info Generated inventory
+The authoritative, CI-checked list of every container, port and profile is the generated [Service Inventory](./service-inventory.md) page. This page is the narrative companion.
+:::
+
 ## Registry API (port 8011)
 
 The central data store and API layer. FastAPI + PostgreSQL 15 + pgvector.

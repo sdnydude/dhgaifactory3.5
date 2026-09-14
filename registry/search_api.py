@@ -176,7 +176,7 @@ async def list_sources(user_id: str, db: Session = Depends(get_db)):
                 {"uid": user_id},
             ).scalar()
             sources_info[display_name] = {"table": table, "count": result}
-        except Exception as e:
+        except Exception:
             db.rollback()
             logger.exception("search source %s unavailable", table)
             sources_info[display_name] = {"table": table, "count": 0, "error": "unavailable"}
@@ -185,7 +185,7 @@ async def list_sources(user_id: str, db: Session = Depends(get_db)):
         try:
             result = db.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar()
             sources_info[display_name] = {"table": table, "count": result}
-        except Exception as e:
+        except Exception:
             db.rollback()
             logger.exception("search source %s unavailable", table)
             sources_info[display_name] = {"table": table, "count": 0, "error": "unavailable"}

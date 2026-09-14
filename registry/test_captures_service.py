@@ -56,10 +56,8 @@ class TestLookupCapture:
         """The corrections unique key is (project, category, hash) — two
         different-category corrections can share user_message text; lookup
         must not conflate them (review important #3)."""
-        from unittest.mock import call, patch
 
         from captures_service import lookup_capture
-        import models
 
         db = MagicMock()
         db.query.return_value.filter.return_value.first.return_value = None

@@ -3,8 +3,7 @@ import os
 import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from unittest.mock import MagicMock, patch, PropertyMock
-import pytest
+from unittest.mock import MagicMock
 from sqlalchemy.exc import IntegrityError
 
 import doc_pages_service as svc

@@ -287,7 +287,7 @@ async def create_cme_project(
             created_at=db_project.created_at
         )
 
-    except Exception as e:
+    except Exception:
         db.rollback()
         registry_errors.labels(error_type="create_cme_project").inc()
         logger.exception("create_cme_project failed")
@@ -333,7 +333,7 @@ async def list_cme_projects(
 
         return result
 
-    except Exception as e:
+    except Exception:
         registry_errors.labels(error_type="list_cme_projects").inc()
         logger.exception("list_cme_projects failed")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -367,7 +367,7 @@ async def get_cme_project(project_id: str, db: Session = Depends(get_db)):
 
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         registry_errors.labels(error_type="get_cme_project").inc()
         logger.exception("get_cme_project failed")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -424,7 +424,7 @@ async def update_cme_project(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         db.rollback()
         registry_errors.labels(error_type="update_cme_project").inc()
         logger.exception("update_cme_project failed")
@@ -488,7 +488,7 @@ async def start_cme_pipeline(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         db.rollback()
         registry_errors.labels(error_type="start_cme_pipeline").inc()
         logger.exception("start_cme_pipeline failed")
@@ -537,7 +537,7 @@ async def get_cme_pipeline_status(project_id: str, db: Session = Depends(get_db)
 
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         registry_errors.labels(error_type="get_cme_pipeline_status").inc()
         logger.exception("get_cme_pipeline_status failed")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -639,7 +639,7 @@ async def rerun_cme_pipeline(
 
     try:
         lg = await trigger_langgraph_pipeline(str(project.id), project.intake)
-    except Exception as e:
+    except Exception:
         registry_errors.labels(error_type="rerun_cme_pipeline").inc()
         logger.exception("rerun_cme_pipeline LangGraph trigger failed")
         raise HTTPException(status_code=502, detail="Pipeline trigger failed")

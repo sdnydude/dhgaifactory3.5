@@ -15,7 +15,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install ruff
+      - run: pip install ruff==0.15.11
       - run: ruff check registry/ langgraph_workflows/dhg-agents-cloud/src/ --select E,F,W --ignore E501,E402,E722,E712
 
   lint-js:
@@ -62,6 +62,9 @@ jobs:
   validate-compose:
     name: Validate Docker Compose
     runs-on: ubuntu-latest
+    env:
+      # The git-tracked override requires POSTGRES_PASSWORD (${VAR:?}); CI only validates the merged config.
+      POSTGRES_PASSWORD: ci-placeholder
     steps:
       - uses: actions/checkout@v4
       - run: docker compose config --quiet
@@ -75,7 +78,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install pyyaml
+      - run: pip install pyyaml pytest
+      - run: pytest scripts/test_generate_docs.py
       - run: python3 scripts/generate-docs.py --check
 
   shell-tests:
