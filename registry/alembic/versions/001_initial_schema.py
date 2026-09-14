@@ -17,6 +17,12 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Extensions the schema depends on. Production got them from
+    # registry/init.sql via docker-entrypoint-initdb.d; a clean database
+    # (CI, a fresh clone) has neither, so the chain must own them.
+    op.execute('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"')
+    op.execute('CREATE EXTENSION IF NOT EXISTS vector')
+
     # Create media table
     op.create_table(
         'media',
