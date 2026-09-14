@@ -153,38 +153,56 @@ textfile fails closed.
   (`dhg-platform-overview` supersedes the first; the second lost its data source
   with Tempo). The old flat dashboard tree under `observability/grafana/` is gone.
 
-## Pending root-only items
+## Root-only items
 
-Real gaps, each needing root on g700data1 — Stephen's call.
+**1. cloudflared metrics — DONE.** Both units carry `--metrics 0.0.0.0:2024x` in
+`ExecStart` (`cloudflared.service` 20241, `cloudflared-portage.service` 20242),
+both listen on all interfaces, both Prometheus `cloudflared` targets are UP
+(verified 2026-09-13).
 
-**1. cloudflared metrics.** Both `cloudflared` scrape targets are DOWN by design —
-the units bind their metrics servers to loopback, unreachable from a container.
-Add to each unit's `ExecStart` (`cloudflared.service`: `--metrics 0.0.0.0:20241`;
-`cloudflared-portage.service`: `--metrics 0.0.0.0:20242`) then
-`systemctl daemon-reload && systemctl restart cloudflared cloudflared-portage`.
+**2. node-exporter thermal_zone — DONE 2026-09-13** via
+`observability/scripts/override-wave1-edits.sh` (`--no-collector.thermal_zone`
+on the g700data1 node-exporter `command:`; dh40801's already had it).
+`HighErrorRate` and `ContainerErrorSpike` still exclude `dhg-node-exporter`;
+remove the exclusion once a day of clean logs confirms the fix.
 
-**2. node-exporter thermal_zone.** The g700data1 node-exporter emits ~708K
-`thermal_zone` error lines/day, which kept the Loki log alerts permanently firing;
-`HighErrorRate` and `ContainerErrorSpike` exclude `dhg-node-exporter` as a
-workaround. The fix is `--no-collector.thermal_zone` on its `command:` in
-`docker-compose.override.yml` (dh40801's already has it). Remove the exclusion
-once it is in place.
+**3. LAN exposure (rebuild plan WP9) — `docker-user-fw.sh`.** Prometheus 9090,
+Alertmanager 9093, Loki 3100 and cAdvisor 8080 answer any LAN host with no auth.
+Limit them to the Mac, and 3100 additionally to dh40801 (its Alloy pushes logs
+here). Grafana `:3001` and the frontend `:3000` stay open.
 
-**3. LAN exposure (rebuild plan WP9).** The core observability ports answer any
-LAN host with no auth. Limit them to loopback and the Mac, leaving Grafana `:3001`
-and the frontend `:3000` open. Ports 3200/4317/4318 are moot since Tempo retired.
+ufw is not the tool: it is disabled on g700data1, and even enabled it would not
+see this traffic — Docker DNATs a published port in nat PREROUTING, so LAN
+packets traverse FORWARD, never the INPUT chain ufw writes to. The one hook
+Docker leaves to the operator is the `DOCKER-USER` chain, which is where
+`observability/scripts/docker-user-fw.sh` installs its `DHG-LAN-GUARD` chain
+(v4 from `DOCKER-USER`; v6 from `INPUT`, since the `[::]` listeners are
+docker-proxy sockets). The script header explains the conntrack matching.
+
+Install once (root; the copy under `/usr/local/sbin` is root-owned because a
+root systemd unit must not execute a user-writable file):
 
 ```bash
-for p in 9090 9093 3100 8080; do
-  sudo ufw allow from 127.0.0.1    to any port $p proto tcp
-  sudo ufw allow from <MAC_LAN_IP> to any port $p proto tcp
-  sudo ufw deny to any port $p proto tcp
-done
-sudo ufw reload && sudo ufw status numbered
+sudo install -o root -g root -m 755 observability/scripts/docker-user-fw.sh /usr/local/sbin/docker-user-fw.sh \
+  && sudo install -o root -g root -m 644 observability/systemd/dhg-docker-user-fw.service /etc/systemd/system/dhg-docker-user-fw.service \
+  && sudo systemctl daemon-reload && sudo systemctl enable --now dhg-docker-user-fw.service \
+  && sudo /usr/local/sbin/docker-user-fw.sh --status
 ```
 
-Verify: from the Mac `curl 10.0.0.251:9090/-/ready` = 200, from any other LAN
-host = timeout, frontend `/api/prometheus` still 200.
+Change the allowed hosts by editing the constants at the top of the script,
+reinstalling the copy, and `systemctl restart dhg-docker-user-fw`. The unit is
+`PartOf=docker.service`, so a Docker restart re-applies the rules.
+
+Verify: from the Mac `curl 10.0.0.251:9090/-/ready` = 200; from dh40801
+`curl -m 3 10.0.0.251:9090/-/ready` times out and `curl -m 3 10.0.0.251:3100/ready`
+= 200; Loki keeps receiving `host="dh40801"` lines; the `cadvisor-dh40801` and
+`node-exporter-dh40801` targets stay UP (their replies traverse the same chain).
+Preview without root: `observability/scripts/docker-user-fw.sh --dry-run`.
+
+**4. Host firewall (ufw) — separate project.** A default-deny host firewall is
+still worth having, but it needs the full port map as input (SSH, node-exporter,
+cloudflared metrics, Ollama, session-logger, every Postgres exporter) and a
+lock-out-safe rollout. Tracked as its own item; not part of 3.
 
 ## Operational scripts (`observability/scripts/`)
 
@@ -196,6 +214,7 @@ host = timeout, frontend `/api/prometheus` still 200.
 | `langfuse-canary.sh` | Write-then-read Langfuse round-trip; writes the canary textfile metric |
 | `p5-baseline.sh` | Alert-path silence round-trip test + Loki label baseline (`baselines/*.json`) |
 | `p5-seeded-secret.sh` | Seeds a known secret shape to prove the Alloy redaction stage works |
+| `docker-user-fw.sh` | LAN guard for the Docker-published observability ports via the `DOCKER-USER` chain (`--dry-run`, `--status`, `--remove`); installed by `observability/systemd/dhg-docker-user-fw.service` |
 
 ## Ports added 2026-09-04
 

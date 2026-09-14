@@ -1,0 +1,15 @@
+[Unit]
+Description=DHG LAN guard for Docker-published observability ports (DOCKER-USER chain)
+Documentation=file:///home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/docs/OBSERVABILITY_RUNBOOK.md
+After=docker.service
+Requires=docker.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/docker-user-fw.sh
+ExecStop=/usr/local/sbin/docker-user-fw.sh --remove
+
+[Install]
+WantedBy=multi-user.target
