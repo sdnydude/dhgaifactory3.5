@@ -230,6 +230,17 @@ Default is off — the container logs
   empty today, so enabling the scheduler enforces nothing until reviewers and
   assignments exist.
 
+## Backups and disaster recovery (2026-09-11)
+
+Nightly 03:30 ET `observability/scripts/backup-all.sh` (13 targets, gpg, manifests,
+`/mnt/4tb/backups/nightly`, rsync mirror to the Synology `aifactory-backups`),
+Sunday 04:00 `restore-drill.sh --all` (ephemeral-container restores, exact count
+checks). Metrics in `backups.prom`; rules `rules.d/backups.yml` + `rules.d/nas.yml`
+(Synology over SNMPv3 via `dhg-snmp-exporter`, job `nas`); dashboard
+`dhg-platform-backups`. Full design, restore procedures and the NAS residual-risk
+statement: `docs-site/projects/dhg-ai-factory/backups.md`. Runbooks:
+`docs-site/projects/dhg-ai-factory/runbooks/alerts.md` → Backups, NAS.
+
 ## Troubleshooting
 
 - **Target down** — read `lastError` from `/api/v1/targets`, then

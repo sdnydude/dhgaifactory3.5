@@ -1,0 +1,76 @@
+# Backup alerts. Series come from /mnt/4tb/observability/textfile/backups.prom,
+# written by observability/scripts/backup-all.sh (nightly 03:30 ET) and
+# observability/scripts/restore-drill.sh (Sundays 04:00 ET) and scraped by the
+# g700data1 node-exporter. Every per-target series carries name="<target>";
+# every rule sets service="backups" so:
+#   - the registry webhook fingerprints alertname|service|instance PLUS the
+#     `name` label into one incident per target (not one for all 13), and
+#   - Alertmanager groups and inhibits these separately from node-exporter.
+# Stated choice: inhibit rule 1 (critical suppresses high|warning on equal
+# service) means one critical BackupStale silences the three high alerts for
+# every target while it is firing. Acceptable: the critical is the one that
+# matters and it names the target.
+#
+# Every rule carries `or absent(...)` on purpose: if the textfile is deleted or
+# never written, the series vanish and a bare age comparison would evaluate
+# over an empty vector and stay silent forever (see LangfuseCanaryStale).
+groups:
+  - name: backups
+    rules:
+      # 28 h = one missed nightly plus slack. attempt/success are both stamped by
+      # the script, so a run that failed still bumps attempt (BackupFailed) while
+      # success stays put (this rule, once 28 h pass).
+      - alert: BackupStale
+        expr: (time() - backup_last_success_timestamp > 100800) or absent(backup_last_success_timestamp)
+        for: 5m
+        labels:
+          severity: critical
+          service: backups
+        annotations:
+          summary: "Backup of {{ $labels.name }} is stale (no verified archive in 28 h)"
+          description: "backup-all.sh has not produced a verified, manifest-bearing run for {{ $labels.name }} in over 28 hours, or the backups.prom textfile is missing entirely. Check ~/.claude/run/backup-all.log on g700data1 and run `doppler run --project dhg-monitoring --config dev -- observability/scripts/backup-all.sh --target {{ $labels.name }}` by hand."
+          runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#backupstale"
+
+      # Fires the same morning a target fails: the script stamps attempt before
+      # producing and success only after the manifest lands. The `unless` half
+      # covers a target that has NEVER succeeded (first night failed, new target,
+      # dh40801 unreachable from day one): it has no success series, so the plain
+      # comparison would match nothing and absent() on the whole metric is false
+      # once any other target has succeeded. Unit-tested in tests/backups_test.yml.
+      - alert: BackupFailed
+        expr: (backup_last_attempt_timestamp > backup_last_success_timestamp) or (backup_last_attempt_timestamp unless on (name) backup_last_success_timestamp)
+        for: 10m
+        labels:
+          severity: high
+          service: backups
+        annotations:
+          summary: "Last backup attempt of {{ $labels.name }} failed"
+          description: "The most recent backup-all.sh attempt for {{ $labels.name }} did not complete (attempt stamp is newer than the last success). The previous good run is still on disk and on the NAS. Read the failure line in ~/.claude/run/backup-all.log; a stopped source container or an unreachable dh40801 are the usual causes."
+          runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#backupfailed"
+
+      # Weekly drill (Sundays 04:00 ET) restores every target into an ephemeral
+      # container and checks counts against the manifest. 8 days = one missed
+      # Sunday plus slack.
+      # Same shape: a backed-up target with no drill stamp at all must alert too.
+      - alert: RestoreDrillStale
+        expr: (time() - backup_restore_drill_success_timestamp > 691200) or (backup_last_success_timestamp unless on (name) backup_restore_drill_success_timestamp) or absent(backup_restore_drill_success_timestamp)
+        for: 5m
+        labels:
+          severity: high
+          service: backups
+        annotations:
+          summary: "Restore drill of {{ $labels.name }} has not passed in 8 days"
+          description: "restore-drill.sh has not verified a restore of {{ $labels.name }} in over 8 days (or never). A backup nobody has restored is a hope, not a backup. Run `doppler run --project dhg-monitoring --config dev -- observability/scripts/restore-drill.sh {{ $labels.name }}` and read why it fails."
+          runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#restoredrillstale"
+
+      # The NAS mirror (rsync over SSH to the Synology) is the off-host copy.
+      - alert: BackupOffsiteStale
+        expr: (time() - backup_offsite_last_success_timestamp > 100800) or absent(backup_offsite_last_success_timestamp)
+        for: 5m
+        labels:
+          severity: high
+          service: backups
+        annotations:
+          summary: "Backups have not been mirrored to the NAS in 28 h"
+          description: "The nightly rsync of /mnt/4tb/backups/nightly to the Synology (aifactory-backup@10.0.0.250::aifactory-backups) has not succeeded in over 28 hours. Local backups are still being written; only the off-host copy is behind. Check the NAS is up (NasDown), the rsync service is enabled in DSM, and the key in ~/.ssh/nas-backup_ed25519 still works: `rsync --list-only -e 'ssh -p 22 -i ~/.ssh/nas-backup_ed25519' aifactory-backup@10.0.0.250::aifactory-backups/`."
+          runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#backupoffsitestale"

@@ -1,0 +1,26 @@
+# Config/secrets layer captured nightly by backup-all.sh (same directory)
+# (target "config"). One absolute path per line; blank lines and # comments are
+# ignored. EVERY entry must be readable by the backup user or the target fails
+# loudly. The archive is gpg-encrypted; nothing here is ever mirrored in plain.
+#
+# Why these: database dumps restore data, not the ability to start anything.
+# These files hold the secrets and wiring that exist nowhere else (the override
+# carries hardcoded secrets, .env files are gitignored, the four renders are
+# produced from Doppler but pinned here so a Doppler outage cannot block a
+# restore). The Langfuse env on dh40801 lives in Doppler project `langfuse`
+# and is deliberately NOT here (there is no dh40801/.env).
+
+# DHG AI Factory
+/home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/.env
+/home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/docker-compose.override.yml
+/home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/observability/alertmanager/alertmanager.yml
+/home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/observability/postgres-exporter/postgres_exporter.yml
+/home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/observability/grafana/provisioning/datasources/registry-postgres.yml
+/home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/services/medkb/.env.otel
+/home/swebber64/DHG/aifactory3.5/dhgaifactory3.5/observability/snmp-exporter/auths.yml
+
+# Sibling stacks whose databases are backed up here too
+/home/swebber64/DHG/portage/.env
+/home/swebber64/plane-selfhost/plane-app/plane.env
+/home/swebber64/DHG/Digital-Harmony-Studio-v1/dhg-transcribe/.env
+/home/swebber64/DHG/dhg-research-eval-viewer/.env

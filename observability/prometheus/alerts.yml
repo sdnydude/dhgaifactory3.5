@@ -57,8 +57,10 @@ groups:
 
       # T2: Container crash loop. container_start_time_seconds changes value on
       # every (re)start, so >3 changes in 15m is >3 restarts in 15m.
+      # dhg-restore-drill-* are short-lived ephemeral containers started and
+      # removed by observability/scripts/restore-drill.sh; never a crash loop.
       - alert: ContainerCrashLoop
-        expr: changes(container_start_time_seconds{name=~"dhg-.*"}[15m]) > 3
+        expr: changes(container_start_time_seconds{name=~"dhg-.*", name!~"dhg-restore-drill-.*"}[15m]) > 3
         for: 5m
         labels:
           severity: high
@@ -180,7 +182,7 @@ groups:
 
       # General: Container high CPU (warning, informational)
       - alert: ContainerHighCPU
-        expr: rate(container_cpu_usage_seconds_total{name=~"dhg-.*"}[5m]) > 0.9
+        expr: rate(container_cpu_usage_seconds_total{name=~"dhg-.*", name!~"dhg-restore-drill-.*"}[5m]) > 0.9
         for: 10m
         labels:
           severity: warning
@@ -255,10 +257,14 @@ groups:
           description: "The Loki ruler evaluated log-based alerts but could not push them to Alertmanager, so every rule in observability/loki/rules/** is currently undelivered. Check the alertmanager_url in the Loki config."
           runbook_url: "http://10.0.0.251:8017/dhg-ai-factory/runbooks/alerts#lokirulererrors"
 
-      # Covers the loki_store.prom exporter today and any future backup-marker
-      # textfile written to /mnt/4tb/observability/textfile.
+      # Covers every textfile under /mnt/4tb/observability/textfile that is
+      # rewritten continuously (loki_store.prom, langfuse_canary.prom). The
+      # `file` label is the FULL host path. backups.prom is excluded on purpose:
+      # it is rewritten once per nightly run, so a 15-minute mtime rule would
+      # fire every day; its freshness is covered by BackupStale/BackupFailed in
+      # rules.d/backups.yml, which use `or absent()` and do not need the mtime.
       - alert: TextfileStale
-        expr: time() - node_textfile_mtime_seconds > 900
+        expr: time() - node_textfile_mtime_seconds{file!~".*/backups\\.prom"} > 900
         for: 5m
         labels:
           severity: warning

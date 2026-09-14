@@ -1,4 +1,4 @@
-.PHONY: help setup secrets up down restart logs health backup restore rollback clean
+.PHONY: help setup secrets up down restart logs health rollback clean
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -44,19 +44,6 @@ logs: ## Tail logs from all services
 health: ## Check health of all services
 	@echo "Checking service health..."
 	@./scripts/healthcheck.sh
-
-backup: ## Create database backup
-	@echo "Creating backup..."
-	@./scripts/backup.sh
-
-restore: ## Restore database from backup (usage: make restore BACKUP=filename)
-	@if [ -z "$(BACKUP)" ]; then \
-		echo "Error: Specify backup file with BACKUP=filename"; \
-		echo "Available backups:"; \
-		ls -1 backups/; \
-		exit 1; \
-	fi
-	@./scripts/restore.sh backups/$(BACKUP)
 
 rollback: ## One-command rollback - stop and restart all services
 	@echo "Rolling back - restarting all services..."

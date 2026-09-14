@@ -135,6 +135,15 @@ services:
     volumes:
       - langfuse_clickhouse_data:/var/lib/clickhouse
       - langfuse_clickhouse_logs:/var/log/clickhouse-server
+    # System-log diet (backups + DR ship, 2026-09-10). Before this drop-in the
+    # `system` database had grown to 9.6 GiB (trace_log alone 5.6 GiB) against
+    # 3 MiB of actual Langfuse data, because ClickHouse's default-on internal
+    # logs carry no TTL. Langfuse needs none of the removed logs. Delivered as
+    # `configs: content:` because `configs: file:` is not uploaded over an ssh
+    # docker context (KB insight).
+    configs:
+      - source: clickhouse_system_logs
+        target: /etc/clickhouse-server/config.d/system-logs.xml
     restart: unless-stopped
     networks: [langfuse]
 
@@ -203,3 +212,29 @@ volumes:
   langfuse_clickhouse_logs:
   langfuse_redis_data:
   langfuse_minio_data:
+
+configs:
+  # ClickHouse merges every file in config.d over config.xml; `remove="1"`
+  # deletes the node, and a system log whose section is absent is never
+  # created (SystemLog.cpp: "Not creating ... since corresponding section
+  # is missing"). The logs that stay get a 7-day TTL; ClickHouse renames the
+  # old tables to *_0 when a create statement changes (dropped by hand once).
+  clickhouse_system_logs:
+    content: |
+      <clickhouse>
+        <trace_log remove="1"/>
+        <text_log remove="1"/>
+        <asynchronous_metric_log remove="1"/>
+        <metric_log remove="1"/>
+        <processors_profile_log remove="1"/>
+        <opentelemetry_span_log remove="1"/>
+        <query_log>
+          <ttl>event_date + INTERVAL 7 DAY DELETE</ttl>
+        </query_log>
+        <query_thread_log>
+          <ttl>event_date + INTERVAL 7 DAY DELETE</ttl>
+        </query_thread_log>
+        <part_log>
+          <ttl>event_date + INTERVAL 7 DAY DELETE</ttl>
+        </part_log>
+      </clickhouse>
