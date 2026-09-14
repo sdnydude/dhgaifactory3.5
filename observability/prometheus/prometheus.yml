@@ -179,14 +179,10 @@ scrape_configs:
     scrape_interval: 30s
 
   # cloudflared tunnels (two host systemd units). AUDIT-2026-09 A5.
-  # WARNING: this job is DOWN until the units are edited as root. Today both
-  # cloudflared processes bind their metrics server to 127.0.0.1 only (ports
-  # auto-assigned: 20241 and 20242 are currently listening on loopback), which
-  # a container cannot reach. Stephen must add to each unit's ExecStart:
-  #   cloudflared.service          -> --metrics 0.0.0.0:20241
-  #   cloudflared-portage.service  -> --metrics 0.0.0.0:20242
-  # then `systemctl daemon-reload && systemctl restart cloudflared cloudflared-portage`.
-  # Until then these two targets report DOWN. This is intentional, not a bug.
+  # Each unit's ExecStart carries --metrics 0.0.0.0:<port>:
+  #   cloudflared.service          -> 20241
+  #   cloudflared-portage.service  -> 20242
+  # If a target goes DOWN, check the unit flag first (`systemctl cat cloudflared`).
   - job_name: 'cloudflared'
     static_configs:
       - targets: ['host.docker.internal:20241', 'host.docker.internal:20242']
