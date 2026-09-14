@@ -33,6 +33,9 @@ def upgrade():
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
     )
 
+    # Raw string with `\:` escapes: alembic wraps this in sqlalchemy.text(), which
+    # reads `:40` / `:true` inside the JSON as bind parameters. The escape is
+    # stripped at compile time, so the stored JSON is unchanged. Do not "clean up".
     op.execute(r"""
         INSERT INTO frontend_design_specs (
             feature_name, slug, status, spec_path, comp_path, description,

@@ -12,14 +12,21 @@ with `alembic upgrade head` lacks them and any endpoint touching them fails.
 
 DDL is column-for-column what production has (pg_dump --schema-only,
 2026-09-13). Each table is guarded on its own existence, so production and any
-database built from the SQL files are untouched. Trigger function
-update_research_requests_updated_at and its trigger are recreated
-idempotently because research_requests carries it.
+database built from the SQL files are untouched. The trigger function
+update_research_requests_updated_at is recreated idempotently (CREATE OR
+REPLACE, every run); its trigger is created together with research_requests
+only when this revision creates that table. Production has no trigger on
+`agents` (001_add_agents.sql defined one, it was never applied), so none is
+created here. Offline --sql mode is refused: the guards need a connection.
 """
 from __future__ import annotations
 
+import logging
+
 import sqlalchemy as sa
 from alembic import context, op
+
+log = logging.getLogger("alembic.runtime.migration")
 
 revision = "002c_legacy_tables_bootstrap"
 down_revision = "002b_cme_bootstrap"
@@ -27,15 +34,30 @@ branch_labels = None
 depends_on = None
 
 
-def _has_table(name: str) -> bool:
+def _refuse_offline() -> None:
     if context.is_offline_mode():
-        return False  # emit the DDL for review in --sql mode
+        raise RuntimeError("002c_legacy_tables_bootstrap must run online (no --sql): its table guards inspect the database")
+
+
+def _has_table(name: str) -> bool:
     return sa.inspect(op.get_bind()).has_table(name)
 
 
 # Creation order respects foreign keys: agents -> agent_heartbeats,
 # antigravity_chats -> antigravity_files, inference_nodes -> inference_models /
 # llm_interactions -> llm_quality_evals, model_update_log.
+# Idempotent: the trigger function research_requests attaches to (from
+# registry/migrations/002_add_research_requests.sql / init.sql).
+FUNCTION_SQL = """
+CREATE OR REPLACE FUNCTION update_research_requests_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+"""
+
 TABLE_SQL = {
     "agents": """
 CREATE TABLE agents (
@@ -277,6 +299,7 @@ CREATE INDEX idx_research_status ON research_requests USING btree (status);
 CREATE INDEX idx_research_status_created ON research_requests USING btree (status, created_at);
 CREATE INDEX idx_research_user_created ON research_requests USING btree (user_id, created_at);
 CREATE INDEX idx_research_user_id ON research_requests USING btree (user_id);
+CREATE TRIGGER research_requests_updated_at BEFORE UPDATE ON research_requests FOR EACH ROW EXECUTE FUNCTION update_research_requests_updated_at();
 """,
     "routing_config": """
 CREATE TABLE routing_config (
@@ -292,35 +315,22 @@ ALTER TABLE routing_config ADD CONSTRAINT routing_config_task_type_key UNIQUE (t
 """,
 }
 
-FUNCTION_SQL = """
-CREATE OR REPLACE FUNCTION update_research_requests_updated_at()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-"""
-
-TRIGGER_SQL = """
-CREATE TRIGGER research_requests_updated_at BEFORE UPDATE ON research_requests FOR EACH ROW EXECUTE FUNCTION update_research_requests_updated_at();
-"""
 
 
 def upgrade() -> None:
-    created_research = False
+    _refuse_offline()
+    op.execute(FUNCTION_SQL)
     for name, sql in TABLE_SQL.items():
         if _has_table(name):
+            log.info("002c: %s already exists, skipping bootstrap", name)
             continue
+        log.info("002c: creating %s (hand-applied in production, absent here)", name)
         op.execute(sql)
-        if name == "research_requests":
-            created_research = True
-    if created_research or context.is_offline_mode():
-        op.execute(FUNCTION_SQL)
-        op.execute(TRIGGER_SQL)
 
 
 def downgrade() -> None:
-    # Only undo what this revision created; a database that had the tables
-    # before (production) skipped them and must keep them.
-    pass
+    log.warning(
+        "002c downgrade keeps the twelve legacy tables and "
+        "update_research_requests_updated_at(): a database that had them "
+        "before skipped upgrade() and must keep them"
+    )
