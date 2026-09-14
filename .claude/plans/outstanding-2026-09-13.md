@@ -42,7 +42,7 @@ Four pre-existing red jobs on every PR to master:
 - [x] 4.1 Snapshot schedule on `aifactory-backups`: daily 04:30, keep latest 14, applied 2026-09-13 20:08 ET via `observability/scripts/nas-snapshot-policy.sh` (DSM API; get_schedule next=2026-09-14 04:30 task_id=8; retention policyType=20 recently=14). Verify tomorrow: `SYNO.Core.Share.Snapshot list` shows one snapshot.
 - [ ] 4.2 **[device]** Escrow `BACKUP_GPG_PASSPHRASE`: no password-manager CLI on g700data1 (op/bw/pass absent), so the store lives on the Mac. Hand line for the Mac: `doppler secrets get BACKUP_GPG_PASSPHRASE --project dhg-monitoring --config dev --plain | pbcopy`. Verify: entry exists in the manager (only checkable there).
 - [x] 4.3 Telegram delivery live 2026-09-13 20:58 ET: TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID in Doppler dhg-monitoring/dev, Alertmanager rendered with telegram + webhook-and-telegram receivers, reload 200, TelegramDeliveryTest (warning) routed to telegram with no notify errors. Verify: message on phone.
-- [ ] 4.4 **[physical]** Drive 1 replacement (SATA HDD ≥ 5.5 TB). I trigger the repair via DSM API once the disk is seated and confirm status. Verify: `NasRaidDegraded` clears; dashboard NAS row green.
+- [ ] 4.4 Drive 1 replaced by Stephen 2026-09-13 (6/6 disks visible, all normal). Pool `reuse_1` repairing since ~20:45 ET, 1.2 % at 20:59, ~14 h remaining. NasRaidDegraded cleared. Ticks when DSM pool status = normal and raidStatus{Storage Pool 1} = 1.
 - [ ] 4.5 DSM 7.2 upgrade after 4.4 (via DSM API `SYNO.Core.Upgrade`; only consideration is Video Station gone in 7.2.2), then immutable snapshots on `aifactory-backups`. Verify: DSM reports 7.2.x; registry deferred 8baeab4c resolved.
 
 ## Track 5 — Observability rebuild follow-through (override / root)
