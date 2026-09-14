@@ -153,7 +153,7 @@ Approach confirmed; no second pass. What would have falsified it: a dump that ne
 ## Chunk 5 — drills, surface, schedule
 - [x] T13 restore-drill.sh --all passes 13 targets (2026-09-11 03:1x UTC); registry-db drill 9 s, plane-db 9 s, full --all 46 s; log in session scratchpad; re-run on request for a watched pass
 - [x] T14 Grafana dhg-platform-backups (Backups row + NAS row); verify-dashboard.sh exit 0 + PNG (after T13 so drill-age panels have series)
-- [ ] T17 CI `Shell tests` job green on the PR — BLOCKED: ci.yml triggers only on `pull_request: branches: [master]`; PR #30 is based on feat/observability-rebuild-2026-09, so GitHub Actions did not run (only CodeRabbit, Socket, CircleCI ran, all green). Ticks after #29 merges and #30 is retargeted to master. Local equivalent run 2026-09-12: bats 40/40 + promtool SUCCESS.
+- [x] T17 CI `Shell tests` job green on PR #30 (run 2026-09-14T00:06Z after retarget to master + reopen; the four pre-existing red jobs are Track 2 of .claude/plans/outstanding-2026-09-13.md)
 
 ## Chunk 6 — cleanup, docs
 - [x] T16 Legacy scripts + Makefile targets removed; infrastructure/README.md untouched (its rows describe infrastructure/*.sh, which still exist); deferral list ticked; f530537e resolved with the AC 50-53 note (registry write token)
