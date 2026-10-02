@@ -11,10 +11,10 @@ SCRIPT="$BATS_TEST_DIRNAME/../scripts/backup-all.sh"
 setup() { common_setup; }
 teardown() { common_teardown; }
 
-@test "--dry-run exits 0 and prints one plan line per data target plus the offsite mirror (14)" {
+@test "--dry-run exits 0 and prints one plan line per data target plus the offsite mirror (13)" {
   run "$SCRIPT" --dry-run
   [ "$status" -eq 0 ]
-  [ "$(printf '%s\n' "$output" | grep -c '^plan ')" -eq 14 ]
+  [ "$(printf '%s\n' "$output" | grep -c '^plan ')" -eq 13 ]
 }
 
 @test "an unknown --target id exits 2 before doing anything (no plan, no run, no mirror)" {

@@ -24,7 +24,7 @@ CONFIG="dev"
 
 # module name -> Doppler secret suffix. Module names match the auth_module query
 # param in the prometheus.yml postgres-multi job.
-MODULES=(medkb:MEDKB portage:PORTAGE eval:EVAL transcribe:TRANSCRIBE audio:AUDIO plane:PLANE)
+MODULES=(portage:PORTAGE eval:EVAL transcribe:TRANSCRIBE audio:AUDIO plane:PLANE)
 
 command -v doppler >/dev/null || { echo "doppler CLI not found" >&2; exit 1; }
 

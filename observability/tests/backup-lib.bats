@@ -137,14 +137,14 @@ mkrun() { # id days_ago with_manifest(1|0)
   [ "$status" -ne 0 ]
 }
 
-@test "bl_targets lists 13 unique data targets with known kinds, and bl_target_field resolves fields" {
+@test "bl_targets lists 12 unique data targets with known kinds, and bl_target_field resolves fields" {
   run bl_targets
   [ "$status" -eq 0 ]
-  [ "${#lines[@]}" -eq 13 ]
+  [ "${#lines[@]}" -eq 12 ]
   for l in "${lines[@]}"; do [ "$(awk -F'|' '{print NF}' <<<"$l")" -eq 5 ]; done
   [ -z "$(bl_targets | cut -d'|' -f1 | sort | uniq -d)" ]
   [ "$(bl_targets | cut -d'|' -f2 | sort -u | tr '\n' ' ')" = "clickhouse files minio pg volume " ]
-  [ "$(bl_targets | cut -d'|' -f3 | sort | uniq -c | awk '{print $2"="$1}' | tr '\n' ' ')" = "dh40801=3 local=10 " ]
+  [ "$(bl_targets | cut -d'|' -f3 | sort | uniq -c | awk '{print $2"="$1}' | tr '\n' ' ')" = "dh40801=3 local=9 " ]
   run bl_target_field registry-db container; [ "$output" = "dhg-registry-db" ]
   run bl_target_field langfuse-minio ctx;    [ "$output" = "dh40801" ]
   run bl_target_field plane-db extra;        [ "$output" = "plane:plane:/var/run/postgresql" ]

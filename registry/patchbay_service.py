@@ -31,7 +31,6 @@ SERVICES: dict[str, int] = {
     "minio": 9001,
     "qdrant": 6333,
     "terminal": 8022,
-    "medkb": 8015,
     "agui-poc": 8104,
     "langgraph-dev": 2026,
     "logo-maker": 8012,

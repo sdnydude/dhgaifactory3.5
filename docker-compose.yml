@@ -73,95 +73,6 @@ services:
       - dhg_exports:/exports
     # no external port — only reachable from registry-api over the internal network
 
-  # ============================================================================
-  # MEDKB — RAG-as-a-Service
-  # ============================================================================
-
-  dhg-medkb-db:
-    image: pgvector/pgvector:pg15
-    container_name: dhg-medkb-db
-    ports:
-      - "5435:5432"
-    volumes:
-      - medkb_db_data:/var/lib/postgresql/data
-    networks:
-      - dhg-network
-    environment:
-      - POSTGRES_DB=medkb
-      - POSTGRES_USER=medkb
-      - POSTGRES_PASSWORD=${MEDKB_DB_PASSWORD:-medkb_dev}
-    healthcheck:
-      test: ["CMD", "pg_isready", "-U", "medkb"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-    restart: unless-stopped
-
-  dhg-medkb-cache:
-    image: redis:7-alpine
-    container_name: dhg-medkb-cache
-    ports:
-      - "6381:6379"
-    networks:
-      - dhg-network
-    command: redis-server --maxmemory 4gb --maxmemory-policy allkeys-lru
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-    restart: unless-stopped
-
-  dhg-medkb-api:
-    build:
-      context: ./services/medkb
-      dockerfile: Dockerfile
-    container_name: dhg-medkb-api
-    ports:
-      - "8015:8015"
-    networks:
-      - dhg-network
-    depends_on:
-      dhg-medkb-db:
-        condition: service_healthy
-      dhg-medkb-cache:
-        condition: service_healthy
-    environment:
-      - MEDKB_DB_URL=postgresql+asyncpg://medkb:${MEDKB_DB_PASSWORD:-medkb_dev}@dhg-medkb-db:5432/medkb
-      - MEDKB_REDIS_URL=redis://dhg-medkb-cache:6379/0
-      - OLLAMA_URL=http://dhg-ollama:11434
-      - EMBEDDING_MODEL=nomic-embed-text
-      - DEFAULT_GENERATION_MODEL=claude-sonnet-4-6
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-    # OTLP export to Langfuse. Rendered from Doppler (dhg-monitoring/dev) by
-    # observability/scripts/render-medkb-otel-env.sh; absent until the
-    # dhg-ai-factory Langfuse project keys exist, in which case medkb starts
-    # with tracing disabled. OTEL_ENDPOINT must NOT be set inline here — an
-    # `environment:` entry would override the env_file value.
-    env_file:
-      - path: services/medkb/.env.otel
-        required: false
-    labels:
-      - prometheus.scrape=true
-      - prometheus.port=8015
-    restart: unless-stopped
-
-  dhg-medkb-ingestor:
-    build:
-      context: ./services/medkb
-      dockerfile: Dockerfile
-    container_name: dhg-medkb-ingestor
-    command: ["python", "-c", "import time; print('Ingestor stub — activates Phase 5'); time.sleep(999999)"]
-    networks:
-      - dhg-network
-    depends_on:
-      dhg-medkb-db:
-        condition: service_healthy
-    environment:
-      - MEDKB_DB_URL=postgresql+asyncpg://medkb:${MEDKB_DB_PASSWORD:-medkb_dev}@dhg-medkb-db:5432/medkb
-      - MEDKB_REDIS_URL=redis://dhg-medkb-cache:6379/0
-    restart: unless-stopped
-
   # Grafana image renderer — backs /render/d/<uid> PNG snapshots used by
   # observability/scripts/verify-dashboard.sh. Renderer 3.x (>= 3.6.1) is the
   # documented match for Grafana 10.2; 3.12.9 is the last 3.x release.
@@ -220,13 +131,14 @@ services:
   # Multi-instance Postgres metrics (REBUILD-PLAN-2026-09 WP4). Separate from the
   # existing `postgres-exporter` (registry-db, single-target DATA_SOURCE_NAME):
   # postgres_exporter v0.15.0 serves /probe?target=<host:port/db>&auth_module=<name>,
-  # so one container covers the other six instances. Credentials live in the
+  # so one container covers the other five instances. Credentials live in the
   # gitignored postgres_exporter.yml, rendered from Doppler by
   # observability/postgres-exporter/render-postgres-exporter.sh.
   #
-  # The six databases sit on five different compose networks (only dhg-medkb-db is
-  # on dhg-network, and portage-db publishes only to host loopback 127.2.0.1), so
-  # this container joins all of them and reaches each DB by container DNS on 5432.
+  # The five databases sit on five different compose networks (none of them on
+  # dhg-network, where Prometheus scrapes this container, and portage-db publishes
+  # only to host loopback 127.2.0.1), so this container joins all of them and
+  # reaches each DB by container DNS on 5432.
   postgres-exporter-multi:
     image: prometheuscommunity/postgres-exporter:v0.15.0
     container_name: dhg-postgres-exporter-multi
@@ -313,6 +225,4 @@ volumes:
   ollama-data:
     driver: local
   dhg_exports:
-    driver: local
-  medkb_db_data:
     driver: local
