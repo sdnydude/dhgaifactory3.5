@@ -68,7 +68,6 @@ export const racks: Rack[] = [
       {name: 'MinIO', port: 9001, statusKey: 'minio', desc: 'Object storage console', jacks: ['LAN', 'TS']},
       {name: 'Qdrant', port: 6333, statusKey: 'qdrant', desc: 'Vector DB dashboard', path: '/dashboard', jacks: ['LAN', 'TS']},
       {name: 'Terminal', port: 8022, statusKey: 'terminal', desc: 'Web shell — private network only', jacks: ['LAN', 'TS']},
-      {name: 'medkb API', port: 8015, statusKey: 'medkb', desc: 'RAG-as-a-Service', path: '/docs', jacks: ['LAN', 'TS']},
     ],
   },
   {

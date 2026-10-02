@@ -17,7 +17,6 @@ bl_run_id() {
 bl_targets() {
   cat <<'EOF'
 registry-db|pg|local|dhg-registry-db|dhg:dhg_registry,snap2list:
-medkb-db|pg|local|dhg-medkb-db|medkb:medkb:
 eval-db|pg|local|dhg-eval-db|evalviewer:evalviewer,evalviewer_test:
 audio-postgres|pg|local|dhg-audio-postgres|user:audio_agent:
 transcribe-db|pg|local|dhg-transcribe-db|transcribe:transcribe:

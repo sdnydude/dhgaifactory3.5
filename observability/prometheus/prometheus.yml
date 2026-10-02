@@ -44,7 +44,7 @@ scrape_configs:
           service: 'registry-db'
     scrape_interval: 30s
 
-  # The other six Postgres instances, via one multi-target postgres_exporter
+  # The other five Postgres instances, via one multi-target postgres_exporter
   # (REBUILD-PLAN-2026-09 WP4). v0.15.0 serves /probe?target=<host:port/db>
   # &auth_module=<name>; credentials never appear here — they live in the
   # gitignored observability/postgres-exporter/postgres_exporter.yml rendered
@@ -52,8 +52,6 @@ scrape_configs:
   - job_name: 'postgres-multi'
     metrics_path: /probe
     static_configs:
-      - targets: ['dhg-medkb-db:5432/medkb']
-        labels: {service: 'medkb-db', __param_auth_module: 'medkb'}
       - targets: ['portage-db:5432/portage']
         labels: {service: 'portage-db', __param_auth_module: 'portage'}
       - targets: ['dhg-eval-db:5432/evalviewer']
@@ -190,13 +188,6 @@ scrape_configs:
           service: 'cloudflared'
     metrics_path: /metrics
     scrape_interval: 30s
-
-  # medkb RAG-as-a-Service
-  - job_name: 'medkb'
-    static_configs:
-      - targets: ['dhg-medkb-api:8015']
-    metrics_path: /metrics
-    scrape_interval: 15s
 
   # audio-agent (REBUILD-PLAN-2026-09 WP4). It belongs to compose project
   # dhg-audio-agent (config at langgraph_workflows/dhg-agents-cloud/src/
