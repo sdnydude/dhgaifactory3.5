@@ -2,7 +2,7 @@
 **Last Updated:** May 24, 2026 (v20)
 
 ## System Status
-- **Containers:** 22 running (21 healthy, 1 expected-unhealthy: `dhg-medkb-ingestor` stub activates Phase 5)
+- **Containers:** 22 running (21 healthy, 1 expected-unhealthy: `dhg-medkb-ingestor` stub activates Phase 5) — medkb containers removed 2026-10-02 (PR #32)
 - **LangGraph Server:** Cloud production at `dhg-agents-526554f2bb905517adab9bd53427c745.us.langgraph.app` (17 graphs)
 - **VS Engine:** Running, healthy, Prometheus metrics active
 - **Frontend:** Next.js on :3000 (shadcn/ui + assistant-ui + CopilotKit)
@@ -10,7 +10,7 @@
 - **Disk:** Root 12% (1.9TB), Data 4% (3.6TB)
 - **Observability:** Full stack operational — Prometheus (6/6 targets UP), Grafana, Loki+Promtail (23 containers), Tempo+OTel, Alertmanager, cAdvisor, Node/Postgres exporters. Mission Control dashboard with 11 panels including Feedback Loop + Deferred Intelligence.
 - **CI/CD:** GitHub Actions (lint, test, compose validation, doc drift checker)
-- **Tests:** 514 tests (registry: 26 files), medkb: 46 tests (21 files)
+- **Tests:** 514 tests (registry: 26 files); medkb's 46 tests removed with the service 2026-10-02
 - **Memreg Pipeline:** 7 capture types active (corrections, bug_fixes, insights, decision_logs, deferred_items, test_coverage, ship_sessions). 262+ events captured. 3 hook scripts written (session-briefing, check-corrections, check-auto-resolution) — pending registration in settings.json.
 - **Branch state:** Master at `25bf09d`. Close the Loop V1 merged May 24. Auth wiring ship paused at Phase 1 spec.
 
@@ -102,7 +102,9 @@ Plan: `docs/superpowers/plans/2026-04-14-inbox-document-project-download.md` (5 
 
 45. [ ] **Phase 5 — Hardening** (TTL, rate limiting, retry, observability) — NOT STARTED. 10 tasks. TTL cleanup task, rate limiting on project enqueue, retry UX on failed jobs, tray filters (all/running/succeeded/failed), compliance stamp in `README.txt`, Chromium memory watchdog in pdf-renderer, signing key rotation support, Prometheus metrics on the registry, Grafana panel + Alertmanager rule, load test + phase closeout.
 
-## Phase 9: medkb RAG-as-a-Service (Apr 17-19, 2026) — DONE (Phases 0-3)
+## Phase 9: medkb RAG-as-a-Service (Apr 17-19, 2026) — DONE (Phases 0-3) — RETIRED 2026-10-02
+
+**medkb was removed from the stack on 2026-10-02** (dhgaifactory3.5 PR #32; last state at git tag `medkb-parked-2026-10`). Operator decision: deprecated, not planned. Phases 4-5 below are cancelled. History kept as written.
 
 Plan: `docs/superpowers/plans/2026-04-17-medkb-plan1-foundation.md`. Design spec: `docs/superpowers/specs/2026-04-17-medkb-rag-as-a-service-design.md`.
 
@@ -171,8 +173,8 @@ Merge order: `git merge --no-ff` always; serialize streams that touch `frontend/
 44. [ ] **Revisit Onyx / Pixeltable capability claims** — separate task. Dify decommissioning (Apr 6) was based on a claim that we "could do anything Dify could" via Onyx, Pixeltable, and RAGFlow. RAGFlow has since also been decommissioned. The claim's current validity with only Onyx + Pixeltable remaining is unverified. Concrete deliverable: a capability matrix of Dify vs. (Onyx + Pixeltable) covering drag-and-drop agent building, pre-built agent marketplace, user self-service, and integration with LangGraph. Blocks #43.
 
 46. [x] ~~**medkb Plan 1 — Phases 0-3 (Foundation + Hybrid Retrieval)**~~ — DONE Apr 17-19. 51 commits (`518cd1e..5a915a4`), 46 tests across 21 files, all 4 containers running. Full RAG-as-a-Service with dense + BM25 + hybrid RRF retrieval, LLM generation via init_chat_model, CRAG quality loop (grade_docs + rewrite_query), Cloudflare JWT auth, corpora CRUD, Prometheus metrics. See Phase 9 below for details.
-46a. [ ] **medkb Plan 1 — Phase 4 (Ingestor Pipeline)** — NOT STARTED. `SourceIngestor` base, MeSH/RxNorm/PubMed/PMC OA ingestors, concept reconciliation, golden test set + Recall@5 quality gate.
-46b. [ ] **medkb Plan 1 — Phase 5 (Production Hardening)** — NOT STARTED. Activate `dhg-medkb-ingestor` worker, `medkb_client.py` LangGraph integration, exit-gate verification script.
+46a. [x] ~~**medkb Plan 1 — Phase 4 (Ingestor Pipeline)**~~ — CANCELLED 2026-10-02 (medkb removed, PR #32). Was: NOT STARTED. `SourceIngestor` base, MeSH/RxNorm/PubMed/PMC OA ingestors, concept reconciliation, golden test set + Recall@5 quality gate.
+46b. [x] ~~**medkb Plan 1 — Phase 5 (Production Hardening)**~~ — CANCELLED 2026-10-02 (medkb removed, PR #32). Was: NOT STARTED. Activate `dhg-medkb-ingestor` worker, `medkb_client.py` LangGraph integration, exit-gate verification script.
 
 ---
 

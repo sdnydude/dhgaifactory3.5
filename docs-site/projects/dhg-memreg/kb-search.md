@@ -84,4 +84,4 @@ The `pre-tool-kb-search-inject.sh` hook runs this same search automatically when
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `REGISTRY_URL` | `http://10.0.0.251:8011` | Registry base URL |
-| `KB_ENDPOINT` | `$REGISTRY_URL/api/kb/search` | KB search endpoint (override for future medkb swap) |
+| `KB_ENDPOINT` | `$REGISTRY_URL/api/kb/search` | KB search endpoint (override to point at another KB backend) |

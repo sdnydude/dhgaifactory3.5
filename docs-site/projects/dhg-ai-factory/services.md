@@ -47,14 +47,6 @@ Playwright-based service — no external port, reachable from registry-api over 
 - **Google Drive sync** — service-account client with reconciliation
 - **Worker loop** — `FOR UPDATE SKIP LOCKED` job claim, three-scope dispatch
 
-## MedKB (ports 5435, 6381, 8015)
-
-Medical Knowledge Base RAG service:
-
-- **dhg-medkb-db** (5435) — PostgreSQL + pgvector, separate from registry
-- **dhg-medkb-cache** (6381) — Redis 7 query + embedding cache (4GB LRU)
-- **dhg-medkb-api** (8015) — FastAPI RAG with LangGraph (dense + hybrid + CRAG)
-
 ## Ollama (port 11434)
 
 Local LLM inference:

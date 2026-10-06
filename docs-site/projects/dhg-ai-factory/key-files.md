@@ -57,7 +57,6 @@ title: Key Files
 |---------|------|
 | VS Engine | `services/vs-engine/` |
 | PDF renderer | `services/pdf-renderer/` (main.py, renderer.py, bundler.py, drive_client.py, worker.py) |
-| MedKB | `services/medkb/src/medkb/` |
 
 ## Observability
 
