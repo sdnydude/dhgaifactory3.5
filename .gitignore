@@ -11,6 +11,7 @@ __pycache__/
 .Python
 **/venv/
 **/.venv/
+**/.venv-*/
 **/ENV/
 **/env/
 
@@ -81,7 +82,9 @@ swincoming/
 .claude/rules/00-daemon-live-briefing.md
 # Local runtime scratch (manifest + versioned ship-state drafts) — the canonical
 # .claude/ commands/rules/settings stay tracked; only this per-session noise is ignored.
-.claude/session-manifest.json
+**/.claude/session-manifest.json
+# Per-machine Claude Code overrides (never shared)
+**/.claude/settings.local.json
 .claude/ship-state_v*.md
 .claude/ship_v2-state.md
 .worktrees/
@@ -96,6 +99,11 @@ swincoming/
 
 # Superpowers writing-plans scratch (session-local, not a repo artifact)
 /whats-next.md
+/whats-next_v*.md
+frontend/whats-next.md
+# One-off session handoffs / transcripts kept local (may contain live keys)
+/LANGFUSE_SELFHOST_HANDOFF.md
+frontend/langraph cloud wiring.txt
 
 # Pyright container site-packages snapshots (regeneratable via docker cp)
 .pyright-stubs/
