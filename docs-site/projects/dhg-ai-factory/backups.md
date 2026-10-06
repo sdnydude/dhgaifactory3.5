@@ -29,7 +29,6 @@ four of six disks since February with nobody knowing.
 | id | kind | source | what is captured |
 |---|---|---|---|
 | `registry-db` | pg | `dhg-registry-db` (pgvector pg15) | `dhg_registry` + `snap2list`, roles (`grafana_ro`) |
-| `medkb-db` | pg | `dhg-medkb-db` | `medkb` |
 | `eval-db` | pg | `dhg-eval-db` | `evalviewer` + `evalviewer_test` |
 | `audio-postgres` | pg | `dhg-audio-postgres` (pg16) | `audio_agent` |
 | `transcribe-db` | pg | `dhg-transcribe-db` | `transcribe` |

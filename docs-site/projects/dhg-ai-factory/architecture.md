@@ -56,9 +56,6 @@ All agents have dual tracing: LangSmith (`@traceable`) + OpenTelemetry (`@traced
 | dhg-logo-maker | 8012 | Logo generation |
 | dhg-audio-agent | 8101 | Audio processing |
 | dhg-pdf-renderer | internal | Playwright PDF renderer + project bundler + Google Drive sync |
-| dhg-medkb-db | 5435 | PostgreSQL 15 + pgvector (medkb knowledge store) |
-| dhg-medkb-cache | 6381 | Redis 7 (query + embedding cache, 4GB LRU) |
-| dhg-medkb-api | 8015 | FastAPI RAG service with LangGraph |
 
 ## Observability Stack
 

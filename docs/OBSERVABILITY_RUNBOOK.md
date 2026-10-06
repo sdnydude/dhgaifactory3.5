@@ -128,9 +128,6 @@ carry the Viewer/Editor grants are reported `unchanged`. Full explanation in
 
 All OTLP goes to Langfuse on dh40801 — `http://10.0.0.179:3000/api/public/otel`
 (traces at `/v1/traces`), HTTP Basic with a project key pair.
-`render-medkb-otel-env.sh` writes the gitignored `services/medkb/.env.otel`
-(mode 600) from Doppler; with no keys it warns, exits 0, and medkb starts with
-tracing disabled.
 
 `langfuse-canary.sh` is the **silent-drop detector**: Langfuse v3 accepts a trace
 (HTTP 207) and hands it to MinIO, so if MinIO is down or the bucket is missing the
@@ -209,7 +206,6 @@ lock-out-safe rollout. Tracked as its own item; not part of 3.
 | Script | Purpose |
 |---|---|
 | `render-alertmanager.sh` | Renders the gitignored `alertmanager.yml` from template + Doppler Telegram bot token and chat id |
-| `render-medkb-otel-env.sh` | Renders the gitignored `services/medkb/.env.otel` for Langfuse OTLP |
 | `verify-dashboard.sh` | Replays every panel of a board and renders a PNG; exit 0 = all panels answer with data |
 | `langfuse-canary.sh` | Write-then-read Langfuse round-trip; writes the canary textfile metric |
 | `p5-baseline.sh` | Alert-path silence round-trip test + Loki label baseline (`baselines/*.json`) |

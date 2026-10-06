@@ -573,8 +573,7 @@ docker logs --tail 100 <container>
 curl -sG http://10.0.0.251:9090/api/v1/query --data-urlencode 'query=topk(5, rate(container_cpu_usage_seconds_total{name=~"dhg-.*"}[5m]))'
 ```
 
-**Likely causes:** expected for `dhg-ollama`, `dhg-medkb-api` during ingest, and
-transcription workers. Unexpected for anything that should be idle — a hot retry
+**Likely causes:** expected for `dhg-ollama` and transcription workers. Unexpected for anything that should be idle — a hot retry
 loop, a runaway scheduler, or a poll with no backoff.
 
 **Resolve:** only act if it is a service that should be idle. Find the loop in

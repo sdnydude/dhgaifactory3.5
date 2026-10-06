@@ -136,15 +136,7 @@ Every tool step and agent dispatch in this workflow has exactly three possible o
      -d '{"query":"[feature keywords]","limit":10}'
    ```
 
-   **Future (RAG — when medkb ingestor pipeline is live):** Replace the keyword search above with a semantic RAG query against medkb's `engineering` corpus:
-   ```bash
-   curl -s -X POST "http://10.0.0.251:8015/v1/query" \
-     -H "Content-Type: application/json" \
-     -d '{"query": "[feature description]", "corpus": "engineering", "strategy": "hybrid", "top_k": 10}'
-   ```
-   Semantic retrieval finds meaning matches, not just keyword matches — "add async job queue" will surface the export pipeline ship sessions even when exact words don't overlap.
-
-   Either way, surface anything relevant:
+   Surface anything relevant:
    - "We shipped something similar in session #N — here's what we learned"
    - "A correction was logged about this pattern — don't repeat it"
    - "This was parked in session #N — exploration findings already exist"

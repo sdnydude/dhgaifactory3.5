@@ -28,7 +28,7 @@ in **`dhg-infra`** so they're referenced, never copied.
 | **dhg-infra** | Shared keys used across projects — Cloudflare, tunnel creds, cross-project API tokens (e.g. the GitHub PAT) |
 | **aifactory** | AI Factory 3.5 platform + all sub-services |
 | **portage** | Inventory / multi-marketplace app (API, web, DB, AI providers) |
-| **medkb** | Medical knowledge base |
+| **medkb** | Retired — medkb removed from the stack 2026-10-02; project pending deletion |
 | **dhg-transcribe** | Transcription pipeline |
 | **dhg-audio** | Audio analysis agent |
 | **dhg-cognitive** | Cognitive agent |

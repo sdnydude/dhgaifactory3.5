@@ -79,7 +79,7 @@ Track 5, same override-script pattern as 5.1/5.2:
 Track 6, reordered on the reviewers' advice:
 
 - [ ] **6.1 Auth on the incident endpoints.** Two additions: the inbox page's remaining LangGraph call moves in here, because 6.1 edits those same two components and doing it later means rework; and an inventory of every client that posts to those endpoints, since at least one script seeds runbooks with no token today. Also add a capture-rate metric before the rollout so the 48-hour observation window can actually show captures failing.
-- [ ] **6.2 Move medkb to dh40801.** No code dependency on anything else; sequence it on host availability. Before scheduling, confirm dh40801 actually has the GPU the ingestion plan assumes (Prometheus shows a GPU exporter only on this host).
+- [x] ~~**6.2 Move medkb to dh40801.**~~ CANCELLED 2026-10-02: medkb removed from the stack (PR #32). Original note: No code dependency on anything else; sequence it on host availability. Before scheduling, confirm dh40801 actually has the GPU the ingestion plan assumes (Prometheus shows a GPU exporter only on this host).
 - [ ] **6.3 LangGraph agents to Pydantic AI and Langfuse.** Unchanged.
 - [ ] **6.4 Transcribe pipeline refactor.** Unchanged.
 - [ ] **6.5 memreg reporting suite.** Now also includes posting session transcripts to the session logger (the leftover from the close-out item).

@@ -139,10 +139,6 @@ backups/
 # regenerate with observability/postgres-exporter/render-postgres-exporter.sh
 /observability/postgres-exporter/postgres_exporter.yml
 
-# Rendered medkb OTLP env — embeds the Langfuse Basic auth header.
-# Regenerate with observability/scripts/render-medkb-otel-env.sh
-/services/medkb/.env.otel
-
 # Rendered Grafana Postgres datasource — embeds the grafana_ro role password.
 # Tracked source of truth is
 # observability/grafana/provisioning/datasources/registry-postgres.yml.tmpl;

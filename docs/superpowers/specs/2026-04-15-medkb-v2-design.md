@@ -1,3 +1,5 @@
+> **RETIRED 2026-10-02.** medkb was removed from the stack (dhgaifactory3.5 PR #32; last state at git tag `medkb-parked-2026-10`). Operator decision: deprecated, not planned. This document is kept as history only.
+
 # MedKB v2 — Unified Design Spec (Phases 1 through 5)
 
 **Status:** Draft for review

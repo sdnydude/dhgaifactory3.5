@@ -18,7 +18,7 @@ export const RANGE_WINDOW_SECONDS = 15 * 60;
 export const RANGE_STEP_SECONDS = 30;
 
 // The registry's own Postgres, as labelled by the postgres_exporter multi-target
-// scrape. Other services (portage, medkb, …) share the same metric names.
+// scrape. Other services (portage, …) share the same metric names.
 export const PG_REGISTRY_SELECTOR = '{service="registry-db"}';
 
 export const BORDERED_ROW =

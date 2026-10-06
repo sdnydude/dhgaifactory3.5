@@ -237,16 +237,16 @@ links. Its three datasources are Prometheus, Loki and the read-only Registry DB
 All OTLP now goes to Langfuse at `http://10.0.0.179:3000/api/public/otel`
 (traces: `/v1/traces`), authenticated with a project key pair as HTTP Basic.
 
-To enable medkb trace export:
+To give a service trace export:
 
-1. In the Langfuse UI (`http://10.0.0.179:3000`), create the project `dhg-ai-factory`
+1. In the Langfuse UI (`http://10.0.0.179:3000`), use the project `dhg-ai-factory`
    and mint an API key pair. Do not reuse the portage or canary keys.
 2. `doppler secrets set LANGFUSE_AIFACTORY_PUBLIC_KEY` and
    `LANGFUSE_AIFACTORY_SECRET_KEY` in project `dhg-monitoring`, config `dev`.
-3. `observability/scripts/render-medkb-otel-env.sh` — writes the gitignored
-   `services/medkb/.env.otel` (mode 600). Without the keys it warns and exits 0,
-   and medkb starts with tracing disabled.
-4. `docker compose up -d dhg-medkb-api`.
+3. Give the service `OTEL_ENDPOINT=http://10.0.0.179:3000/api/public/otel` and an
+   `OTEL_EXPORTER_OTLP_HEADERS` Basic-auth header built from that key pair.
+
+(medkb, the first service wired this way, was removed 2026-10-02.)
 
 Pydantic AI agents do not use the legacy `traced_node` decorators: they call
 `Agent.instrument_all()` and inherit the same Langfuse OTLP env.

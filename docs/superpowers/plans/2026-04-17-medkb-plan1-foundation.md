@@ -1,3 +1,5 @@
+> **RETIRED 2026-10-02.** medkb was removed from the stack (dhgaifactory3.5 PR #32; last state at git tag `medkb-parked-2026-10`). Operator decision: deprecated, not planned. This document is kept as history only.
+
 # medkb Plan 1 — Foundation + Hybrid Retrieval (Phases 0-3)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
