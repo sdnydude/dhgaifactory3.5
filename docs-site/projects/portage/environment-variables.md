@@ -43,7 +43,8 @@ The vision and chat pipelines use configurable provider chains (comma-separated,
 
 | Variable | Description |
 |----------|-------------|
-| `VISION_PROVIDERS` | Vision provider chain (e.g. `gemini,anthropic`) — providers: `local`, `gemini`, `openai`, `huggingface`, `anthropic` |
+| `VISION_PROVIDERS` | Vision provider chain, entries `provider[:model][@reasoning_effort]` (e.g. `gemini:gemini-3.5-flash-lite@minimal,gemini:gemini-3.8-flash,anthropic:claude-haiku-4-5`) — providers: `local`, `gemini`, `openai`, `huggingface`, `anthropic`. `@effort` (one of `none`, `minimal`, `low`, `medium`, `high`) overrides the provider default (`none` for gemini; Flash-Lite needs `minimal`); it is sent only on OpenAI-compatible providers and each model accepts its own subset — an unsupported value 400s on that entry and fails over |
+| `VISION_CALL_TIMEOUT_MS` | Per-call ceiling for OpenAI-compatible vision calls, default `12000`. A call past it throws inside the chain loop and fails over to the next entry, keeping a scan (two calls) inside the web proxy's 30s budget |
 | `CHAT_PROVIDERS` | Chat provider chain, same provider names |
 | `GEMINI_API_KEY` | Google AI key (Gemini 2.5 is the primary vision provider) |
 | `GEMINI_VISION_MODEL` / `GEMINI_CHAT_MODEL` | Model overrides (defaults `gemini-2.5-pro` / `gemini-2.5-flash`) |
@@ -70,11 +71,14 @@ The vision and chat pipelines use configurable provider chains (comma-separated,
 
 | Variable | Description |
 |----------|-------------|
-| `EBAY_CLIENT_ID` | eBay app client ID |
-| `EBAY_CLIENT_SECRET` | eBay app client secret |
-| `EBAY_PROD_CLIENT_ID` / `EBAY_PROD_CLIENT_SECRET` | Production app credentials |
-| `EBAY_REDIRECT_URI` | OAuth callback URL |
-| `EBAY_SANDBOX` | `false` in production (only the literal string `false` disables sandbox — any other non-empty value enables it) |
+| `EBAY_CLIENT_ID` | eBay app client ID (sandbox keyset, `…-SBX-…`) |
+| `EBAY_CLIENT_SECRET` | eBay app client secret (sandbox keyset) |
+| `EBAY_PROD_CLIENT_ID` / `EBAY_PROD_CLIENT_SECRET` | Production keyset credentials (`…-PRD-…`) — used when `EBAY_SANDBOX=false`, falling back to the base keys if unset |
+| `EBAY_REDIRECT_URI` | **eBay RuName, NOT a URL** (e.g. `Digital_Harmony-DigitalH-click2-cefmyzh`). eBay's OAuth `redirect_uri` parameter takes the RuName registered on the active keyset; a plain callback URL here breaks connect with `invalid_request`. RuNames are keyset-specific — the prod keyset's RuName differs from the sandbox one. See [eBay OAuth environment](reference/ebay-oauth-env.md) |
+| `EBAY_RUNAME` | Sandbox keyset RuName. **Not read by any code** — kept as a reference value only |
+| `EBAY_SANDBOX` | `false` in production (only the literal string `false` disables sandbox — any other non-empty value enables it). Switches both the auth/API hosts and which keyset + RuName must be in play |
+| `EBAY_DELETION_VERIFICATION_TOKEN` | Verification token registered with eBay for [Marketplace Account Deletion notifications](reference/ebay-trade-first.md#marketplace-account-deletion-notifications) — 32–80 chars of `[A-Za-z0-9_-]` (eBay rule). Feeds the challenge-response hash. **Required in production** |
+| `EBAY_DELETION_ENDPOINT_URL` | The exact endpoint URL registered in the eBay developer portal (`https://portage-api.digitalharmonyai.com/marketplace/ebay/account-deletion`). Must match byte-for-byte — it is hashed into the challenge response. **Required in production** |
 
 ### Reverb
 
@@ -91,6 +95,10 @@ The vision and chat pipelines use configurable provider chains (comma-separated,
 | `STRIPE_PRICE_MONTHLY` | Pro monthly plan price ID |
 | `STRIPE_PRICE_ANNUAL` | Pro annual plan price ID |
 | `STRIPE_PRICE_CREDITS` | Credit pack price ID |
+
+### Production boot guard
+
+In `NODE_ENV=production` the API refuses to start unless every statically-required key is present and non-empty, naming **every** missing key in one error (`apps/api/src/lib/prod-env-guard.ts`, extends the PR #269 `CF_ACCESS_AUD` pattern). Currently required: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_URL`, eBay client id + secret from **either** keyset (`EBAY_CLIENT_ID|EBAY_PROD_CLIENT_ID`, `EBAY_CLIENT_SECRET|EBAY_PROD_CLIENT_SECRET` — runtime falls back PROD → base), `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_MONTHLY`, `STRIPE_PRICE_ANNUAL`, `STRIPE_PRICE_CREDITS`, `EBAY_DELETION_VERIFICATION_TOKEN`, `EBAY_DELETION_ENDPOINT_URL` (plus `CF_ACCESS_AUD` with two audience tags). Provider-chain keys (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, …) are deliberately **not** boot-required — the vision/chat chains fail over at runtime. Land new Doppler values **before** deploying a build that requires them.
 
 ## Optional Variables
 

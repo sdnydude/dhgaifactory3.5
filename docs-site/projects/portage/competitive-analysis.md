@@ -9,7 +9,7 @@ sidebar_label: Competitive Analysis
 
 *Last updated: 2026-07-17*
 
-> **Point-in-time analysis.** Competitor research was verified in May 2026; Portage product-side facts were refreshed in July 2026. For the current Portage feature list, see [Features](./features.md).
+> **Point-in-time analysis.** Competitor research was verified in May 2026; Portage product-side facts were refreshed in July 2026. For the current Portage feature list, see [Features](./features/index.md).
 
 ## Market Position
 
@@ -56,7 +56,7 @@ Simple cross-lister         |            Full suite
 
 ## Unique Differentiators (What Only Portage Does)
 
-Portage is the only tool with a conversational AI on live inventory data, self-hosted background removal, three listing UX modes, Reverb support, and comp-grounded AI pricing. See [Features — Only in Portage](./features.md#only-in-portage) for the maintained list with details and nearest competitors.
+Portage is the only tool with a conversational AI on live inventory data, self-hosted background removal, three listing UX modes, Reverb support, and comp-grounded AI pricing. See [Features — Only in Portage](./features/index.md#only-in-portage) for the maintained list with details and nearest competitors.
 
 ## Weaknesses vs. Competitors
 
