@@ -1,8 +1,8 @@
 # DHG AI Factory — Master Task List
-**Last Updated:** Jul 20, 2026 (v21)
+**Last Updated:** May 24, 2026 (v20)
 
 ## System Status
-- **Containers:** 22 running (21 healthy, 1 expected-unhealthy: `dhg-medkb-ingestor` stub activates Phase 5) — medkb containers removed 2026-10-02 (PR #32)
+- **Containers:** 22 running (21 healthy, 1 expected-unhealthy: `dhg-medkb-ingestor` stub activates Phase 5)
 - **LangGraph Server:** Cloud production at `dhg-agents-526554f2bb905517adab9bd53427c745.us.langgraph.app` (17 graphs)
 - **VS Engine:** Running, healthy, Prometheus metrics active
 - **Frontend:** Next.js on :3000 (shadcn/ui + assistant-ui + CopilotKit)
@@ -10,7 +10,7 @@
 - **Disk:** Root 12% (1.9TB), Data 4% (3.6TB)
 - **Observability:** Full stack operational — Prometheus (6/6 targets UP), Grafana, Loki+Promtail (23 containers), Tempo+OTel, Alertmanager, cAdvisor, Node/Postgres exporters. Mission Control dashboard with 11 panels including Feedback Loop + Deferred Intelligence.
 - **CI/CD:** GitHub Actions (lint, test, compose validation, doc drift checker)
-- **Tests:** 514 tests (registry: 26 files); medkb's 46 tests removed with the service 2026-10-02
+- **Tests:** 514 tests (registry: 26 files), medkb: 46 tests (21 files)
 - **Memreg Pipeline:** 7 capture types active (corrections, bug_fixes, insights, decision_logs, deferred_items, test_coverage, ship_sessions). 262+ events captured. 3 hook scripts written (session-briefing, check-corrections, check-auto-resolution) — pending registration in settings.json.
 - **Branch state:** Master at `25bf09d`. Close the Loop V1 merged May 24. Auth wiring ship paused at Phase 1 spec.
 
@@ -102,9 +102,7 @@ Plan: `docs/superpowers/plans/2026-04-14-inbox-document-project-download.md` (5 
 
 45. [ ] **Phase 5 — Hardening** (TTL, rate limiting, retry, observability) — NOT STARTED. 10 tasks. TTL cleanup task, rate limiting on project enqueue, retry UX on failed jobs, tray filters (all/running/succeeded/failed), compliance stamp in `README.txt`, Chromium memory watchdog in pdf-renderer, signing key rotation support, Prometheus metrics on the registry, Grafana panel + Alertmanager rule, load test + phase closeout.
 
-## Phase 9: medkb RAG-as-a-Service (Apr 17-19, 2026) — DONE (Phases 0-3) — RETIRED 2026-10-02
-
-**medkb was removed from the stack on 2026-10-02** (dhgaifactory3.5 PR #32; last state at git tag `medkb-parked-2026-10`). Operator decision: deprecated, not planned. Phases 4-5 below are cancelled. History kept as written.
+## Phase 9: medkb RAG-as-a-Service (Apr 17-19, 2026) — DONE (Phases 0-3)
 
 Plan: `docs/superpowers/plans/2026-04-17-medkb-plan1-foundation.md`. Design spec: `docs/superpowers/specs/2026-04-17-medkb-rag-as-a-service-design.md`.
 
@@ -173,17 +171,10 @@ Merge order: `git merge --no-ff` always; serialize streams that touch `frontend/
 44. [ ] **Revisit Onyx / Pixeltable capability claims** — separate task. Dify decommissioning (Apr 6) was based on a claim that we "could do anything Dify could" via Onyx, Pixeltable, and RAGFlow. RAGFlow has since also been decommissioned. The claim's current validity with only Onyx + Pixeltable remaining is unverified. Concrete deliverable: a capability matrix of Dify vs. (Onyx + Pixeltable) covering drag-and-drop agent building, pre-built agent marketplace, user self-service, and integration with LangGraph. Blocks #43.
 
 46. [x] ~~**medkb Plan 1 — Phases 0-3 (Foundation + Hybrid Retrieval)**~~ — DONE Apr 17-19. 51 commits (`518cd1e..5a915a4`), 46 tests across 21 files, all 4 containers running. Full RAG-as-a-Service with dense + BM25 + hybrid RRF retrieval, LLM generation via init_chat_model, CRAG quality loop (grade_docs + rewrite_query), Cloudflare JWT auth, corpora CRUD, Prometheus metrics. See Phase 9 below for details.
-46a. [x] ~~**medkb Plan 1 — Phase 4 (Ingestor Pipeline)**~~ — CANCELLED 2026-10-02 (medkb removed, PR #32). Was: NOT STARTED. `SourceIngestor` base, MeSH/RxNorm/PubMed/PMC OA ingestors, concept reconciliation, golden test set + Recall@5 quality gate.
-46b. [x] ~~**medkb Plan 1 — Phase 5 (Production Hardening)**~~ — CANCELLED 2026-10-02 (medkb removed, PR #32). Was: NOT STARTED. Activate `dhg-medkb-ingestor` worker, `medkb_client.py` LangGraph integration, exit-gate verification script.
+46a. [ ] **medkb Plan 1 — Phase 4 (Ingestor Pipeline)** — NOT STARTED. `SourceIngestor` base, MeSH/RxNorm/PubMed/PMC OA ingestors, concept reconciliation, golden test set + Recall@5 quality gate.
+46b. [ ] **medkb Plan 1 — Phase 5 (Production Hardening)** — NOT STARTED. Activate `dhg-medkb-ingestor` worker, `medkb_client.py` LangGraph integration, exit-gate verification script.
 
 ---
-
-## Phase 13: Explore Subagent Return Format (Jul 2026)
-
-68. [x] ~~**Explore return-format contract + compliance measurement hook**~~ — DONE Jul 20, `d06a2f4` on `feat/beta-reports` (pushed). Explore subagents pasted source blocks into reports, bloating main context on handback. Shipped: SKILL.md no-source rule + per-level word caps (150/300/500); `codegraph.md` rule line covering non-skill spawns; new `.claude/hooks/explore-compliance-log.sh` (PostToolUse, matcher `Agent|Task`, scoped to Explore) logging words/fences/fenced-lines/contract/violation to `.claude/logs/explore-compliance.log`. 6-scenario execution test + one live spawn verified (133w, 0 fences, contract detected, no restart needed). Ship log `002`, decision `c147dff0`. **Measurement, not enforcement** — blocking PreToolUse gate dropped, reproduced the substring-bypass defect that killed `enforce-capture-sweep.sh` (2026-07-05).
-    - [ ] Let `.claude/logs/explore-compliance.log` accumulate real spawns; determine actual violation rate and whether `prompt_had_contract:false` correlates with it.
-    - [ ] Tune violation thresholds (currently `fences>=2` or `words>700` — untuned guesses) once real violations exist.
-    - [ ] Only if data justifies: revisit a blocking gate via independent `config-safety-reviewer` + execution testing before touching `settings.json` (per 2026-07-05 precedent).
 
 ## Completed (May 2026)
 
@@ -308,8 +299,7 @@ Merge order: `git merge --no-ff` always; serialize streams that touch `frontend/
 ---
 
 ## Version History
-- v21: Jul 20, 2026 — current (Explore subagent return-format contract + compliance measurement hook shipped — `d06a2f4` on `feat/beta-reports`, pushed. New PostToolUse hook logs Explore report bloat; SKILL.md + codegraph.md rule edits. Blocking gate deliberately dropped — reproduced the substring-bypass defect from the rejected `enforce-capture-sweep.sh`. Added Phase 13 with 3 open follow-ups (accumulate data, tune thresholds, gate only if justified). Ship log 002, decision c147dff0. Saved v20 as docs/archive/TODO_v20.md.)
-- v20: May 24, 2026 — (Close the Loop V1 shipped — 12 tasks, 4 commits, merged to master at `25bf09d`. 3 new backend stats endpoints with SQL-side conditional aggregation. Dashboard decomposed from 1133→141 LOC orchestrator + 9 panel files + types.ts + data.ts. Two new panels: Feedback Loop + Deferred Intelligence. 3 hook scripts written. 2 advisor reviews, 7 fixes applied. Added Phase 12 section. Deferred N1 + N3. Saved v19 as docs/archive/TODO_v19.md.)
+- v20: May 24, 2026 — current (Close the Loop V1 shipped — 12 tasks, 4 commits, merged to master at `25bf09d`. 3 new backend stats endpoints with SQL-side conditional aggregation. Dashboard decomposed from 1133→141 LOC orchestrator + 9 panel files + types.ts + data.ts. Two new panels: Feedback Loop + Deferred Intelligence. 3 hook scripts written. 2 advisor reviews, 7 fixes applied. Added Phase 12 section. Deferred N1 + N3. Saved v19 as docs/archive/TODO_v19.md.)
 - v19: May 22, 2026 — (Memreg capture pipeline wired end-to-end: 7 trigger rules, 7 capture scripts, 7/7 E2E verified. Fixed 33 info leaks across 6 endpoints. Registry health 6.4→7.6. Extracted CME schemas. Test count: 514.)
 - v18: Apr 19, 2026 — (medkb Plan 1 Phases 0-3 DONE — 51 commits, 46 tests, 4 containers, full RAG-as-a-Service with dense + BM25 + hybrid retrieval, LLM generation, CRAG quality loop. Added Phases 9-11 documenting medkb, Incident Record Library + remediator sidecar, and pipeline improvements that had been implemented but undocumented. Incident Library was undocumented since v17 despite being on master — 58 tests, 5 new DB tables, full frontend. Agent Observatory Phase 1 in progress on worktree branch (19 commits, not merged). Worktree landscape changed: 4 original Phase 8 streams retired/completed, replaced with observatory + master-review + 6 auto-worktrees. Test count jumped from 119→273 (registry 227 + medkb 46). Container count corrected to 22 running. New design specs: Agent Observatory, Ansible fleet bootstrap, medkb Claude Design brief. Cleanup: asr/ removed, deps bumped. Saved v17 as docs/archive/TODO_v17.md.)
 - v17: Apr 17, 2026 — (Worktree stream audit session. Verified on master that Phase 2 v2 is DONE 19/19 / tagged `phase2v2` Apr 16; discovered CLAUDE.md "Inbox Document & Project Download" block was stale claiming 13/19. Five worktrees created off master @ `f7f85b2` for parallel development streams, then #1 `inbox-files-tab` retired because its scope was already shipped — verified via commit range `1bb841d..bf711ca` and tag. Added Phase 8 section listing active streams (medkb-phase1, legacy-port-cleanup, agent-slo-alerts, audit-log-viewer) + retired-stream note. Renumbered from Phase 6 during audit — Phases 6 and 7 already claimed (Security & Infrastructure, Inbox Document & Project Download). Fixed stale 13-of-19 line in Apr-2026 Completed section. Removed orphan `docs/TODO_v15.md` (superseded by v16 tracked file, never committed). Related: CLAUDE.md Phase 2 v2 block corrected in separate commit.)

@@ -1,18 +1,17 @@
 # DHG AI Factory — Master Task List
-**Last Updated:** Jul 20, 2026 (v21)
+**Last Updated:** Apr 17, 2026 (v17)
 
 ## System Status
-- **Containers:** 22 running (21 healthy, 1 expected-unhealthy: `dhg-medkb-ingestor` stub activates Phase 5) — medkb containers removed 2026-10-02 (PR #32)
+- **Containers:** 37 running + 1 new sibling service `dhg-pdf-renderer` (internal-only on `dhg-network`, Playwright renderer + md-only bundler + Google Drive sync worker)
 - **LangGraph Server:** Cloud production at `dhg-agents-526554f2bb905517adab9bd53427c745.us.langgraph.app` (17 graphs)
 - **VS Engine:** Running, healthy, Prometheus metrics active
 - **Frontend:** Next.js on :3000 (shadcn/ui + assistant-ui + CopilotKit)
 - **GPU:** RTX 5080 (16GB VRAM, 26% used by Ollama)
 - **Disk:** Root 12% (1.9TB), Data 4% (3.6TB)
-- **Observability:** Full stack operational — Prometheus (6/6 targets UP), Grafana, Loki+Promtail (23 containers), Tempo+OTel, Alertmanager, cAdvisor, Node/Postgres exporters. Mission Control dashboard with 11 panels including Feedback Loop + Deferred Intelligence.
+- **Observability:** Full stack operational — Prometheus (6/6 targets UP), Grafana, Loki+Promtail, Tempo+OTel, Alertmanager, cAdvisor, Node/Postgres exporters
 - **CI/CD:** GitHub Actions (lint, test, compose validation, doc drift checker)
-- **Tests:** 514 tests (registry: 26 files); medkb's 46 tests removed with the service 2026-10-02
-- **Memreg Pipeline:** 7 capture types active (corrections, bug_fixes, insights, decision_logs, deferred_items, test_coverage, ship_sessions). 262+ events captured. 3 hook scripts written (session-briefing, check-corrections, check-auto-resolution) — pending registration in settings.json.
-- **Branch state:** Master at `25bf09d`. Close the Loop V1 merged May 24. Auth wiring ship paused at Phase 1 spec.
+- **Tests:** 119 tests across 8 files (119 passing) — +3 real-DB integration tests for /outputs document_text passthrough
+- **Branch state:** `lsp-setup` feature branch **merged to master Apr 16** carrying LSP Task 6 verification, full inbox-download Phase 1 + Phase 2 v2 (19/19 tasks, tagged `phase2v2`), pdf-renderer service, inbox-repair merge, medkb v2 design spec. Master at `f7f85b2`. Four active worktree streams (see Phase 8) created off this commit Apr 17 for parallel dev.
 
 ---
 
@@ -21,13 +20,6 @@
 1. [x] ~~Fix gh auth and push commits~~ — DONE (7 commits pushed)
 2. [x] ~~Fix 16 DB-dependent test failures~~ — DONE (61/61 passing, conftest.py rewritten with `app.dependency_overrides`)
 3. [x] ~~Investigate Dify worker instability~~ — DONE (decommissioned Dify + RAGFlow, zero usage)
-
-## Phase 12: Close the Loop (May 2026)
-
-64. [x] ~~**V1 — Dashboard panels + backend stats + hook scripts**~~ — DONE (May 24, `25bf09d`). See Completed (May 2026) section.
-65. [x] ~~**Register 3 hook scripts in `~/.claude/settings.json`**~~ — DEPRECATED Jun 2. All three superseded by memreg daemon hooks (`~/DHG/dhg-memreg/hooks/`): `session-briefing.sh` → `session-start-kb-briefing.sh` + `session-briefing.sh` (richer coverage); `check-corrections.sh` → wired at PreToolUse on Write|Edit + `user-prompt-kb-inject.sh`; `check-auto-resolution.sh` → replaced by `check-deferred-resolution.sh` (already wired PostToolUse on git commit).
-66. [x] ~~**N1: Age histogram universe mismatch**~~ — DONE May 26. Added `status == "open"` filter to all 4 age histogram buckets in `deferred_items_service.py` to match `stale_candidates` universe.
-67. [x] ~~**N3: Missing `response_model` on `/api/feedback-loop/health`**~~ — DONE May 26. Created `feedback_loop_schemas.py` with `FeedbackLoopHealthResponse` + `TypeStat` models, wired to endpoint.
 
 ## Phase 2: VS Wave 1 Verification
 
@@ -102,52 +94,18 @@ Plan: `docs/superpowers/plans/2026-04-14-inbox-document-project-download.md` (5 
 
 45. [ ] **Phase 5 — Hardening** (TTL, rate limiting, retry, observability) — NOT STARTED. 10 tasks. TTL cleanup task, rate limiting on project enqueue, retry UX on failed jobs, tray filters (all/running/succeeded/failed), compliance stamp in `README.txt`, Chromium memory watchdog in pdf-renderer, signing key rotation support, Prometheus metrics on the registry, Grafana panel + Alertmanager rule, load test + phase closeout.
 
-## Phase 9: medkb RAG-as-a-Service (Apr 17-19, 2026) — DONE (Phases 0-3) — RETIRED 2026-10-02
+## Phase 8: Active Worktree Streams (Apr 17, 2026)
 
-**medkb was removed from the stack on 2026-10-02** (dhgaifactory3.5 PR #32; last state at git tag `medkb-parked-2026-10`). Operator decision: deprecated, not planned. Phases 4-5 below are cancelled. History kept as written.
+Four streams created in `.claude/worktrees/` off master @ `f7f85b2`, all planning-phase until each is explicitly moved to build:
 
-Plan: `docs/superpowers/plans/2026-04-17-medkb-plan1-foundation.md`. Design spec: `docs/superpowers/specs/2026-04-17-medkb-rag-as-a-service-design.md`.
+47. [ ] **medkb-phase1** (`claude/medkb-phase1`) — Promote `docs/superpowers/plans/2026-04-15-medkb-phase1.md` to tracked, then execute per plan.
+48. [ ] **legacy-port-cleanup** (`claude/legacy-port-cleanup`) — Resolve Issue O1: remove orphan legacy orchestrator on port 2024 from `docker-compose.yml`, retire `agents/` code, update CLAUDE.md known-issues.
+49. [ ] **agent-slo-alerts** (`claude/agent-slo-alerts`) — Alertmanager SLO rules (p95 latency, error rate, timeout rate) for 13 LangGraph agents + Grafana panel.
+50. [ ] **audit-log-viewer** (`claude/audit-log-viewer`) — Read-only `/manage/audit-log` route, paginated + filtered, admin-RBAC gated.
 
-53. [x] ~~**Phase 0 — Skeleton (Tasks 0.1-0.14)**~~ — DONE. 4 Docker containers (`dhg-medkb-db` :5435, `dhg-medkb-cache` :6381, `dhg-medkb-api` :8015, `dhg-medkb-ingestor` stub), FastAPI scaffold with `/v1/healthz` + `/v1/readyz` + `/metrics`, SQL schema with pgvector + tsvector, SQLAlchemy ORM models, async DB engine, Pydantic Settings config, OTel tracing with `@traced_node`, Prometheus metrics registry, token budget tracker, Dockerfile with healthcheck, Prometheus scrape target added. 32 commits on `feature/medkb-phase0`, merged to master via `47035b3`.
+**Retired stream:** `claude/inbox-files-tab` — scope already shipped as part of `phase2v2` tag (Apr 16, commits `1bb841d..bf711ca`: files-tab store + downloads store/polling + Files tab wired into inbox tab switcher). Worktree + branch removed Apr 17 after verification.
 
-54. [x] ~~**Phase 1 — Dense Retrieval (Tasks 1.1-1.13)**~~ — DONE. `Retriever` Protocol + `RetrievedChunk` dataclass, `PgVectorRetriever` with dual-embedding support (Ollama nomic-embed-text), LLM factory via `init_chat_model`, 9 graph nodes (redact, analyze_query, retrieve_fan, rerank, format_cite, emit_feedback + generate added in Phase 2), conditional edge functions, graph builder with `strategy=regular` flow, seed corpus with 3 CME sample documents, corpora CRUD endpoints, `/v1/query` endpoint with graph invocation, PgVectorRetriever wired into query flow.
-
-55. [x] ~~**Phase 2 — Generation + Citations**~~ — DONE. `generate` node with LLM answer generation via ChatAnthropic/ChatOllama, `format_cite` node with citation assembly, Ollama `base_url` fix for Docker networking.
-
-56. [x] ~~**Phase 3 — Hybrid + CRAG**~~ — DONE. `BM25Retriever` (tsvector + `ts_rank_cd`), `HybridRetriever` (RRF fusion), retriever registry mapping corpus → retriever, `grade_docs` node (LLM relevance grading), `rewrite_query` node (LLM query rewriting), CRAG conditional edges, `/v1/retrieve` endpoint, Cloudflare JWT `auth.py` module, `readyz` dependency checks (DB + Redis + Ollama).
-
-57. [ ] **Phase 4 — Ingestor Pipeline** — NOT STARTED. See #46a.
-58. [ ] **Phase 5 — Production Hardening** — NOT STARTED. See #46b.
-
-## Phase 10: Incident Record Library (Apr 16, 2026) — DONE
-
-Full incident management system — backend, frontend, remediation sidecar, 58 tests. Previously undocumented in TODO (predates v17 base but was omitted).
-
-59. [x] ~~**Full Incident Record Library**~~ — DONE (`21d7be1`). Backend: migration 011 (incidents, events, actions, runbooks, postmortems tables), `incident_endpoints.py` + `incident_service.py` + `incident_schemas.py`, 10 seeded runbooks (`seed_runbooks.py`), 35+23=58 tests across 2 files. Frontend: `/monitoring/incidents` route, incident list + filters + stats + detail panel, `incidentsApi.ts` client, Zustand store. Prometheus: 97-line alert rule expansion. 20 files changed, ~4000 lines.
-60. [x] ~~**Remediation sidecar**~~ — DONE (`7201da8`). `services/remediator/` — polls registry for active incidents, matches to runbooks, executes remediation steps. Three modes: `auto`, `approval` (diagnostic-only), `none`. Safety: hard-blocked commands, container allowlist, rate limiting, dry-run mode. Postmortem creation form in frontend.
-61. [x] ~~**Snapshot dashboard + prefilled postmortem**~~ — DONE (`829e79c`). `snapshot-dashboard.tsx` component (264 lines), prefilled postmortem form from incident data.
-
-## Phase 11: Pipeline Improvements (Apr 16, 2026) — DONE
-
-62. [x] ~~**Guided character mode**~~ — DONE (`efbd9b7`). `CharacterConfig` intake schema, needs_assessment_agent updated with character-driven content generation.
-63. [x] ~~**Learning objectives agent crash fix**~~ — DONE (`1b1f1e5`). `int` cast for `moore_level_target` + key mismatch fix in orchestrator.
-
-## Phase 8: Active Worktree Streams (Updated Apr 19, 2026)
-
-Active worktrees in `.claude/worktrees/`:
-
-51. [~] **agent-observatory-phase1** (`claude/agent-observatory-phase1`) — React Flow-based Agent Observatory with timeline playback, scenario comparison, and architecture visualization. 19 commits ahead of master. Design spec at `docs/superpowers/specs/2026-04-17-agent-observatory-design.md`. Components: graph canvas, custom node components, 4 example scenarios × 5 architectures, playback engine, metrics bar, compare view, detail panel, Playwright E2E suite. Uses `@xyflow/react`. **Not merged — needs review.**
-52. [ ] **master-review** (`claude/master-review`) — Full code review of master at `f7f85b2` (P0:11, P1:58, P2:45 issues). Reference artifact for prioritizing tech debt.
-
-**Retired streams:** `claude/medkb-phase1` (scope merged to master Apr 17-19, 51 commits), `claude/inbox-files-tab` (shipped in `phase2v2` tag Apr 16), `claude/legacy-port-cleanup`, `claude/agent-slo-alerts`, `claude/audit-log-viewer` (worktrees removed, scope remains in backlog as #48, #49, #50).
-
-**Auto-worktrees from parallel sessions:** 6 `claude-branch/*` worktrees exist — most are at or behind master HEAD with 0-3 commits. `priceless-hoover-c8e359` has a docs-check routine + `/ship` close rule (3 commits, not merged).
-
-48. [ ] **legacy-port-cleanup** — Resolve Issue O1: remove orphan legacy orchestrator on port 2024, retire `agents/` code.
-49. [ ] **agent-slo-alerts** — Alertmanager SLO rules for 13 LangGraph agents + Grafana panel.
-50. [ ] **audit-log-viewer** — Read-only `/manage/audit-log` route, paginated + filtered, admin-RBAC gated.
-
-Merge order: `git merge --no-ff` always; serialize streams that touch `frontend/src/` sidebar.
+Merge order (conflict avoidance): `git merge --no-ff` always (per `feedback_no_fast_forward`); serialize any streams that touch `frontend/src/` sidebar. `audit-log-viewer` adds `/manage/` routes — rebase before merge if newer sidebar work lands first.
 
 ---
 
@@ -164,42 +122,11 @@ Merge order: `git merge --no-ff` always; serialize streams that touch `frontend/
 39. [ ] **pdf-renderer: wire application logger output through uvicorn** — worker/bundler/drive_sync use `logging.getLogger(__name__)` at INFO level but uvicorn's default log config suppresses non-uvicorn loggers, so `worker loop started` and `drive sync done` never appear in `docker logs`. Add a logging config dict in `main.py` or a LOG_LEVEL env-driven setup so live debugging of the worker loop is possible.
 40. [ ] **pdf-renderer: upgrade base image to Python 3.11+** — `mcr.microsoft.com/playwright/python:v1.48.0-jammy` ships Python 3.10.12. `google-api-core` fires a FutureWarning on every boot about 3.10 EOL (2026-10-04). Upgrade when Playwright publishes a 3.11+ image, or pin an alternate base.
 
-41. [ ] **Network architecture / VLAN planning for PostHog's isolation** — separate brainstorm. Referenced by PostHog self-host spec (`docs/superpowers/specs/2026-04-18-posthog-self-host-design.md`). Scope: where PostHog's mini-PC sits in the existing VLAN topology (TCP/IP, Dante, NDI), LAN addressing, ingest traffic isolation from production DHG services. Not a blocker for PostHog spec review, but blocks PostHog deployment prerequisites.
-
-42. [ ] **Sonos VLAN, TV/Apple TV VLAN, mDNS server, NDI discovery server** — separate brainstorm. Home/studio network infrastructure extension. Adds two new VLANs (Sonos, TVs/Apple TVs) to the existing TCP/IP + Dante + NDI scheme. Ryzen 6900 mini-PC earmarked as potential DNS/mDNS/NDI-discovery host. Parked — not blocking any active DHG work.
-
-43. [ ] **Visual agent editor evaluation** — parked brainstorm. User-facing drag-and-drop agent builder (Flowise/Langflow/similar) as an install-only addition, not a UI replacement. Goal: let users build their own agents alongside the curated DHG agent library. Gated on #44 — the original Dify-decommission premise that Onyx + Pixeltable + RAGFlow covered Dify's capabilities must be re-verified before picking a tool.
-
-44. [ ] **Revisit Onyx / Pixeltable capability claims** — separate task. Dify decommissioning (Apr 6) was based on a claim that we "could do anything Dify could" via Onyx, Pixeltable, and RAGFlow. RAGFlow has since also been decommissioned. The claim's current validity with only Onyx + Pixeltable remaining is unverified. Concrete deliverable: a capability matrix of Dify vs. (Onyx + Pixeltable) covering drag-and-drop agent building, pre-built agent marketplace, user self-service, and integration with LangGraph. Blocks #43.
-
-46. [x] ~~**medkb Plan 1 — Phases 0-3 (Foundation + Hybrid Retrieval)**~~ — DONE Apr 17-19. 51 commits (`518cd1e..5a915a4`), 46 tests across 21 files, all 4 containers running. Full RAG-as-a-Service with dense + BM25 + hybrid RRF retrieval, LLM generation via init_chat_model, CRAG quality loop (grade_docs + rewrite_query), Cloudflare JWT auth, corpora CRUD, Prometheus metrics. See Phase 9 below for details.
-46a. [x] ~~**medkb Plan 1 — Phase 4 (Ingestor Pipeline)**~~ — CANCELLED 2026-10-02 (medkb removed, PR #32). Was: NOT STARTED. `SourceIngestor` base, MeSH/RxNorm/PubMed/PMC OA ingestors, concept reconciliation, golden test set + Recall@5 quality gate.
-46b. [x] ~~**medkb Plan 1 — Phase 5 (Production Hardening)**~~ — CANCELLED 2026-10-02 (medkb removed, PR #32). Was: NOT STARTED. Activate `dhg-medkb-ingestor` worker, `medkb_client.py` LangGraph integration, exit-gate verification script.
+46. [~] **medkb v2 unified design spec + Phase 1 plan draft** — DESIGN LANDED Apr 15, `67abc4d`. Medical knowledge-base service covering Phases 1-5 with addendum. Phase 1 implementation plan drafted at `docs/superpowers/plans/2026-04-15-medkb-phase1.md` (23 tasks, 4302 lines) covering service scaffold, `dhg-medkb-db` + `dhg-medkb-api` compose services, Alembic schema, OllamaEmbeddingClient, `/healthz` + `/v1/concept/{source}/{source_id}` + `/v1/graph/neighbors` + `/v1/search/semantic` + `/v1/search/literature` endpoints, `SourceIngestor` base + concept reconciliation, MeSH/RxNorm/PubMed/PMC OA ingestors, golden test set + Recall@5 quality gate, Prometheus metrics, `medkb_client.py` LangGraph smoke test, Phase 1 exit-gate verification script. No implementation yet — plan only. Gated on inbox-download Phase 2 completion and bandwidth.
 
 ---
 
-## Phase 13: Explore Subagent Return Format (Jul 2026)
-
-68. [x] ~~**Explore return-format contract + compliance measurement hook**~~ — DONE Jul 20, `d06a2f4` on `feat/beta-reports` (pushed). Explore subagents pasted source blocks into reports, bloating main context on handback. Shipped: SKILL.md no-source rule + per-level word caps (150/300/500); `codegraph.md` rule line covering non-skill spawns; new `.claude/hooks/explore-compliance-log.sh` (PostToolUse, matcher `Agent|Task`, scoped to Explore) logging words/fences/fenced-lines/contract/violation to `.claude/logs/explore-compliance.log`. 6-scenario execution test + one live spawn verified (133w, 0 fences, contract detected, no restart needed). Ship log `002`, decision `c147dff0`. **Measurement, not enforcement** — blocking PreToolUse gate dropped, reproduced the substring-bypass defect that killed `enforce-capture-sweep.sh` (2026-07-05).
-    - [ ] Let `.claude/logs/explore-compliance.log` accumulate real spawns; determine actual violation rate and whether `prompt_had_contract:false` correlates with it.
-    - [ ] Tune violation thresholds (currently `fences>=2` or `words>700` — untuned guesses) once real violations exist.
-    - [ ] Only if data justifies: revisit a blocking gate via independent `config-safety-reviewer` + execution testing before touching `settings.json` (per 2026-07-05 precedent).
-
-## Completed (May 2026)
-
-- [x] **Close the Loop V1 — Feedback loop dashboard + backend SQL hardening** (May 24, 12 tasks, 4 commits `7d7b6ba..ba5a5ed`, merged to master as `25bf09d`) — Backend: 3 new stats endpoints (`/api/v1/corrections/stats/enhanced`, `/api/v1/feedback-loop/health`, `/api/v1/deferred-items/stats`) with SQL-side conditional aggregation replacing in-memory Python loops (PostgreSQL `COUNT() FILTER (WHERE ...)`). Service layer rewrites: `corrections_service.py` (enhanced stats with `tuple_` subquery for most_recent_message), `deferred_items_service.py` (5-query stats with `sa_func.coalesce` + `literal_column` + age histogram bins), `feedback_loop_service.py` (collapsed to 1 query per model type). Frontend: dashboard decomposition from 1133-line monolith to 141-line orchestrator + 9 panel components + types.ts + data.ts. Two new panels: Feedback Loop (correction stats, category breakdown with REPEAT badges and trend arrows, capture pipeline health grid) and Deferred Intelligence (open/resolved/stale counts, priority breakdown, category distribution, age histogram). Hook scripts: `session-briefing.sh`, `check-corrections.sh`, `check-auto-resolution.sh` written (pending registration in settings.json). 2 advisor reviews applied 7 fixes (C1: TS type sync, C2: session-briefing robustness, H1-H4: SQL rewrites + exact path match + set -e removal + last_capture scope fix, N2: semantic regression fix). Deferred: N1 (age histogram universe mismatch), N3 (missing response_model on health endpoint).
-
 ## Completed (April 2026)
-
-- [x] **medkb Plan 1 Phases 0-3 — RAG-as-a-Service foundation** (Apr 17-19, 51 commits `518cd1e..5a915a4`) — Complete RAG service from scratch in `services/medkb/`. Phase 0: 4 Docker containers (medkb-db :5435, medkb-cache :6381, medkb-api :8015, medkb-ingestor stub), PostgreSQL 15 + pgvector schema, FastAPI scaffold, OTel tracing, Prometheus metrics. Phase 1: Retriever Protocol + RetrievedChunk, PgVectorRetriever with dual-embedding, LLM factory via init_chat_model, 9-node LangGraph StateGraph (redact → analyze → retrieve_fan → rerank → generate → format_cite → emit_feedback + grade/rewrite for CRAG), seed corpus, corpora CRUD, `/v1/query` endpoint. Phase 2: generate node with Claude/Ollama LLM, format_cite citation assembly. Phase 3: BM25Retriever (tsvector), HybridRetriever (RRF fusion), retriever registry, grade_docs + rewrite_query CRAG nodes, `/v1/retrieve` endpoint, Cloudflare JWT auth module, readyz dependency checks. 46 tests across 21 files. Plan reconciled with 6 implementation drifts (port remapping, network declaration, pin relaxation, runtime retriever injection, metrics import, ORM event listener).
-
-- [x] **Incident Record Library + Remediation Sidecar** (Apr 16, commits `21d7be1..829e79c`) — Full incident management system. Backend: migration 011 (5 tables: incidents, events, actions, runbooks, postmortems), `incident_service.py` (529 lines), `incident_endpoints.py`, `incident_schemas.py`, 10 seeded runbooks, 58 tests across 2 files. Frontend: `/monitoring/incidents` route with list + filters + stats + detail panel + postmortem form + snapshot dashboard, `incidentsApi.ts`, Zustand store. Remediation sidecar (`services/remediator/`): polls for active incidents, matches to runbooks, executes steps in auto/approval/none modes with safety controls (hard-blocked commands, container allowlist, rate limiting, dry-run). Prometheus alert rules expanded (+97 lines). Previously undocumented — predates v17 base.
-
-- [x] **Guided character mode + LO crash fix** (Apr 16, `efbd9b7` + `1b1f1e5`) — `CharacterConfig` intake schema for persona-driven content generation in needs_assessment_agent. Learning objectives agent crash fixed: `int` cast for `moore_level_target` + orchestrator key mismatch.
-
-- [x] **Cleanup & dependency bumps** (Apr 17-18) — Removed dead `asr/` directory (`8f6f9cb`). Bumped `python-multipart` 0.0.22→0.0.26, `cryptography` 46.0.6→46.0.7 in registry (`56fa2df`). Bumped `pytest` 8.3.3→9.0.3 in pdf-renderer dev deps (`c207957`).
-
-- [x] **medkb documentation suite** (Apr 17-18) — RAG-as-a-Service design spec (`docs/superpowers/specs/2026-04-17-medkb-rag-as-a-service-design.md`), architecture overview with registry + DHG service integration addendum (`docs/architecture/MEDKB_ARCHITECTURE.md`), Claude Design brief + Nano Banana diagram prompts (`docs/architecture/MEDKB_CLAUDE_DESIGN_BRIEF.md`, `MEDKB_DIAGRAM_PROMPTS.md`), Agent Observatory design spec (`docs/superpowers/specs/2026-04-17-agent-observatory-design.md`), Ansible fleet bootstrap design spec (`docs/superpowers/specs/2026-04-18-ansible-fleet-bootstrap-design.md`).
 
 - [x] **Inbox Document & Project Download Phase 1 — Single-document sync path** (Apr 14, Tasks 1.1–1.12, commit range `e4ec07d..db0d76d`) — New sibling service `dhg-pdf-renderer` scaffolded from scratch. Build order: (1) service directory + requirements.txt + minimal main.py + /health, (2) HMAC signing module with failing-test-first TDD (`registry/test_export_signing.py` → `registry/export_signing.py` → Edge-Runtime TS verifier `frontend/src/lib/printTokens.ts`, `EXPORT_SIGNING_SECRET` wired to frontend compose env), (3) Playwright render helper with wait-for-`[data-chart-ready]` attribute (TDD, `services/pdf-renderer/renderer.py`), (4) `/render-sync` endpoint with URL validation (TDD, `services/pdf-renderer/main.py`), (5) Dockerfile + compose wiring with `shm_size: 2gb` and `dhg_exports` volume mount (read-only on registry-api side), (6) Next.js print layout + print stylesheet + print shell component + `/print/cme/document` route, (7) middleware bypass for `/print/*` with HMAC verify TDD, (8) `registry/export_schemas.py` Pydantic bundle, (9) `/api/cme/export/document` sync endpoint + `export_service.py` + `fetch_latest_document_for_thread` stub + router wired in `api.py`, (10) `exportApi.ts` frontend client, (11) download button in review panel masthead, (12) Playwright E2E `frontend/e2e/inbox-document-download.spec.ts` + `playwright.config.ts` + `playwright test` npm script. Also `7db05d8` fix: TS token verifier rewritten for Edge Runtime (original used Node `crypto` which Edge blocks). Also `eaf9a63` fix: filter zombie interrupted threads from review count and list (pre-existing bug surfaced while testing download button). Also `18bf5e3` refactor: replaced editorial masthead with standard page header (per design review). Also `775ea66` compose: `dhg-pdf-renderer` service + `dhg_exports` volume.
 
@@ -308,11 +235,7 @@ Merge order: `git merge --no-ff` always; serialize streams that touch `frontend/
 ---
 
 ## Version History
-- v21: Jul 20, 2026 — current (Explore subagent return-format contract + compliance measurement hook shipped — `d06a2f4` on `feat/beta-reports`, pushed. New PostToolUse hook logs Explore report bloat; SKILL.md + codegraph.md rule edits. Blocking gate deliberately dropped — reproduced the substring-bypass defect from the rejected `enforce-capture-sweep.sh`. Added Phase 13 with 3 open follow-ups (accumulate data, tune thresholds, gate only if justified). Ship log 002, decision c147dff0. Saved v20 as docs/archive/TODO_v20.md.)
-- v20: May 24, 2026 — (Close the Loop V1 shipped — 12 tasks, 4 commits, merged to master at `25bf09d`. 3 new backend stats endpoints with SQL-side conditional aggregation. Dashboard decomposed from 1133→141 LOC orchestrator + 9 panel files + types.ts + data.ts. Two new panels: Feedback Loop + Deferred Intelligence. 3 hook scripts written. 2 advisor reviews, 7 fixes applied. Added Phase 12 section. Deferred N1 + N3. Saved v19 as docs/archive/TODO_v19.md.)
-- v19: May 22, 2026 — (Memreg capture pipeline wired end-to-end: 7 trigger rules, 7 capture scripts, 7/7 E2E verified. Fixed 33 info leaks across 6 endpoints. Registry health 6.4→7.6. Extracted CME schemas. Test count: 514.)
-- v18: Apr 19, 2026 — (medkb Plan 1 Phases 0-3 DONE — 51 commits, 46 tests, 4 containers, full RAG-as-a-Service with dense + BM25 + hybrid retrieval, LLM generation, CRAG quality loop. Added Phases 9-11 documenting medkb, Incident Record Library + remediator sidecar, and pipeline improvements that had been implemented but undocumented. Incident Library was undocumented since v17 despite being on master — 58 tests, 5 new DB tables, full frontend. Agent Observatory Phase 1 in progress on worktree branch (19 commits, not merged). Worktree landscape changed: 4 original Phase 8 streams retired/completed, replaced with observatory + master-review + 6 auto-worktrees. Test count jumped from 119→273 (registry 227 + medkb 46). Container count corrected to 22 running. New design specs: Agent Observatory, Ansible fleet bootstrap, medkb Claude Design brief. Cleanup: asr/ removed, deps bumped. Saved v17 as docs/archive/TODO_v17.md.)
-- v17: Apr 17, 2026 — (Worktree stream audit session. Verified on master that Phase 2 v2 is DONE 19/19 / tagged `phase2v2` Apr 16; discovered CLAUDE.md "Inbox Document & Project Download" block was stale claiming 13/19. Five worktrees created off master @ `f7f85b2` for parallel development streams, then #1 `inbox-files-tab` retired because its scope was already shipped — verified via commit range `1bb841d..bf711ca` and tag. Added Phase 8 section listing active streams (medkb-phase1, legacy-port-cleanup, agent-slo-alerts, audit-log-viewer) + retired-stream note. Renumbered from Phase 6 during audit — Phases 6 and 7 already claimed (Security & Infrastructure, Inbox Document & Project Download). Fixed stale 13-of-19 line in Apr-2026 Completed section. Removed orphan `docs/TODO_v15.md` (superseded by v16 tracked file, never committed). Related: CLAUDE.md Phase 2 v2 block corrected in separate commit.)
+- v17: Apr 17, 2026 — current (Worktree stream audit session. Verified on master that Phase 2 v2 is DONE 19/19 / tagged `phase2v2` Apr 16; discovered CLAUDE.md "Inbox Document & Project Download" block was stale claiming 13/19. Five worktrees created off master @ `f7f85b2` for parallel development streams, then #1 `inbox-files-tab` retired because its scope was already shipped — verified via commit range `1bb841d..bf711ca` and tag. Added Phase 8 section listing active streams (medkb-phase1, legacy-port-cleanup, agent-slo-alerts, audit-log-viewer) + retired-stream note. Renumbered from Phase 6 during audit — Phases 6 and 7 already claimed (Security & Infrastructure, Inbox Document & Project Download). Fixed stale 13-of-19 line in Apr-2026 Completed section. Removed orphan `docs/TODO_v15.md` (superseded by v16 tracked file, never committed). Related: CLAUDE.md Phase 2 v2 block corrected in separate commit.)
 - v16: Apr 16, 2026 — Phase 2 v2 closeout landed: `1bb841d` files-tab store + selection/expansion state, `7607bbb` downloads store + polling hook, `f68aaca` Files tab + Downloads tray wired into inbox tab switcher (Tasks 2.16 + 2.17b), `7108b3e` 5-test E2E round-trip with zip manifest verification, `bf711ca` docs close-out. Tag `phase2v2` at `bf711ca`. 19/19 tasks complete; `lsp-setup` ancestry merged through to master.
 - v15: Apr 15, 2026 (Inbox Document & Project Download feature landed in massive burst across 3 parallel sessions 2026-04-14 evening into 2026-04-15 early AM. Phase 1 (12 tasks) single-document download path complete `e4ec07d..db0d76d`. Phase 2 v2 (13 of 19 tasks) async project bundle + Google Drive sync in progress on branch `lsp-setup` — commit range `ef5126e..ef6a70b`. New sibling service `dhg-pdf-renderer` scaffolded from scratch — Playwright renderer with `[data-chart-ready]` wait helper, md-only project bundler with atomic zip writer, Google Drive service-account client, Drive sync with `manifest.json` reconciliation, worker loop with `FOR UPDATE SKIP LOCKED` + three-scope dispatch (document/project_bundle/drive_sync). Migrations 009+010 extended `download_jobs` to v2 schema with Drive tracking. Inbox-repair branch merged in `bc9cfd5` carrying registry proxy binary body fix (`b736357` — critical: proxy was text-decoding PDF bodies) and `full_pipeline` orchestrator recipe deletion (`a1f85f0`). medkb v2 design spec parallel-landed `67abc4d` with Phase 1 plan draft at `docs/superpowers/plans/2026-04-15-medkb-phase1.md` (23 tasks, 4302 lines). Branch `lsp-setup` now +40 commits / +14865/-1180 across 55 files vs master, zero pushed — merge-to-master decision pending. Added Phase 7 (items 41-45) to the phase list covering all 5 phases of the inbox-download plan. Backlog #46: medkb v2. Saved current as `docs/archive/TODO_v14.md` per planning-file-versioning rule. Task 2.13 `filesApi.ts` committed in this session as `ef6a70b` — next is Task 2.14 (Files tab Zustand store).)
 - v1: Feb 26, 2026 — saved as docs/archive/TODO_v1.md
