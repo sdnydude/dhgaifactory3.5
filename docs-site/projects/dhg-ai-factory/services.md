@@ -49,11 +49,15 @@ Playwright-based service — no external port, reachable from registry-api over 
 
 ## Ollama (port 11434)
 
-Local LLM inference:
+Local LLM inference. **`dhg-ollama` container only** — repo-defined in `docker-compose.yml`, bound `0.0.0.0:11434`, GPU, models on named volume `dhgaifactory35_ollama-data`. Consumers on the LAN (e.g. Portage Porter chat, `LOCAL_LLM_BASE_URL=http://10.0.0.251:11434/v1`) depend on this exact bind.
 
-- `llama3.1:8b` — general purpose
+> **Do not run a host `ollama.service`.** A stray systemd unit (`/etc/systemd/system/ollama.service`, `127.0.0.1:11434`, empty model store) was found enabled on 2026-08-15. It lost the bind race to the container for months (crash-looping every 3s), then won it after a power-outage cold boot: `dhg-ollama` failed to restart (`failed to bind host port 0.0.0.0:11434/tcp: address already in use`), dockerd dropped the container's port endpoint, and Portage Porter silently fell over from granite to Gemini for 5h. Disabled with `systemctl disable --now ollama.service`. If it ever reappears (e.g. an Ollama installer re-adds it), disable it again. Recovery when the container is up but `docker port dhg-ollama` prints nothing: `docker compose up -d --force-recreate --no-deps ollama` (plain `docker start` reuses the broken endpoint). Registry bug-fix `ef492f28`.
+
+- `granite4.1:8b` — Portage Porter chat primary (tools, grounding)
+- `qwen3-vl:8b-instruct` — Portage vision/scan primary (`VISION_PROVIDERS=local:qwen3-vl:8b-instruct,gemini,anthropic`, 2026-08-17). Must be the **instruct** tag: `qwen3-vl:latest` is the thinking variant and burns the whole `max_tokens` budget on reasoning (Ollama's OpenAI-compat path ignores `think:false` / `reasoning_effort`), returning empty content. Container runs `OLLAMA_CONTEXT_LENGTH=16384` — default 4096 rejects 3-image scans (~8k prompt tokens).
+- `qwen3-vl:latest` (thinking) / `qwen3-vl-nothink` (template hack, avoid) / `llama3.2-vision` — other vision
 - `nomic-embed-text` — embeddings for semantic search
-- `qwen3:14b` — alternative model
+- `qwen3:14b`, `qwen3:8b`, `qwen3:4b`, `llama3.1:8b`, `gemma4:12b`/`26b`, `mistral-small3.2:24b`, `devstral-small-2:24b`, `glm-4.7-flash` — general / alternates
 
 ## Session Logger (port 8009)
 

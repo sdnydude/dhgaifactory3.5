@@ -109,7 +109,7 @@ Verdict rules:
 If ANY `[FAIL]` findings were reported, make one call to capture them:
 
 ```bash
-~/.claude/scripts/post-deferred-items.sh '{"title":"Registry drift: N field alignment failures in DOMAIN","description":"FAIL_LINES","reason":"Detected by /registry-validator","source_context":"/registry-validator","priority":"high","category":"registry","project_name":"dhg-ai-factory","affected_files":["FILES_CHECKED"],"tags":["serializer-drift","registry-validator"],"model_name":"claude-opus-4-6"}'
+~/.claude/scripts/post-deferred-items.sh '{"title":"Registry drift: N field alignment failures in DOMAIN","description":"FAIL_LINES","reason":"Detected by /registry-validator","source_context":"/registry-validator","priority":"high","category":"registry","project_name":"dhg-ai-factory","affected_files":["FILES_CHECKED"],"tags":["serializer-drift","registry-validator"],"model_name":"<current session model ID>"}'
 ```
 
 Replace:
