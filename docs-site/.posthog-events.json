@@ -1,0 +1,47 @@
+[
+  {
+    "event_name": "talkback_question_asked",
+    "event_description": "User submits a question to the Talkback AI assistant on the Patchbay.",
+    "file": "src/components/Patchbay/index.tsx"
+  },
+  {
+    "event_name": "talkback_error",
+    "event_description": "An error occurred while the Talkback AI assistant was processing a response.",
+    "file": "src/components/Patchbay/index.tsx"
+  },
+  {
+    "event_name": "talkback_closed",
+    "event_description": "The Talkback monitor panel was closed by the user.",
+    "file": "src/components/Patchbay/index.tsx"
+  },
+  {
+    "event_name": "suggestion_chip_clicked",
+    "event_description": "User clicked one of the pre-defined suggestion chips in the Talkback panel.",
+    "file": "src/components/Patchbay/index.tsx"
+  },
+  {
+    "event_name": "module_clicked",
+    "event_description": "User clicked on a service module tile to open the associated service URL.",
+    "file": "src/components/Patchbay/index.tsx"
+  },
+  {
+    "event_name": "jack_clicked",
+    "event_description": "User clicked a specific jack (TUNNEL, LAN, or TS) link on a service module.",
+    "file": "src/components/Patchbay/index.tsx"
+  },
+  {
+    "event_name": "documentation_tape_clicked",
+    "event_description": "User clicked on a documentation tape to navigate to a project docs section.",
+    "file": "src/components/Patchbay/index.tsx"
+  },
+  {
+    "event_name": "offsite_link_clicked",
+    "event_description": "User clicked an external offsite link from the Patchbay footer links section.",
+    "file": "src/components/Patchbay/index.tsx"
+  },
+  {
+    "event_name": "service_filter_used",
+    "event_description": "User typed a search query in the Patchbay filter strip to find services.",
+    "file": "src/components/Patchbay/index.tsx"
+  }
+]
