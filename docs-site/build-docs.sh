@@ -15,7 +15,12 @@ cd "$(dirname "$0")"
 
 TMP="build.tmp"
 rm -rf "$TMP"
-npx docusaurus build --out-dir "$TMP"
+# No persistent webpack cache: a stale entry in node_modules/.cache/webpack
+# compiled service-inventory.md without its metadata export and failed the
+# portage Deploy Docs build on 2026-10-04 and 2026-10-06 ("reading 'id'" in
+# DocItem); a cache-disabled build of the same tree passed. A cold build
+# costs ~10s more; package.json "build" (the CI path) sets the same flag.
+DOCUSAURUS_NO_PERSISTENT_CACHE=1 npx docusaurus build --out-dir "$TMP"
 
 mkdir -p build
 rsync -a --delete "$TMP"/ build/   # swap contents; build/ itself is never removed
