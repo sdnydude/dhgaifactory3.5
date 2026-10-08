@@ -37,7 +37,7 @@ set -euo pipefail
 
 IFACE="${IFACE:-eno1}"
 MAC_LAN_IP="${MAC_LAN_IP:-10.0.0.238}"   # Stephen's Mac; pin it with a DHCP reservation
-DH40801_IP="${DH40801_IP:-10.0.0.179}"   # Alloy on dh40801 pushes logs to :3100
+DH40801_IP="${DH40801_IP:-10.0.0.179}"   # dh40801: Alloy pushes logs to :3100, dhg-power posts alerts to :9093
 GUARDED_PORTS=(9090 9093 3100 8080)
 CHAIN=DHG-LAN-GUARD
 IPT="${IPTABLES:-iptables}"
@@ -93,6 +93,7 @@ apply_v4() {
     run "$IPT" -w -A "$CHAIN" -s "$MAC_LAN_IP" -p tcp -m conntrack --ctorigdstport "$p" -j RETURN
   done
   run "$IPT" -w -A "$CHAIN" -s "$DH40801_IP" -p tcp -m conntrack --ctorigdstport 3100 -j RETURN
+  run "$IPT" -w -A "$CHAIN" -s "$DH40801_IP" -p tcp -m conntrack --ctorigdstport 9093 -j RETURN  # dhg-power notify
   for p in "${GUARDED_PORTS[@]}"; do
     run "$IPT" -w -A "$CHAIN" -p tcp -m conntrack --ctorigdstport "$p" -j DROP
   done

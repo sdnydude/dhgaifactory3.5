@@ -54,7 +54,7 @@ spec and residual-risk statement: [Backups & disaster recovery](../backups.md).
   pre-pulled and pre-built.
 - Langfuse secrets live in Doppler `langfuse/prd`, not `dev`; a compose recreate
   under the wrong config would have started ClickHouse with a blank password.
-- Prometheus has no lifecycle endpoint; reload is `docker kill -s HUP`.
+- Prometheus has no lifecycle endpoint; reload with `docker compose restart prometheus`. (Originally recorded as `docker kill -s HUP`, which marks the container manually stopped and kept it down after the 2026-10-07 boot.)
 - The Synology: DSM 7.1.1 (immutable snapshots need 7.2), rsync-over-SSH needs
   the rsync service on (873 keeps listing module names), a No-Access rule on
   `homes` breaks the backup user's key auth, SNMPv1/2c community `public` was
