@@ -635,7 +635,7 @@ receivers:
 - Always run `promtool check config` and `promtool check rules` before reloading Prometheus
 - Always use a `for` clause in alert rules to prevent flapping on transient spikes
 - Do not write Loki alert rules until log ingestion is confirmed working
-- Prefer reloading (SIGHUP / HTTP POST `/-/reload`) over container restarts
+- Reload Prometheus with `docker compose restart prometheus` (no `--web.enable-lifecycle`, so `/-/reload` returns 403). Never `docker kill -s HUP dhg-prometheus`: Docker marks the container manually stopped and skips it at the next boot.
 - All new Docker services must use `dhg-` container name prefix and join `dhgaifactory35_dhg-network`
 
 ---

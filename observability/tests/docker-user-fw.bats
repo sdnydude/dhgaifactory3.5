@@ -28,6 +28,7 @@ teardown() { rm -rf "$TEST_ROOT"; }
   [[ "$output" == *"iptables -w -I DOCKER-USER 1 -j DHG-LAN-GUARD"* ]]
   [[ "$output" == *"ip6tables -w -I INPUT 1 -j DHG-LAN-GUARD"* ]]
   [[ "$output" == *"-s 10.0.0.179 -p tcp -m conntrack --ctorigdstport 3100 -j RETURN"* ]]
+  [[ "$output" == *"-s 10.0.0.179 -p tcp -m conntrack --ctorigdstport 9093 -j RETURN"* ]]
   [ ! -e "$SHIM_LOG" ]
 }
 

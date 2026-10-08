@@ -1,0 +1,10 @@
+# Post-reboot fix — tasks (2026-10-08)
+
+- [x] 1. Prometheus override: `restart: unless-stopped` → `restart: always` (Stephen runs the `!` sed one-liner)
+- [x] 2. `docker update --restart=always dhg-prometheus` (Claude)
+- [x] 3. Docs: replace `docker kill -s HUP` reload with `docker compose restart prometheus` in `.claude/commands/observability-engineer.md:638` + ship-log 003 line 57 (Claude)
+- [x] 4. 4080 sysctl `net.ipv4.ip_nonlocal_bind = 1` (Stephen, sudo one-liner)
+- [ ] 5. Before test reboot: `docker kill -s HUP dhg-prometheus` once, so the reboot actually tests the fix (Claude)
+- [ ] 6. Reboot 4080, then .251 (Stephen picks time)
+- [ ] 7. Run server-status agent; pass = everything up, 34/34 targets, no manual starts (Claude)
+- [ ] 8. `docker compose restart prometheus` to clear the test flag; commit on branch, `--no-ff` merge (Claude)
